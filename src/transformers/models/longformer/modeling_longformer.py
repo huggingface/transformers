@@ -41,7 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
-_TOKENIZER_FOR_DOC = "LongformerTokenizer"
 
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "allenai/longformer-base-4096",
@@ -763,7 +762,7 @@ class LongformerSelfAttention(nn.Module):
         return chunked_hidden_states
 
     @staticmethod
-    def _chunk(hidden_states, window_overlap, onnx_export=False):
+    def _chunk(hidden_states, window_overlap, onnx_export: bool = False):
         """convert into overlapping chunks. Chunk size = 2w, overlap size = w"""
         if not onnx_export:
             # non-overlapping chunks of size = 2w
@@ -782,29 +781,26 @@ class LongformerSelfAttention(nn.Module):
             return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
 
         # When exporting to ONNX, use this separate logic
-        if hidden_states.size(1) == window_overlap * 2:
-            # simplest case
-            return hidden_states.unsqueeze(1)
-        else:
-            # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
+        # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
 
-            # TODO replace this with
-            # > return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
-            # once `unfold` is supported
+        # TODO replace this with
+        # > return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
+        # once `unfold` is supported
+        # the case hidden_states.size(1) == window_overlap * 2 can also simply return hidden_states.unsqueeze(1), but that's control flow
 
-            chunk_size = [
-                hidden_states.size(0),
-                hidden_states.size(1) // window_overlap - 1,
-                window_overlap * 2,
-                hidden_states.size(2),
+        chunk_size = [
+            hidden_states.size(0),
+            torch.div(hidden_states.size(1), window_overlap, rounding_mode="trunc") - 1,
+            window_overlap * 2,
+            hidden_states.size(2),
+        ]
+
+        overlapping_chunks = torch.empty(chunk_size, device=hidden_states.device)
+        for chunk in range(chunk_size[1]):
+            overlapping_chunks[:, chunk, :, :] = hidden_states[
+                :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
             ]
-
-            overlapping_chunks = torch.empty(chunk_size)
-            for chunk in range(chunk_size[1]):
-                overlapping_chunks[:, chunk, :, :] = hidden_states[
-                    :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
-                ]
-            return overlapping_chunks
+        return overlapping_chunks
 
     @staticmethod
     def _mask_invalid_locations(input_tensor, affected_seq_len) -> torch.Tensor:
@@ -1291,9 +1287,10 @@ class LongformerEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
-
         is_index_masked = attention_mask < 0
         is_index_global_attn = attention_mask > 0
+
+        # Record `is_global_attn == True` to enable ONNX export
         is_global_attn = is_index_global_attn.flatten().any().item()
 
         all_hidden_states = () if output_hidden_states else None
@@ -1349,15 +1346,14 @@ class LongformerEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        # undo padding
-        if padding_len > 0:
-            # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
-            hidden_states = hidden_states[:, :-padding_len]
-            if output_hidden_states:
-                all_hidden_states = tuple([state[:, :-padding_len] for state in all_hidden_states])
+        # undo padding if necessary
+        # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
+        hidden_states = hidden_states[:, : hidden_states.shape[1] - padding_len]
+        if output_hidden_states:
+            all_hidden_states = tuple([state[:, : state.shape[1] - padding_len] for state in all_hidden_states])
 
-            if output_attentions:
-                all_attentions = tuple([state[:, :, :-padding_len, :] for state in all_attentions])
+        if output_attentions:
+            all_attentions = tuple([state[:, :, : state.shape[2] - padding_len, :] for state in all_attentions])
 
         if not return_dict:
             return tuple(
@@ -1473,7 +1469,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`LongformerTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1612,6 +1608,8 @@ class LongformerModel(LongformerPreTrainedModel):
         batch_size, seq_len = input_shape[:2]
 
         padding_len = (attention_window - seq_len % attention_window) % attention_window
+
+        # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
         if padding_len > 0:
             logger.info(
                 f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
@@ -1673,10 +1671,10 @@ class LongformerModel(LongformerPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import LongformerModel, LongformerTokenizer
+        >>> from transformers import LongformerModel, AutoTokenizer
 
         >>> model = LongformerModel.from_pretrained("allenai/longformer-base-4096")
-        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
 
         >>> SAMPLE_TEXT = " ".join(["Hello world! "] * 1000)  # long input document
         >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
@@ -1822,9 +1820,9 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         Mask filling example:
 
         ```python
-        >>> from transformers import LongformerTokenizer, LongformerForMaskedLM
+        >>> from transformers import AutoTokenizer, LongformerForMaskedLM
 
-        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
         >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
         ```
 
@@ -1904,7 +1902,6 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="jpwahle/longformer-base-plagiarism-detection",
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2062,10 +2059,10 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LongformerTokenizer, LongformerForQuestionAnswering
+        >>> from transformers import AutoTokenizer, LongformerForQuestionAnswering
         >>> import torch
 
-        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
         >>> model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
@@ -2173,7 +2170,6 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="brad1141/Longformer-finetuned-norm",
         output_type=LongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2261,7 +2257,6 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
         LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,

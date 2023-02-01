@@ -33,7 +33,7 @@ from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation import FlaxGenerationMixin
+from .generation import FlaxGenerationMixin, GenerationConfig
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import (
     FLAX_WEIGHTS_INDEX_NAME,
@@ -199,6 +199,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         self.key = PRNGKey(seed)
         self.dtype = dtype
         self.input_shape = input_shape
+        self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
 
         # To check if the model was intialized automatically.
         self._is_initialized = _do_init
@@ -466,6 +467,16 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         # the state dict is unflattened to the match the format of model.params
         return unflatten_dict(state_sharded_dict, sep="/")
+
+    def can_generate(self) -> bool:
+        """
+        Returns whether this model can generate sequences with `.generate()`. Returns:
+            `bool`: Whether this model can generate sequences with `.generate()`.
+        """
+        # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
+        if "GenerationMixin" in str(self.prepare_inputs_for_generation):
+            return False
+        return True
 
     @classmethod
     def from_pretrained(
@@ -940,6 +951,29 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 "See [`~FlaxPreTrainedModel.to_fp32`] for further information on how to do this."
             )
 
+        # If it is a model with generation capabilities, attempt to load the generation config
+        if model.can_generate():
+            try:
+                model.generation_config = GenerationConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _from_auto=from_auto_class,
+                    _from_pipeline=from_pipeline,
+                    **kwargs,
+                )
+            except OSError:
+                logger.info(
+                    "Generation config file not found, using a generation config created from the model config."
+                )
+                pass
+
         if _do_init:
             # set correct parameters
             model.params = unflatten_dict(state)
@@ -984,7 +1018,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
+            repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # get abs dir
@@ -998,6 +1032,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             custom_object_save(self, save_directory, config=self.config)
 
         self.config.save_pretrained(save_directory)
+        if self.can_generate():
+            self.generation_config.save_pretrained(save_directory)
 
         # save model
         output_model_file = os.path.join(save_directory, FLAX_WEIGHTS_NAME)
@@ -1041,7 +1077,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         if push_to_hub:
             self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=kwargs.get("use_auth_token"),
             )
 
     @classmethod
@@ -1073,9 +1113,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
 FlaxPreTrainedModel.push_to_hub = copy_func(FlaxPreTrainedModel.push_to_hub)
-FlaxPreTrainedModel.push_to_hub.__doc__ = FlaxPreTrainedModel.push_to_hub.__doc__.format(
-    object="model", object_class="FlaxAutoModel", object_files="model checkpoint"
-)
+if FlaxPreTrainedModel.push_to_hub.__doc__ is not None:
+    FlaxPreTrainedModel.push_to_hub.__doc__ = FlaxPreTrainedModel.push_to_hub.__doc__.format(
+        object="model", object_class="FlaxAutoModel", object_files="model checkpoint"
+    )
 
 
 def overwrite_call_docstring(model_class, docstring):
@@ -1087,10 +1128,9 @@ def overwrite_call_docstring(model_class, docstring):
     model_class.__call__ = add_start_docstrings_to_model_forward(docstring)(model_class.__call__)
 
 
-def append_call_sample_docstring(model_class, tokenizer_class, checkpoint, output_type, config_class, mask=None):
+def append_call_sample_docstring(model_class, checkpoint, output_type, config_class, mask=None):
     model_class.__call__ = copy_func(model_class.__call__)
     model_class.__call__ = add_code_sample_docstrings(
-        processor_class=tokenizer_class,
         checkpoint=checkpoint,
         output_type=output_type,
         config_class=config_class,

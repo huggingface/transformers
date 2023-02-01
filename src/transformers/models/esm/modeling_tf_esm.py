@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/esm2_t6_8M_UR50D"
 _CONFIG_FOR_DOC = "EsmConfig"
-_TOKENIZER_FOR_DOC = "EsmTokenizer"
 
 TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/esm2_t6_8M_UR50D",
@@ -69,6 +68,23 @@ def apply_rotary_pos_emb(x, cos, sin):
     sin = sin[:, :, : tf.shape(x)[-2], :]
 
     return (x * cos) + (rotate_half(x) * sin)
+
+
+def symmetrize(x):
+    "Make layer symmetric in final two dimensions, used for contact prediction."
+    return x + tf.linalg.matrix_transpose(x)  # Transposes last two dimensions only
+
+
+def average_product_correct(x):
+    "Perform average product correct, used for contact prediction."
+    a1 = tf.reduce_sum(x, -1, keepdims=True)
+    a2 = tf.reduce_sum(x, -2, keepdims=True)
+    a12 = tf.reduce_sum(x, (-1, -2), keepdims=True)
+
+    avg = a1 * a2
+    avg = avg / a12
+    normalized = x - avg
+    return normalized
 
 
 class TFRotaryEmbedding(Layer):
@@ -115,6 +131,43 @@ class TFRotaryEmbedding(Layer):
         )
 
 
+class TFEsmContactPredictionHead(Layer):
+    """Performs symmetrization, apc, and computes a logistic regression on the output features"""
+
+    def __init__(
+        self,
+        in_features: int,
+        bias=True,
+        eos_idx: int = 2,
+        name=None,
+    ):
+        super().__init__(name=name)
+        self.eos_idx = eos_idx
+        self.in_features = in_features
+        self.regression = Dense(1, use_bias=bias, activation="sigmoid", name="regression")
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        with tf.name_scope("regression"):
+            self.regression.build((None, self.in_features))
+
+    def call(self, tokens, attentions):
+        # remove eos token attentions
+        eos_mask = tf.cast(tokens != self.eos_idx, attentions.dtype)
+        eos_mask = tf.expand_dims(eos_mask, 1) * tf.expand_dims(eos_mask, 2)
+        attentions = attentions * eos_mask[:, None, None, :, :]
+        attentions = attentions[..., :-1, :-1]
+        # remove cls token attentions
+        attentions = attentions[..., 1:, 1:]
+        batch_size, layers, heads, seqlen, _ = shape_list(attentions)
+        attentions = tf.reshape(attentions, (batch_size, layers * heads, seqlen, seqlen))
+
+        # features: batch x channels x tokens x tokens (symmetric)
+        attentions = average_product_correct(symmetrize(attentions))
+        attentions = tf.transpose(attentions, perm=(0, 2, 3, 1))
+        return tf.squeeze(self.regression(attentions), 3)
+
+
 class TFEsmEmbeddings(Layer):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
@@ -148,7 +201,7 @@ class TFEsmEmbeddings(Layer):
         self.padding_idx = config.pad_token_id
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
-        self.vocab_size = config.vocab_size
+        self.config = config
 
     def call(
         self, input_ids=None, attention_mask=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -165,10 +218,10 @@ class TFEsmEmbeddings(Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = self.word_embeddings(input_ids)
@@ -676,7 +729,7 @@ ESM_INPUTS_DOCSTRING = r"""
         input_ids (`tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`EsmTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -741,6 +794,15 @@ class TFEsmMainLayer(Layer):
         self.embeddings = TFEsmEmbeddings(config, name="embeddings")
         self.encoder = TFEsmEncoder(config, name="encoder")
         self.pooler = TFEsmPooler(config, name="pooler") if add_pooling_layer else None
+
+        self.contact_head = TFEsmContactPredictionHead(
+            in_features=self.config.num_hidden_layers * self.config.num_attention_heads, bias=True, name="contact_head"
+        )
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        with tf.name_scope("contact_head"):
+            self.contact_head.build(input_shape)
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -906,6 +968,18 @@ class TFEsmMainLayer(Layer):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+    def predict_contacts(self, tokens, attention_mask):
+        attns = self(tokens, attention_mask=attention_mask, return_dict=True, output_attentions=True).attentions
+        attns = tf.stack(attns, axis=1)  # Matches the original model layout
+        # In the original model, attentions for padding tokens are completely zeroed out.
+        # This makes no difference most of the time because the other tokens won't attend to them,
+        # but it does for the contact prediction task, which takes attentions as input,
+        # so we have to mimic that here.
+        attention_mask = tf.cast(attention_mask, attns.dtype)
+        attns *= attention_mask[:, None, None, None]
+        attns *= attention_mask[:, None, None, :, None]
+        return self.contact_head(tokens, attns)
+
 
 @add_start_docstrings(
     "The bare ESM Model transformer outputting raw hidden-states without any specific head on top.",
@@ -920,7 +994,6 @@ class TFEsmModel(TFEsmPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -981,8 +1054,8 @@ class TFEsmModel(TFEsmPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )
@@ -1010,6 +1083,9 @@ class TFEsmModel(TFEsmPreTrainedModel):
             attentions=attns,
             cross_attentions=cross_attns,
         )
+
+    def predict_contacts(self, tokens, attention_mask):
+        return self.esm.predict_contacts(tokens, attention_mask)
 
 
 @add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
@@ -1041,7 +1117,6 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1113,8 +1188,8 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )
@@ -1122,6 +1197,9 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
         output = self.call(inputs)
 
         return self.serving_output(output)
+
+    def predict_contacts(self, tokens, attention_mask):
+        return self.esm.predict_contacts(tokens, attention_mask)
 
 
 class TFEsmLMHead(Layer):
@@ -1141,13 +1219,13 @@ class TFEsmLMHead(Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="decoder",
         )
-        self.vocab_size = config.vocab_size
+        self.config = config
 
     def build(self, input_shape):
         super().build(input_shape)
         # Separate bias to match the PT model and allow weight cross-loading to work
         # Put it in the build so it gets the right name when adding it as a weight
-        self.bias = self.add_weight("bias", shape=(self.vocab_size,), initializer="zeros", trainable=True)
+        self.bias = self.add_weight("bias", shape=(self.config.vocab_size,), initializer="zeros", trainable=True)
 
     def get_bias(self):
         return {"bias": self.bias}
@@ -1184,7 +1262,6 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1247,8 +1324,8 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
             }
         ]
     )
@@ -1280,7 +1357,6 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1344,8 +1420,8 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )

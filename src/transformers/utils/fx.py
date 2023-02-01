@@ -34,6 +34,7 @@ from .. import PretrainedConfig, PreTrainedModel, logging
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_BACKBONE_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
@@ -82,6 +83,7 @@ def _generate_supported_model_class_names(
         "ctc": MODEL_FOR_CTC_MAPPING_NAMES,
         "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
         "semantic-segmentation": MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
+        "backbone": MODEL_FOR_BACKBONE_MAPPING_NAMES,
     }
 
     if supported_tasks is None:
@@ -99,6 +101,7 @@ def _generate_supported_model_class_names(
 
 
 _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
+    "altclip",
     "albert",
     "bart",
     "bert",
@@ -151,7 +154,12 @@ for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS:
 
 _SPECIAL_SUPPORTED_MODELS = [
     "CLIPTextModel",
+    "CLIPTextModelWithProjection",
     "CLIPVisionModel",
+    "CLIPVisionModelWithProjection",
+    "AltCLIPTextModel",
+    "AltCLIPVisionModel",
+    "GitVisionModel",
     "GPT2DoubleHeadsModel",
     "Speech2Text2Decoder",
     "TrOCRDecoder",
@@ -711,6 +719,7 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)

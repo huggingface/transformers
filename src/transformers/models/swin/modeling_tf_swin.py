@@ -47,7 +47,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "SwinConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/swin-tiny-patch4-window7-224"
@@ -985,8 +984,8 @@ SWIN_START_DOCSTRING = r"""
 SWIN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
         head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -1192,7 +1191,6 @@ class TFSwinModel(TFSwinPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSwinModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1321,7 +1319,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import AutoFeatureExtractor, TFSwinForMaskedImageModeling
+        >>> from transformers import AutoImageProcessor, TFSwinForMaskedImageModeling
         >>> import tensorflow as tf
         >>> from PIL import Image
         >>> import requests
@@ -1329,11 +1327,11 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
         >>> model = TFSwinForMaskedImageModeling.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = feature_extractor(images=image, return_tensors="tf").pixel_values
+        >>> pixel_values = image_processor(images=image, return_tensors="tf").pixel_values
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = tf.random.uniform((1, num_patches)) >= 0.5
 
@@ -1429,7 +1427,6 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFSwinImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

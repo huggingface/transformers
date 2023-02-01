@@ -52,7 +52,6 @@ from .configuration_blenderbot import BlenderbotConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BlenderbotConfig"
-_TOKENIZER_FOR_DOC = "BlenderbotTokenizer"
 _CHECKPOINT_FOR_DOC = "facebook/blenderbot-400M-distill"
 
 
@@ -84,7 +83,7 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BlenderbotTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -98,7 +97,7 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BlenderbotTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -135,7 +134,7 @@ BLENDERBOT_ENCODE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BlenderbotTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -164,7 +163,7 @@ BLENDERBOT_DECODE_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BlenderbotTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -359,7 +358,7 @@ class FlaxBlenderbotAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -817,6 +816,7 @@ class FlaxBlenderbotModule(nn.Module):
             self.config.vocab_size,
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            dtype=self.dtype,
         )
 
         self.encoder = FlaxBlenderbotEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
@@ -991,10 +991,10 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BlenderbotTokenizer, FlaxBlenderbotForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxBlenderbotForConditionalGeneration
 
         >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-400M-distill")
-        >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
@@ -1060,10 +1060,10 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
 
         ```python
         >>> import jax.numpy as jnp
-        >>> from transformers import BlenderbotTokenizer, FlaxBlenderbotForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxBlenderbotForConditionalGeneration
 
         >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-400M-distill")
-        >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
@@ -1221,9 +1221,7 @@ class FlaxBlenderbotModel(FlaxBlenderbotPreTrainedModel):
     module_class = FlaxBlenderbotModule
 
 
-append_call_sample_docstring(
-    FlaxBlenderbotModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBlenderbotModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule with Bart->Blenderbot
@@ -1330,10 +1328,10 @@ class FlaxBlenderbotForConditionalGeneration(FlaxBlenderbotPreTrainedModel):
 
         ```python
         >>> import jax.numpy as jnp
-        >>> from transformers import BlenderbotTokenizer, FlaxBlenderbotForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxBlenderbotForConditionalGeneration
 
         >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-400M-distill")
-        >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
@@ -1485,17 +1483,19 @@ FLAX_BLENDERBOT_CONDITIONAL_GENERATION_DOCSTRING = r"""
 
     Conversation example::
 
-        >>> from transformers import BlenderbotTokenizer, FlaxBlenderbotForConditionalGeneration, BlenderbotConfig
+    ```py
+    >>> from transformers import AutoTokenizer, FlaxBlenderbotForConditionalGeneration
 
-        >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained('facebook/blenderbot-400M-distill') >>>
-        tokenizer = BlenderbotTokenizer.from_pretrained('facebook/blenderbot-400M-distill')
+    >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-400M-distill")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
-        >>> UTTERANCE = "My friends are cool but they eat too many carbs." >>> inputs = tokenizer([UTTERANCE],
-        max_length=1024, return_tensors='np')
+    >>> UTTERANCE = "My friends are cool but they eat too many carbs."
+    >>> inputs = tokenizer([UTTERANCE], max_length=1024, return_tensors="np")
 
-        >>> # Generate Reply >>> reply_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5,
-        early_stopping=True).sequences >>> print([tokenizer.decode(g, skip_special_tokens=True,
-        clean_up_tokenization_spaces=False) for g in reply_ids])
+    >>> # Generate Reply
+    >>> reply_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5, early_stopping=True).sequences
+    >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in reply_ids])
+    ```
 """
 
 overwrite_call_docstring(

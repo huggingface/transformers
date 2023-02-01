@@ -51,7 +51,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/xglm-564M"
 _CONFIG_FOR_DOC = "XGLMConfig"
-_TOKENIZER_FOR_DOC = "XGLMTokenizer"
 
 
 TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -639,15 +638,15 @@ class TFXGLMPreTrainedModel(TFPreTrainedModel):
         input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
         dummy_inputs = {
             "input_ids": input_ids,
-            "attention_mask": tf.math.not_equal(input_ids, pad_token),
+            "attention_mask": tf.cast(input_ids != pad_token, tf.int32),
         }
         return dummy_inputs
 
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )
@@ -703,7 +702,7 @@ XGLM_INPUTS_DOCSTRING = r"""
         input_ids (`tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`XGLMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -789,7 +788,6 @@ class TFXGLMModel(TFXGLMPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XGLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -888,9 +886,9 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past_key_values=None, use_cache=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past_key_values:
             inputs = tf.expand_dims(inputs[:, -1], -1)
 
         attention_mask = kwargs.get("attention_mask", None)
@@ -898,7 +896,7 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         return {
             "input_ids": inputs,
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
@@ -906,7 +904,6 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
     @add_start_docstrings_to_model_forward(XGLM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFCausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -992,10 +989,3 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
             attentions=attns,
             cross_attentions=cross_attns,
         )
-
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past),)
-        return reordered_past

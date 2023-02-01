@@ -24,7 +24,7 @@ import os
 import re
 import warnings
 from collections import OrderedDict, UserDict
-from collections.abc import Mapping
+from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
@@ -56,8 +56,8 @@ from .utils import (
     is_torch_device,
     is_torch_tensor,
     logging,
+    requires_backends,
     to_py_obj,
-    torch_required,
 )
 
 
@@ -475,8 +475,10 @@ class BatchEncoding(UserDict):
                 or 1) the provided word index belongs to.
 
         Returns:
-            Optional [`~tokenization_utils_base.TokenSpan`] Span of tokens in the encoded sequence. Returns `None` if
-            no tokens correspond to the word.
+            ([`~tokenization_utils_base.TokenSpan`], *optional*): Span of tokens in the encoded sequence. Returns
+            `None` if no tokens correspond to the word. This can happen especially when the token is a special token
+            that has been used to format the tokenization. For example when we add a class token at the very beginning
+            of the tokenization.
         """
 
         if not self._encodings:
@@ -737,7 +739,6 @@ class BatchEncoding(UserDict):
 
         return self
 
-    @torch_required
     def to(self, device: Union[str, "torch.device"]) -> "BatchEncoding":
         """
         Send all values to device by calling `v.to(device)` (PyTorch only).
@@ -748,6 +749,7 @@ class BatchEncoding(UserDict):
         Returns:
             [`BatchEncoding`]: The same instance after modification.
         """
+        requires_backends(self, ["torch"])
 
         # This check catches things like APEX blindly calling "to" on all inputs to a module
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
@@ -839,7 +841,9 @@ class SpecialTokensMixin:
         """
         return self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
-    def add_special_tokens(self, special_tokens_dict: Dict[str, Union[str, AddedToken]]) -> int:
+    def add_special_tokens(
+        self, special_tokens_dict: Dict[str, Union[str, AddedToken]], replace_additional_special_tokens=True
+    ) -> int:
         """
         Add a dictionary of special tokens (eos, pad, cls, etc.) to the encoder and link them to class attributes. If
         special tokens are NOT in the vocabulary, they are added to it (indexed starting from the last index of the
@@ -867,6 +871,11 @@ class SpecialTokensMixin:
 
                 Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer
                 assign the index of the `unk_token` to them).
+            replace_additional_special_tokens (`bool`, *optional*,, defaults to `True`):
+                If `True`, the existing list of additional special tokens will be replaced by the one specified in
+                `special_tokens_dict`. Otherwise, `self._additional_special_tokens` is updated. In the former case, the
+                tokens will NOT be removed from the tokenizer's full vocabulary - they are only being flagged as
+                non-special tokens.
 
         Returns:
             `int`: Number of tokens added to the vocabulary.
@@ -896,17 +905,32 @@ class SpecialTokensMixin:
 
             if self.verbose:
                 logger.info(f"Assigning {value} to the {key} key of the tokenizer")
-            setattr(self, key, value)
 
             if key == "additional_special_tokens":
                 assert isinstance(value, (list, tuple)) and all(
                     isinstance(t, (str, AddedToken)) for t in value
                 ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
+
+                if replace_additional_special_tokens:
+                    setattr(self, key, value)
+                else:
+                    # This is a copy of `self._additional_special_tokens`
+                    additional_special_tokens = getattr(self, key)
+                    additional_special_tokens_set = set(additional_special_tokens)
+                    to_add = []
+                    for token in value:
+                        if str(token) not in additional_special_tokens_set and str(token) not in to_add:
+                            to_add.append(token)
+                    # update the property
+                    additional_special_tokens.extend(to_add)
+                    self.additional_special_tokens = additional_special_tokens
+
                 added_tokens += self.add_tokens(value, special_tokens=True)
             else:
                 assert isinstance(
                     value, (str, AddedToken)
                 ), f"Token {value} for key {key} should be a str or an AddedToken instance"
+                setattr(self, key, value)
                 added_tokens += self.add_tokens([value], special_tokens=True)
 
         return added_tokens
@@ -1319,7 +1343,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 which it will tokenize. This is useful for NER or token classification.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -1548,11 +1572,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def __repr__(self) -> str:
         return (
-            f"{'PreTrainedTokenizerFast' if self.is_fast else 'PreTrainedTokenizer'}(name_or_path='{self.name_or_path}',"
-            f" vocab_size={self.vocab_size}, model_max_len={self.model_max_length}, is_fast={self.is_fast},"
+            f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
+            f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length}, is_fast={self.is_fast},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
             f" special_tokens={self.special_tokens_map_extended})"
         )
+
+    def __len__(self) -> int:
+        raise NotImplementedError()
 
     def get_vocab(self) -> Dict[str, int]:
         """
@@ -2071,7 +2098,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
+            repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
         special_tokens_map_file = os.path.join(
@@ -2082,6 +2109,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
+
+        # TODO: Ensure the modified attributes (those are also in the __init__ kwargs) will give identical tokenizers
+        # target_keys = self.init_kwargs.keys()
+        target_keys = ["model_max_length"]
+        for k in target_keys:
+            if hasattr(self, k):
+                tokenizer_config[k] = getattr(self, k)
+
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
         for file_id in self.vocab_files_names.keys():
@@ -2142,7 +2177,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         if push_to_hub:
             self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=kwargs.get("use_auth_token"),
             )
 
         return save_files
@@ -2870,7 +2909,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific tokenizer's default, defined by the `return_outputs` attribute.
@@ -2908,7 +2947,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         required_input = encoded_inputs[self.model_input_names[0]]
 
-        if not required_input:
+        if required_input is None or (isinstance(required_input, Sized) and len(required_input) == 0):
             if return_attention_mask:
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
@@ -3307,7 +3346,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
@@ -3736,6 +3775,7 @@ def get_fast_tokenizer_file(tokenization_files: List[str]) -> str:
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
 PreTrainedTokenizerBase.push_to_hub = copy_func(PreTrainedTokenizerBase.push_to_hub)
-PreTrainedTokenizerBase.push_to_hub.__doc__ = PreTrainedTokenizerBase.push_to_hub.__doc__.format(
-    object="tokenizer", object_class="AutoTokenizer", object_files="tokenizer files"
-)
+if PreTrainedTokenizerBase.push_to_hub.__doc__ is not None:
+    PreTrainedTokenizerBase.push_to_hub.__doc__ = PreTrainedTokenizerBase.push_to_hub.__doc__.format(
+        object="tokenizer", object_class="AutoTokenizer", object_files="tokenizer files"
+    )

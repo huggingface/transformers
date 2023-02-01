@@ -30,20 +30,16 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 import h5py
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.keras import backend as K
-from tensorflow.python.keras.engine import data_adapter
-from tensorflow.python.keras.engine.keras_tensor import KerasTensor
-from tensorflow.python.keras.saving import hdf5_format
+from packaging.version import parse
 
 from huggingface_hub import Repository, list_repo_files
-from keras.saving.hdf5_format import save_attributes_to_hdf5_group
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation import TFGenerationMixin
+from .generation import GenerationConfig, TFGenerationMixin
 from .tf_utils import shape_list
 from .utils import (
     DUMMY_INPUTS,
@@ -51,6 +47,7 @@ from .utils import (
     SAFE_WEIGHTS_NAME,
     TF2_WEIGHTS_INDEX_NAME,
     TF2_WEIGHTS_NAME,
+    TF_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     ModelOutput,
@@ -66,6 +63,18 @@ from .utils import (
     requires_backends,
     working_or_temp_dir,
 )
+
+
+if parse(tf.__version__) >= parse("2.11.0"):
+    from keras import backend as K
+    from keras.engine import data_adapter
+    from keras.engine.keras_tensor import KerasTensor
+    from keras.saving.legacy import hdf5_format
+else:
+    from tensorflow.python.keras import backend as K
+    from tensorflow.python.keras.engine import data_adapter
+    from tensorflow.python.keras.engine.keras_tensor import KerasTensor
+    from tensorflow.python.keras.saving import hdf5_format
 
 
 if is_safetensors_available():
@@ -94,7 +103,11 @@ TFModelInputType = Union[
 
 
 def dummy_loss(y_true, y_pred):
-    return tf.reduce_mean(y_pred)
+    if y_pred.shape.rank <= 1:
+        return y_pred
+    else:
+        reduction_axes = list(range(1, y_pred.shape.rank))
+        return tf.reduce_mean(y_pred, axis=reduction_axes)
 
 
 class TFModelUtilsMixin:
@@ -573,10 +586,10 @@ def input_processing(func, config, **kwargs):
 
     cast_output = dict()
     for key, val in output.items():
-        if isinstance(val, tf.Tensor) and val.dtype == tf.int32:
-            cast_output[key] = tf.cast(val, tf.int64)
-        elif isinstance(val, np.ndarray) and val.dtype == np.int32:
-            cast_output[key] = val.astype(np.int64)
+        if isinstance(val, tf.Tensor) and val.dtype == tf.int64:
+            cast_output[key] = tf.cast(val, tf.int32)
+        elif isinstance(val, np.ndarray) and val.dtype == np.int64:
+            cast_output[key] = val.astype(np.int32)
         else:
             cast_output[key] = val
 
@@ -764,7 +777,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
 
     Args:
         model (`tf.keras.models.Model`): Model in which the weights are loaded
-        model_layer_map (`Dict`): A dictionnary mapping the layer name to the index of the layer in the model.
+        model_layer_map (`Dict`): A dictionary mapping the layer name to the index of the layer in the model.
         resolved_archive_file (`str`): Path to the checkpoint file from which the weights will be loaded
         ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`): Whether to ignore the mismatched keys
 
@@ -1103,7 +1116,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         return {
-            "input_ids": tf.constant(DUMMY_INPUTS),
+            "input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32),
         }
 
     @property
@@ -1124,6 +1137,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+        self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
         self._set_save_spec(self.serving.input_signature[0])
 
@@ -1143,12 +1157,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return cls(config, **kwargs)
 
+    def eager_serving(self, inputs):
+        """
+        Method used for serving the model. Intended not to be compiled with a tf.function decorator so that we can use
+        it to generate multiple signatures later.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int64, name="token_type_ids"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )
@@ -1164,7 +1191,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         return self.serving_output(output)
 
-    def serving_output(output):
+    def serving_output(self, output):
         """
         Prepare the output of the saved model. Each model must implement this function.
 
@@ -1173,6 +1200,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 The output returned by the model.
         """
         raise NotImplementedError
+
+    def can_generate(self) -> bool:
+        """
+        Returns whether this model can generate sequences with `.generate()`.
+
+        Returns:
+            `bool`: Whether this model can generate sequences with `.generate()`.
+        """
+        # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
+        if "GenerationMixin" in str(self.prepare_inputs_for_generation):
+            return False
+        return True
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
@@ -1306,9 +1345,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if collate_fn is None:
             if tokenizer is None:
-                collate_fn = DefaultDataCollator(return_tensors="tf")
+                collate_fn = DefaultDataCollator(return_tensors="np")
             else:
-                collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
+                collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="np")
         if collate_fn_args is None:
             collate_fn_args = dict()
 
@@ -1447,7 +1486,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         label_kwargs = find_labels(self.__class__)
         label_to_output = self.get_label_to_output_name_mapping()
         output_to_label = {val: key for key, val in label_to_output.items()}
-        if not self._using_dummy_loss:
+        if not self._using_dummy_loss and parse(tf.__version__) < parse("2.11.0"):
+            # Newer TF train steps leave this out
             data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
         # If the inputs are mutable dictionaries, make a shallow copy of them because we will modify
@@ -1554,7 +1594,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         label_kwargs = find_labels(self.__class__)
         label_to_output = self.get_label_to_output_name_mapping()
         output_to_label = {val: key for key, val in label_to_output.items()}
-        if not self._using_dummy_loss:
+        if not self._using_dummy_loss and parse(tf.__version__) < parse("2.11.0"):
+            # Newer versions leave this out
             data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
         # If the inputs are mutable dictionaries, make a shallow copy of them because we will modify
@@ -2236,12 +2277,22 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
+            repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
         if saved_model:
             if signatures is None:
-                signatures = self.serving
+                if any(spec.dtype == tf.int32 for spec in self.serving.input_signature[0].values()):
+                    int64_spec = {
+                        key: tf.TensorSpec(
+                            shape=spec.shape, dtype=tf.int64 if spec.dtype == tf.int32 else spec.dtype, name=spec.name
+                        )
+                        for key, spec in self.serving.input_signature[0].items()
+                    }
+                    int64_serving = tf.function(self.eager_serving, input_signature=[int64_spec])
+                    signatures = {"serving_default": self.serving, "int64_serving": int64_serving}
+                else:
+                    signatures = self.serving
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
             self.save(saved_model_dir, include_optimizer=False, signatures=signatures)
             logger.info(f"Saved model created in {saved_model_dir}")
@@ -2255,6 +2306,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             custom_object_save(self, save_directory, config=self.config)
 
         self.config.save_pretrained(save_directory)
+        if self.can_generate():
+            self.generation_config.save_pretrained(save_directory)
 
         # If we save using the predefined names, we can load using `from_pretrained`
         weights_name = SAFE_WEIGHTS_NAME if safe_serialization else TF2_WEIGHTS_NAME
@@ -2306,11 +2359,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         )
                         param_dset[:] = layer.numpy()
                         layers.append(layer_name.encode("utf8"))
-                    save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
+                    hdf5_format.save_attributes_to_hdf5_group(shard_file, "layer_names", layers)
 
         if push_to_hub:
             self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=kwargs.get("use_auth_token"),
             )
 
     @classmethod
@@ -2357,7 +2414,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                       save directory.
                     - The model is loaded by supplying a local directory as `pretrained_model_name_or_path` and a
                       configuration JSON file named *config.json* is found in the directory.
-            from_pt: (`bool`, *optional*, defaults to `False`):
+            from_pt (`bool`, *optional*, defaults to `False`):
                 Load the model weights from a PyTorch state_dict save file (see docstring of
                 `pretrained_model_name_or_path` argument).
             ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`):
@@ -2496,7 +2553,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             is_local = os.path.isdir(pretrained_model_name_or_path)
-            if os.path.isdir(pretrained_model_name_or_path):
+            if is_local:
                 if from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
                     # Load from a PyTorch checkpoint in priority if from_pt
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
@@ -2524,7 +2581,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_INDEX_NAME)
                     is_sharded = True
                 # At this stage we don't have a weight file so we will raise an error.
-                elif os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME):
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)) or os.path.isfile(
+                    os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
+                ):
                     raise EnvironmentError(
                         f"Error no file named {TF2_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} "
                         "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
@@ -2595,6 +2654,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
+                    if resolved_archive_file is None and filename == WEIGHTS_NAME:
+                        # Maybe the checkpoint is sharded, we try to grab the index name in this case.
+                        resolved_archive_file = cached_file(
+                            pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **cached_file_kwargs
+                        )
+                        if resolved_archive_file is not None:
+                            is_sharded = True
                     if resolved_archive_file is None:
                         # Otherwise, maybe there is a PyTorch or Flax model file.  We try those to give a helpful error
                         # message.
@@ -2611,8 +2677,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                             )
                         else:
                             raise EnvironmentError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}."
+                                f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME},"
+                                f" {TF2_WEIGHTS_NAME} or {TF_WEIGHTS_NAME}"
                             )
 
                 except EnvironmentError:
@@ -2626,7 +2692,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                         " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                         f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                        f" directory containing a file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}."
+                        f" directory containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME} or {TF_WEIGHTS_NAME}"
                     )
             if is_local:
                 logger.info(f"loading weights file {archive_file}")
@@ -2682,14 +2748,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return load_pytorch_checkpoint_in_tf2_model(
                 model, resolved_archive_file, allow_missing_keys=True, output_loading_info=output_loading_info
             )
-        elif safetensors_from_pt:
-            from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
-
-            state_dict = safe_load_file(resolved_archive_file)
-            # Load from a PyTorch checkpoint
-            return load_pytorch_state_dict_in_tf2_model(
-                model, state_dict, allow_missing_keys=True, output_loading_info=output_loading_info
-            )
 
         # we might need to extend the variable scope for composite models
         if load_weight_prefix is not None:
@@ -2697,6 +2755,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 model(model.dummy_inputs)  # build the network with dummy inputs
         else:
             model(model.dummy_inputs)  # build the network with dummy inputs
+
+        if safetensors_from_pt:
+            from .modeling_tf_pytorch_utils import load_pytorch_state_dict_in_tf2_model
+
+            state_dict = safe_load_file(resolved_archive_file)
+            # Load from a PyTorch checkpoint
+            return load_pytorch_state_dict_in_tf2_model(
+                model, state_dict, allow_missing_keys=True, output_loading_info=output_loading_info
+            )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
@@ -2784,6 +2851,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 " to use it for predictions and inference."
             )
 
+        # If it is a model with generation capabilities, attempt to load the generation config
+        if model.can_generate():
+            try:
+                model.generation_config = GenerationConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _from_auto=from_auto_class,
+                    _from_pipeline=from_pipeline,
+                    **kwargs,
+                )
+            except OSError:
+                logger.info(
+                    "Generation config file not found, using a generation config created from the model config."
+                )
+                pass
+
         if output_loading_info:
             loading_info = {
                 "missing_keys": missing_keys,
@@ -2860,7 +2950,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             working_dir = repo_id.split("/")[-1]
 
-        repo_id, token = self._create_repo(
+        repo_id = self._create_repo(
             repo_id, private=private, use_auth_token=use_auth_token, repo_url=repo_url, organization=organization
         )
 
@@ -2882,7 +2972,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 self.create_model_card(**base_model_card_args)
 
             self._upload_modified_files(
-                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=token
+                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=use_auth_token
             )
 
     @classmethod

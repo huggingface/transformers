@@ -56,12 +56,12 @@ Tips:
 - One can also check out [this interactive demo on Hugging Face Spaces](https://huggingface.co/spaces/chansung/segformer-tf-transformers)
   to try out a SegFormer model on custom images.
 - SegFormer works on any input size, as it pads the input to be divisible by `config.patch_sizes`.
-- One can use [`SegformerFeatureExtractor`] to prepare images and corresponding segmentation maps
-  for the model. Note that this feature extractor is fairly basic and does not include all data augmentations used in
+- One can use [`SegformerImageProcessor`] to prepare images and corresponding segmentation maps
+  for the model. Note that this image processor is fairly basic and does not include all data augmentations used in
   the original paper. The original preprocessing pipelines (for the ADE20k dataset for instance) can be found [here](https://github.com/NVlabs/SegFormer/blob/master/local_configs/_base_/datasets/ade20k_repeat.py). The most
   important preprocessing step is that images and segmentation maps are randomly cropped and padded to the same size,
   such as 512x512 or 640x640, after which they are normalized.
-- One additional thing to keep in mind is that one can initialize [`SegformerFeatureExtractor`] with
+- One additional thing to keep in mind is that one can initialize [`SegformerImageProcessor`] with
   `reduce_labels` set to `True` or `False`. In some datasets (like ADE20k), the 0 index is used in the annotated
   segmentation maps for background. However, ADE20k doesn't include the "background" class in its 150 labels.
   Therefore, `reduce_labels` is used to reduce all labels by 1, and to make sure no loss is computed for the
@@ -84,6 +84,22 @@ Tips:
 Note that MiT in the above table refers to the Mix Transformer encoder backbone introduced in SegFormer. For
 SegFormer's results on the segmentation datasets like ADE20k, refer to the [paper](https://arxiv.org/abs/2105.15203).
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SegFormer.
+
+<PipelineTag pipeline="image-classification"/>
+
+- [`SegformerForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+
+Semantic segmentation:
+
+- [`SegformerForSemanticSegmentation`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/semantic-segmentation).
+- A blog on fine-tuning SegFormer on a custom dataset can be found [here](https://huggingface.co/blog/fine-tune-segformer).
+- More demo notebooks on SegFormer (both inference + fine-tuning on a custom dataset) can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SegFormer).
+- [`TFSegformerForSemanticSegmentation`] is supported by this [example notebook](https://github.com/huggingface/notebooks/blob/main/examples/semantic_segmentation-tf.ipynb).
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## SegformerConfig
 

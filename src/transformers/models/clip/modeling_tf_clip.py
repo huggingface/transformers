@@ -201,7 +201,6 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.embed_dim = config.hidden_size
-        self.vocab_size = config.vocab_size
 
         self.config = config
 
@@ -209,7 +208,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
 
         with tf.name_scope("token_embedding"):
             self.weight = self.add_weight(
-                shape=(self.vocab_size, self.embed_dim),
+                shape=(self.config.vocab_size, self.embed_dim),
                 initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
                 trainable=True,
                 name="weight",
@@ -245,10 +244,10 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -993,8 +992,8 @@ CLIP_TEXT_INPUTS_DOCSTRING = r"""
 CLIP_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`]. See
-            [`CLIPFeatureExtractor.__call__`] for details. output_attentions (`bool`, *optional*): Whether or not to
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`CLIPImageProcessor.__call__`] for details. output_attentions (`bool`, *optional*): Whether or not to
             return the attentions tensors of all attention layers. See `attentions` under returned tensors for more
             detail. This argument can be used only in eager mode, in graph mode the value in the config will be used
             instead.
@@ -1020,8 +1019,8 @@ CLIP_INPUTS_DOCSTRING = r"""
 
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`]. See
-            [`CLIPFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`CLIPImageProcessor.__call__`] for details.
         attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1080,10 +1079,10 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, TFCLIPTextModel
+        >>> from transformers import AutoTokenizer, TFCLIPTextModel
 
         >>> model = TFCLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="tf")
 
@@ -1107,8 +1106,8 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )
@@ -1188,10 +1187,10 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, TFCLIPVisionModel
+        >>> from transformers import AutoProcessor, TFCLIPVisionModel
 
         >>> model = TFCLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1292,10 +1291,10 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, TFCLIPModel
+        >>> from transformers import AutoTokenizer, TFCLIPModel
 
         >>> model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="tf")
         >>> text_features = model.get_text_features(**inputs)
@@ -1332,10 +1331,10 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, TFCLIPModel
+        >>> from transformers import AutoProcessor, TFCLIPModel
 
         >>> model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1378,10 +1377,10 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         >>> import tensorflow as tf
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, TFCLIPModel
+        >>> from transformers import AutoProcessor, TFCLIPModel
 
         >>> model = TFCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

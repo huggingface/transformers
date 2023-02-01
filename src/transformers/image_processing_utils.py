@@ -185,7 +185,7 @@ class ImageProcessingMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
+            repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -201,7 +201,11 @@ class ImageProcessingMixin(PushToHubMixin):
 
         if push_to_hub:
             self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=kwargs.get("use_auth_token"),
             )
 
         return [output_image_processor_file]
@@ -316,7 +320,16 @@ class ImageProcessingMixin(PushToHubMixin):
             [`~image_processing_utils.ImageProcessingMixin`]: The image processor object instantiated from those
             parameters.
         """
+        image_processor_dict = image_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+
+        # The `size` parameter is a dict and was previously an int or tuple in feature extractors.
+        # We set `size` here directly to the `image_processor_dict` so that it is converted to the appropriate
+        # dict within the image processor and isn't overwritten if `size` is passed in as a kwarg.
+        if "size" in kwargs and "size" in image_processor_dict:
+            image_processor_dict["size"] = kwargs.pop("size")
+        if "crop_size" in kwargs and "crop_size" in image_processor_dict:
+            image_processor_dict["crop_size"] = kwargs.pop("crop_size")
 
         image_processor = cls(**image_processor_dict)
 
@@ -440,11 +453,50 @@ class BaseImageProcessor(ImageProcessingMixin):
         raise NotImplementedError("Each image processor must implement its own preprocess method")
 
 
+VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"})
+
+
+def is_valid_size_dict(size_dict):
+    if not isinstance(size_dict, dict):
+        return False
+
+    size_dict_keys = set(size_dict.keys())
+    for allowed_keys in VALID_SIZE_DICT_KEYS:
+        if size_dict_keys == allowed_keys:
+            return True
+    return False
+
+
+def convert_to_size_dict(
+    size, max_size: Optional[int] = None, default_to_square: bool = True, height_width_order: bool = True
+):
+    # By default, if size is an int we assume it represents a tuple of (size, size).
+    if isinstance(size, int) and default_to_square:
+        if max_size is not None:
+            raise ValueError("Cannot specify both size as an int, with default_to_square=True and max_size")
+        return {"height": size, "width": size}
+    # In other configs, if size is an int and default_to_square is False, size represents the length of
+    # the shortest edge after resizing.
+    elif isinstance(size, int) and not default_to_square:
+        size_dict = {"shortest_edge": size}
+        if max_size is not None:
+            size_dict["longest_edge"] = max_size
+        return size_dict
+    # Otherwise, if size is a tuple it's either (height, width) or (width, height)
+    elif isinstance(size, (tuple, list)) and height_width_order:
+        return {"height": size[0], "width": size[1]}
+    elif isinstance(size, (tuple, list)) and not height_width_order:
+        return {"height": size[1], "width": size[0]}
+
+    raise ValueError(f"Could not convert size input to size dict: {size}")
+
+
 def get_size_dict(
     size: Union[int, Iterable[int], Dict[str, int]] = None,
     max_size: Optional[int] = None,
     height_width_order: bool = True,
     default_to_square: bool = True,
+    param_name="size",
 ) -> dict:
     """
     Converts the old size parameter in the config into the new dict expected in the config. This is to ensure backwards
@@ -467,44 +519,24 @@ def get_size_dict(
         default_to_square (`bool`, *optional*, defaults to `True`):
             If `size` is an int, whether to default to a square image or not.
     """
-    # If a dict is passed, we check if it's a valid size dict and then return it.
-    if isinstance(size, dict):
-        size_keys = set(size.keys())
-        if (
-            size_keys != set(["height", "width"])
-            and size_keys != set(["shortest_edge"])
-            and size_keys != set(["shortest_edge", "longest_edge"])
-        ):
-            raise ValueError(
-                "The size dict must contain either the keys ('height', 'width') or ('shortest_edge')"
-                f"or ('shortest_edge', 'longest_edge') but got {size_keys}"
-            )
-        return size
+    if not isinstance(size, dict):
+        size_dict = convert_to_size_dict(size, max_size, default_to_square, height_width_order)
+        logger.info(
+            f"{param_name} should be a dictionary on of the following set of keys: {VALID_SIZE_DICT_KEYS}, got {size}."
+            f" Converted to {size_dict}.",
+        )
+    else:
+        size_dict = size
 
-    # By default, if size is an int we assume it represents a tuple of (size, size).
-    elif isinstance(size, int) and default_to_square:
-        if max_size is not None:
-            raise ValueError("Cannot specify both size as an int, with default_to_square=True and max_size")
-        size_dict = {"height": size, "width": size}
-    # In other configs, if size is an int and default_to_square is False, size represents the length of the shortest edge after resizing.
-    elif isinstance(size, int) and not default_to_square:
-        if max_size is not None:
-            size_dict = {"shortest_edge": size, "longest_edge": max_size}
-        else:
-            size_dict = {"shortest_edge": size}
-    elif isinstance(size, (tuple, list)) and height_width_order:
-        size_dict = {"height": size[0], "width": size[1]}
-    elif isinstance(size, (tuple, list)) and not height_width_order:
-        size_dict = {"height": size[1], "width": size[0]}
-
-    logger.warning(
-        "The size parameter should be a dictionary with keys ('height', 'width'), ('shortest_edge', 'longest_edge')"
-        f" or ('shortest_edge',) got {size}. Setting as {size_dict}.",
-    )
+    if not is_valid_size_dict(size_dict):
+        raise ValueError(
+            f"{param_name} must have one of the following set of keys: {VALID_SIZE_DICT_KEYS}, got {size_dict.keys()}"
+        )
     return size_dict
 
 
 ImageProcessingMixin.push_to_hub = copy_func(ImageProcessingMixin.push_to_hub)
-ImageProcessingMixin.push_to_hub.__doc__ = ImageProcessingMixin.push_to_hub.__doc__.format(
-    object="image processor", object_class="AutoImageProcessor", object_files="image processor file"
-)
+if ImageProcessingMixin.push_to_hub.__doc__ is not None:
+    ImageProcessingMixin.push_to_hub.__doc__ = ImageProcessingMixin.push_to_hub.__doc__.format(
+        object="image processor", object_class="AutoImageProcessor", object_files="image processor file"
+    )

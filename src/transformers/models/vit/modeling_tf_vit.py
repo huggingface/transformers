@@ -41,7 +41,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "ViTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "ViTFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224-in21k"
@@ -629,8 +628,8 @@ VIT_START_DOCSTRING = r"""
 VIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See
-            [`ViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
 
         head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -670,7 +669,6 @@ class TFViTModel(TFViTPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -764,7 +762,6 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
     @unpack_inputs
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

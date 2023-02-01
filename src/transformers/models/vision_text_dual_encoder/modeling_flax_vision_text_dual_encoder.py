@@ -88,7 +88,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -106,8 +106,8 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            a feature extractor (e.g. if you use ViT as the encoder, you should use [`ViTFeatureExtractor`]). See
-            [`ViTFeatureExtractor.__call__`] for details.
+            an image processor (e.g. if you use ViT as the encoder, you should use [`AutoImageProcessor`]). See
+            [`ViTImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -556,13 +556,13 @@ VISION_TEXT_DUAL_ENCODER_MODEL_DOCSTRING = r"""
     >>> from transformers import (
     ...     FlaxVisionTextDualEncoderModel,
     ...     VisionTextDualEncoderProcessor,
-    ...     ViTFeatureExtractor,
-    ...     BertTokenizer,
+    ...     AutoImageProcessor,
+    ...     AutoTokenizer,
     ... )
 
-    >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
-    >>> processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
+    >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+    >>> image_processor = AutoImageProcesor.from_pretrained("google/vit-base-patch16-224")
+    >>> processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
     >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
     ...     "google/vit-base-patch16-224", "bert-base-uncased"
     ... )

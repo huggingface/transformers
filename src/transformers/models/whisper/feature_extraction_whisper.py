@@ -43,7 +43,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, defaults to 80):
             The feature dimension of the extracted features.
         sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         hop_length (`int`, defaults to 160):
             Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, defaults to 30):
@@ -240,7 +240,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
@@ -249,8 +249,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
                 <Tip>
 
-                For WhisperTransoformer models, `attention_mask` should alwys be passed for batched inference, to avoid
-                subtle bugs.
+                For Whisper models, `attention_mask` should always be passed for batched inference, to avoid subtle
+                bugs.
 
                 </Tip>
 
@@ -271,9 +271,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
-                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
-                    f" {self.sampling_rate} and not {sampling_rate}."
+                    f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a"
+                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `raw_speech` input"
+                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
             logger.warning(
@@ -307,7 +307,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            **kwargs,
         )
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)

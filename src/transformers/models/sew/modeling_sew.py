@@ -36,16 +36,11 @@ from .configuration_sew import SEWConfig
 
 logger = logging.get_logger(__name__)
 
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-
 
 _HIDDEN_STATES_START_POSITION = 1
 
-
 # General docstring
 _CONFIG_FOR_DOC = "SEWConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "asapp/sew-tiny-100k-ft-ls100h"
@@ -58,7 +53,6 @@ _CTC_EXPECTED_OUTPUT = (
 _CTC_EXPECTED_LOSS = 0.42
 
 # Audio class docstring
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 _SEQ_CLASS_CHECKPOINT = "anton-l/sew-mid-100k-ft-keyword-spotting"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
 _SEQ_CLASS_EXPECTED_LOSS = 9.52
@@ -450,7 +444,14 @@ class SEWAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -812,10 +813,10 @@ SEW_START_DOCSTRING = r"""
 SEW_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -909,7 +910,6 @@ class SEWModel(SEWPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEW_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1013,7 +1013,6 @@ class SEWForCTC(SEWPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEW_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1148,7 +1147,6 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEW_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

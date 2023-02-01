@@ -376,8 +376,8 @@ class TFDPRPretrainedReader(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )
@@ -457,7 +457,7 @@ TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
             rather than the left.
 
-            Indices can be obtained using [`DPRTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)

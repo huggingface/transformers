@@ -39,7 +39,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/esm2_t6_8M_UR50D"
 _CONFIG_FOR_DOC = "EsmConfig"
-_TOKENIZER_FOR_DOC = "EsmTokenizer"
 
 ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/esm2_t6_8M_UR50D",
@@ -66,6 +65,23 @@ def gelu(x):
     This is the gelu implementation from the original ESM repo. Using F.gelu yields subtly wrong results.
     """
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+
+
+def symmetrize(x):
+    "Make layer symmetric in final two dimensions, used for contact prediction."
+    return x + x.transpose(-1, -2)
+
+
+def average_product_correct(x):
+    "Perform average product correct, used for contact prediction."
+    a1 = x.sum(-1, keepdims=True)
+    a2 = x.sum(-2, keepdims=True)
+    a12 = x.sum((-1, -2), keepdims=True)
+
+    avg = a1 * a2
+    avg.div_(a12)  # in-place to reduce memory
+    normalized = x - avg
+    return normalized
 
 
 class RotaryEmbedding(torch.nn.Module):
@@ -109,6 +125,41 @@ class RotaryEmbedding(torch.nn.Module):
             apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached),
             apply_rotary_pos_emb(k, self._cos_cached, self._sin_cached),
         )
+
+
+class EsmContactPredictionHead(nn.Module):
+    """Performs symmetrization, apc, and computes a logistic regression on the output features"""
+
+    def __init__(
+        self,
+        in_features: int,
+        bias=True,
+        eos_idx: int = 2,
+    ):
+        super().__init__()
+        self.in_features = in_features
+        self.eos_idx = eos_idx
+        self.regression = nn.Linear(in_features, 1, bias)
+        self.activation = nn.Sigmoid()
+
+    def forward(self, tokens, attentions):
+        # remove eos token attentions
+        eos_mask = tokens.ne(self.eos_idx).to(attentions)
+        eos_mask = eos_mask.unsqueeze(1) * eos_mask.unsqueeze(2)
+        attentions = attentions * eos_mask[:, None, None, :, :]
+        attentions = attentions[..., :-1, :-1]
+        # remove cls token attentions
+        attentions = attentions[..., 1:, 1:]
+        batch_size, layers, heads, seqlen, _ = attentions.size()
+        attentions = attentions.view(batch_size, layers * heads, seqlen, seqlen)
+
+        # features: batch x channels x tokens x tokens (symmetric)
+        attentions = attentions.to(
+            self.regression.weight.device
+        )  # attentions always float32, may need to convert to float16
+        attentions = average_product_correct(symmetrize(attentions))
+        attentions = attentions.permute(0, 2, 3, 1)
+        return self.activation(self.regression(attentions).squeeze(3))
 
 
 class EsmEmbeddings(nn.Module):
@@ -638,6 +689,7 @@ class EsmPreTrainedModel(PreTrainedModel):
 
     config_class = EsmConfig
     base_model_prefix = "esm"
+    _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -678,7 +730,7 @@ ESM_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`EsmTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -735,7 +787,6 @@ class EsmModel(EsmPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = False
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Esm
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -744,6 +795,10 @@ class EsmModel(EsmPreTrainedModel):
         self.encoder = EsmEncoder(config)
 
         self.pooler = EsmPooler(config) if add_pooling_layer else None
+
+        self.contact_head = EsmContactPredictionHead(
+            in_features=config.num_hidden_layers * config.num_attention_heads, bias=True
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -768,7 +823,6 @@ class EsmModel(EsmPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -893,6 +947,17 @@ class EsmModel(EsmPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+    def predict_contacts(self, tokens, attention_mask):
+        attns = self(tokens, attention_mask=attention_mask, return_dict=True, output_attentions=True).attentions
+        attns = torch.stack(attns, dim=1)  # Matches the original model layout
+        # In the original model, attentions for padding tokens are completely zeroed out.
+        # This makes no difference most of the time because the other tokens won't attend to them,
+        # but it does for the contact prediction task, which takes attentions as input,
+        # so we have to mimic that here.
+        attns *= attention_mask.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+        attns *= attention_mask.unsqueeze(1).unsqueeze(2).unsqueeze(4)
+        return self.contact_head(tokens, attns)
+
 
 @add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
 class EsmForMaskedLM(EsmPreTrainedModel):
@@ -921,7 +986,6 @@ class EsmForMaskedLM(EsmPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -940,7 +1004,7 @@ class EsmForMaskedLM(EsmPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -981,6 +1045,9 @@ class EsmForMaskedLM(EsmPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def predict_contacts(self, tokens, attention_mask):
+        return self.esm.predict_contacts(tokens, attention_mask=attention_mask)
 
 
 class EsmLMHead(nn.Module):
@@ -1026,7 +1093,6 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1042,7 +1108,7 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1122,7 +1188,6 @@ class EsmForTokenClassification(EsmPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1138,7 +1203,7 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.

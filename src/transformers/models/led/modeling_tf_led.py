@@ -50,7 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "allenai/led-base-16384"
 _CONFIG_FOR_DOC = "LEDConfig"
-_TOKENIZER_FOR_DOC = "LEDTokenizer"
 
 
 LARGE_NEGATIVE = -1e8
@@ -1323,10 +1322,10 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        input_ids = tf.convert_to_tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0]], dtype=tf.int64)
+        input_ids = tf.convert_to_tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0]], dtype=tf.int32)
         # make sure global layers are initialized
-        attention_mask = tf.convert_to_tensor([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0]], dtype=tf.int64)
-        global_attention_mask = tf.convert_to_tensor([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0]], dtype=tf.int64)
+        attention_mask = tf.convert_to_tensor([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0]], dtype=tf.int32)
+        global_attention_mask = tf.convert_to_tensor([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0]], dtype=tf.int32)
         dummy_inputs = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -1338,10 +1337,10 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
             }
         ]
     )
@@ -1704,7 +1703,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`LEDTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1967,7 +1966,7 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it. Indices can be obtained using [`LEDTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                provide it. Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
             attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -2269,7 +2268,6 @@ class TFLEDModel(TFLEDPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLEDSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2430,11 +2428,11 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LEDTokenizer, TFLEDForConditionalGeneration
+        >>> from transformers import AutoTokenizer, TFLEDForConditionalGeneration
         >>> import tensorflow as tf
 
         >>> mname = "allenai/led-base-16384"
-        >>> tokenizer = LEDTokenizer.from_pretrained(mname)
+        >>> tokenizer = AutoTokenizer.from_pretrained(mname)
         >>> TXT = "My friends are <mask> but they eat too many carbs."
         >>> model = TFLEDForConditionalGeneration.from_pretrained(mname)
         >>> batch = tokenizer([TXT], return_tensors="tf")
@@ -2512,7 +2510,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
@@ -2521,13 +2519,13 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         **kwargs
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -2537,16 +2535,6 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
-
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            # cached cross_attention states don't have to be reordered -> they are always the same
-            reordered_past += (
-                tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past[:2]) + layer_past[2:],
-            )
-        return reordered_past
 
     def hf_compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""

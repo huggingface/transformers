@@ -441,6 +441,11 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
+    def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        config_and_inputs[0].position_embedding_type = "relative_key"
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)

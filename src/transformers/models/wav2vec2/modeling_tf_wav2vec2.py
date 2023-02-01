@@ -50,7 +50,6 @@ _HIDDEN_STATES_START_POSITION = 2
 
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
-_TOKENIZER_FOR_DOC = "Wav2Vec2Tokenizer"
 
 TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/wav2vec2-base-960h",
@@ -262,13 +261,17 @@ def _compute_mask_indices(
     if mask_length < 1:
         raise ValueError("`mask_length` has to be bigger than 0.")
 
-    if mask_length > sequence_length:
-        raise ValueError(
+    tf.debugging.assert_less(
+        mask_length,
+        sequence_length,
+        message=(
             f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and"
             f" `sequence_length`: {sequence_length}`"
-        )
+        ),
+    )
+
     # compute number of masked spans in batch
-    num_masked_spans = mask_prob * sequence_length / mask_length + tf.random.uniform((1,))
+    num_masked_spans = mask_prob * tf.cast(sequence_length, tf.float32) / mask_length + tf.random.uniform((1,))
     num_masked_spans = tf.maximum(num_masked_spans, min_masks)
     num_masked_spans = tf.cast(num_masked_spans, tf.int32)
 
@@ -1345,8 +1348,8 @@ class TFWav2Vec2PreTrainedModel(TFPreTrainedModel):
         input_signature=[
             {
                 "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int64, name="token_type_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )
@@ -1400,10 +1403,10 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
 
 WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
+        input_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1486,11 +1489,11 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import Wav2Vec2Processor, TFWav2Vec2Model
+        >>> from transformers import AutoProcessor, TFWav2Vec2Model
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+        >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
         >>> model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
 
 
@@ -1617,11 +1620,11 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import Wav2Vec2Processor, TFWav2Vec2ForCTC
+        >>> from transformers import AutoProcessor, TFWav2Vec2ForCTC
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+        >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
         >>> model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 
 

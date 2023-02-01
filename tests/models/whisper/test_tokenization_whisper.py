@@ -59,7 +59,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(len(vocab_keys), 50364)
 
     def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 50257)
+        self.assertEqual(self.get_tokenizer().vocab_size, 50258)
 
     def test_full_tokenizer(self):
         tokenizer = WhisperTokenizer.from_pretrained(self.tmpdirname)
@@ -96,7 +96,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @slow
     def test_tokenizer_integration(self):
         # fmt: off
-        expected_encoding = {'input_ids': [[41762, 364, 357, 36234, 1900, 355, 12972, 13165, 354, 12, 35636, 364, 290, 12972, 13165, 354, 12, 5310, 13363, 12, 4835, 8, 3769, 2276, 12, 29983, 45619, 357, 13246, 51, 11, 402, 11571, 12, 17, 11, 5564, 13246, 38586, 11, 16276, 44, 11, 4307, 346, 33, 861, 11, 16276, 7934, 23029, 329, 12068, 15417, 28491, 357, 32572, 52, 8, 290, 12068, 15417, 16588, 357, 32572, 38, 8, 351, 625, 3933, 10, 2181, 13363, 4981, 287, 1802, 10, 8950, 290, 2769, 48817, 1799, 1022, 449, 897, 11, 9485, 15884, 354, 290, 309, 22854, 37535, 13], [13246, 51, 318, 3562, 284, 662, 12, 27432, 2769, 8406, 4154, 282, 24612, 422, 9642, 9608, 276, 2420, 416, 26913, 21143, 319, 1111, 1364, 290, 826, 4732, 287, 477, 11685, 13], [464, 2068, 7586, 21831, 18045, 625, 262, 16931, 3290, 13]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # noqa: E501
+        expected_encoding = {'input_ids': [[50257, 50362, 41762, 364, 357, 36234, 1900, 355, 12972, 13165, 354, 12, 35636, 364, 290, 12972, 13165, 354, 12, 5310, 13363, 12, 4835, 8, 3769, 2276, 12, 29983, 45619, 357, 13246, 51, 11, 402, 11571, 12, 17, 11, 5564, 13246, 38586, 11, 16276, 44, 11, 4307, 346, 33, 861, 11, 16276, 7934, 23029, 329, 12068, 15417, 28491, 357, 32572, 52, 8, 290, 12068, 15417, 16588, 357, 32572, 38, 8, 351, 625, 3933, 10, 2181, 13363, 4981, 287, 1802, 10, 8950, 290, 2769, 48817, 1799, 1022, 449, 897, 11, 9485, 15884, 354, 290, 309, 22854, 37535, 13, 50256], [50257, 50362, 13246, 51, 318, 3562, 284, 662, 12, 27432, 2769, 8406, 4154, 282, 24612, 422, 9642, 9608, 276, 2420, 416, 26913, 21143, 319, 1111, 1364, 290, 826, 4732, 287, 477, 11685, 13, 50256], [50257, 50362, 464, 2068, 7586, 21831, 18045, 625, 262, 16931, 3290, 13, 50256]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # noqa: E501
         # fmt: on
 
         self.tokenizer_integration_test_util(
@@ -227,3 +227,79 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         batch_encoding = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
         transcription = multilingual_tokenizer.batch_decode(batch_encoding, skip_special_tokens=True)
         self.assertListEqual(batch, transcription)
+
+    def test_offset_decoding(self):
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
+        # fmt: off
+        INPUT_TOKENS = [
+            50258, 50259, 50359, 50364, 441, 1857, 4174, 11, 5242, 366,
+            257, 1333, 295, 493, 2794, 2287, 293, 12018, 14880, 11,
+            293, 25730, 311, 454, 34152, 4496, 904, 50724, 50724, 366,
+            382, 4048, 382, 257, 361, 18459, 13065, 13, 2221, 13,
+            7145, 74, 325, 38756, 311, 29822, 7563, 412, 472, 709,
+            294, 264, 51122, 51122, 912, 636, 300, 2221, 13, 2741,
+            5767, 1143, 281, 7319, 702, 7798, 13, 400, 2221, 13,
+            2619, 4004, 811, 2709, 702, 51449, 51449, 50257
+        ]
+        # fmt: on
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
+
+        self.assertEqual(
+            output,
+            [
+                {
+                    "text": (
+                        " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles"
+                    ),
+                    "timestamp": (0.0, 7.2),
+                },
+                {
+                    "text": (
+                        " are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the"
+                    ),
+                    "timestamp": (7.2, 15.16),
+                },
+                {
+                    "text": " same way that Mr. Carker used to flash his teeth. And Mr. John Colier gives his",
+                    "timestamp": (15.16, 21.7),
+                },
+            ],
+        )
+        # test `decode_with_offsets`
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, decode_with_timestamps=True)
+        self.assertEqual(
+            output,
+            "<|startoftranscript|><|en|><|transcribe|><|0.00|> Lennils, pictures are a sort of upguards and atom"
+            " paintings, and Mason's exquisite idles<|7.20|><|7.20|> are as national as a jingo poem. Mr. Birkut"
+            " Foster's landscapes smile at one much in the<|15.16|><|15.16|> same way that Mr. Carker used to flash"
+            " his teeth. And Mr. John Colier gives his<|21.70|><|21.70|><|endoftext|>",
+        )
+        # test a single sequence with timestamps
+        # fmt: off
+        INPUT_TOKENS = [
+            50364, 441, 1857, 4174, 11, 5242, 366,
+            257, 1333, 295, 493, 2794, 2287, 293, 12018, 14880, 11,
+            293, 25730, 311, 454, 34152, 4496, 904, 50724
+        ]
+        # fmt: on
+
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
+        self.assertEqual(
+            output[0],
+            {
+                "text": " Lennils, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles",
+                "timestamp": (0.0, 7.2),
+            },
+        )
+
+        # test a sequence without a single timestamps
+        # fmt: off
+        INPUT_TOKENS = [
+            441, 1857, 4174, 11, 5242, 366,
+            257, 1333, 295, 493, 2794, 2287, 293, 12018, 14880, 11,
+            293, 25730, 311, 454, 34152, 4496, 904, 50724
+        ]
+        # fmt: on
+
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
+        self.assertEqual(output, [])

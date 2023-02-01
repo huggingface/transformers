@@ -17,6 +17,8 @@ import json
 import os
 from typing import List, Optional, Tuple, Union
 
+import numpy as np
+
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -110,7 +112,7 @@ LANGUAGES = {
     "hi": "hindi",
     "fi": "finnish",
     "vi": "vietnamese",
-    "iw": "hebrew",
+    "he": "hebrew",
     "uk": "ukrainian",
     "el": "greek",
     "ms": "malay",
@@ -399,9 +401,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
             self.language = self.language.lower()
             if self.language in TO_LANGUAGE_CODE:
                 language_id = TO_LANGUAGE_CODE[self.language]
+            elif self.language in TO_LANGUAGE_CODE.values():
+                language_id = self.language
             else:
+                is_language_code = len(self.language) == 2
                 raise ValueError(
-                    f"Unsupported language: {self.language}. Language should be in: {TO_LANGUAGE_CODE.keys()}"
+                    f"Unsupported language: {self.language}. Language should be one of:"
+                    f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
                 )
 
         if self.task is not None:
@@ -473,8 +479,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        return self.decoder.get(index, self.decoder.get(self.unk_token_id))
+        """
+        Converts an index (integer) in a token (str) using the vocab. Whisper's base tokenizer always decodes OOV
+        tokens as "", thus we do not use the `unk_token` here.
+        """
+        return self.decoder.get(index, "")
 
     def _normalize(self, text):
         """
@@ -483,6 +492,115 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
+
+    def _decode_with_timestamps(self, token_ids, time_precision=0.02) -> str:
+        """
+        Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
+        given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
+        """
+        timestamp_begin = self.all_special_ids[-1] + 1
+        outputs = [[]]
+        for token in token_ids:
+            if token >= timestamp_begin:
+                timestamp = f"<|{(token - timestamp_begin) * time_precision:.2f}|>"
+                outputs.append(timestamp)
+                outputs.append([])
+            else:
+                outputs[-1].append(token)
+        outputs = [s if isinstance(s, str) else self.decode(s) for s in outputs]
+        return "".join(outputs)
+
+    def _compute_offsets(self, token_ids, time_precision=0.02):
+        """
+        Compute offsets for a given tokenized input
+
+        Args:
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            time_precision (`float`, `optional`, defaults to 0.02):
+                The time ratio to convert from token to time.
+        """
+        offsets = []
+        token_ids = np.array(token_ids)
+        if token_ids.shape[0] > 1 and len(token_ids.shape) > 1:
+            raise ValueError("Can only process a single input at a time")
+        timestamp_begin = self.all_special_ids[-1] + 1
+        timestamp_tokens = token_ids >= timestamp_begin
+
+        consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
+        if consecutive.shape[0] == 0 and timestamp_tokens.sum() <= 1:
+            # either there are no timestamps or there are no consecutive ones
+            return []
+        elif np.where(timestamp_tokens)[0][-1] + 1 not in consecutive:
+            # we add the final timestamp if it is not already in the list
+            consecutive = np.append(consecutive, np.where(timestamp_tokens)[0][-1] + 1)
+
+        last_slice = np.where(timestamp_tokens)[0][0]
+        for current_slice in consecutive:
+            sliced_tokens = token_ids[last_slice:current_slice]
+            if len(sliced_tokens) > 1:
+                start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
+                end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
+                offsets.append(
+                    {
+                        "text": self._decode(sliced_tokens),
+                        "timestamp": (
+                            start_timestamp_position * time_precision,
+                            end_timestamp_position * time_precision,
+                        ),
+                    }
+                )
+            last_slice = current_slice
+
+        return offsets
+
+    def decode(
+        self,
+        token_ids,
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        output_offsets: bool = False,
+        time_precision=0.02,
+        decode_with_timestamps: bool = False,
+        **kwargs
+    ) -> str:
+        """
+        Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
+        tokens and clean up tokenization spaces.
+
+        Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
+
+        Args:
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the `__call__` method.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+                Whether or not to clean up the tokenization spaces.
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the underlying model specific decode method.
+            output_offsets (`bool`, *optional*, defaults to `False`):
+                Whether or not to output the offsets of the tokens. This should only be set if the model predicted
+                timestamps.
+            decode_with_timestamps (`bool`, *optional*, defaults to `False`):
+                WHether or not to decode with timestamps included in the raw text.
+        Returns:
+            `str`: The decoded sentence.
+        """
+        text = super().decode(
+            token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+        if decode_with_timestamps:
+            text = self._decode_with_timestamps(token_ids, time_precision=time_precision)
+        # retrieve offsets
+        if output_offsets:
+            offsets = None
+            offsets = self._compute_offsets(token_ids, time_precision=time_precision)
+            return {"text": text, "offsets": offsets}
+        return text
 
     def _decode(
         self, token_ids: Union[int, List[int]], skip_special_tokens: bool = False, normalize: bool = False, **kwargs
@@ -577,3 +695,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
         if len(input_ids) > self.model_max_length:
             input_ids = input_ids[-self.model_max_length :]
         return input_ids
+
+    def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
+        self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
+        # prefix tokens are of the form: <|startoftranscript|> <|lang_id|> <|task|> <|notimestamps|>
+        # we don't want to force the bos token at position 1, as this is the starting token
+        # when we generate, so we slice the prefix tokens to: <|lang_id|> <|task|> <|notimestamps|>
+        # to get the forced tokens
+        forced_tokens = self.prefix_tokens[1:]
+        forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_tokens)]
+        return forced_decoder_ids

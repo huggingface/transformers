@@ -55,7 +55,6 @@ _HIDDEN_STATES_START_POSITION = 2
 
 # General docstring
 _CONFIG_FOR_DOC = "UniSpeechSatConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/unispeech-sat-base-100h-libri-ft"
@@ -64,12 +63,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
 # CTC docstring
 _CTC_EXPECTED_OUTPUT = "'MISTER QUILDER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
 _CTC_EXPECTED_LOSS = 39.88
-
-# Audio class docstring
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-_SEQ_CLASS_CHECKPOINT = "hf-internal-testing/tiny-random-unispeech-sat"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
-_SEQ_CLASS_EXPECTED_LOSS = 0.71  # TODO(anton) - could you quickly fine-tune a KS WavLM Model
 
 # Frame class docstring
 _FRAME_CLASS_CHECKPOINT = "microsoft/unispeech-sat-base-plus-sd"
@@ -500,7 +493,14 @@ class UniSpeechSatAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -1044,11 +1044,10 @@ UNISPEECH_SAT_START_DOCSTRING = r"""
 UNISPEECH_SAT_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`UniSpeechSatProcessor`] should be used for
-            padding and conversion into a tensor of type *torch.FloatTensor*. See [`UniSpeechSatProcessor.__call__`]
-            for details.
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1151,7 +1150,6 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1292,10 +1290,10 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import Wav2Vec2FeatureExtractor, UniSpeechSatForPreTraining
+        >>> from transformers import AutoFeatureExtractor, UniSpeechSatForPreTraining
         >>> from transformers.models.unispeech_sat.modeling_unispeech_sat import _compute_mask_indices
 
-        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("microsoft/unispeech-sat-base")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/unispeech-sat-base")
         >>> model = UniSpeechSatForPreTraining.from_pretrained("microsoft/unispeech-sat-base")
         >>> # TODO: Add full pretraining example
         ```"""
@@ -1392,7 +1390,6 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1479,7 +1476,6 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
     """,
     UNISPEECH_SAT_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat, WAV_2_VEC_2->UNISPEECH_SAT
 class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1498,6 +1494,7 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_feature_extractor
     def freeze_feature_extractor(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameters will
@@ -1510,6 +1507,7 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
         )
         self.freeze_feature_encoder()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_feature_encoder with wav2vec2->unispeech_sat
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -1517,6 +1515,7 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
         """
         self.unispeech_sat.feature_extractor._freeze_parameters()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_base_model with wav2vec2->unispeech_sat
     def freeze_base_model(self):
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
@@ -1527,14 +1526,12 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->UniSpeechSat, wav2vec2->unispeech_sat
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1651,7 +1648,6 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_FRAME_CLASS_CHECKPOINT,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1834,7 +1830,6 @@ class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(UNISPEECH_SAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_XVECTOR_CHECKPOINT,
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,

@@ -20,7 +20,7 @@ boto3==1.16.34
 botocore==1.19.63
 Brotli==1.0.9
 cachetools==5.0.0
-certifi==2021.10.8
+certifi==2022.12.7
 cffi==1.15.0
 chardet==4.0.0
 charset-normalizer==2.0.12
@@ -67,7 +67,7 @@ fsspec==2022.2.0
 fugashi==1.1.2
 gast==0.5.3
 gitdb==4.0.9
-GitPython==3.1.18
+GitPython==3.1.30
 glfw==2.5.1
 google-auth==2.6.2
 google-auth-oauthlib==0.4.6
@@ -119,7 +119,7 @@ nltk==3.7
 numba==0.55.1
 numpy==1.22.3
 oauthlib==3.2.1
-onnx==1.11.0
+onnx==1.13.0
 onnxconverter-common==1.9.0
 opt-einsum==3.3.0
 optax==0.1.1
@@ -133,7 +133,7 @@ pbr==5.8.1
 pexpect==4.8.0
 phonemizer==3.0.1
 pickleshare==0.7.5
-Pillow==9.0.1
+Pillow==9.3.0
 Pint==0.16.1
 plac==1.3.4
 platformdirs==2.5.1

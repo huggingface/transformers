@@ -770,8 +770,8 @@ VIT_MAE_START_DOCSTRING = r"""
 VIT_MAE_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
 
         head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -830,17 +830,17 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, TFViTMAEModel
+        >>> from transformers import AutoImageProcessor, TFViTMAEModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-mae-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/vit-mae-base")
         >>> model = TFViTMAEModel.from_pretrained("facebook/vit-mae-base")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> inputs = image_processor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
@@ -1121,17 +1121,17 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, TFViTMAEForPreTraining
+        >>> from transformers import AutoImageProcessor, TFViTMAEForPreTraining
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-mae-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/vit-mae-base")
         >>> model = TFViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> loss = outputs.loss
         >>> mask = outputs.mask

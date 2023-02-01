@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "MobileViTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "MobileViTFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "apple/mobilevit-small"
@@ -811,8 +810,8 @@ MOBILEVIT_START_DOCSTRING = r"""
 MOBILEVIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]`, `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`MobileViTFeatureExtractor`]. See
-            [`MobileViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`MobileViTImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -839,7 +838,6 @@ class TFMobileViTModel(TFMobileViTPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -889,7 +887,6 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -1103,17 +1100,17 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MobileViTFeatureExtractor, TFMobileViTForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, TFMobileViTForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/deeplabv3-mobilevit-small")
+        >>> image_processor = AutoImageProcessor.from_pretrained("apple/deeplabv3-mobilevit-small")
         >>> model = TFMobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-small")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> inputs = image_processor(images=image, return_tensors="tf")
 
         >>> outputs = model(**inputs)
 

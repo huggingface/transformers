@@ -58,7 +58,6 @@ from .configuration_funnel import FunnelConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "FunnelConfig"
-_TOKENIZER_FOR_DOC = "FunnelTokenizer"
 
 TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "funnel-transformer/small",  # B4-4-4H768
@@ -82,7 +81,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
         self.initializer_std = 1.0 if config.initializer_std is None else config.initializer_std
 
@@ -93,7 +92,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.hidden_size],
+                shape=[self.config.vocab_size, self.hidden_size],
                 initializer=get_initializer(initializer_range=self.initializer_std),
             )
 
@@ -114,10 +113,10 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = tf.gather(self.weight, input_ids)
@@ -924,12 +923,12 @@ class TFFunnelDiscriminatorPredictions(tf.keras.layers.Layer):
 class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
         super().build(input_shape)
 
@@ -945,13 +944,13 @@ class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states, training=False):
         seq_length = shape_list(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
@@ -1060,7 +1059,7 @@ FUNNEL_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`FunnelTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1114,7 +1113,6 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1164,7 +1162,6 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1236,10 +1233,10 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import FunnelTokenizer, TFFunnelForPreTraining
+        >>> from transformers import AutoTokenizer, TFFunnelForPreTraining
         >>> import torch
 
-        >>> tokenizer = FunnelTokenizer.from_pretrained("funnel-transformer/small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("funnel-transformer/small")
         >>> model = TFFunnelForPreTraining.from_pretrained("funnel-transformer/small")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
@@ -1293,7 +1290,6 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1366,7 +1362,6 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1446,12 +1441,11 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32)}
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1521,9 +1515,9 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int64, name="token_type_ids"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )
@@ -1561,7 +1555,6 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1638,7 +1631,6 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

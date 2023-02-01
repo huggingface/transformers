@@ -159,7 +159,7 @@ def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
         label_col_name = None
     if label_col_name is not None:
         if isinstance(first[label_col_name], tf.Tensor):
-            dtype = tf.int64 if first[label_col_name].dtype.is_integer() else tf.float32
+            dtype = tf.int64 if first[label_col_name].dtype.is_integer else tf.float32
         elif isinstance(first[label_col_name], np.ndarray) or isinstance(first[label_col_name], np.generic):
             dtype = tf.int64 if np.issubdtype(first[label_col_name].dtype, np.integer) else tf.float32
         elif isinstance(first[label_col_name], (tuple, list)):
@@ -305,30 +305,38 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
 
         label_name = "label" if "label" in features[0].keys() else "labels"
         labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
+
+        no_labels_features = [{k: v for k, v in feature.items() if k != label_name} for feature in features]
+
         batch = self.tokenizer.pad(
-            features,
+            no_labels_features,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            # Conversion to tensors will fail if we have labels as they are not of the same length yet.
-            return_tensors="pt" if labels is None else None,
+            return_tensors="pt",
         )
 
         if labels is None:
             return batch
 
-        sequence_length = torch.tensor(batch["input_ids"]).shape[1]
+        sequence_length = batch["input_ids"].shape[1]
         padding_side = self.tokenizer.padding_side
+
+        def to_list(tensor_or_iterable):
+            if isinstance(tensor_or_iterable, torch.Tensor):
+                return tensor_or_iterable.tolist()
+            return list(tensor_or_iterable)
+
         if padding_side == "right":
             batch[label_name] = [
-                list(label) + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels
+                to_list(label) + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels
             ]
         else:
             batch[label_name] = [
-                [self.label_pad_token_id] * (sequence_length - len(label)) + list(label) for label in labels
+                [self.label_pad_token_id] * (sequence_length - len(label)) + to_list(label) for label in labels
             ]
 
-        batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
+        batch[label_name] = torch.tensor(batch[label_name], dtype=torch.int64)
         return batch
 
     def tf_call(self, features):

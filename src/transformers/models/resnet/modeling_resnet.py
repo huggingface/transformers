@@ -23,12 +23,19 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
+    BackboneOutput,
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_resnet import ResNetConfig
 
 
@@ -36,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "ResNetConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/resnet-50"
@@ -260,7 +266,7 @@ class ResNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ResNetModel):
+        if isinstance(module, ResNetEncoder):
             module.gradient_checkpointing = value
 
 
@@ -278,8 +284,8 @@ RESNET_START_DOCSTRING = r"""
 RESNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`ConvNextImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -305,7 +311,6 @@ class ResNetModel(ResNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -362,7 +367,6 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -416,3 +420,93 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
             return (loss,) + output if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+@add_start_docstrings(
+    """
+    ResNet backbone, to be used with frameworks like DETR and MaskFormer.
+    """,
+    RESNET_START_DOCSTRING,
+)
+class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.stage_names = config.stage_names
+        self.embedder = ResNetEmbeddings(config)
+        self.encoder = ResNetEncoder(config)
+
+        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
+
+        out_feature_channels = {}
+        out_feature_channels["stem"] = config.embedding_size
+        for idx, stage in enumerate(self.stage_names[1:]):
+            out_feature_channels[stage] = config.hidden_sizes[idx]
+
+        self.out_feature_channels = out_feature_channels
+
+        # initialize weights and apply final processing
+        self.post_init()
+
+    @property
+    def channels(self):
+        return [self.out_feature_channels[name] for name in self.out_features]
+
+    @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+    ) -> BackboneOutput:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("microsoft/resnet-50")
+        >>> model = AutoBackbone.from_pretrained(
+        ...     "microsoft/resnet-50", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ... )
+
+        >>> inputs = processor(image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 2048, 7, 7]
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        embedding_output = self.embedder(pixel_values)
+
+        outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
+
+        hidden_states = outputs.hidden_states
+
+        feature_maps = ()
+        for idx, stage in enumerate(self.stage_names):
+            if stage in self.out_features:
+                feature_maps += (hidden_states[idx],)
+
+        if not return_dict:
+            output = (feature_maps,)
+            if output_hidden_states:
+                output += (outputs.hidden_states,)
+            return output
+
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=None,
+        )

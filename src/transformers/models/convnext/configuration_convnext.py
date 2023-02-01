@@ -64,6 +64,9 @@ class ConvNextConfig(PretrainedConfig):
             The initial value for the layer scale.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). Will default to the last stage if unset.
 
     Example:
     ```python
@@ -90,10 +93,10 @@ class ConvNextConfig(PretrainedConfig):
         hidden_act="gelu",
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         layer_scale_init_value=1e-6,
         drop_path_rate=0.0,
         image_size=224,
+        out_features=None,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -109,6 +112,16 @@ class ConvNextConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.image_size = image_size
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]
+        if out_features is not None:
+            if not isinstance(out_features, list):
+                raise ValueError("out_features should be a list")
+            for feature in out_features:
+                if feature not in self.stage_names:
+                    raise ValueError(
+                        f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
+                    )
+        self.out_features = out_features
 
 
 class ConvNextOnnxConfig(OnnxConfig):

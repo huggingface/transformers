@@ -51,7 +51,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openai-gpt"
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
-_TOKENIZER_FOR_DOC = "OpenAIGPTTokenizer"
 
 TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openai-gpt",
@@ -202,7 +201,6 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         self.return_dict = config.use_return_dict
         self.num_hidden_layers = config.n_layer
-        self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
         self.n_positions = config.n_positions
         self.initializer_range = config.initializer_range
@@ -302,10 +300,10 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = self.tokens_embed(input_ids, mode="embedding")
@@ -316,10 +314,10 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 token_type_ids,
-                tf.cast(self.vocab_size, dtype=token_type_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=token_type_ids.dtype),
                 message=(
                     "token_type_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(token_type_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(token_type_ids)} >= {self.config.vocab_size})"
                 ),
             )
             token_type_embeds = self.tokens_embed(token_type_ids, mode="embedding")
@@ -379,8 +377,8 @@ class TFOpenAIGPTPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )
@@ -466,7 +464,7 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`OpenAIGPTTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -529,7 +527,6 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -593,7 +590,6 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
     @unpack_inputs
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -708,9 +704,9 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import OpenAIGPTTokenizer, TFOpenAIGPTDoubleHeadsModel
+        >>> from transformers import AutoTokenizer, TFOpenAIGPTDoubleHeadsModel
 
-        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained("openai-gpt")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-gpt")
         >>> model = TFOpenAIGPTDoubleHeadsModel.from_pretrained("openai-gpt")
 
         >>> # Add a [CLS] to the vocabulary (we should train it also!)
@@ -821,7 +817,6 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
     @unpack_inputs
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

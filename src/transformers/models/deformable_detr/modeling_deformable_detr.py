@@ -35,12 +35,15 @@ from ...file_utils import (
     is_scipy_available,
     is_timm_available,
     is_torch_cuda_available,
+    is_vision_available,
     replace_return_docstrings,
     requires_backends,
 )
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import meshgrid
 from ...utils import is_ninja_available, logging
+from ..auto import AutoBackbone
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
 
@@ -57,6 +60,9 @@ if is_torch_cuda_available() and is_ninja_available():
         MultiScaleDeformableAttention = None
 else:
     MultiScaleDeformableAttention = None
+
+if is_vision_available():
+    from transformers.image_transforms import center_to_corners_format
 
 
 class MultiScaleDeformableAttentionFunction(Function):
@@ -236,7 +242,7 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~AutoFeatureExtractor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~DeformableDetrProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -366,45 +372,57 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-class DeformableDetrTimmConvEncoder(nn.Module):
+class DeformableDetrConvEncoder(nn.Module):
     """
-    Convolutional encoder (backbone) from the timm library.
+    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
 
     nn.BatchNorm2d layers are replaced by DeformableDetrFrozenBatchNorm2d as defined above.
+
     """
 
     def __init__(self, config):
         super().__init__()
 
-        kwargs = {}
-        if config.dilation:
-            kwargs["output_stride"] = 16
+        self.config = config
 
-        requires_backends(self, ["timm"])
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = {}
+            if config.dilation:
+                kwargs["output_stride"] = 16
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=(2, 3, 4) if config.num_feature_levels > 1 else (4,),
+                in_chans=config.num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = AutoBackbone.from_config(config.backbone_config)
 
-        out_indices = (2, 3, 4) if config.num_feature_levels > 1 else (4,)
-        backbone = create_model(
-            config.backbone, pretrained=True, features_only=True, out_indices=out_indices, **kwargs
-        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.feature_info.channels()
-        self.strides = self.model.feature_info.reduction()
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
 
-        if "resnet" in config.backbone:
+        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                    parameter.requires_grad_(False)
+                if config.use_timm_backbone:
+                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                        parameter.requires_grad_(False)
+                else:
+                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                        parameter.requires_grad_(False)
 
+    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->DeformableDetr
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        """
-        Outputs feature maps of latter stages C_3 through C_5 in ResNet if `config.num_feature_levels > 1`, otherwise
-        outputs feature maps of C_5.
-        """
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values)
+        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
@@ -527,27 +545,42 @@ def build_position_encoding(config):
     return position_embedding
 
 
-def ms_deform_attn_core_pytorch(value, value_spatial_shapes, sampling_locations, attention_weights):
-    # for debug and test only,
-    # need to use cuda version instead
-    N_, S_, M_, D_ = value.shape
-    _, Lq_, M_, L_, P_, _ = sampling_locations.shape
-    value_list = value.split([H_ * W_ for H_, W_ in value_spatial_shapes], dim=1)
+def multi_scale_deformable_attention(
+    value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
+) -> Tensor:
+    batch_size, _, num_heads, hidden_dim = value.shape
+    _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
-    for lid_, (H_, W_) in enumerate(value_spatial_shapes):
-        # N_, H_*W_, M_, D_ -> N_, H_*W_, M_*D_ -> N_, M_*D_, H_*W_ -> N_*M_, D_, H_, W_
-        value_l_ = value_list[lid_].flatten(2).transpose(1, 2).reshape(N_ * M_, D_, H_, W_)
-        # N_, Lq_, M_, P_, 2 -> N_, M_, Lq_, P_, 2 -> N_*M_, Lq_, P_, 2
-        sampling_grid_l_ = sampling_grids[:, :, :, lid_].transpose(1, 2).flatten(0, 1)
-        # N_*M_, D_, Lq_, P_
-        sampling_value_l_ = F.grid_sample(
+    for level_id, (height, width) in enumerate(value_spatial_shapes):
+        # batch_size, height*width, num_heads, hidden_dim
+        # -> batch_size, height*width, num_heads*hidden_dim
+        # -> batch_size, num_heads*hidden_dim, height*width
+        # -> batch_size*num_heads, hidden_dim, height, width
+        value_l_ = (
+            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, hidden_dim, height, width)
+        )
+        # batch_size, num_queries, num_heads, num_points, 2
+        # -> batch_size, num_heads, num_queries, num_points, 2
+        # -> batch_size*num_heads, num_queries, num_points, 2
+        sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+        # batch_size*num_heads, hidden_dim, num_queries, num_points
+        sampling_value_l_ = nn.functional.grid_sample(
             value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
         )
         sampling_value_list.append(sampling_value_l_)
-    # (N_, Lq_, M_, L_, P_) -> (N_, M_, Lq_, L_, P_) -> (N_, M_, 1, Lq_, L_*P_)
-    attention_weights = attention_weights.transpose(1, 2).reshape(N_ * M_, 1, Lq_, L_ * P_)
-    output = (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights).sum(-1).view(N_, M_ * D_, Lq_)
+    # (batch_size, num_queries, num_heads, num_levels, num_points)
+    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+    attention_weights = attention_weights.transpose(1, 2).reshape(
+        batch_size * num_heads, 1, num_queries, num_levels * num_points
+    )
+    output = (
+        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
+        .sum(-1)
+        .view(batch_size, num_heads * hidden_dim, num_queries)
+    )
     return output.transpose(1, 2).contiguous()
 
 
@@ -660,7 +693,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
         try:
-            # GPU
+            # custom kernel
             output = MultiScaleDeformableAttentionFunction.apply(
                 value,
                 spatial_shapes,
@@ -670,8 +703,8 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
                 self.im2col_step,
             )
         except Exception:
-            # CPU
-            output = ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
+            # PyTorch implementation
+            output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -1068,8 +1101,8 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`AutoFeatureExtractor`]. See [`AutoFeatureExtractor.__call__`] for
-            details.
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`DeformableDetrImageProcessor.__call__`]
+            for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1140,9 +1173,10 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes):
 
-            ref_y, ref_x = torch.meshgrid(
+            ref_y, ref_x = meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                indexing="ij",
             )
             # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
             ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, level, 1] * height)
@@ -1433,13 +1467,13 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DeformableDetrTimmConvEncoder(config)
+        backbone = DeformableDetrConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DeformableDetrConvModel(backbone, position_embeddings)
 
         # Create input projection layers
         if config.num_feature_levels > 1:
-            num_backbone_outs = len(backbone.strides)
+            num_backbone_outs = len(backbone.intermediate_channel_sizes)
             input_proj_list = []
             for _ in range(num_backbone_outs):
                 in_channels = backbone.intermediate_channel_sizes[_]
@@ -1504,8 +1538,8 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
-        valid_height = torch.sum(~mask[:, :, 0], 1)
-        valid_width = torch.sum(~mask[:, 0, :], 1)
+        valid_height = torch.sum(mask[:, :, 0], 1)
+        valid_width = torch.sum(mask[:, 0, :], 1)
         valid_ratio_heigth = valid_height.float() / height
         valid_ratio_width = valid_width.float() / width
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
@@ -1551,9 +1585,10 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
-            grid_y, grid_x = torch.meshgrid(
+            grid_y, grid_x = meshgrid(
                 torch.linspace(0, height - 1, height, dtype=torch.float32, device=enc_output.device),
                 torch.linspace(0, width - 1, width, dtype=torch.float32, device=enc_output.device),
+                indexing="ij",
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
 
@@ -1596,17 +1631,17 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, DeformableDetrModel
+        >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrModel.from_pretrained("SenseTime/deformable-detr")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
 
@@ -1681,9 +1716,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
-
-        # revert valid_ratios
-        valid_ratios = ~valid_ratios.bool()
         valid_ratios = valid_ratios.float()
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
@@ -1866,24 +1898,24 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, DeformableDetrForObjectDetection
+        >>> from transformers import AutoImageProcessor, DeformableDetrForObjectDetection
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process_object_detection(
-        ...     outputs, threshold=0.5, target_sizes=target_sizes
-        ... )[0]
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+        ...     0
+        ... ]
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(
@@ -1962,9 +1994,6 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
             if self.config.auxiliary_loss:
-                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
-                outputs_class = self.class_embed(intermediate)
-                outputs_coord = self.bbox_embed(intermediate).sigmoid()
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
             if self.config.two_stage:
@@ -2415,17 +2444,6 @@ def generalized_box_iou(boxes1, boxes2):
     area = width_height[:, :, 0] * width_height[:, :, 1]
 
     return iou - (area - union) / area
-
-
-# Copied from transformers.models.detr.modeling_detr.center_to_corners_format
-def center_to_corners_format(x):
-    """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
-    """
-    center_x, center_y, width, height = x.unbind(-1)
-    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
-    return torch.stack(b, dim=-1)
 
 
 # Copied from transformers.models.detr.modeling_detr._max_by_axis

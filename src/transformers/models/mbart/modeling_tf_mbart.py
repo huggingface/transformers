@@ -54,7 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/mbart-large-cc25"
 _CONFIG_FOR_DOC = "MBartConfig"
-_TOKENIZER_FOR_DOC = "MBartTokenizer"
 
 
 LARGE_NEGATIVE = -1e8
@@ -474,7 +473,7 @@ class TFMBartPreTrainedModel(TFPreTrainedModel):
         decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": tf.math.not_equal(input_ids, pad_token),
+            "attention_mask": tf.cast(input_ids != pad_token, tf.int32),
             "input_ids": input_ids,
         }
         return dummy_inputs
@@ -542,7 +541,7 @@ MBART_INPUTS_DOCSTRING = r"""
         input_ids (`tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -556,7 +555,7 @@ MBART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -623,10 +622,10 @@ MBART_GENERATION_EXAMPLE = r"""
     Summarization example:
 
     ```python
-    >>> from transformers import MBartTokenizer, TFMBartForConditionalGeneration, MBartConfig
+    >>> from transformers import AutoTokenizer, TFMBartForConditionalGeneration, MBartConfig
 
     >>> model = TFMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
-    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
     >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="tf")
@@ -639,10 +638,10 @@ MBART_GENERATION_EXAMPLE = r"""
     Mask filling example:
 
     ```python
-    >>> from transformers import MBartTokenizer, TFMBartForConditionalGeneration
+    >>> from transformers import AutoTokenizer, TFMBartForConditionalGeneration
 
     >>> model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
-    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
     >>> # de_DE is the language symbol id <LID> for German
     >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
@@ -709,7 +708,7 @@ class TFMBartEncoder(tf.keras.layers.Layer):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -894,7 +893,7 @@ class TFMBartDecoder(tf.keras.layers.Layer):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1215,7 +1214,6 @@ class TFMBartModel(TFMBartPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1452,7 +1450,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         decoder_attention_mask=None,
         head_mask=None,
@@ -1463,21 +1461,21 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
         **kwargs
     ):
 
-        # cut decoder_input_ids if past is used
-        if past is not None:
+        # cut decoder_input_ids if past_key_values is used
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         if decoder_attention_mask is not None:  # xla
             decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
-        elif past is not None:  # no xla + past
-            decoder_position_ids = past[0][0].shape[2]
-        else:  # no xla + no past
+        elif past_key_values is not None:  # no xla + past_key_values
+            decoder_position_ids = past_key_values[0][0].shape[2]
+        else:  # no xla + no past_key_values
             decoder_position_ids = tf.range(decoder_input_ids.shape[1])
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
@@ -1490,14 +1488,3 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id)
-
-    @staticmethod
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration._reorder_cache
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            # cached cross_attention states don't have to be reordered -> they are always the same
-            reordered_past += (
-                tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past[:2]) + layer_past[2:],
-            )
-        return reordered_past

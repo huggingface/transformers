@@ -53,7 +53,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Data2VecVisionConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "BeitFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/data2vec-vision-base"
@@ -848,9 +847,9 @@ DATA2VEC_VISION_START_DOCSTRING = r"""
 
 DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`BeitFeatureExtractor`]. See
-            [`BeitFeatureExtractor.__call__`] for details.
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`BeitImageProcessor.__call__`] for details.
 
         head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -894,7 +893,6 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFData2VecVisionModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -960,7 +958,6 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1397,17 +1394,17 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, TFData2VecVisionForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, TFData2VecVisionForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/data2vec-vision-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/data2vec-vision-base")
         >>> model = TFData2VecVisionForSemanticSegmentation.from_pretrained("facebook/data2vec-vision-base")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits

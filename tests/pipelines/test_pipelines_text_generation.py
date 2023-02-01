@@ -143,7 +143,7 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             ],
         )
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer)
         return text_generator, ["This is a test", "Another test"]
 
@@ -201,11 +201,22 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                 ],
             )
 
+        with self.assertRaises(ValueError):
+            outputs = text_generator("test", return_full_text=True, return_text=True)
+        with self.assertRaises(ValueError):
+            outputs = text_generator("test", return_full_text=True, return_tensors=True)
+        with self.assertRaises(ValueError):
+            outputs = text_generator("test", return_text=True, return_tensors=True)
+
         # Empty prompt is slighly special
         # it requires BOS token to exist.
         # Special case for Pegasus which will always append EOS so will
         # work even without BOS.
-        if text_generator.tokenizer.bos_token_id is not None or "Pegasus" in tokenizer.__class__.__name__:
+        if (
+            text_generator.tokenizer.bos_token_id is not None
+            or "Pegasus" in tokenizer.__class__.__name__
+            or "Git" in model.__class__.__name__
+        ):
             outputs = text_generator("")
             self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         else:
@@ -277,10 +288,10 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             ],
         )
 
-        # torch_dtype not necessary
+        # torch_dtype will be automatically set to float32 if not provided - check: https://github.com/huggingface/transformers/pull/20602
         pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto")
         self.assertEqual(pipe.model.device, torch.device(0))
-        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
+        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.float32)
         out = pipe("This is a test")
         self.assertEqual(
             out,
@@ -293,3 +304,11 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                 }
             ],
         )
+
+    @require_torch
+    @require_torch_gpu
+    def test_small_model_fp16(self):
+        import torch
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device=0, torch_dtype=torch.float16)
+        pipe("This is a test")

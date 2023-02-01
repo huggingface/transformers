@@ -221,13 +221,17 @@ def _compute_mask_indices(
     if mask_length < 1:
         raise ValueError("`mask_length` has to be bigger than 0.")
 
-    if mask_length > sequence_length:
-        raise ValueError(
+    tf.debugging.assert_less(
+        mask_length,
+        sequence_length,
+        message=(
             f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and"
             f" `sequence_length`: {sequence_length}`"
-        )
+        ),
+    )
+
     # compute number of masked spans in batch
-    num_masked_spans = mask_prob * sequence_length / mask_length + tf.random.uniform((1,))
+    num_masked_spans = mask_prob * tf.cast(sequence_length, tf.float32) / mask_length + tf.random.uniform((1,))
     num_masked_spans = tf.maximum(num_masked_spans, min_masks)
     num_masked_spans = tf.cast(num_masked_spans, tf.int32)
 
@@ -1312,8 +1316,8 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
         input_signature=[
             {
                 "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int64, name="token_type_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )
@@ -1367,10 +1371,10 @@ HUBERT_START_DOCSTRING = r"""
 
 HUBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
+        input_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1453,12 +1457,12 @@ class TFHubertModel(TFHubertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import Wav2Vec2Processor, TFHubertModel
+        >>> from transformers import AutoProcessor, TFHubertModel
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
-        >>> model = TFHubertModel.from_pretrained("facebook/hubert-base-960h")
+        >>> processor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
+        >>> model = TFHubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
         >>> def map_to_array(batch):
@@ -1579,12 +1583,12 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import Wav2Vec2Processor, TFHubertForCTC
+        >>> from transformers import AutoProcessor, TFHubertForCTC
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-base-960h")
-        >>> model = TFHubertForCTC.from_pretrained("facebook/hubert-base-960h")
+        >>> processor = AutoProcessor.from_pretrained("facebook/hubert-large-ls960-ft")
+        >>> model = TFHubertForCTC.from_pretrained("facebook/hubert-large-ls960-ft")
 
 
         >>> def map_to_array(batch):

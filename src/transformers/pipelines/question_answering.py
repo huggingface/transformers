@@ -226,6 +226,18 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     Question Answering pipeline using any `ModelForQuestionAnswering`. See the [question answering
     examples](../task_summary#question-answering) for more information.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> oracle = pipeline(model="deepset/roberta-base-squad2")
+    >>> oracle(question="Where do I live?", context="My name is Wolfgang and I live in Berlin")
+    {'score': 0.9191, 'start': 34, 'end': 40, 'answer': 'Berlin'}
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     This question answering pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"question-answering"`.
 
@@ -392,6 +404,9 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         if doc_stride is None:
             doc_stride = min(max_seq_len // 2, 128)
 
+        if doc_stride > max_seq_len:
+            raise ValueError(f"`doc_stride` ({doc_stride}) is larger than `max_seq_len` ({max_seq_len})")
+
         if not self.tokenizer.is_fast:
             features = squad_convert_examples_to_features(
                 examples=[example],
@@ -497,8 +512,12 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     def _forward(self, inputs):
         example = inputs["example"]
         model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
-        start, end = self.model(**model_inputs)[:2]
-        return {"start": start, "end": end, "example": example, **inputs}
+        output = self.model(**model_inputs)
+        if isinstance(output, dict):
+            return {"start": output["start_logits"], "end": output["end_logits"], "example": example, **inputs}
+        else:
+            start, end = output[:2]
+            return {"start": start, "end": end, "example": example, **inputs}
 
     def postprocess(
         self,

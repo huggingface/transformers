@@ -806,7 +806,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
@@ -883,6 +883,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         adding special tokens. A RoBERTa sequence has the following format:
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s></s> B </s>`
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.

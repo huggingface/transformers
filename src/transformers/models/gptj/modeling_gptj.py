@@ -37,16 +37,8 @@ from .configuration_gptj import GPTJConfig
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "hf-internal-testing/tiny-random-gptj"
+_REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
 _CONFIG_FOR_DOC = "GPTJConfig"
-_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
-
-_CHECKPOINT_FOR_QA = "ydshieh/tiny-random-gptj-for-question-answering"
-_QA_EXPECTED_OUTPUT = "' was Jim Henson?Jim Henson was a n'"
-_QA_EXPECTED_LOSS = 3.13
-
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ydshieh/tiny-random-gptj-for-sequence-classification"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.76
 
 
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -381,7 +373,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPTJTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -536,10 +528,10 @@ class GPTJModel(GPTJPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
+        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,
@@ -760,10 +752,10 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
@@ -775,13 +767,13 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past:
+            if past_key_values:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
         return {
             "input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
@@ -790,10 +782,10 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
+        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,
@@ -912,12 +904,10 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
+        checkpoint="ydshieh/tiny-random-gptj-for-sequence-classification",
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
+        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,
@@ -969,7 +959,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1
+                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(
@@ -1039,12 +1029,10 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_QA,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_QA_EXPECTED_OUTPUT,
-        expected_loss=_QA_EXPECTED_LOSS,
+        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,

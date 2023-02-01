@@ -5,7 +5,7 @@ import gc
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List  # noqa: F401
 
 import pytorch_lightning as pl
 import torch

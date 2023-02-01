@@ -102,8 +102,8 @@ BEIT_START_DOCSTRING = r"""
 BEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`BeitFeatureExtractor`]. See
-            [`BeitFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -756,17 +756,17 @@ FLAX_BEIT_MODEL_DOCSTRING = """
     Examples:
 
     ```python
-    >>> from transformers import BeitFeatureExtractor, FlaxBeitModel
+    >>> from transformers import AutoImageProcessor, FlaxBeitModel
     >>> from PIL import Image
     >>> import requests
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
-    >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
+    >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
     >>> model = FlaxBeitModel.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
 
-    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
     >>> last_hidden_states = outputs.last_hidden_state
     ```
@@ -843,17 +843,17 @@ FLAX_BEIT_MLM_DOCSTRING = """
     Examples:
 
     ```python
-    >>> from transformers import BeitFeatureExtractor, BeitForMaskedImageModeling
+    >>> from transformers import AutoImageProcessor, BeitForMaskedImageModeling
     >>> from PIL import Image
     >>> import requests
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
-    >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
+    >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
     >>> model = BeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
-    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
     >>> logits = outputs.logits
     ```
@@ -927,17 +927,17 @@ FLAX_BEIT_CLASSIF_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import BeitFeatureExtractor, FlaxBeitForImageClassification
+    >>> from transformers import AutoImageProcessor, FlaxBeitForImageClassification
     >>> from PIL import Image
     >>> import requests
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
-    >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224")
+    >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224")
     >>> model = FlaxBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224")
 
-    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
     >>> logits = outputs.logits
     >>> # model predicts one of the 1000 ImageNet classes

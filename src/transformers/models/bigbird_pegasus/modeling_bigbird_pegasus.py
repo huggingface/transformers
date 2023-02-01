@@ -51,20 +51,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/bigbird-pegasus-large-arxiv"
 _CONFIG_FOR_DOC = "BigBirdPegasusConfig"
-_TOKENIZER_FOR_DOC = "PegasusTokenizerFast"
-
-# Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 7, 1024]
-
-# SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-random-bigbird_pegasus"
-_SEQ_CLASS_EXPECTED_LOSS = 0.69
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
-
-# QuestionAsnwering docstring
-_CHECKPOINT_FOR_QA = "hf-internal-testing/tiny-random-bigbird_pegasus"
-_QA_EXPECTED_LOSS = 3.96
-_QA_EXPECTED_OUTPUT = "''"
 
 
 BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1266,7 +1253,14 @@ class BigBirdPegasusDecoderAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -1490,17 +1484,17 @@ class BigBirdPegasusDecoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                *(encoder_attention_heads,)*.
+                `(encoder_attention_heads,)`.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size *(decoder_attention_heads,)*.
+                size `(decoder_attention_heads,)`.
             past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -1642,10 +1636,10 @@ BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
     Summarization example:
 
     ```python
-    >>> from transformers import PegasusTokenizer, BigBirdPegasusForConditionalGeneration
+    >>> from transformers import AutoTokenizer, BigBirdPegasusForConditionalGeneration
 
     >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained("google/bigbird-pegasus-large-arxiv")
-    >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
 
     >>> ARTICLE_TO_SUMMARIZE = (
     ...     "The dominant sequence transduction models are based on complex recurrent or convolutional neural "
@@ -1670,7 +1664,7 @@ BIGBIRD_PEGASUS_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1821,7 +1815,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -2147,7 +2141,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -2348,7 +2342,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
     "The bare BigBirdPegasus Model outputting raw hidden-states without any specific head on top.",
     BIGBIRD_PEGASUS_START_DOCSTRING,
 )
-# Copied from transformers.models.bart.modeling_bart.BartModel with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -2380,12 +2373,12 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIGBIRD_PEGASUS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
+    # Copied from transformers.models.bart.modeling_bart.BartModel.forward with Bart->BigBirdPegasus
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2610,8 +2603,9 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
+        decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
@@ -2619,16 +2613,17 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
         encoder_outputs=None,
         **kwargs
     ):
-        # cut decoder_input_ids if past is used
-        if past is not None:
+        # cut decoder_input_ids if past_key_values is used
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
+            "decoder_attention_mask": decoder_attention_mask,
             "head_mask": head_mask,
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,
@@ -2656,7 +2651,6 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
     """,
     BIGBIRD_PEGASUS_START_DOCSTRING,
 )
-# Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -2674,13 +2668,11 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIGBIRD_PEGASUS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
+    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2731,7 +2723,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
         )
         hidden_states = outputs[0]  # last hidden state
 
-        eos_mask = input_ids.eq(self.config.eos_token_id)
+        eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
         if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
@@ -2786,7 +2778,6 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     """,
     BIGBIRD_PEGASUS_START_DOCSTRING,
 )
-# Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
@@ -2803,13 +2794,11 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIGBIRD_PEGASUS_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_QA,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_loss=_QA_EXPECTED_LOSS,
-        expected_output=_QA_EXPECTED_OUTPUT,
     )
+    # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering.forward
     def forward(
         self,
         input_ids: torch.Tensor = None,
@@ -2976,7 +2965,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -3041,9 +3030,9 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import PegasusTokenizer, BigBirdPegasusForCausalLM
+        >>> from transformers import AutoTokenizer, BigBirdPegasusForCausalLM
 
-        >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
         >>> model = BigBirdPegasusForCausalLM.from_pretrained(
         ...     "google/bigbird-pegasus-large-arxiv", add_cross_attention=False
         ... )
@@ -3096,18 +3085,20 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 

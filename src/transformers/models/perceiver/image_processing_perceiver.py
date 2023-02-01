@@ -30,7 +30,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     get_image_size,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -99,7 +99,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
     ) -> None:
         super().__init__(**kwargs)
         crop_size = crop_size if crop_size is not None else {"height": 256, "width": 256}
-        crop_size = get_size_dict(crop_size)
+        crop_size = get_size_dict(crop_size, param_name="crop_size")
         size = size if size is not None else {"height": 224, "width": 224}
         size = get_size_dict(size)
 
@@ -141,7 +141,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
         """
         size = self.size if size is None else size
         size = get_size_dict(size)
-        crop_size = get_size_dict(crop_size)
+        crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         height, width = get_image_size(image)
         min_dim = min(height, width)
@@ -278,7 +278,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
         """
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size)
+        crop_size = get_size_dict(crop_size, param_name="crop_size")
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size)
@@ -289,8 +289,7 @@ class PerceiverImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

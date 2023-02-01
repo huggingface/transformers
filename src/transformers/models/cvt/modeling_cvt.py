@@ -35,7 +35,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "CvtConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/cvt-13"
@@ -107,8 +106,8 @@ class CvtDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
@@ -451,11 +450,7 @@ class CvtStage(nn.Module):
         self.config = config
         self.stage = stage
         if self.config.cls_token[self.stage]:
-            self.cls_token = nn.Parameter(
-                nn.init.trunc_normal_(
-                    torch.zeros(1, 1, self.config.embed_dim[-1]), mean=0.0, std=config.initializer_range
-                )
-            )
+            self.cls_token = nn.Parameter(torch.randn(1, 1, self.config.embed_dim[-1]))
 
         self.embedding = CvtEmbeddings(
             patch_size=config.patch_sizes[self.stage],
@@ -557,6 +552,11 @@ class CvtPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, CvtStage):
+            if self.config.cls_token[module.stage]:
+                module.cls_token.data = nn.init.trunc_normal_(
+                    torch.zeros(1, 1, self.config.embed_dim[-1]), mean=0.0, std=self.config.initializer_range
+                )
 
 
 CVT_START_DOCSTRING = r"""
@@ -573,8 +573,8 @@ CVT_START_DOCSTRING = r"""
 CVT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`CvtFeatureExtractor`]. See
-            [`CvtFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`CvtImageProcessor.__call__`]
+            for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -604,7 +604,6 @@ class CvtModel(CvtPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CVT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithCLSToken,
         config_class=_CONFIG_FOR_DOC,
@@ -667,7 +666,6 @@ class CvtForImageClassification(CvtPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CVT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,

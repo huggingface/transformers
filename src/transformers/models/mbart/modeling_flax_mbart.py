@@ -55,7 +55,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/mbart-large-cc25"
 _CONFIG_FOR_DOC = "MBartConfig"
-_TOKENIZER_FOR_DOC = "MBartTokenizer"
 
 
 MBART_START_DOCSTRING = r"""
@@ -98,7 +97,7 @@ MBART_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`MBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -112,7 +111,7 @@ MBART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -149,7 +148,7 @@ MBART_ENCODE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`MBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -178,7 +177,7 @@ MBART_DECODE_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -383,7 +382,7 @@ class FlaxMBartAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -881,6 +880,7 @@ class FlaxMBartModule(nn.Module):
             self.config.vocab_size,
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            dtype=self.dtype,
         )
 
         self.encoder = FlaxMBartEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
@@ -1056,10 +1056,10 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxMBartForConditionalGeneration
 
         >>> model = FlaxMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
-        >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
@@ -1122,10 +1122,10 @@ class FlaxMBartPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxMBartForConditionalGeneration
 
         >>> model = FlaxMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
-        >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
@@ -1281,9 +1281,7 @@ class FlaxMBartModel(FlaxMBartPreTrainedModel):
     module_class = FlaxMBartModule
 
 
-append_call_sample_docstring(
-    FlaxMBartModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxMBartModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule with Bart->MBart
@@ -1389,10 +1387,10 @@ class FlaxMBartForConditionalGeneration(FlaxMBartPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxMBartForConditionalGeneration
 
         >>> model = FlaxMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
-        >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
@@ -1545,10 +1543,10 @@ FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING = r"""
     Summarization example:
 
     ```python
-    >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration, MBartConfig
+    >>> from transformers import AutoTokenizer, FlaxMBartForConditionalGeneration, MBartConfig
 
     >>> model = FlaxMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
-    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
     >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="np")
@@ -1561,10 +1559,10 @@ FLAX_MBART_CONDITIONAL_GENERATION_DOCSTRING = r"""
     Mask filling example:
 
     ```python
-    >>> from transformers import MBartTokenizer, FlaxMBartForConditionalGeneration
+    >>> from transformers import AutoTokenizer, FlaxMBartForConditionalGeneration
 
     >>> model = FlaxMBartForConditionalGeneration.from_pretrained("facebook/mbart-large-cc25")
-    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-cc25")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
     >>> # de_DE is the language symbol id <LID> for German
     >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
@@ -1682,7 +1680,6 @@ class FlaxMBartForSequenceClassification(FlaxMBartPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxMBartForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSeq2SeqSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1770,7 +1767,6 @@ class FlaxMBartForQuestionAnswering(FlaxMBartPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxMBartForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSeq2SeqQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,

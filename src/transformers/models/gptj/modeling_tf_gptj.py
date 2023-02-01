@@ -52,7 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
 _CONFIG_FOR_DOC = "GPTJConfig"
-_TOKENIZER_FOR_DOC = "GPTJTokenizer"
 
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-j-6B",
@@ -347,7 +346,6 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
         self.return_dict = config.use_return_dict
 
         self.num_hidden_layers = config.n_layer
-        self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
         self.n_positions = config.n_positions
         self.initializer_range = config.initializer_range
@@ -531,14 +529,14 @@ class TFGPTJPreTrainedModel(TFPreTrainedModel):
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        dummy = {"input_ids": tf.constant(DUMMY_INPUTS)}
+        dummy = {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32)}
         return dummy
 
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )
@@ -598,7 +596,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
 
             If `past` is used, only input IDs that do not have their past calculated should be passed as `input_ids`.
 
-            Indices can be obtained using [`GPTJTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -665,7 +663,6 @@ class TFGPTJModel(TFGPTJPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -741,10 +738,10 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, inputs, past=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past_key_values=None, use_cache=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past_key_values:
             inputs = tf.expand_dims(inputs[:, -1], -1)
             if token_type_ids is not None:
                 token_type_ids = tf.expand_dims(token_type_ids[:, -1], -1)
@@ -754,14 +751,14 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
 
         if attention_mask is not None and position_ids is None:
             position_ids = tf.math.cumsum(attention_mask, axis=-1, exclusive=True)
-            if past:
+            if past_key_values:
                 position_ids = tf.expand_dims(position_ids[:, -1], -1)
 
         return {
             "input_ids": inputs,
             "attention_mask": attention_mask,
             "position_ids": position_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
             "token_type_ids": token_type_ids,
         }
@@ -769,7 +766,6 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -873,7 +869,6 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -996,7 +991,6 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

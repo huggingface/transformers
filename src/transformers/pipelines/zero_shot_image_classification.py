@@ -33,6 +33,27 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
     Zero shot image classification pipeline using `CLIPModel`. This pipeline predicts the class of an image when you
     provide an image and a set of `candidate_labels`.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> classifier = pipeline(model="openai/clip-vit-large-patch14")
+    >>> classifier(
+    ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
+    ...     candidate_labels=["animals", "humans", "landscape"],
+    ... )
+    [{'score': 0.965, 'label': 'animals'}, {'score': 0.03, 'label': 'humans'}, {'score': 0.005, 'label': 'landscape'}]
+
+    >>> classifier(
+    ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
+    ...     candidate_labels=["black and white", "photorealist", "painting"],
+    ... )
+    [{'score': 0.996, 'label': 'black and white'}, {'score': 0.003, 'label': 'photorealist'}, {'score': 0.0, 'label': 'painting'}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     This image classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"zero-shot-image-classification"`.
 
@@ -68,7 +89,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
                 logits_per_image
 
         Return:
-            A list of dictionaries containing result, one dictionnary per proposed label. The dictionaries contain the
+            A list of dictionaries containing result, one dictionary per proposed label. The dictionaries contain the
             following keys:
 
             - **label** (`str`) -- The label identified by the model. It is one of the suggested `candidate_label`.

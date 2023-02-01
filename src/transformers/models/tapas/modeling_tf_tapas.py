@@ -69,7 +69,6 @@ if is_tensorflow_probability_available():
         )
 
 _CONFIG_FOR_DOC = "TapasConfig"
-_TOKENIZER_FOR_DOC = "TapasTokenizer"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
 
 TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -149,8 +148,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
-        self.type_vocab_sizes = config.type_vocab_sizes
+        self.config = config
         self.number_of_token_type_embeddings = len(config.type_vocab_sizes)
         self.reset_position_index_per_cell = config.reset_position_index_per_cell
         self.hidden_size = config.hidden_size
@@ -163,7 +161,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.hidden_size],
+                shape=[self.config.vocab_size, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
@@ -173,7 +171,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
                 shape=[self.max_position_embeddings, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
-        for i, type_vocab_size in enumerate(self.type_vocab_sizes):
+        for i, type_vocab_size in enumerate(self.config.type_vocab_sizes):
             with tf.name_scope(f"token_type_embeddings_{i}"):
                 setattr(
                     self,
@@ -220,9 +218,9 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
             if self.reset_position_index_per_cell:
 
                 # shape (batch_size, seq_len)
-                col_index = IndexMap(token_type_ids[:, :, 1], self.type_vocab_sizes[1], batch_dims=1)
+                col_index = IndexMap(token_type_ids[:, :, 1], self.config.type_vocab_sizes[1], batch_dims=1)
                 # shape (batch_size, seq_len)
-                row_index = IndexMap(token_type_ids[:, :, 2], self.type_vocab_sizes[2], batch_dims=1)
+                row_index = IndexMap(token_type_ids[:, :, 2], self.config.type_vocab_sizes[2], batch_dims=1)
                 # shape (batch_size, seq_len)
                 full_index = ProductIndexMap(col_index, row_index)
                 # shape (max_rows * max_columns,). First absolute position for every cell
@@ -234,6 +232,16 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
                 position_ids = tf.math.minimum(self.max_position_embeddings - 1, position - first_position)
 
         if input_ids is not None:
+            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+            tf.debugging.assert_less(
+                input_ids,
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
+                message=(
+                    "input_ids must be smaller than the embedding layer's input dimension (got"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
+                ),
+            )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
         position_embeddings = tf.gather(self.position_embeddings, indices=position_ids)
@@ -677,7 +685,7 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
 
         self.transform = TFTapasPredictionHeadTransform(config, name="transform")
@@ -687,7 +695,7 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape: tf.TensorShape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
         super().build(input_shape)
 
@@ -703,14 +711,14 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
 
     def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
@@ -865,9 +873,9 @@ class TFTapasPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None, None), tf.int64, name="token_type_ids"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )
@@ -923,7 +931,7 @@ TAPAS_INPUTS_DOCSTRING = r"""
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`TapasTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -935,7 +943,7 @@ TAPAS_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`np.ndarray` or `tf.Tensor` of shape `({0}, 7)`, *optional*):
-            Token indices that encode tabular structure. Indices can be obtained using [`TapasTokenizer`]. See this
+            Token indices that encode tabular structure. Indices can be obtained using [`AutoTokenizer`]. See this
             class for more info.
 
             [What are token type IDs?](../glossary#token-type-ids)
@@ -1004,10 +1012,10 @@ class TFTapasModel(TFTapasPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasModel
+        >>> from transformers import AutoTokenizer, TapasModel
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base")
         >>> model = TapasModel.from_pretrained("google/tapas-base")
 
         >>> data = {
@@ -1095,10 +1103,10 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasForMaskedLM
+        >>> from transformers import AutoTokenizer, TapasForMaskedLM
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base")
         >>> model = TapasForMaskedLM.from_pretrained("google/tapas-base")
 
         >>> data = {
@@ -1307,7 +1315,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             padding are 0.
         labels (`tf.Tensor` of shape `(batch_size, seq_length)`, *optional*):
             Labels per token for computing the hierarchical cell selection loss. This encodes the positions of the
-            answer appearing in the table. Can be obtained using [`TapasTokenizer`].
+            answer appearing in the table. Can be obtained using [`AutoTokenizer`].
 
             - 1 for tokens that are **part of the answer**,
             - 0 for tokens that are **not part of the answer**.
@@ -1321,10 +1329,10 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             required in case of weak supervision (WTQ) to calculate the aggregate mask and regression loss.
         numeric_values (`tf.Tensor` of shape `(batch_size, seq_length)`, *optional*):
             Numeric values of every token, NaN for tokens which are not numeric values. Can be obtained using
-            [`TapasTokenizer`]. Only required in case of weak supervision for aggregation (WTQ) to calculate the
+            [`AutoTokenizer`]. Only required in case of weak supervision for aggregation (WTQ) to calculate the
             regression loss.
         numeric_values_scale (`tf.Tensor` of shape `(batch_size, seq_length)`, *optional*):
-            Scale of the numeric values of every token. Can be obtained using [`TapasTokenizer`]. Only required in case
+            Scale of the numeric values of every token. Can be obtained using [`AutoTokenizer`]. Only required in case
             of weak supervision for aggregation (WTQ) to calculate the regression loss.
 
         Returns:
@@ -1332,10 +1340,10 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
+        >>> from transformers import AutoTokenizer, TapasForQuestionAnswering
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-wtq")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base-finetuned-wtq")
         >>> model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq")
 
         >>> data = {
@@ -1633,11 +1641,11 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasForSequenceClassification
+        >>> from transformers import AutoTokenizer, TapasForSequenceClassification
         >>> import tensorflow as tf
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-tabfact")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base-finetuned-tabfact")
         >>> model = TapasForSequenceClassification.from_pretrained("google/tapas-base-finetuned-tabfact")
 
         >>> data = {

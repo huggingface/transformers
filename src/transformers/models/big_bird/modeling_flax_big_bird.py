@@ -53,7 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/bigbird-roberta-base"
 _CONFIG_FOR_DOC = "BigBirdConfig"
-_TOKENIZER_FOR_DOC = "BigBirdTokenizer"
 
 remat = nn_partitioning.remat
 
@@ -159,7 +158,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BigBirdTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -205,16 +204,19 @@ class FlaxBigBirdEmbeddings(nn.Module):
             self.config.vocab_size,
             self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
         )
         self.position_embeddings = nn.Embed(
             self.config.max_position_embeddings,
             self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
         )
         self.token_type_embeddings = nn.Embed(
             self.config.type_vocab_size,
             self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
         )
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -377,7 +379,7 @@ class FlaxBigBirdSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -1831,9 +1833,7 @@ class FlaxBigBirdModel(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdModule
 
 
-append_call_sample_docstring(
-    FlaxBigBirdModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBigBirdModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertForPreTrainingModule with Bert->BigBird
@@ -1917,9 +1917,9 @@ FLAX_BIG_BIRD_FOR_PRETRAINING_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import BigBirdTokenizer, FlaxBigBirdForPreTraining
+    >>> from transformers import AutoTokenizer, FlaxBigBirdForPreTraining
 
-    >>> tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-roberta-base")
     >>> model = FlaxBigBirdForPreTraining.from_pretrained("google/bigbird-roberta-base")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
@@ -2004,9 +2004,7 @@ class FlaxBigBirdForMaskedLM(FlaxBigBirdPreTrainedModel):
     module_class = FlaxBigBirdForMaskedLMModule
 
 
-append_call_sample_docstring(
-    FlaxBigBirdForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBigBirdForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxBigBirdClassificationHead(nn.Module):
@@ -2098,7 +2096,6 @@ class FlaxBigBirdForSequenceClassification(FlaxBigBirdPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBigBirdForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -2198,7 +2195,6 @@ overwrite_call_docstring(
 )
 append_call_sample_docstring(
     FlaxBigBirdForMultipleChoice,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMultipleChoiceModelOutput,
     _CONFIG_FOR_DOC,
@@ -2279,7 +2275,6 @@ class FlaxBigBirdForTokenClassification(FlaxBigBirdPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBigBirdForTokenClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxTokenClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -2462,7 +2457,6 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBigBirdForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxBigBirdForQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
@@ -2575,7 +2569,6 @@ class FlaxBigBirdForCausalLM(FlaxBigBirdPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBigBirdForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,

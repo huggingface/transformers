@@ -17,7 +17,7 @@
 
 import math
 import random
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation.logits_process import WhisperTimeStampLogitsProcessor
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -160,7 +161,14 @@ class WhisperAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -254,7 +262,7 @@ class WhisperAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextEncoderLayer with Speech2Text->Whisper
+# Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Whisper
 class WhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
@@ -278,14 +286,14 @@ class WhisperEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         layer_head_mask: torch.Tensor,
         output_attentions: bool = False,
-    ):
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(config.encoder_attention_heads,)`.
+                `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -323,7 +331,7 @@ class WhisperEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextDecoderLayer with Speech2Text->Whisper
+# Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Whisper
 class WhisperDecoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
@@ -362,7 +370,7 @@ class WhisperDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-    ):
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -375,7 +383,7 @@ class WhisperDecoderLayer(nn.Module):
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
                 `(encoder_attention_heads,)`.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size *(decoder_attention_heads,)*.
+                size `(decoder_attention_heads,)`.
             past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -494,7 +502,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
             Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
             loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
             the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`WhisperFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
+            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -546,15 +554,12 @@ WHISPER_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. decoder_inputs_embeds (`torch.FloatTensor` of
-            shape `(batch_size, target_sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-            `decoder_input_ids` you can choose to directly pass an embedded representation. If `past_key_values` is
-            used, optionally only the last `decoder_inputs_embeds` have to be input (see `past_key_values`). This is
-            useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
-            of `inputs_embeds`.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
+            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -610,6 +615,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
     def forward(
         self,
         input_features,
+        attention_mask=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -621,15 +627,16 @@ class WhisperEncoder(WhisperPreTrainedModel):
                 Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
                 `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting the mel features,
-                padding and conversion into a tensor of type `torch.FloatTensor`. See
-                [`~WhisperFeatureExtractor.__call__`]
+                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+            attention_mask (`torch.Tensor`)`, *optional*):
+                Whisper does not support masking of the `input_features`, this argument is preserved for compatibility,
+                but it is not used. By default the silence in the input log mel spectrogram are ignored.
             head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
-
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -753,8 +760,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
             ).to(inputs_embeds.device)
 
         if attention_mask is not None:
-            if attention_mask.shape[-1] > input_shape[-1] > 0:
-                attention_mask = attention_mask[:, : input_shape[-1] + past_key_values_length]
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
             combined_attention_mask = (
@@ -1001,31 +1006,31 @@ class WhisperModel(WhisperPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_features=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_features: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
         r"""
         Returns:
 
         Example:
          ```python
          >>> import torch
-         >>> from transformers import WhisperFeatureExtractor, WhisperModel
+         >>> from transformers import AutoFeatureExtractor, WhisperModel
          >>> from datasets import load_dataset
 
          >>> model = WhisperModel.from_pretrained("openai/whisper-base")
-         >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
          >>> input_features = inputs.input_features
@@ -1137,21 +1142,21 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_features=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_features: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
@@ -1164,10 +1169,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import WhisperProcessor, WhisperForConditionalGeneration
+        >>> from transformers import AutoProcessor, WhisperForConditionalGeneration
         >>> from datasets import load_dataset
 
-        >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1227,16 +1232,166 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
+    def generate(
+        self,
+        inputs: Optional[torch.Tensor] = None,
+        generation_config=None,
+        logits_processor=None,
+        stopping_criteria=None,
+        prefix_allowed_tokens_fn=None,
+        synced_gpus=False,
+        return_timestamps=None,
+        task=None,
+        language=None,
+        is_multilingual=None,
+        **kwargs
+    ):
+        """
+
+        Generates sequences of token ids for models with a language modeling head.
+
+        <Tip warning={true}>
+
+        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+        model's default generation configuration. You can override any `generation_config` by passing the corresponding
+        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+
+        For an overview of generation strategies and code examples, check out the [following
+        guide](./generation_strategies).
+
+        </Tip>
+
+        Parameters:
+            inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
+                The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
+                method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
+                should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
+                `input_ids`, `input_values`, `input_features`, or `pixel_values`.
+            generation_config (`~generation.GenerationConfig`, *optional*):
+                The generation configuration to be used as base parametrization for the generation call. `**kwargs`
+                passed to generate matching the attributes of `generation_config` will override them. If
+                `generation_config` is not provided, the default will be used, which had the following loading
+                priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
+                configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
+                default values, whose documentation should be checked to parameterize generation.
+            logits_processor (`LogitsProcessorList`, *optional*):
+                Custom logits processors that complement the default logits processors built from arguments and
+                generation config. If a logit processor is passed that is already created with the arguments or a
+                generation config an error is thrown. This feature is intended for advanced users.
+            stopping_criteria (`StoppingCriteriaList`, *optional*):
+                Custom stopping criteria that complement the default stopping criteria built from arguments and a
+                generation config. If a stopping criteria is passed that is already created with the arguments or a
+                generation config an error is thrown. This feature is intended for advanced users.
+            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
+                If provided, this function constraints the beam search to allowed tokens only at each step. If not
+                provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
+                `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
+                on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
+                for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
+                Retrieval](https://arxiv.org/abs/2010.00904).
+            synced_gpus (`bool`, *optional*, defaults to `False`):
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            return_timestamps (`bool`, *optional*):
+                Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
+            task (`bool`, *optional*):
+                Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
+                will be updated accordingly.
+            language (`bool`, *optional*):
+                Language token to use for generation, should be in the form `<|en|>`. You can find all the possible
+                language tokens in the `model.generation_config.lang_to_id` dictionary.
+            is_multilingual (`bool`, *optional*):
+                Whether or not the model is multilingual.
+            kwargs:
+                Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
+                forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
+                specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
+
+        Return:
+            [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
+            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
+
+                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
+                [`~utils.ModelOutput`] types are:
+
+                    - [`~generation.GreedySearchDecoderOnlyOutput`],
+                    - [`~generation.SampleDecoderOnlyOutput`],
+                    - [`~generation.BeamSearchDecoderOnlyOutput`],
+                    - [`~generation.BeamSampleDecoderOnlyOutput`]
+
+                If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
+                [`~utils.ModelOutput`] types are:
+
+                    - [`~generation.GreedySearchEncoderDecoderOutput`],
+                    - [`~generation.SampleEncoderDecoderOutput`],
+                    - [`~generation.BeamSearchEncoderDecoderOutput`],
+                    - [`~generation.BeamSampleEncoderDecoderOutput`]
+        """
+        if generation_config is None:
+            generation_config = self.generation_config
+
+        if return_timestamps is not None:
+            generation_config.return_timestamps = return_timestamps
+
+        if task is not None:
+            generation_config.task = task
+
+        if is_multilingual is not None:
+            generation_config.is_multilingual = is_multilingual
+
+        if language is not None:
+            generation_config.language = language
+
+        forced_decoder_ids = []
+
+        if hasattr(generation_config, "is_multilingual") and generation_config.is_multilingual:
+            if hasattr(generation_config, "language"):
+                forced_decoder_ids.append((1, generation_config.lang_to_id[generation_config.language]))
+            else:
+                forced_decoder_ids.append((1, None))
+
+            if hasattr(generation_config, "task"):
+                forced_decoder_ids.append((2, generation_config.task_to_id[generation_config.task]))
+            else:
+                forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))
+
+        if (
+            hasattr(generation_config, "return_timestamps") and generation_config.return_timestamps
+        ) or return_timestamps:
+            logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
+        else:
+            if forced_decoder_ids and forced_decoder_ids[-1][0] != generation_config.no_timestamps_token_id:
+                idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
+                forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
+
+        if len(forced_decoder_ids) > 0:
+            generation_config.forced_decoder_ids = forced_decoder_ids
+
+        return super().generate(
+            inputs,
+            generation_config,
+            logits_processor,
+            stopping_criteria,
+            prefix_allowed_tokens_fn,
+            synced_gpus,
+            **kwargs,
+        )
+
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past=None, use_cache=None, encoder_outputs=None, attention_mask=None, **kwargs
+        self,
+        decoder_input_ids,
+        past_key_values=None,
+        use_cache=None,
+        encoder_outputs=None,
+        attention_mask=None,
+        **kwargs
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "use_cache": use_cache,
             "decoder_attention_mask": None,

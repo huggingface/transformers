@@ -46,7 +46,6 @@ from .configuration_m2m_100 import M2M100Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "M2M100Config"
-_TOKENIZER_FOR_DOC = "M2M100Tokenizer"
 _CHECKPOINT_FOR_DOC = "facebook/m2m100_418M"
 
 
@@ -173,7 +172,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
-        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds, past_key_values_length):
         """
@@ -247,7 +246,14 @@ class M2M100Attention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -368,11 +374,11 @@ class M2M100EncoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                *(encoder_attention_heads,)*.
+                `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -452,17 +458,17 @@ class M2M100DecoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                *(encoder_attention_heads,)*.
+                `(encoder_attention_heads,)`.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size *(decoder_attention_heads,)*.
+                size `(decoder_attention_heads,)`.
             past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -570,10 +576,10 @@ M2M_100_GENERATION_EXAMPLE = r"""
     Translation example:
 
     ```python
-    >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
+    >>> from transformers import AutoTokenizer, M2M100ForConditionalGeneration
 
     >>> model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
-    >>> tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/m2m100_418M")
 
     >>> text_to_translate = "Life is like a box of chocolates"
     >>> model_inputs = tokenizer(text_to_translate, return_tensors="pt")
@@ -590,7 +596,7 @@ M2M_100_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -604,7 +610,7 @@ M2M_100_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -727,7 +733,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -908,7 +914,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1128,7 +1134,14 @@ class M2M100Decoder(M2M100PreTrainedModel):
     M2M_100_START_DOCSTRING,
 )
 class M2M100Model(M2M100PreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_missing = [
+        "encoder.embed_tokens.weight",
+        "decoder.embed_tokens.weight",
+        "encoder.embed_positions.weights",
+        "encoder.embed_positions.bias",
+        "decoder.embed_positions.weights",
+        "decoder.embed_positions.bias",
+    ]
 
     def __init__(self, config: M2M100Config):
         super().__init__(config)
@@ -1158,7 +1171,6 @@ class M2M100Model(M2M100PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(M2M_100_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1248,6 +1260,10 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
         r"lm_head.weight",
         r"encoder.embed_tokens.weight",
         r"decoder.embed_tokens.weight",
+        r"encoder.embed_positions.weights",
+        r"encoder.embed_positions.bias",
+        r"decoder.embed_positions.weights",
+        r"decoder.embed_positions.bias",
     ]
 
     def __init__(self, config: M2M100Config):
@@ -1355,7 +1371,7 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
@@ -1365,13 +1381,13 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
         **kwargs,
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,

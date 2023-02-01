@@ -821,7 +821,7 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        dummy = {"input_ids": tf.constant(DUMMY_INPUTS)}
+        dummy = {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int64)}
         # Add `encoder_hidden_states` to make the cross-attention layers' weights initialized
         if self.config.add_cross_attention:
             batch_size, seq_len = tf.constant(DUMMY_INPUTS).shape
@@ -1121,15 +1121,15 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
     def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
 
-    def prepare_inputs_for_generation(self, inputs, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, inputs, past_key_values=None, attention_mask=None, **model_kwargs):
         # cut decoder_input_ids if past is used
-        if past:
+        if past_key_values:
             inputs = tf.expand_dims(inputs[:, -1], -1)
 
         return {
             "input_ids": inputs,
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": model_kwargs["use_cache"],
         }
 
@@ -1365,7 +1365,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int64)}
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
@@ -3003,7 +3003,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
@@ -3013,13 +3013,13 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
         **kwargs
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # needs to be passed to make Keras.layer.__call__ happy
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -3027,13 +3027,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
-
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past),)
-        return reordered_past
 
     def hf_compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""

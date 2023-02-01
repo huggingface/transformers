@@ -38,7 +38,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "VanConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "Visual-Attention-Network/van-base"
@@ -83,8 +82,8 @@ class VanDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
@@ -233,7 +232,7 @@ class VanLayer(nn.Module):
         drop_path_rate: float = 0.5,
     ):
         super().__init__()
-        self.drop_path = VanDropPath(drop_path) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = VanDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.pre_normomalization = nn.BatchNorm2d(hidden_size)
         self.attention = VanSpatialAttentionLayer(hidden_size, config.hidden_act)
         self.attention_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
@@ -407,8 +406,8 @@ VAN_START_DOCSTRING = r"""
 VAN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`ConvNextImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all stages. See `hidden_states` under returned tensors for
@@ -435,7 +434,6 @@ class VanModel(VanPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(VAN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -493,7 +491,6 @@ class VanForImageClassification(VanPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(VAN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,

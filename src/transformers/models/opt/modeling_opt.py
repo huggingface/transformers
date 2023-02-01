@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/opt-350m"
 _CONFIG_FOR_DOC = "OPTConfig"
-_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
@@ -279,15 +278,18 @@ class OPTDecoderLayer(nn.Module):
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            bias=config.enable_bias,
         )
         self.do_layer_norm_before = config.do_layer_norm_before
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim)
-        self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(
+            self.embed_dim, elementwise_affine=config.layer_norm_elementwise_affine
+        )
+        self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim, bias=config.enable_bias)
+        self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim, bias=config.enable_bias)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim, elementwise_affine=config.layer_norm_elementwise_affine)
 
     def forward(
         self,
@@ -418,7 +420,7 @@ OPT_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`GPT2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -430,7 +432,7 @@ OPT_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
 
-            Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
@@ -507,7 +509,9 @@ class OPTDecoder(OPTPreTrainedModel):
         # with checkpoints that have been fine-tuned before transformers v4.20.1
         # see https://github.com/facebookresearch/metaseq/pull/164
         if config.do_layer_norm_before and not config._remove_final_layer_norm:
-            self.final_layer_norm = nn.LayerNorm(config.hidden_size)
+            self.final_layer_norm = nn.LayerNorm(
+                config.hidden_size, elementwise_affine=config.layer_norm_elementwise_affine
+            )
         else:
             self.final_layer_norm = None
 
@@ -562,7 +566,7 @@ class OPTDecoder(OPTPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -750,7 +754,6 @@ class OPTModel(OPTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -851,7 +854,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -905,10 +908,10 @@ class OPTForCausalLM(OPTPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import GPT2Tokenizer, OPTForCausalLM
+        >>> from transformers import AutoTokenizer, OPTForCausalLM
 
         >>> model = OPTForCausalLM.from_pretrained("facebook/opt-350m")
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-350m")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -961,18 +964,20 @@ class OPTForCausalLM(OPTPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
@@ -1013,7 +1018,6 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -1064,7 +1068,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1
+                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(
@@ -1164,11 +1168,11 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import GPT2Tokenizer, OPTForQuestionAnswering
+        >>> from transformers import AutoTokenizer, OPTForQuestionAnswering
         >>> import torch
 
         >>> torch.manual_seed(4)  # doctest: +IGNORE_RESULT
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-350m")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 
         >>> # note: we are loading a OPTForQuestionAnswering from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random

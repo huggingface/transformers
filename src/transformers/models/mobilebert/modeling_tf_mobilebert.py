@@ -63,7 +63,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/mobilebert-uncased"
 _CONFIG_FOR_DOC = "MobileBertConfig"
-_TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
 # TokenClassification docstring
 _CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "vumichien/mobilebert-finetuned-ner"
@@ -166,9 +165,8 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
 
         self.trigram_input = config.trigram_input
         self.embedding_size = config.embedding_size
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
-        self.type_vocab_size = config.type_vocab_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
         self.embedding_transformation = tf.keras.layers.Dense(config.hidden_size, name="embedding_transformation")
@@ -184,14 +182,14 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.embedding_size],
+                shape=[self.config.vocab_size, self.embedding_size],
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
         with tf.name_scope("token_type_embeddings"):
             self.token_type_embeddings = self.add_weight(
                 name="embeddings",
-                shape=[self.type_vocab_size, self.hidden_size],
+                shape=[self.config.type_vocab_size, self.hidden_size],
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
@@ -218,10 +216,10 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -658,13 +656,12 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.transform = TFMobileBertPredictionHeadTransform(config, name="transform")
-        self.vocab_size = config.vocab_size
         self.config = config
 
     def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
         self.dense = self.add_weight(
-            shape=(self.config.hidden_size - self.config.embedding_size, self.vocab_size),
+            shape=(self.config.hidden_size - self.config.embedding_size, self.config.vocab_size),
             initializer="zeros",
             trainable=True,
             name="dense/weight",
@@ -682,14 +679,14 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
 
     def set_output_embeddings(self, value):
         self.decoder = value
-        self.vocab_size = shape_list(value)[0]
+        self.config.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         return {"bias": self.bias}
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -912,7 +909,7 @@ MOBILEBERT_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MobileBertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -975,7 +972,6 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -1066,9 +1062,9 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTra
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import MobileBertTokenizer, TFMobileBertForPreTraining
+        >>> from transformers import AutoTokenizer, TFMobileBertForPreTraining
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = TFMobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         >>> outputs = model(input_ids)
@@ -1146,7 +1142,6 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1257,9 +1252,9 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import MobileBertTokenizer, TFMobileBertForNextSentencePrediction
+        >>> from transformers import AutoTokenizer, TFMobileBertForNextSentencePrediction
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = TFMobileBertForNextSentencePrediction.from_pretrained("google/mobilebert-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1341,7 +1336,6 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1435,7 +1429,6 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_QA,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1549,14 +1542,13 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32)}
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(
         MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1683,7 +1675,6 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

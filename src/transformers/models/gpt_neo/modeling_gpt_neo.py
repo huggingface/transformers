@@ -39,7 +39,6 @@ from .configuration_gpt_neo import GPTNeoConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPTNeoConfig"
-_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-neo-1.3B",
@@ -414,7 +413,7 @@ GPT_NEO_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
-            Indices can be obtained using [`GPTNeoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -496,7 +495,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -683,10 +681,10 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
@@ -698,13 +696,13 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past:
+            if past_key_values:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
         return {
             "input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
@@ -713,7 +711,6 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -828,7 +825,6 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -883,7 +879,7 @@ class GPTNeoForSequenceClassification(GPTNeoPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1
+                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(

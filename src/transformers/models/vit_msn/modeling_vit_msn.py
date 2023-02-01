@@ -464,8 +464,8 @@ VIT_MSN_START_DOCSTRING = r"""
 VIT_MSN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -525,14 +525,14 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[tuple, BaseModelOutput]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, ViTMSNModel
+        >>> from transformers import AutoImageProcessor, ViTMSNModel
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -540,9 +540,9 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-msn-small")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/vit-msn-small")
         >>> model = ViTMSNModel.from_pretrained("facebook/vit-msn-small")
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
@@ -627,7 +627,7 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, ViTMSNForImageClassification
+        >>> from transformers import AutoImageProcessor, ViTMSNForImageClassification
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -637,10 +637,10 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-msn-small")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/vit-msn-small")
         >>> model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-small")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
         >>> # model predicts one of the 1000 ImageNet classes

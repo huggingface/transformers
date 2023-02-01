@@ -15,7 +15,7 @@
 """Image processor class for Beit."""
 
 import warnings
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -30,7 +30,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -118,7 +118,7 @@ class BeitImageProcessor(BaseImageProcessor):
         size = size if size is not None else {"height": 256, "width": 256}
         size = get_size_dict(size)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size)
+        crop_size = get_size_dict(crop_size, param_name="crop_size")
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
@@ -130,6 +130,26 @@ class BeitImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_reduce_labels = do_reduce_labels
+
+    @property
+    def reduce_labels(self) -> bool:
+        warnings.warn(
+            "The `reduce_labels` property is deprecated and will be removed in v4.27. Please use"
+            " `do_reduce_labels` instead.",
+            FutureWarning,
+        )
+        return self.do_reduce_labels
+
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
+        is created using from_dict and kwargs e.g. `BeitImageProcessor.from_pretrained(checkpoint, reduce_labels=True)`
+        """
+        image_processor_dict = image_processor_dict.copy()
+        if "reduce_labels" in kwargs:
+            image_processor_dict["reduce_labels"] = kwargs.pop("reduce_labels")
+        return super().from_dict(image_processor_dict, **kwargs)
 
     def resize(
         self,
@@ -152,7 +172,7 @@ class BeitImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        size = get_size_dict(size)
+        size = get_size_dict(size, default_to_square=True, param_name="size")
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` argument must contain `height` and `width` keys. Got {size.keys()}")
         return resize(
@@ -178,7 +198,7 @@ class BeitImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        size = get_size_dict(size)
+        size = get_size_dict(size, default_to_square=True, param_name="size")
         return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def rescale(
@@ -406,11 +426,11 @@ class BeitImageProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        size = get_size_dict(size)
+        size = get_size_dict(size, default_to_square=True, param_name="size")
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size)
+        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -418,9 +438,9 @@ class BeitImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
-        if not is_batched(images):
-            images = [images]
-            segmentation_maps = [segmentation_maps] if segmentation_maps is not None else None
+        images = make_list_of_images(images)
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if not valid_images(images):
             raise ValueError(

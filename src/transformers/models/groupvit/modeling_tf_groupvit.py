@@ -536,7 +536,6 @@ class TFGroupViTTextEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.embed_dim = config.hidden_size
-        self.vocab_size = config.vocab_size
 
         self.config = config
 
@@ -544,7 +543,7 @@ class TFGroupViTTextEmbeddings(tf.keras.layers.Layer):
 
         with tf.name_scope("token_embedding"):
             self.weight = self.add_weight(
-                shape=(self.vocab_size, self.embed_dim),
+                shape=(self.config.vocab_size, self.embed_dim),
                 initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
                 trainable=True,
                 name="weight",
@@ -580,10 +579,10 @@ class TFGroupViTTextEmbeddings(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -1555,8 +1554,8 @@ GROUPVIT_TEXT_INPUTS_DOCSTRING = r"""
 GROUPVIT_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]`, `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`]. See
-            [`CLIPFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
@@ -1583,8 +1582,8 @@ GROUPVIT_INPUTS_DOCSTRING = r"""
 
             [What are input IDs?](../glossary#input-ids)
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`]. See
-            [`CLIPFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`CLIPImageProcessor.__call__`] for details.
         attention_mask (`np.ndarray` or `tf.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1640,8 +1639,8 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )
@@ -1828,9 +1827,9 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "pixel_values": tf.TensorSpec((None, None, None, None), tf.float64, name="pixel_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
             }
         ]
     )

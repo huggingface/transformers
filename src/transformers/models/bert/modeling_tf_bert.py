@@ -67,7 +67,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 # TokenClassification docstring
 _CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "dbmdz/bert-large-cased-finetuned-conll03-english"
@@ -149,8 +148,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
-        self.type_vocab_size = config.type_vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
@@ -161,14 +159,14 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.hidden_size],
+                shape=[self.config.vocab_size, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
         with tf.name_scope("token_type_embeddings"):
             self.token_type_embeddings = self.add_weight(
                 name="embeddings",
-                shape=[self.type_vocab_size, self.hidden_size],
+                shape=[self.config.type_vocab_size, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
@@ -204,10 +202,10 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -648,7 +646,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: BertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
 
         self.transform = TFBertPredictionHeadTransform(config, name="transform")
@@ -658,7 +656,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape: tf.TensorShape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
         super().build(input_shape)
 
@@ -674,14 +672,14 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
 
     def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
@@ -920,7 +918,7 @@ class TFBertPreTrainedModel(TFPreTrainedModel):
         Returns:
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        dummy = {"input_ids": tf.constant(DUMMY_INPUTS)}
+        dummy = {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32)}
         # Add `encoder_hidden_states` to make the cross-attention layers' weights initialized
         if self.config.add_cross_attention:
             batch_size, seq_len = tf.constant(DUMMY_INPUTS).shape
@@ -1009,7 +1007,7 @@ BERT_INPUTS_DOCSTRING = r"""
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1073,7 +1071,6 @@ class TFBertModel(TFBertPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1221,9 +1218,9 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import BertTokenizer, TFBertForPreTraining
+        >>> from transformers import AutoTokenizer, TFBertForPreTraining
 
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         >>> model = TFBertForPreTraining.from_pretrained("bert-base-uncased")
         >>> input_ids = tokenizer("Hello, my dog is cute", add_special_tokens=True, return_tensors="tf")
         >>> # Batch size 1
@@ -1309,7 +1306,6 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1395,21 +1391,20 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = tf.ones(input_shape)
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
     @unpack_inputs
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1508,13 +1503,6 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
         )
 
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past),)
-        return reordered_past
-
 
 @add_start_docstrings(
     """Bert Model with a `next sentence prediction (classification)` head on top.""",
@@ -1554,9 +1542,9 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import BertTokenizer, TFBertForNextSentencePrediction
+        >>> from transformers import AutoTokenizer, TFBertForNextSentencePrediction
 
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         >>> model = TFBertForNextSentencePrediction.from_pretrained("bert-base-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1635,7 +1623,6 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1726,12 +1713,11 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32)}
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1809,9 +1795,9 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int64, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None, None), tf.int64, name="token_type_ids"),
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )
@@ -1864,7 +1850,6 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1956,10 +1941,11 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_QA,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        qa_target_start_index=_QA_TARGET_START_INDEX,
+        qa_target_end_index=_QA_TARGET_END_INDEX,
         expected_output=_QA_EXPECTED_OUTPUT,
         expected_loss=_QA_EXPECTED_LOSS,
     )

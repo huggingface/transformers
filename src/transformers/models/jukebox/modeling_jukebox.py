@@ -16,7 +16,7 @@
 
 import math
 import os
-from typing import List
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -737,7 +737,7 @@ class JukeboxVQVAE(PreTrainedModel):
         ]
         return self.decode(music_tokens)
 
-    def forward(self, raw_audio):
+    def forward(self, raw_audio: torch.FloatTensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass of the VQ-VAE, encodes the `raw_audio` to latent states, which are then decoded for each level.
         The commit loss, which ensure that the encoder's computed embeddings are close to the codebook vectors, is
@@ -748,7 +748,7 @@ class JukeboxVQVAE(PreTrainedModel):
                 Audio input which will be encoded and decoded.
 
         Returns:
-            `Tuple[torch.Tensor, torch.Tensor`
+            `Tuple[torch.Tensor, torch.Tensor]`
 
 
         Example:
@@ -1972,7 +1972,7 @@ class JukeboxPrior(PreTrainedModel):
 
     def prior_preprocess(self, tokens, conds):
         """
-        Shifts the input tokens to account for the dictionnary merge. The embed_dim_shift give by how much the music
+        Shifts the input tokens to account for the dictionary merge. The embed_dim_shift give by how much the music
         tokens should be shifted by. It is equal to `lyric_vocab_size`.
         """
         batch_size = tokens[0].shape[0]
@@ -2228,7 +2228,13 @@ class JukeboxPrior(PreTrainedModel):
         else:
             return loss, metrics
 
-    def forward(self, hidden_states, metadata=None, decode=False, get_preds=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        metadata: Optional[List[torch.LongTensor]],
+        decode: Optional[bool] = False,
+        get_preds: Optional[bool] = False,
+    ) -> List[torch.Tensor]:
         """
         Encode the hidden states using the `vqvae` encoder, and then predicts the next token in the `forward_tokens`
         function. The loss is the sum of the `encoder` loss and the `decoder` loss.
@@ -2495,11 +2501,11 @@ class JukeboxModel(JukeboxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import JukeboxTokenizer, JukeboxModel, set_seed
+        >>> from transformers import AutoTokenizer, JukeboxModel, set_seed
         >>> import torch
 
         >>> metas = dict(artist="Zac Brown Band", genres="Country", lyrics="I met a traveller from an antique land")
-        >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
         >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0).eval()
 
         >>> labels = tokenizer(**metas)["input_ids"]
@@ -2588,10 +2594,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import JukeboxTokenizer, JukeboxModel, set_seed
+        >>> from transformers import AutoTokenizer, JukeboxModel, set_seed
 
         >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0).eval()
-        >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
 
         >>> lyrics = "Hey, are you awake? Can you talk to me?"
         >>> artist = "Zac Brown Band"

@@ -33,10 +33,12 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_scipy_available,
     is_timm_available,
+    is_vision_available,
     logging,
     replace_return_docstrings,
     requires_backends,
 )
+from ..auto import AutoBackbone
 from .configuration_table_transformer import TableTransformerConfig
 
 
@@ -45,6 +47,9 @@ if is_scipy_available():
 
 if is_timm_available():
     from timm import create_model
+
+if is_vision_available():
+    from transformers.image_transforms import center_to_corners_format
 
 logger = logging.get_logger(__name__)
 
@@ -132,7 +137,7 @@ class TableTransformerModelOutput(Seq2SeqModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.detr.modeling_detr.DetrObjectDetectionOutput with Detr->TableTransformer,DetrFeatureExtractor->DetrFeatureExtractor
+# Copied from transformers.models.detr.modeling_detr.DetrObjectDetectionOutput with Detr->TableTransformer,DetrImageProcessor->DetrImageProcessor
 class TableTransformerObjectDetectionOutput(ModelOutput):
     """
     Output type of [`TableTransformerForObjectDetection`].
@@ -149,7 +154,7 @@ class TableTransformerObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~TableTransformerFeatureExtractor.post_process_object_detection`] to
+            possible padding). You can use [`~TableTransformerImageProcessor.post_process_object_detection`] to
             retrieve the unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -251,46 +256,57 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrTimmConvEncoder with Detr->TableTransformer
-class TableTransformerTimmConvEncoder(nn.Module):
+# Copied from transformers.models.detr.modeling_detr.DetrConvEncoder with Detr->TableTransformer
+class TableTransformerConvEncoder(nn.Module):
     """
-    Convolutional encoder (backbone) from the timm library.
+    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
 
     nn.BatchNorm2d layers are replaced by TableTransformerFrozenBatchNorm2d as defined above.
 
     """
 
-    def __init__(self, name: str, dilation: bool, use_pretrained_backbone: bool, num_channels: int = 3):
+    def __init__(self, config):
         super().__init__()
 
-        kwargs = {}
-        if dilation:
-            kwargs["output_stride"] = 16
+        self.config = config
 
-        requires_backends(self, ["timm"])
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = {}
+            if config.dilation:
+                kwargs["output_stride"] = 16
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=(1, 2, 3, 4),
+                in_chans=config.num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = AutoBackbone.from_config(config.backbone_config)
 
-        backbone = create_model(
-            name,
-            pretrained=use_pretrained_backbone,
-            features_only=True,
-            out_indices=(1, 2, 3, 4),
-            in_chans=num_channels,
-            **kwargs,
-        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.feature_info.channels()
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
 
-        if "resnet" in name:
+        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                    parameter.requires_grad_(False)
+                if config.use_timm_backbone:
+                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                        parameter.requires_grad_(False)
+                else:
+                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                        parameter.requires_grad_(False)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values)
+        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
@@ -793,8 +809,7 @@ TABLE_TRANSFORMER_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`DetrFeatureExtractor`]. See [`DetrFeatureExtractor.__call__`] for
-            details.
+            Pixel values can be obtained using [`DetrImageProcessor`]. See [`DetrImageProcessor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1133,9 +1148,7 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = TableTransformerTimmConvEncoder(
-            config.backbone, config.dilation, config.use_pretrained_backbone, config.num_channels
-        )
+        backbone = TableTransformerConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = TableTransformerConvModel(backbone, position_embeddings)
 
@@ -1184,18 +1197,18 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, TableTransformerModel
+        >>> from transformers import AutoImageProcessor, TableTransformerModel
         >>> from huggingface_hub import hf_hub_download
         >>> from PIL import Image
 
         >>> file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
         >>> image = Image.open(file_path).convert("RGB")
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/table-transformer-detection")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/table-transformer-detection")
         >>> model = TableTransformerModel.from_pretrained("microsoft/table-transformer-detection")
 
         >>> # prepare image for the model
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> # forward pass
         >>> outputs = model(**inputs)
@@ -1353,24 +1366,24 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
 
         ```python
         >>> from huggingface_hub import hf_hub_download
-        >>> from transformers import AutoFeatureExtractor, TableTransformerForObjectDetection
+        >>> from transformers import AutoImageProcessor, TableTransformerForObjectDetection
         >>> import torch
         >>> from PIL import Image
 
         >>> file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
         >>> image = Image.open(file_path).convert("RGB")
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/table-transformer-detection")
+        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/table-transformer-detection")
         >>> model = TableTransformerForObjectDetection.from_pretrained("microsoft/table-transformer-detection")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process_object_detection(
-        ...     outputs, threshold=0.9, target_sizes=target_sizes
-        ... )[0]
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
+        ...     0
+        ... ]
 
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
@@ -1929,14 +1942,3 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     else:
         raise ValueError("Only 3-dimensional tensors are supported")
     return NestedTensor(tensor, mask)
-
-
-# Copied from transformers.models.detr.modeling_detr.center_to_corners_format
-def center_to_corners_format(x):
-    """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
-    """
-    center_x, center_y, width, height = x.unbind(-1)
-    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
-    return torch.stack(b, dim=-1)

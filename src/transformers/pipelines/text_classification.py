@@ -50,6 +50,21 @@ class TextClassificationPipeline(Pipeline):
     Text classification pipeline using any `ModelForSequenceClassification`. See the [sequence classification
     examples](../task_summary#sequence-classification) for more information.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> classifier = pipeline(model="distilbert-base-uncased-finetuned-sst-2-english")
+    >>> classifier("This movie is disgustingly good !")
+    [{'label': 'POSITIVE', 'score': 1.0}]
+
+    >>> classifier("Director tried too much.")
+    [{'label': 'NEGATIVE', 'score': 0.996}]
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     This text classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"sentiment-analysis"` (for classifying sequences according to positive or negative sentiments).
 
@@ -110,7 +125,7 @@ class TextClassificationPipeline(Pipeline):
         Args:
             args (`str` or `List[str]` or `Dict[str]`, or `List[Dict[str]]`):
                 One or several texts to classify. In order to use text pairs for your classification, you can send a
-                dictionnary containing `{"text", "text_pair"}` keys, or a list of those.
+                dictionary containing `{"text", "text_pair"}` keys, or a list of those.
             top_k (`int`, *optional*, defaults to `1`):
                 How many results to return.
             function_to_apply (`str`, *optional*, defaults to `"default"`):
@@ -159,7 +174,7 @@ class TextClassificationPipeline(Pipeline):
             # This is likely an invalid usage of the pipeline attempting to pass text pairs.
             raise ValueError(
                 "The pipeline received invalid inputs, if you are trying to send text pairs, you can try to send a"
-                ' dictionnary `{"text": "My text", "text_pair": "My pair"}` in order to send a text pair.'
+                ' dictionary `{"text": "My text", "text_pair": "My pair"}` in order to send a text pair.'
             )
         return self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
 

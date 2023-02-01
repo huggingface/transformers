@@ -29,9 +29,6 @@ import numpy as np
 from .import_utils import is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
 
 
-if is_tf_available():
-    import tensorflow as tf
-
 if is_flax_available():
     import jax.numpy as jnp
 
@@ -121,6 +118,24 @@ def is_torch_device(x):
     Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
     """
     return False if not is_torch_available() else _is_torch_device(x)
+
+
+def _is_torch_dtype(x):
+    import torch
+
+    if isinstance(x, str):
+        if hasattr(torch, x):
+            x = getattr(torch, x)
+        else:
+            return False
+    return isinstance(x, torch.dtype)
+
+
+def is_torch_dtype(x):
+    """
+    Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
+    """
+    return False if not is_torch_available() else _is_torch_dtype(x)
 
 
 def _is_tensorflow(x):
@@ -227,12 +242,20 @@ class ModelOutput(OrderedDict):
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
             if first_field_iterator:
-                for element in iterator:
+                for idx, element in enumerate(iterator):
                     if (
                         not isinstance(element, (list, tuple))
                         or not len(element) == 2
                         or not isinstance(element[0], str)
                     ):
+                        if idx == 0:
+                            # If we do not have an iterator of key/values, set it as attribute
+                            self[class_fields[0].name] = first_field
+                        else:
+                            # If we have a mixed iterator, raise an error
+                            raise ValueError(
+                                f"Cannot set key/value for {element}. It needs to be a tuple (key, value)."
+                            )
                         break
                     setattr(self, element[0], element[1])
                     if element[1] is not None:
@@ -336,6 +359,28 @@ class ContextManagers:
         self.stack.__exit__(*args, **kwargs)
 
 
+def can_return_loss(model_class):
+    """
+    Check if a given model can return loss.
+
+    Args:
+        model_class (`type`): The class of the model.
+    """
+    model_name = model_class.__name__
+    if model_name.startswith("TF"):
+        signature = inspect.signature(model_class.call)
+    elif model_name.startswith("Flax"):
+        signature = inspect.signature(model_class.__call__)
+    else:
+        signature = inspect.signature(model_class.forward)
+
+    for p in signature.parameters:
+        if p == "return_loss" and signature.parameters[p].default is True:
+            return True
+
+    return False
+
+
 def find_labels(model_class):
     """
     Find the labels used by a given model.
@@ -389,6 +434,8 @@ def transpose(array, axes=None):
     elif is_torch_tensor(array):
         return array.T if axes is None else array.permute(*axes)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.transpose(array, perm=axes)
     elif is_jax_tensor(array):
         return jnp.transpose(array, axes=axes)
@@ -406,6 +453,8 @@ def reshape(array, newshape):
     elif is_torch_tensor(array):
         return array.reshape(*newshape)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.reshape(array, newshape)
     elif is_jax_tensor(array):
         return jnp.reshape(array, newshape)
@@ -423,6 +472,8 @@ def squeeze(array, axis=None):
     elif is_torch_tensor(array):
         return array.squeeze() if axis is None else array.squeeze(dim=axis)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.squeeze(array, axis=axis)
     elif is_jax_tensor(array):
         return jnp.squeeze(array, axis=axis)
@@ -440,6 +491,8 @@ def expand_dims(array, axis):
     elif is_torch_tensor(array):
         return array.unsqueeze(dim=axis)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.expand_dims(array, axis=axis)
     elif is_jax_tensor(array):
         return jnp.expand_dims(array, axis=axis)
@@ -456,6 +509,8 @@ def tensor_size(array):
     elif is_torch_tensor(array):
         return array.numel()
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.size(array)
     elif is_jax_tensor(array):
         return array.size

@@ -56,7 +56,6 @@ from .configuration_t5 import T5Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
-_TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "t5-small",
@@ -878,8 +877,8 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        inputs = tf.constant(DUMMY_INPUTS)
-        input_mask = tf.constant(DUMMY_MASK)
+        inputs = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
+        input_mask = tf.constant(DUMMY_MASK, dtype=tf.int32)
         dummy_inputs = {
             "input_ids": inputs,
             "decoder_input_ids": inputs,
@@ -890,10 +889,10 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
             }
         ]
     )
@@ -1081,7 +1080,7 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on the right or the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             To know more on how to prepare `inputs` for pre-training take a look at [T5 Training](./t5#training).
@@ -1182,9 +1181,9 @@ class TFT5Model(TFT5PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import T5Tokenizer, TFT5Model
+        >>> from transformers import AutoTokenizer, TFT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
         >>> model = TFT5Model.from_pretrained("t5-small")
 
         >>> input_ids = tokenizer(
@@ -1243,7 +1242,7 @@ class TFT5Model(TFT5PreTrainedModel):
         past = decoder_outputs[1] if use_cache else None
 
         if not return_dict:
-            if past is not None:
+            if past_key_values is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             return decoder_outputs + encoder_outputs
 
@@ -1366,9 +1365,9 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         Examples:
 
         ```python
-        >>> from transformers import T5Tokenizer, TFT5ForConditionalGeneration
+        >>> from transformers import AutoTokenizer, TFT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
         >>> model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
 
         >>> # training
@@ -1441,7 +1440,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         past = decoder_outputs[1] if use_cache else None
         if not return_dict:
-            if past is not None:
+            if past_key_values is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             output = (logits,) + decoder_outputs[1:] + encoder_outputs
             return ((loss,) + output) if loss is not None else output
@@ -1499,7 +1498,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         decoder_attention_mask=None,
         head_mask=None,
@@ -1510,13 +1509,13 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
     ):
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         return {
             "input_ids": None,  # needs to be passed to make Keras.layer.__call__ happy
             "decoder_input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
@@ -1527,30 +1526,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return self._shift_right(labels)
-
-    def _reorder_cache(self, past, beam_idx):
-        # if decoder past is not included in output
-        # speedy decoding is disabled and no need to reorder
-        if past is None:
-            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past
-
-        reordered_decoder_past = ()
-        for layer_past_states in past:
-            # get the correct batch idx from layer past batch dim
-            # batch dim of `past` is at 2nd position
-            reordered_layer_past_states = ()
-            for layer_past_state in layer_past_states:
-                # need to set correct `past` for each of the four key / value states
-                reordered_layer_past_states = reordered_layer_past_states + (
-                    tf.gather(layer_past_state, beam_idx, axis=0),
-                )
-
-            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
-            assert len(reordered_layer_past_states) == len(layer_past_states)
-
-            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return reordered_decoder_past
 
 
 @add_start_docstrings(
@@ -1575,7 +1550,7 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        return {"input_ids": tf.constant(DUMMY_INPUTS)}
+        return {"input_ids": tf.constant(DUMMY_INPUTS, dtype=tf.int32)}
 
     def get_encoder(self):
         return self.encoder
@@ -1600,9 +1575,9 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import T5Tokenizer, TFT5EncoderModel
+        >>> from transformers import AutoTokenizer, TFT5EncoderModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
         >>> model = TFT5EncoderModel.from_pretrained("t5-small")
 
         >>> input_ids = tokenizer(

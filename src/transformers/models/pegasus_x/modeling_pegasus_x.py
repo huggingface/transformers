@@ -47,7 +47,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/pegasus-x-base"
 _CONFIG_FOR_DOC = "PegasusXConfig"
-_TOKENIZER_FOR_DOC = "PegasusTokenizer"
 
 
 PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -203,7 +202,14 @@ class PegasusXAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -797,10 +803,10 @@ PEGASUS_X_GENERATION_EXAMPLE = r"""
     Summarization example:
 
     ```python
-    >>> from transformers import PegasusTokenizer, PegasusXForConditionalGeneration
+    >>> from transformers import AutoTokenizer, PegasusXForConditionalGeneration
 
     >>> model = PegasusXForConditionalGeneration.from_pretrained("google/pegasus-x-base")
-    >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-x-large")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/pegasus-x-large")
 
     >>> ARTICLE_TO_SUMMARIZE = (
     ...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
@@ -822,7 +828,7 @@ PEGASUS_X_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -838,7 +844,7 @@ PEGASUS_X_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -971,7 +977,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1199,7 +1205,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1449,9 +1455,9 @@ class PegasusXModel(PegasusXPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import PegasusTokenizer, PegasusModel
+        >>> from transformers import AutoTokenizer, PegasusModel
 
-        >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-x-large")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/pegasus-x-large")
         >>> model = PegasusModel.from_pretrained("google/pegasus-x-large")
 
         >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
@@ -1652,16 +1658,22 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self,
+        decoder_input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)

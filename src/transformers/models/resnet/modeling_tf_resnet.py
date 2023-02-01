@@ -34,7 +34,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "ResNetConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/resnet-50"
@@ -313,8 +312,8 @@ RESNET_START_DOCSTRING = r"""
 RESNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`ConvNextImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -393,7 +392,6 @@ class TFResNetModel(TFResNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -458,7 +456,6 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,

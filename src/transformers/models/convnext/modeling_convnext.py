@@ -24,12 +24,19 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
+    BackboneOutput,
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_convnext import ConvNextConfig
 
 
@@ -37,7 +44,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "ConvNextConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "ConvNextFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/convnext-tiny-224"
@@ -82,8 +88,8 @@ class ConvNextDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
@@ -290,7 +296,7 @@ class ConvNextPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ConvNextModel):
+        if isinstance(module, ConvNextEncoder):
             module.gradient_checkpointing = value
 
 
@@ -308,8 +314,8 @@ CONVNEXT_START_DOCSTRING = r"""
 CONVNEXT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`ConvNextImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -339,7 +345,6 @@ class ConvNextModel(ConvNextPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -407,7 +412,6 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -464,4 +468,103 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
+        )
+
+
+@add_start_docstrings(
+    """
+    ConvNeXt backbone, to be used with frameworks like DETR and MaskFormer.
+    """,
+    CONVNEXT_START_DOCSTRING,
+)
+class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.stage_names = config.stage_names
+        self.embeddings = ConvNextEmbeddings(config)
+        self.encoder = ConvNextEncoder(config)
+
+        self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
+
+        out_feature_channels = {}
+        out_feature_channels["stem"] = config.hidden_sizes[0]
+        for idx, stage in enumerate(self.stage_names[1:]):
+            out_feature_channels[stage] = config.hidden_sizes[idx]
+
+        self.out_feature_channels = out_feature_channels
+
+        # Add layer norms to hidden states of out_features
+        hidden_states_norms = dict()
+        for stage, num_channels in zip(self.out_features, self.channels):
+            hidden_states_norms[stage] = ConvNextLayerNorm(num_channels, data_format="channels_first")
+        self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
+
+        # initialize weights and apply final processing
+        self.post_init()
+
+    @property
+    def channels(self):
+        return [self.out_feature_channels[name] for name in self.out_features]
+
+    @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> BackboneOutput:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
+        >>> model = AutoBackbone.from_pretrained("facebook/convnext-tiny-224")
+
+        >>> inputs = processor(image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        embedding_output = self.embeddings(pixel_values)
+
+        outputs = self.encoder(
+            embedding_output,
+            output_hidden_states=True,
+            return_dict=True,
+        )
+
+        hidden_states = outputs.hidden_states
+
+        feature_maps = ()
+        # we skip the stem
+        for idx, (stage, hidden_state) in enumerate(zip(self.stage_names[1:], hidden_states[1:])):
+            if stage in self.out_features:
+                hidden_state = self.hidden_states_norms[stage](hidden_state)
+                feature_maps += (hidden_state,)
+
+        if not return_dict:
+            output = (feature_maps,)
+            if output_hidden_states:
+                output += (outputs.hidden_states,)
+            return output
+
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=None,
         )

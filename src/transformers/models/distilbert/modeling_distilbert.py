@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """
  PyTorch DistilBERT model adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM) and in
  part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
@@ -53,7 +54,6 @@ from .configuration_distilbert import DistilBertConfig
 logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
 _CONFIG_FOR_DOC = "DistilBertConfig"
-_TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "distilbert-base-uncased",
@@ -141,7 +141,10 @@ class MultiHeadSelfAttention(nn.Module):
         self.dim = config.dim
         self.dropout = nn.Dropout(p=config.attention_dropout)
 
-        assert self.dim % self.n_heads == 0
+        # Have an even number of multi heads that divide the dimensions
+        if self.dim % self.n_heads != 0:
+            # Raise value errors for even multi-head attention nodes
+            raise ValueError(f"self.n_heads: {self.n_heads} must divide self.dim: {self.dim} evenly")
 
         self.q_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.k_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
@@ -149,12 +152,14 @@ class MultiHeadSelfAttention(nn.Module):
         self.out_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
 
         self.pruned_heads: Set[int] = set()
+        self.attention_head_size = self.dim // self.n_heads
 
     def prune_heads(self, heads: List[int]):
-        attention_head_size = self.dim // self.n_heads
         if len(heads) == 0:
             return
-        heads, index = find_pruneable_heads_and_indices(heads, self.n_heads, attention_head_size, self.pruned_heads)
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.n_heads, self.attention_head_size, self.pruned_heads
+        )
         # Prune linear layers
         self.q_lin = prune_linear_layer(self.q_lin, index)
         self.k_lin = prune_linear_layer(self.k_lin, index)
@@ -162,7 +167,7 @@ class MultiHeadSelfAttention(nn.Module):
         self.out_lin = prune_linear_layer(self.out_lin, index, dim=1)
         # Update hyper params
         self.n_heads = self.n_heads - len(heads)
-        self.dim = attention_head_size * self.n_heads
+        self.dim = self.attention_head_size * self.n_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -255,7 +260,9 @@ class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
 
-        assert config.dim % config.n_heads == 0
+        # Have an even number of Configure multi-heads
+        if config.dim % config.n_heads != 0:
+            raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
 
         self.attention = MultiHeadSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
@@ -291,7 +298,9 @@ class TransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
-            assert type(sa_output) == tuple
+            if type(sa_output) != tuple:
+                raise TypeError(f"sa_output must be a tuple but it is {type(sa_output)} type")
+
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
 
@@ -320,6 +329,7 @@ class Transformer(nn.Module):
         output_hidden_states: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:  # docstyle-ignore
+
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim) Input sequence embedded.
@@ -348,11 +358,14 @@ class Transformer(nn.Module):
             hidden_state = layer_outputs[-1]
 
             if output_attentions:
-                assert len(layer_outputs) == 2
+                if len(layer_outputs) != 2:
+                    raise ValueError(f"The length of the layer_outputs should be 2, but it is {len(layer_outputs)}")
+
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
             else:
-                assert len(layer_outputs) == 1
+                if len(layer_outputs) != 1:
+                    raise ValueError(f"The length of the layer_outputs should be 1, but it is {len(layer_outputs)}")
 
         # Add last layer
         if output_hidden_states:
@@ -414,7 +427,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`DistilBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -524,7 +537,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -624,7 +636,6 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -722,7 +733,6 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -810,7 +820,9 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
         self.distilbert = DistilBertModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
-        assert config.num_labels == 2
+        if config.num_labels != 2:
+            raise ValueError(f"config.num_labels should be 2, but it is {config.num_labels}")
+
         self.dropout = nn.Dropout(config.qa_dropout)
 
         # Initialize weights and apply final processing
@@ -838,7 +850,6 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -955,7 +966,6 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1074,10 +1084,10 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
+        >>> from transformers import AutoTokenizer, DistilBertForMultipleChoice
         >>> import torch
 
-        >>> tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased")
         >>> model = DistilBertForMultipleChoice.from_pretrained("distilbert-base-cased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."

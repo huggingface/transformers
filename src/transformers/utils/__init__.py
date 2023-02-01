@@ -38,6 +38,7 @@ from .generic import (
     PaddingStrategy,
     TensorType,
     cached_property,
+    can_return_loss,
     expand_dims,
     find_labels,
     flatten_dict,
@@ -46,6 +47,7 @@ from .generic import (
     is_tensor,
     is_tf_tensor,
     is_torch_device,
+    is_torch_dtype,
     is_torch_tensor,
     reshape,
     squeeze,
@@ -101,7 +103,9 @@ from .import_utils import (
     is_bitsandbytes_available,
     is_bs4_available,
     is_coloredlogs_available,
+    is_cython_available,
     is_datasets_available,
+    is_decord_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
@@ -110,8 +114,10 @@ from .import_utils import (
     is_ipex_available,
     is_jumanpp_available,
     is_kenlm_available,
+    is_keras_nlp_available,
     is_librosa_available,
     is_more_itertools_available,
+    is_natten_available,
     is_ninja_available,
     is_onnx_available,
     is_pandas_available,
@@ -127,7 +133,6 @@ from .import_utils import (
     is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
-    is_scatter_available,
     is_scipy_available,
     is_sentencepiece_available,
     is_sklearn_available,
@@ -145,21 +150,23 @@ from .import_utils import (
     is_torch_bf16_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_compile_available,
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_neuroncore_available,
     is_torch_onnx_dict_inputs_support_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
+    is_torchdistx_available,
     is_torchdynamo_available,
+    is_torchvision_available,
     is_training_run_on_sagemaker,
     is_vision_available,
     requires_backends,
-    tf_required,
     torch_only_method,
-    torch_required,
     torch_version,
 )
 
@@ -176,6 +183,7 @@ SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
+GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
 SENTENCEPIECE_UNDERLINE = "▁"

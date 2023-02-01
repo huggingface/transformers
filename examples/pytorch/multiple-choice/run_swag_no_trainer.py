@@ -40,7 +40,7 @@ import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-from huggingface_hub import Repository
+from huggingface_hub import Repository, create_repo
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
@@ -56,7 +56,7 @@ from transformers.utils import PaddingStrategy, check_min_version, get_full_repo
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.25.0.dev0")
+check_min_version("4.27.0.dev0")
 
 logger = get_logger(__name__)
 # You should update this to your particular problem to have better documentation of `model_type`
@@ -85,7 +85,7 @@ def parse_args():
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
     )
     parser.add_argument(
-        "--max_length",
+        "--max_seq_length",
         type=int,
         default=128,
         help=(
@@ -205,7 +205,7 @@ def parse_args():
         default="all",
         help=(
             'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
-            ' `"wandb"` and `"comet_ml"`. Use `"all"` (default) to report to all integrations.'
+            ' `"wandb"`, `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations.'
             "Only applicable when `--with_tracking` is passed."
         ),
     )
@@ -317,7 +317,8 @@ def main():
                 repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
             else:
                 repo_name = args.hub_model_id
-            repo = Repository(args.output_dir, clone_from=repo_name)
+            create_repo(repo_name, exist_ok=True, token=args.hub_token)
+            repo = Repository(args.output_dir, clone_from=repo_name, token=args.hub_token)
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -424,7 +425,7 @@ def main():
         tokenized_examples = tokenizer(
             first_sentences,
             second_sentences,
-            max_length=args.max_length,
+            max_length=args.max_seq_length,
             padding=padding,
             truncation=True,
         )
@@ -654,8 +655,10 @@ def main():
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
-        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-            json.dump({"eval_accuracy": eval_metric["accuracy"]}, f)
+
+            all_results = {f"eval_{k}": v for k, v in eval_metric.items()}
+            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+                json.dump(all_results, f)
 
 
 if __name__ == "__main__":

@@ -33,10 +33,12 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_scipy_available,
     is_timm_available,
+    is_vision_available,
     logging,
     replace_return_docstrings,
     requires_backends,
 )
+from ..auto import AutoBackbone
 from .configuration_detr import DetrConfig
 
 
@@ -45,6 +47,9 @@ if is_scipy_available():
 
 if is_timm_available():
     from timm import create_model
+
+if is_vision_available():
+    from transformers.image_transforms import center_to_corners_format
 
 logger = logging.get_logger(__name__)
 
@@ -144,7 +149,7 @@ class DetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DetrFeatureExtractor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~DetrImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -207,13 +212,13 @@ class DetrSegmentationOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DetrFeatureExtractor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~DetrImageProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
             Segmentation masks logits for all queries. See also
-            [`~DetrFeatureExtractor.post_process_semantic_segmentation`] or
-            [`~DetrFeatureExtractor.post_process_instance_segmentation`]
-            [`~DetrFeatureExtractor.post_process_panoptic_segmentation`] to evaluate semantic, instance and panoptic
+            [`~DetrImageProcessor.post_process_semantic_segmentation`] or
+            [`~DetrImageProcessor.post_process_instance_segmentation`]
+            [`~DetrImageProcessor.post_process_panoptic_segmentation`] to evaluate semantic, instance and panoptic
             segmentation masks respectively.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -316,45 +321,56 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-class DetrTimmConvEncoder(nn.Module):
+class DetrConvEncoder(nn.Module):
     """
-    Convolutional encoder (backbone) from the timm library.
+    Convolutional backbone, using either the AutoBackbone API or one from the timm library.
 
     nn.BatchNorm2d layers are replaced by DetrFrozenBatchNorm2d as defined above.
 
     """
 
-    def __init__(self, name: str, dilation: bool, use_pretrained_backbone: bool, num_channels: int = 3):
+    def __init__(self, config):
         super().__init__()
 
-        kwargs = {}
-        if dilation:
-            kwargs["output_stride"] = 16
+        self.config = config
 
-        requires_backends(self, ["timm"])
+        if config.use_timm_backbone:
+            requires_backends(self, ["timm"])
+            kwargs = {}
+            if config.dilation:
+                kwargs["output_stride"] = 16
+            backbone = create_model(
+                config.backbone,
+                pretrained=config.use_pretrained_backbone,
+                features_only=True,
+                out_indices=(1, 2, 3, 4),
+                in_chans=config.num_channels,
+                **kwargs,
+            )
+        else:
+            backbone = AutoBackbone.from_config(config.backbone_config)
 
-        backbone = create_model(
-            name,
-            pretrained=use_pretrained_backbone,
-            features_only=True,
-            out_indices=(1, 2, 3, 4),
-            in_chans=num_channels,
-            **kwargs,
-        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.feature_info.channels()
+        self.intermediate_channel_sizes = (
+            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
+        )
 
-        if "resnet" in name:
+        backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
+        if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                    parameter.requires_grad_(False)
+                if config.use_timm_backbone:
+                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
+                        parameter.requires_grad_(False)
+                else:
+                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                        parameter.requires_grad_(False)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values)
+        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:
@@ -852,8 +868,7 @@ DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`DetrFeatureExtractor`]. See [`DetrFeatureExtractor.__call__`] for
-            details.
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`DetrImageProcessor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1188,9 +1203,7 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DetrTimmConvEncoder(
-            config.backbone, config.dilation, config.use_pretrained_backbone, config.num_channels
-        )
+        backbone = DetrConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = DetrConvModel(backbone, position_embeddings)
 
@@ -1239,18 +1252,18 @@ class DetrModel(DetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DetrFeatureExtractor, DetrModel
+        >>> from transformers import AutoImageProcessor, DetrModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
         >>> model = DetrModel.from_pretrained("facebook/detr-resnet-50")
 
         >>> # prepare image for the model
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> # forward pass
         >>> outputs = model(**inputs)
@@ -1406,7 +1419,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DetrFeatureExtractor, DetrForObjectDetection
+        >>> from transformers import AutoImageProcessor, DetrForObjectDetection
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -1414,17 +1427,17 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
         >>> model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process_object_detection(
-        ...     outputs, threshold=0.9, target_sizes=target_sizes
-        ... )[0]
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
+        ...     0
+        ... ]
 
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
@@ -1584,24 +1597,24 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> import torch
         >>> import numpy
 
-        >>> from transformers import DetrFeatureExtractor, DetrForSegmentation
-        >>> from transformers.models.detr.feature_extraction_detr import rgb_to_id
+        >>> from transformers import AutoImageProcessor, DetrForSegmentation
+        >>> from transformers.image_transforms import rgb_to_id
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50-panoptic")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50-panoptic")
         >>> model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic")
 
         >>> # prepare image for the model
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> # forward pass
         >>> outputs = model(**inputs)
 
-        >>> # Use the `post_process_panoptic_segmentation` method of `DetrFeatureExtractor` to retrieve post-processed panoptic segmentation maps
+        >>> # Use the `post_process_panoptic_segmentation` method of the `image_processor` to retrieve post-processed panoptic segmentation maps
         >>> # Segmentation results are returned as a list of dictionaries
-        >>> result = feature_extractor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
+        >>> result = image_processor.post_process_panoptic_segmentation(outputs, target_sizes=[(300, 500)])
 
         >>> # A tensor of shape (height, width) where each value denotes a segment id, filled with -1 if no segment is found
         >>> panoptic_seg = result[0]["segmentation"]
@@ -2284,20 +2297,7 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / area
 
 
-# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
-def center_to_corners_format(x):
-    """
-    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (x_0, y_0, x_1, y_1).
-    """
-    center_x, center_y, width, height = x.unbind(-1)
-    b = [(center_x - 0.5 * width), (center_y - 0.5 * height), (center_x + 0.5 * width), (center_y + 0.5 * height)]
-    return torch.stack(b, dim=-1)
-
-
 # below: taken from https://github.com/facebookresearch/detr/blob/master/util/misc.py#L306
-
-
 def _max_by_axis(the_list):
     # type: (List[List[int]]) -> List[int]
     maxes = the_list[0]

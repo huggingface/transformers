@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for CLIP."""
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -23,13 +23,21 @@ from transformers.utils.generic import TensorType
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     center_crop,
+    convert_to_rgb,
     get_resize_output_image_size,
     normalize,
     rescale,
     resize,
     to_channel_dimension_format,
 )
-from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, is_batched, to_numpy_array, valid_images
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+)
 from ...utils import logging
 from ...utils.import_utils import is_vision_available
 
@@ -39,20 +47,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
-
-
-def convert_to_rgb(image: Union[Any, PIL.Image.Image]) -> Union[Any, PIL.Image.Image]:
-    """
-    Converts `PIL.Image.Image` to RGB format. Images in other formats are returned as is.
-
-    Args:
-        image (`PIL.Image.Image`):
-            The image to convert.
-    """
-    if not isinstance(image, PIL.Image.Image):
-        return image
-
-    return image.convert("RGB")
 
 
 class CLIPImageProcessor(BaseImageProcessor):
@@ -83,10 +77,10 @@ class CLIPImageProcessor(BaseImageProcessor):
             method.
         do_normalize:
             Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
             Image standard deviation.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
@@ -114,7 +108,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         size = size if size is not None else {"shortest_edge": 224}
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size)
+        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
 
         self.do_resize = do_resize
         self.size = size
@@ -176,6 +170,8 @@ class CLIPImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         size = get_size_dict(size)
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"The `size` parameter must contain the keys (height, width). Got {size.keys()}")
         return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def rescale(
@@ -285,11 +281,11 @@ class CLIPImageProcessor(BaseImageProcessor):
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False)
+        size = get_size_dict(size, param_name="size", default_to_square=False)
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size)
+        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
@@ -297,8 +293,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

@@ -96,7 +96,7 @@ MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                 argument defines the number of overlapping tokens.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -428,6 +428,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         adding special tokens. A RoBERTa sequence has the following format:
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s></s> B </s>`
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
@@ -1391,7 +1392,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """

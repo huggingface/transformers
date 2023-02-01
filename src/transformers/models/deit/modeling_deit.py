@@ -44,7 +44,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "DeiTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "DeiTFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/deit-base-distilled-patch16-224"
@@ -387,7 +386,6 @@ class DeiTEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->DeiT all-casing
 class DeiTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -398,11 +396,16 @@ class DeiTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "deit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
+            # `trunc_normal_cpu` not implemented in `half` issues
+            module.weight.data = nn.init.trunc_normal_(
+                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
+            ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -428,8 +431,8 @@ DEIT_START_DOCSTRING = r"""
 DEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`DeiTFeatureExtractor`]. See
-            [`DeiTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`DeiTImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -479,7 +482,6 @@ class DeiTModel(DeiTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -494,7 +496,7 @@ class DeiTModel(DeiTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -510,6 +512,11 @@ class DeiTModel(DeiTPreTrainedModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+
+        # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
+        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
+        if pixel_values.dtype != expected_dtype:
+            pixel_values = pixel_values.to(expected_dtype)
 
         embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
 
@@ -601,7 +608,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import DeiTFeatureExtractor, DeiTForMaskedImageModeling
+        >>> from transformers import AutoImageProcessor, DeiTForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -609,11 +616,11 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
         >>> model = DeiTForMaskedImageModeling.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+        >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 
@@ -711,7 +718,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
+        >>> from transformers import AutoImageProcessor, DeiTForImageClassification
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -722,10 +729,10 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 
         >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random
-        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
         >>> model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         >>> # model predicts one of the 1000 ImageNet classes
@@ -845,7 +852,6 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=DeiTForImageClassificationWithTeacherOutput,
         config_class=_CONFIG_FOR_DOC,

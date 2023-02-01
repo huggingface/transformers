@@ -42,7 +42,6 @@ _HIDDEN_STATES_START_POSITION = 1
 
 # General docstring
 _CONFIG_FOR_DOC = "SEWDConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "asapp/sew-d-tiny-100k-ft-ls100h"
@@ -53,7 +52,6 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTIL OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 0.21
 
 # Audio class docstring
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 _SEQ_CLASS_CHECKPOINT = "anton-l/sew-d-mid-400k-ft-keyword-spotting"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
 _SEQ_CLASS_EXPECTED_LOSS = 3.16
@@ -209,7 +207,7 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
 
 
 # Copied from transformers.models.deberta_v2.modeling_deberta_v2.build_relative_position
-def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1):
+def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1, device=None):
     """
     Build relative position according to the query and key
 
@@ -222,13 +220,14 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
         key_size (int): the length of key
         bucket_size (int): the size of position bucket
         max_position (int): the maximum allowed absolute position
+        device (`torch.device`): the device on which tensors will be created.
 
     Return:
         `torch.LongTensor`: A tensor with shape [1, query_size, key_size]
-
     """
-    q_ids = torch.arange(0, query_size)
-    k_ids = torch.arange(0, key_size)
+
+    q_ids = torch.arange(0, query_size, device=device)
+    k_ids = torch.arange(0, key_size, device=device)
     rel_pos_ids = q_ids[:, None] - k_ids[None, :]
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
@@ -827,7 +826,11 @@ class DisentangledSelfAttention(nn.Module):
         if relative_pos is None:
             q = query_layer.size(-2)
             relative_pos = build_relative_position(
-                q, key_layer.size(-2), bucket_size=self.position_buckets, max_position=self.max_relative_positions
+                q,
+                key_layer.size(-2),
+                bucket_size=self.position_buckets,
+                max_position=self.max_relative_positions,
+                device=query_layer.device,
             )
         if relative_pos.dim() == 2:
             relative_pos = relative_pos.unsqueeze(0).unsqueeze(0)
@@ -884,7 +887,8 @@ class DisentangledSelfAttention(nn.Module):
                     key_layer.size(-2),
                     bucket_size=self.position_buckets,
                     max_position=self.max_relative_positions,
-                ).to(query_layer.device)
+                    device=query_layer.device,
+                )
                 r_pos = r_pos.unsqueeze(0)
             else:
                 r_pos = relative_pos
@@ -1093,7 +1097,11 @@ class SEWDTransformerEncoder(nn.Module):
         if self.relative_attention and relative_pos is None:
             q = query_states.size(-2) if query_states is not None else hidden_states.size(-2)
             relative_pos = build_relative_position(
-                q, hidden_states.size(-2), bucket_size=self.position_buckets, max_position=self.max_relative_positions
+                q,
+                hidden_states.size(-2),
+                bucket_size=self.position_buckets,
+                max_position=self.max_relative_positions,
+                device=hidden_states.device,
             )
         return relative_pos
 
@@ -1345,10 +1353,10 @@ SEWD_START_DOCSTRING = r"""
 SEWD_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1443,7 +1451,6 @@ class SEWDModel(SEWDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1547,7 +1554,6 @@ class SEWDForCTC(SEWDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1682,7 +1688,6 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

@@ -62,7 +62,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "flaubert/flaubert_base_cased"
 _CONFIG_FOR_DOC = "FlaubertConfig"
-_TOKENIZER_FOR_DOC = "FlaubertTokenizer"
 
 TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Flaubert models at https://huggingface.co/models?filter=flaubert
@@ -115,7 +114,7 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`FlaubertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -226,13 +225,13 @@ class TFFlaubertPreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         # Sometimes Flaubert has language embeddings so don't forget to build them as well if needed
-        inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
-        attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+        inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]], dtype=tf.int32)
+        attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]], dtype=tf.int32)
         if self.config.use_lang_emb and self.config.n_langs > 1:
             return {
                 "input_ids": inputs_list,
                 "attention_mask": attns_list,
-                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]),
+                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]], dtype=tf.int32),
             }
         else:
             return {"input_ids": inputs_list, "attention_mask": attns_list}
@@ -250,7 +249,6 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -808,7 +806,6 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFFlaubertWithLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -881,7 +878,6 @@ class TFFlaubertForSequenceClassification(TFFlaubertPreTrainedModel, TFSequenceC
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -968,7 +964,6 @@ class TFFlaubertForQuestionAnsweringSimple(TFFlaubertPreTrainedModel, TFQuestion
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1073,7 +1068,6 @@ class TFFlaubertForTokenClassification(TFFlaubertPreTrainedModel, TFTokenClassif
     @unpack_inputs
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1169,12 +1163,12 @@ class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLos
         # Sometimes Flaubert has language embeddings so don't forget to build them as well if needed
         if self.config.use_lang_emb and self.config.n_langs > 1:
             return {
-                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-                "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
+                "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
             }
         else:
             return {
-                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
             }
 
     @unpack_inputs
@@ -1182,7 +1176,6 @@ class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLos
         FLAUBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,

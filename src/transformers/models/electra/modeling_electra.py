@@ -52,7 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/electra-small-discriminator"
 _CONFIG_FOR_DOC = "ElectraConfig"
-_TOKENIZER_FOR_DOC = "ElectraTokenizer"
 
 ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/electra-small-generator",
@@ -281,6 +280,7 @@ class ElectraSelfAttention(nn.Module):
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
+        use_cache = past_key_value is not None
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -295,10 +295,16 @@ class ElectraSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            query_length, key_length = query_layer.shape[2], key_layer.shape[2]
+            if use_cache:
+                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
+                    -1, 1
+                )
+            else:
+                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
+
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
@@ -740,7 +746,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`ElectraTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -832,7 +838,6 @@ class ElectraModel(ElectraPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -968,7 +973,6 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="bhadresh-savani/electra-base-emotion",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1091,11 +1095,11 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ElectraForPreTraining, ElectraTokenizerFast
+        >>> from transformers import ElectraForPreTraining, AutoTokenizer
         >>> import torch
 
         >>> discriminator = ElectraForPreTraining.from_pretrained("google/electra-base-discriminator")
-        >>> tokenizer = ElectraTokenizerFast.from_pretrained("google/electra-base-discriminator")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/electra-base-discriminator")
 
         >>> sentence = "The quick brown fox jumps over the lazy dog"
         >>> fake_sentence = "The quick brown fox fake over the lazy dog"
@@ -1181,7 +1185,6 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/electra-small-generator",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1268,7 +1271,6 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="bhadresh-savani/electra-base-discriminator-finetuned-conll03-english",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1350,7 +1352,6 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="bhadresh-savani/electra-base-squad2",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1456,7 +1457,6 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1601,10 +1601,10 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import ElectraTokenizer, ElectraForCausalLM, ElectraConfig
+        >>> from transformers import AutoTokenizer, ElectraForCausalLM, ElectraConfig
         >>> import torch
 
-        >>> tokenizer = ElectraTokenizer.from_pretrained("google/electra-base-generator")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/electra-base-generator")
         >>> config = ElectraConfig.from_pretrained("google/electra-base-generator")
         >>> config.is_decoder = True
         >>> model = ElectraForCausalLM.from_pretrained("google/electra-base-generator", config=config)
@@ -1659,17 +1659,17 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
         )
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM._reorder_cache
     def _reorder_cache(self, past, beam_idx):

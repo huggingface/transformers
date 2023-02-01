@@ -52,7 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/markuplm-base"
 _CONFIG_FOR_DOC = "MarkupLMConfig"
-_TOKENIZER_FOR_DOC = "MarkupLMTokenizer"
 
 MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/markuplm-base",
@@ -405,6 +404,7 @@ class MarkupLMSelfAttention(nn.Module):
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
+        use_cache = past_key_value is not None
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -419,10 +419,16 @@ class MarkupLMSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            query_length, key_length = query_layer.shape[2], key_layer.shape[2]
+            if use_cache:
+                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
+                    -1, 1
+                )
+            else:
+                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
+
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
@@ -749,7 +755,7 @@ MARKUPLM_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MarkupLMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -829,27 +835,27 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        xpath_tags_seq=None,
-        xpath_subs_seq=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        xpath_tags_seq: Optional[torch.LongTensor] = None,
+        xpath_subs_seq: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import MarkupLMProcessor, MarkupLMModel
+        >>> from transformers import AutoProcessor, MarkupLMModel
 
-        >>> processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/markuplm-base")
         >>> model = MarkupLMModel.from_pretrained("microsoft/markuplm-base")
 
         >>> html_string = "<html> <head> <title>Page Title</title> </head> </html>"
@@ -930,17 +936,24 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         )
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=True, **model_kwargs
+    ):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        # cut decoder_input_ids if past is used
-        if past is not None:
+        # cut decoder_input_ids if past_key_values is used
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "use_cache": use_cache,
+        }
 
     # Copied from transformers.models.bert.modeling_bert.BertModel._reorder_cache
     def _reorder_cache(self, past, beam_idx):
@@ -1004,10 +1017,10 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MarkupLMProcessor, MarkupLMForQuestionAnswering
+        >>> from transformers import AutoProcessor, MarkupLMForQuestionAnswering
         >>> import torch
 
-        >>> processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
         >>> model = MarkupLMForQuestionAnswering.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
 
         >>> html_string = "<html> <head> <title>My name is Niels</title> </head> </html>"

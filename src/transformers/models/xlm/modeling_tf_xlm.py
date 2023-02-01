@@ -61,7 +61,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "xlm-mlm-en-2048"
 _CONFIG_FOR_DOC = "XLMConfig"
-_TOKENIZER_FOR_DOC = "XLMTokenizer"
 
 TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-mlm-en-2048",
@@ -533,13 +532,13 @@ class TFXLMPreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         # Sometimes XLM has language embeddings so don't forget to build them as well if needed
-        inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
-        attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+        inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]], dtype=tf.int32)
+        attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]], dtype=tf.int32)
         if self.config.use_lang_emb and self.config.n_langs > 1:
             return {
                 "input_ids": inputs_list,
                 "attention_mask": attns_list,
-                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]),
+                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]], dtype=tf.int32),
             }
         else:
             return {"input_ids": inputs_list, "attention_mask": attns_list}
@@ -619,7 +618,7 @@ XLM_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -701,7 +700,6 @@ class TFXLMModel(TFXLMPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -838,7 +836,6 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLMWithLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -910,7 +907,6 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1006,18 +1002,17 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         # Sometimes XLM has language embeddings so don't forget to build them as well if needed
         if self.config.use_lang_emb and self.config.n_langs > 1:
             return {
-                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-                "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
+                "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
             }
         else:
             return {
-                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
             }
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1141,7 +1136,6 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1226,7 +1220,6 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

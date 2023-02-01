@@ -54,7 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/blenderbot_small-90M"
 _CONFIG_FOR_DOC = "BlenderbotSmallConfig"
-_TOKENIZER_FOR_DOC = "BlenderbotSmallTokenizer"
 
 BLENDERBOT_SMALL_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -96,7 +95,7 @@ BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -110,7 +109,7 @@ BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -147,7 +146,7 @@ BLENDERBOT_SMALL_ENCODE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -176,7 +175,7 @@ BLENDERBOT_SMALL_DECODE_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BlenderbotSmallTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -371,7 +370,7 @@ class FlaxBlenderbotSmallAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -815,6 +814,7 @@ class FlaxBlenderbotSmallModule(nn.Module):
             self.config.vocab_size,
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            dtype=self.dtype,
         )
 
         self.encoder = FlaxBlenderbotSmallEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
@@ -989,10 +989,10 @@ class FlaxBlenderbotSmallPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
         >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
@@ -1058,10 +1058,10 @@ class FlaxBlenderbotSmallPreTrainedModel(FlaxPreTrainedModel):
 
         ```python
         >>> import jax.numpy as jnp
-        >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
         >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
@@ -1218,9 +1218,7 @@ class FlaxBlenderbotSmallModel(FlaxBlenderbotSmallPreTrainedModel):
     module_class = FlaxBlenderbotSmallModule
 
 
-append_call_sample_docstring(
-    FlaxBlenderbotSmallModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBlenderbotSmallModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartForConditionalGenerationModule with Bart->BlenderbotSmall
@@ -1328,10 +1326,10 @@ class FlaxBlenderbotSmallForConditionalGeneration(FlaxBlenderbotSmallPreTrainedM
 
         ```python
         >>> import jax.numpy as jnp
-        >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
         >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="np")
@@ -1483,30 +1481,38 @@ FLAX_BLENDERBOT_SMALL_CONDITIONAL_GENERATION_DOCSTRING = """
 
     Summarization example:
 
-        >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration
+    ```py
+    >>> from transformers import AutoTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
-        >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/blenderbot_small-90M') >>>
-        tokenizer = BlenderbotSmallTokenizer.from_pretrained('facebook/blenderbot_small-90M')
+    >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs." >>> inputs =
-        tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='np')
+    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="np")
 
-        >>> # Generate Summary >>> summary_ids = model.generate(inputs['input_ids']).sequences >>>
-        print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs["input_ids"]).sequences
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
+    ```
 
     Mask filling example:
 
-        >>> from transformers import BlenderbotSmallTokenizer, FlaxBlenderbotSmallForConditionalGeneration >>>
-        tokenizer = BlenderbotSmallTokenizer.from_pretrained('facebook/blenderbot_small-90M') >>> TXT = "My friends are
-        <mask> but they eat too many carbs."
+    ```py
+    >>> from transformers import AutoTokenizer, FlaxBlenderbotSmallForConditionalGeneration
 
-        >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/blenderbot_small-90M') >>>
-        input_ids = tokenizer([TXT], return_tensors='np')['input_ids'] >>> logits = model(input_ids).logits
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+    >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item() >>> probs =
-        jax.nn.softmax(logits[0, masked_index], axis=0) >>> values, predictions = jax.lax.top_k(probs)
+    >>> model = FlaxBlenderbotSmallForConditionalGeneration.from_pretrained("facebook/blenderbot_small-90M")
+    >>> input_ids = tokenizer([TXT], return_tensors="np")["input_ids"]
+    >>> logits = model(input_ids).logits
 
-        >>> tokenizer.decode(predictions).split()
+    >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+    >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
+    >>> values, predictions = jax.lax.top_k(probs)
+
+    >>> tokenizer.decode(predictions).split()
+    ```
 """
 
 overwrite_call_docstring(
