@@ -28,11 +28,11 @@ from models.pix2struct import pix2struct_decoder
 from models.pix2struct_itm import pix2struct_itm
 from models.pix2struct_vqa import pix2struct_vqa
 from transformers import (
-    Pix2StructTokenizer,
     Pix2StructConfig,
     Pix2StructForConditionalGeneration,
     Pix2StructForImageTextRetrieval,
     Pix2StructForQuestionAnswering,
+    Pix2StructTokenizer,
 )
 
 
@@ -90,7 +90,9 @@ def convert_pix2struct_checkpoint(pytorch_dump_folder_path, config_path=None):
 
     hf_model = Pix2StructForConditionalGeneration(config).eval()
 
-    model_url = "https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/models/model_base_capfilt_large.pth"
+    model_url = (
+        "https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/models/model_base_capfilt_large.pth"
+    )
 
     pt_model = pix2struct_decoder(pretrained=model_url, image_size=384, vit="base")
     pt_model = pt_model.eval()
@@ -120,9 +122,7 @@ def convert_pix2struct_checkpoint(pytorch_dump_folder_path, config_path=None):
         hf_model.save_pretrained(pytorch_dump_folder_path)
 
     # model_url = 'https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/models/model_vqa.pth'
-    model_url = (
-        "https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/models/model_base_vqa_capfilt_large.pth"
-    )
+    model_url = "https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/models/model_base_vqa_capfilt_large.pth"
 
     vqa_model = pix2struct_vqa(pretrained=model_url, image_size=image_size, vit="base")
     vqa_model.eval()
@@ -147,7 +147,9 @@ def convert_pix2struct_checkpoint(pytorch_dump_folder_path, config_path=None):
     if pytorch_dump_folder_path is not None:
         hf_vqa_model.save_pretrained(pytorch_dump_folder_path + "_vqa")
 
-    model_url = "https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/models/model_base_retrieval_coco.pth"
+    model_url = (
+        "https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/models/model_base_retrieval_coco.pth"
+    )
 
     itm_model = pix2struct_itm(pretrained=model_url, image_size=image_size, vit="base")
     itm_model.eval()

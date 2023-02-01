@@ -57,7 +57,12 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_pix2struct import PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP, Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
+    from .configuration_pix2struct import (
+        PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Pix2StructConfig,
+        Pix2StructTextConfig,
+        Pix2StructVisionConfig,
+    )
     from .processing_pix2struct import Pix2StructProcessor
 
     try:

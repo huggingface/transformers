@@ -25,7 +25,13 @@ from transformers.utils import is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, Pix2StructTokenizer, Pix2StructImageProcessor, Pix2StructProcessor, PreTrainedTokenizerFast
+    from transformers import (
+        AutoProcessor,
+        Pix2StructImageProcessor,
+        Pix2StructProcessor,
+        Pix2StructTokenizer,
+        PreTrainedTokenizerFast,
+    )
 
 
 @require_vision

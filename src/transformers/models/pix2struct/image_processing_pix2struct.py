@@ -14,30 +14,25 @@
 # limitations under the License.
 """Image processor class for PIX2STRUCT."""
 import math
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 from transformers.utils.generic import TensorType
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_format, extract_flattened_patches
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    is_batched,
-    to_numpy_array,
-    valid_images,
-)
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_transforms import convert_to_rgb, normalize, torch_extract_patches
+from ...image_utils import ChannelDimension, ImageInput, is_batched, to_numpy_array, valid_images
 from ...utils import logging
+from ...utils.import_utils import requires_backends
 
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -73,7 +68,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        do_extract_flattened_patches: bool = True,
         size: Dict[str, int] = None,
         patch_size: Dict[str, int] = (16, 16),
         do_normalize: bool = True,
@@ -82,18 +76,11 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     ) -> None:
 
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 384, "width": 384}
-        size = get_size_dict(size, default_to_square=True)
-
-        self.size = size
         self.patch_size = patch_size
-        self.do_extract_flattened_patches = do_extract_flattened_patches
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
 
-    def extract_flattened_patches(
-        self, image: np.ndarray, max_patches: int, **kwargs
-    ) -> np.ndarray:
+    def extract_flattened_patches(self, image: np.ndarray, max_patches: int, **kwargs) -> np.ndarray:
         """
         Extract flattened patches from an image.
 
@@ -101,14 +88,73 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to extract flattened patches from.
         """
-        return extract_flattened_patches(image, patch_size=self.patch_size, max_patches=max_patches, **kwargs)
+        requires_backends(self.extract_flattened_patches, "torch")
+        # import torch
 
+        # convert to torch if
+        if not isinstance(image, torch.Tensor):
+            # check if channels first:
+            if image.shape[0] != 3:
+                image = torch.from_numpy(image).permute(2, 0, 1)
+            else:
+                image = torch.from_numpy(image)
+
+        patch_height, patch_width = self.patch_size
+        image_shape = image.shape
+        image_height = image_shape[1]
+        image_width = image_shape[2]
+        image_height = float(image_height)
+        image_width = float(image_width)
+
+        # maximize scale s.t.
+        scale = math.sqrt(max_patches * (patch_height / image_height) * (patch_width / image_width))
+        num_feasible_rows = max(min(math.floor(scale * image_height / patch_height), max_patches), 1)
+        num_feasible_cols = max(min(math.floor(scale * image_width / patch_width), max_patches), 1)
+        resized_height = max(num_feasible_rows * patch_height, 1)
+        resized_width = max(num_feasible_cols * patch_width, 1)
+
+        image = torch.nn.functional.interpolate(
+            image.unsqueeze(0),
+            size=(resized_height, resized_width),
+            mode="bilinear",
+            align_corners=False,
+            antialias=True,
+        ).squeeze(0)
+
+        # [1, rows, columns, patch_height * patch_width * image_channels]
+        patches = torch_extract_patches(image, patch_height, patch_width, padding="SAME")
+
+        patches_shape = patches.shape
+        rows = patches_shape[1]
+        columns = patches_shape[2]
+        depth = patches_shape[3]
+
+        # [rows * columns, patch_height * patch_width * image_channels]
+        patches = patches.reshape([rows * columns, depth])
+
+        # [rows * columns, 1]
+        row_ids = torch.arange(rows).reshape([rows, 1]).repeat(1, columns).reshape([rows * columns, 1])
+        col_ids = torch.arange(columns).reshape([1, columns]).repeat(rows, 1).reshape([rows * columns, 1])
+
+        # Offset by 1 so the ids do not contain zeros, which represent padding.
+        row_ids += 1
+        col_ids += 1
+
+        # Prepare additional patch features.
+        # [rows * columns, 1]
+        row_ids = row_ids.to(torch.float32)
+        col_ids = col_ids.to(torch.float32)
+
+        # [rows * columns, 2 + patch_height * patch_width * image_channels]
+        result = torch.cat([row_ids, col_ids, patches], -1)
+
+        # [max_patches, 2 + patch_height * patch_width * image_channels]
+        result = torch.nn.functional.pad(result, [0, 0, 0, max_patches - (rows * columns)])
+
+        return result.float()
 
     def normalize(
-        self,
-        image: np.ndarray,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        self, image: np.ndarray, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
@@ -129,14 +175,13 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         # take mean across the whole `image`
         mean = np.mean(image)
         std = np.std(image)
-        adjusted_stddev = max(std, 1.0/math.sqrt(np.prod(image.shape)))
+        adjusted_stddev = max(std, 1.0 / math.sqrt(np.prod(image.shape)))
 
         return normalize(image, mean=mean, std=adjusted_stddev, data_format=data_format, **kwargs)
 
     def preprocess(
         self,
         images: ImageInput,
-        do_extract_flattened_patches: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         max_patches: Optional[int] = None,
         do_normalize: Optional[bool] = None,
@@ -181,11 +226,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        do_extract_flattened_patches = do_extract_flattened_patches if do_extract_flattened_patches is not None else self.do_extract_flattened_patches
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-
-        size = size if size is not None else self.size
-        size = get_size_dict(size, default_to_square=False)
 
         if not is_batched(images):
             images = [images]
@@ -205,17 +246,18 @@ class Pix2StructImageProcessor(BaseImageProcessor):
 
         if do_normalize:
             images = [self.normalize(image=image, data_format=data_format) for image in images]
-        
-        if do_extract_flattened_patches:
-            # convert to torch tensor and permute
-            images = [self.extract_flattened_patches(image=image, max_patches=max_patches) for image in images]
-            attention_masks = [(image.sum(dim=-1) != 0).float() for image in images]
+
+        # convert to torch tensor and permute
+        images = [self.extract_flattened_patches(image=image, max_patches=max_patches) for image in images]
+        attention_masks = [(image.sum(dim=-1) != 0).float() for image in images]
 
         # images = [to_channel_dimension_format(image, data_format) for image in images]
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
         attention_masks = [to_numpy_array(image) for image in attention_masks]
 
-        encoded_outputs = BatchFeature(data={"pixel_values": images, "attention_mask":attention_masks}, tensor_type=return_tensors)
+        encoded_outputs = BatchFeature(
+            data={"pixel_values": images, "attention_mask": attention_masks}, tensor_type=return_tensors
+        )
 
         return encoded_outputs

@@ -153,7 +153,9 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Pix2StructVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Pix2StructVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=Pix2StructVisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -736,7 +738,9 @@ class Pix2StructTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
-                expected_arg_names = ["input_ids"] if model_class != Pix2StructForConditionalGeneration else ["pixel_values"]
+                expected_arg_names = (
+                    ["input_ids"] if model_class != Pix2StructForConditionalGeneration else ["pixel_values"]
+                )
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_training(self):
@@ -939,7 +943,9 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
-                expected_arg_names = ["input_ids"] if model_class != Pix2StructForConditionalGeneration else ["pixel_values"]
+                expected_arg_names = (
+                    ["input_ids"] if model_class != Pix2StructForConditionalGeneration else ["pixel_values"]
+                )
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_training(self):
@@ -1091,7 +1097,9 @@ def prepare_img():
 @slow
 class Pix2StructModelIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
-        model = Pix2StructForConditionalGeneration.from_pretrained("Salesforce/pix2struct-image-captioning-base").to(torch_device)
+        model = Pix2StructForConditionalGeneration.from_pretrained("Salesforce/pix2struct-image-captioning-base").to(
+            torch_device
+        )
         processor = Pix2StructProcessor.from_pretrained("Salesforce/pix2struct-image-captioning-base")
         image = prepare_img()
 

@@ -140,13 +140,9 @@ class Pix2StructEncoderEmbeddings(nn.Module):
         return embeddings
 
 
-class T5Attention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
+class Pix2StructEncoderAttention(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.is_decoder = config.is_decoder
-        self.has_relative_attention_bias = has_relative_attention_bias
-        self.relative_attention_num_buckets = config.relative_attention_num_buckets
-        self.relative_attention_max_distance = config.relative_attention_max_distance
         self.d_model = config.hidden_size
         self.key_value_proj_dim = config.d_kv
         self.n_heads = config.num_attention_heads
@@ -159,76 +155,8 @@ class T5Attention(nn.Module):
         self.value = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
-        if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.gradient_checkpointing = False
 
-
-
-    @staticmethod
-    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
-        """
-        Adapted from Mesh Tensorflow:
-        https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
-
-        Translate relative position to a bucket number for relative attention. The relative position is defined as
-        memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
-        position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
-        small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
-        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
-        This should allow for more graceful generalization to longer sequences than the model has been trained on
-
-        Args:
-            relative_position: an int32 Tensor
-            bidirectional: a boolean - whether the attention is bidirectional
-            num_buckets: an integer
-            max_distance: an integer
-
-        Returns:
-            a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
-        """
-        relative_buckets = 0
-        if bidirectional:
-            num_buckets //= 2
-            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
-            relative_position = torch.abs(relative_position)
-        else:
-            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
-        # now relative_position is in the range [0, inf)
-
-        # half of the buckets are for exact increments in positions
-        max_exact = num_buckets // 2
-        is_small = relative_position < max_exact
-
-        # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-        relative_position_if_large = max_exact + (
-            torch.log(relative_position.float() / max_exact)
-            / math.log(max_distance / max_exact)
-            * (num_buckets - max_exact)
-        ).to(torch.long)
-        relative_position_if_large = torch.min(
-            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
-        )
-
-        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
-        return relative_buckets
-
-    def compute_bias(self, query_length, key_length, device=None):
-        """Compute binned relative position bias"""
-        if device is None:
-            device = self.relative_attention_bias.weight.device
-        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
-        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
-        relative_position = memory_position - context_position  # shape (query_length, key_length)
-        relative_position_bucket = self._relative_position_bucket(
-            relative_position,  # shape (query_length, key_length)
-            bidirectional=(not self.is_decoder),
-            num_buckets=self.relative_attention_num_buckets,
-            max_distance=self.relative_attention_max_distance,
-        )
-        values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
-        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
-        return values
 
     def forward(
         self,
@@ -312,14 +240,11 @@ class T5Attention(nn.Module):
         )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
 
         if position_bias is None:
-            if not self.has_relative_attention_bias:
-                position_bias = torch.zeros(
-                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
-                )
-                if self.gradient_checkpointing and self.training:
-                    position_bias.requires_grad = True
-            else:
-                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
+            position_bias = torch.zeros(
+                (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+            )
+            if self.gradient_checkpointing and self.training:
+                position_bias.requires_grad = True
 
             # if key and values are already calculated
             # we want only the last query position bias
@@ -353,117 +278,13 @@ class T5Attention(nn.Module):
         attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
 
-        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
+        present_key_value_state = (key_states, value_states) if use_cache else None
         outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
         return outputs
 
-
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Pix2StructEncoder
-class Pix2StructEncoderSelfAttention(nn.Module):
-    def __init__(self, config: Pix2StructConfig) -> None:
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, config.hidden_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, config.hidden_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, config.hidden_size, bias=config.qkv_bias)
-
-        self.dropout = nn.Dropout(config.attention_dropout)
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
-    def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->Pix2StructEncoder
-class Pix2StructEncoderSelfOutput(nn.Module):
-    """
-    The residual connection is defined in Pix2StructEncoderLayer instead of here (as is the case with other models),
-    due to the layernorm applied before each layer.
-    """
-
-    def __init__(self, config: Pix2StructConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.mlp_bias)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        return hidden_states
-
-
-# # Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->Pix2StructEncoder
-# class Pix2StructEncoderAttention(nn.Module):
-#     def __init__(self, config: Pix2StructConfig) -> None:
-#         super().__init__()
-#         self.attention = Pix2StructEncoderSelfAttention(config)
-#         self.output = Pix2StructEncoderSelfOutput(config)
-#         self.pruned_heads = set()
-
-#     def forward(
-#         self,
-#         hidden_states: torch.Tensor,
-#         head_mask: Optional[torch.Tensor] = None,
-#         output_attentions: bool = False,
-#     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-#         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
-
-#         attention_output = self.output(self_outputs[0], hidden_states)
-
-#         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-#         return outputs
 
 class Pix2StructEncoderMlp(nn.Module):
     def __init__(self, config):
@@ -489,56 +310,17 @@ class Pix2StructEncoderMlp(nn.Module):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
-# class Pix2StructEncoderMlp(nn.Module):
-#     def __init__(self, config: Pix2StructConfig) -> None:
-#         super().__init__()
-#         self.wi_0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
-#         self.wi_1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
-#         if isinstance(config.hidden_act, str):
-#             self.intermediate_act_fn = ACT2FN[config.hidden_act]
-#         else:
-#             self.intermediate_act_fn = config.hidden_act
-#         self.wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
-
-#     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-#         intermediate_hidden_states_0 = self.wi_0(hidden_states)
-#         intermediate_hidden_states_1 = self.wi_1(hidden_states)
-
-#         intermediate_hidden_states_0 = self.intermediate_act_fn(intermediate_hidden_states_0)
-#         intermediate_hidden_states_1 = self.intermediate_act_fn(intermediate_hidden_states_1)
-
-#         hidden_states = intermediate_hidden_states_0 + intermediate_hidden_states_1
-
-#         hidden_states = self.wo(hidden_states)
-
-#         return hidden_states
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->Pix2StructEncoder
-class Pix2StructEncoderOutput(nn.Module):
-    def __init__(self, config: Pix2StructConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        hidden_states = hidden_states + input_tensor
-
-        return hidden_states
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->Pix2StructEncoder
 class Pix2StructEncoderLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: Pix2StructConfig, has_relative_attention_bias=False) -> None:
+    def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.attention = Pix2StructEncoderAttention(config)
         self.mlp = Pix2StructEncoderMlp(config)
         self.pre_mlp_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pre_attention_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)

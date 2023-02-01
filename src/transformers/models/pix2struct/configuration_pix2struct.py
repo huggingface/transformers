@@ -25,9 +25,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/pix2struct-textcaps-base": "https://huggingface.co/google/pix2struct-textcaps-base/resolve/main/config.json",
+    "google/pix2struct-textcaps-base": (
+        "https://huggingface.co/google/pix2struct-textcaps-base/resolve/main/config.json"
+    ),
 }
-
 
 
 class Pix2StructTextConfig(PretrainedConfig):
@@ -158,7 +159,7 @@ class Pix2StructTextConfig(PretrainedConfig):
         # for backwards compatibility
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
-        
+
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
@@ -389,7 +390,7 @@ class Pix2StructConfig(PretrainedConfig):
             self.text_config = Pix2StructTextConfig(**text_config)
         else:
             self.text_config = text_config
-        
+
         if not isinstance(vision_config, Pix2StructVisionConfig):
             self.vision_config = Pix2StructVisionConfig(**vision_config)
         else:
@@ -404,7 +405,9 @@ class Pix2StructConfig(PretrainedConfig):
         self.image_text_hidden_size = image_text_hidden_size
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: Pix2StructTextConfig, vision_config: Pix2StructVisionConfig, **kwargs):
+    def from_text_vision_configs(
+        cls, text_config: Pix2StructTextConfig, vision_config: Pix2StructVisionConfig, **kwargs
+    ):
         r"""
         Instantiate a [`Pix2StructConfig`] (or a derived class) from pix2struct text model configuration and pix2struct
         vision model configuration.
