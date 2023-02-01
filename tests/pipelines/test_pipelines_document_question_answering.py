@@ -82,7 +82,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
                 "word_boxes": word_boxes,
             },
             {
-                "image": load_image(image),
+                # if image processor is available, we always need to prepare `image`, otherwise let's test without it
+                "image": load_image(image) if processor is not None else None,
                 "question": question,
                 "word_boxes": word_boxes,
             },
