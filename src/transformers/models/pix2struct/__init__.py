@@ -47,7 +47,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_pix2struct"] = [
         "PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Pix2StructModel",
         "Pix2StructPreTrainedModel",
         "Pix2StructForConditionalGeneration",
         "Pix2StructTextPreTrainedModel",
@@ -82,7 +81,6 @@ if TYPE_CHECKING:
         from .modeling_pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pix2StructForConditionalGeneration,
-            Pix2StructModel,
             Pix2StructPreTrainedModel,
             Pix2StructTextModel,
             Pix2StructTextPreTrainedModel,

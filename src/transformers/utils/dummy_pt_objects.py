@@ -4574,13 +4574,6 @@ class Pix2StructForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Pix2StructModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class Pix2StructPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
