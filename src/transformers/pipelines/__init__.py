@@ -387,8 +387,12 @@ for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
         NO_IMAGE_PROCESSOR_TASKS.add(task)
-    elif values["type"] in {"audio", "image", "video"}:
+    elif values["type"] in {"image", "video"}:
         NO_TOKENIZER_TASKS.add(task)
+        NO_FEATURE_EXTRACTOR_TASKS.add(task)
+    elif values["type"] in {"audio"}:
+        NO_TOKENIZER_TASKS.add(task)
+        NO_IMAGE_PROCESSOR_TASKS.add(task)
     elif values["type"] != "multimodal":
         raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
 
