@@ -389,7 +389,6 @@ for task, values in SUPPORTED_TASKS.items():
         NO_IMAGE_PROCESSOR_TASKS.add(task)
     elif values["type"] in {"image", "video"}:
         NO_TOKENIZER_TASKS.add(task)
-        NO_FEATURE_EXTRACTOR_TASKS.add(task)
     elif values["type"] in {"audio"}:
         NO_TOKENIZER_TASKS.add(task)
         NO_IMAGE_PROCESSOR_TASKS.add(task)
@@ -798,6 +797,7 @@ def pipeline(
         and normalized_task not in NO_IMAGE_PROCESSOR_TASKS
         # Using class name to avoid importing the real class.
         and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
+        and normalized_task != "automatic-speech-recognition"
     ):
         # This is a special category of models, that are fusions of multiple models
         # so the model_config might not define a tokenizer, but it seems to be
