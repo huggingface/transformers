@@ -17,15 +17,18 @@
 import copy
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.utils.checkpoint
 from torch import nn
 from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
@@ -34,27 +37,10 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    is_torch_fx_proxy,
-    logging,
-    replace_return_docstrings,
-)
-
-import math
-from typing import Dict, List, Optional, Set, Tuple, Union
-
-import torch
-import torch.utils.checkpoint
-from torch import nn
-
-from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithCrossAttentions
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torch_fx_proxy,
     logging,
     replace_return_docstrings,
 )
@@ -106,10 +92,10 @@ class Pix2StructLayerNorm(nn.Module):
 
 class Pix2StructEncoderEmbeddings(nn.Module):
     r"""
-    Construct the embeddings from patch. In `Pix2Struct` the input is different from classic
-    Vision-transformer models. Here the input is a sequence of `seq_len` patches. Each patch is
-    represented by a vector of `hidden_size` values. 
+    Construct the embeddings from patch. In `Pix2Struct` the input is different from classic Vision-transformer models.
+    Here the input is a sequence of `seq_len` patches. Each patch is represented by a vector of `hidden_size` values.
     """
+
     def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
         self.patch_projection = nn.Linear(config.hidden_size, config.hidden_size)
@@ -119,8 +105,7 @@ class Pix2StructEncoderEmbeddings(nn.Module):
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-
-    def forward(self,pixel_values: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         # the row and column indices are stored in the first and second position of the pixel_values
         # pixel_values: `batch_size`, `seq_len`, `hidden_size` + 2
         row_indices = pixel_values[:, :, 0].long()
@@ -156,7 +141,6 @@ class Pix2StructEncoderAttention(nn.Module):
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
         self.gradient_checkpointing = False
-
 
     def forward(
         self,
@@ -254,7 +238,6 @@ class Pix2StructEncoderAttention(nn.Module):
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
-        
         position_bias_masked = position_bias
         if position_bias_masked is not None:
             # replace 0 by -inf
@@ -262,8 +245,7 @@ class Pix2StructEncoderAttention(nn.Module):
             position_bias_masked = position_bias_masked.masked_fill(position_bias_masked != -10000, 0)
 
         scores += position_bias_masked
-        
-        
+
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
             scores
         )  # (batch_size, n_heads, seq_length, key_length)
@@ -311,7 +293,6 @@ class Pix2StructEncoderMlp(nn.Module):
         return hidden_states
 
 
-
 # Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->Pix2StructEncoder
 class Pix2StructEncoderLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
@@ -337,7 +318,9 @@ class Pix2StructEncoderLayer(nn.Module):
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.pre_attention_layer_norm(hidden_states),  # in Pix2StructEncoder, layernorm is applied before self-attention
+            self.pre_attention_layer_norm(
+                hidden_states
+            ),  # in Pix2StructEncoder, layernorm is applied before self-attention
             mask=attention_mask,
             output_attentions=output_attentions,
         )
@@ -349,12 +332,11 @@ class Pix2StructEncoderLayer(nn.Module):
 
         # in Pix2StructEncoder, layernorm is also applied after self-attention
         layer_output = self.pre_mlp_layer_norm(hidden_states)
-        layer_output = self.mlp(layer_output) + hidden_states # second residual connection
+        layer_output = self.mlp(layer_output) + hidden_states  # second residual connection
 
         outputs = (layer_output,) + outputs
 
         return outputs
-
 
 
 class Pix2StructEncoder(nn.Module):
@@ -484,7 +466,6 @@ VIT_INPUTS_DOCSTRING = r"""
 """
 
 
-
 @add_start_docstrings(
     "The bare Pix2StructEncoder Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_START_DOCSTRING,
@@ -501,7 +482,6 @@ class Pix2StructEncoderModel(Pix2StructEncoderPreTrainedModel):
         self.layernorm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         if not config.layer_norm_bias:
             self.layernorm.bias = None
-
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -555,8 +535,6 @@ class Pix2StructEncoderModel(Pix2StructEncoderPreTrainedModel):
             attention_mask = (pixel_values.sum(dim=-1) != 0).float()
 
         embedding_output = self.embeddings(pixel_values)
-
-        
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -993,8 +971,9 @@ class Pix2StructDecoderBlock(nn.Module):
         super().__init__()
         self.is_decoder = config.is_decoder
 
-        self.self_attention = Pix2StructDecoderLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias)
-
+        self.self_attention = Pix2StructDecoderLayerSelfAttention(
+            config, has_relative_attention_bias=has_relative_attention_bias
+        )
 
         self.encoder_decoder_attention = Pix2StructDecoderLayerCrossAttention(config)
 
@@ -1176,8 +1155,8 @@ class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
         pad_token_id = self.config.pad_token_id
 
         assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In Pix2StructDecoder it is usually set to the pad_token_id."
-            " See Pix2StructDecoder docs for more information"
+            "self.model.config.decoder_start_token_id has to be defined. In Pix2StructDecoder it is usually set to the"
+            " pad_token_id. See Pix2StructDecoder docs for more information"
         )
 
         # shift inputs to the right
@@ -1205,13 +1184,15 @@ class Pix2StructTextDecoder(Pix2StructDecoderPreTrainedModel):
         self.is_decoder = config.is_decoder
 
         self.layer = nn.ModuleList(
-            [Pix2StructDecoderBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
+            [
+                Pix2StructDecoderBlock(config, has_relative_attention_bias=bool(i == 0))
+                for i in range(config.num_layers)
+            ]
         )
         self.final_layer_norm = Pix2StructDecoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1219,7 +1200,7 @@ class Pix2StructTextDecoder(Pix2StructDecoderPreTrainedModel):
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
-    
+
     def _reorder_cache(self, past, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
@@ -1466,7 +1447,6 @@ class Pix2StructTextDecoder(Pix2StructDecoderPreTrainedModel):
             cross_attentions=all_cross_attentions,
         )
 
-
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1485,6 +1465,7 @@ class Pix2StructTextDecoder(Pix2StructDecoderPreTrainedModel):
             "encoder_attention_mask": model_kwargs.get("encoder_attention_mask", None),
             "is_decoder": True,
         }
+
 
 Pix2StructDecoder_START_DOCSTRING = r"""
 
@@ -1692,7 +1673,7 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
-    
+
     def get_encoder(self):
         return self.encoder
 
@@ -1769,7 +1750,6 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
 
         hidden_states = encoder_outputs[0]
 
-
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -1800,7 +1780,7 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
-    
+
     @torch.no_grad()
     def generate(
         self,
@@ -1823,12 +1803,8 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
         if isinstance(input_ids, list):
             input_ids = torch.LongTensor(input_ids)
         elif input_ids is None:
-            input_ids = (
-                torch.LongTensor([[self.decoder_input_ids]])
-                .repeat(batch_size, 1)
-                .to(image_embeds.device)
-            )
-        
+            input_ids = torch.LongTensor([[self.decoder_input_ids]]).repeat(batch_size, 1).to(image_embeds.device)
+
         if decoder_attention_mask is None:
             decoder_attention_mask = torch.ones_like(input_ids).to(image_embeds.device)
 
