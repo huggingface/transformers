@@ -29,8 +29,8 @@ if is_vision_available():
         AutoProcessor,
         Pix2StructImageProcessor,
         Pix2StructProcessor,
-        Pix2StructTokenizer,
         PreTrainedTokenizerFast,
+        T5Tokenizer,
     )
 
 
@@ -40,7 +40,7 @@ class Pix2StructProcessorTest(unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
 
         image_processor = Pix2StructImageProcessor()
-        tokenizer = Pix2StructTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertModel")
+        tokenizer = T5Tokenizer.from_pretrained("hf-internal-testing/tiny-random-BertModel")
 
         processor = Pix2StructProcessor(image_processor, tokenizer)
 

@@ -40,7 +40,7 @@ class Pix2StructProcessor(ProcessorMixin):
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "Pix2StructImageProcessor"
-    tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
+    tokenizer_class = ("T5TokenizerFast", "T5TokenizerFast")
 
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
