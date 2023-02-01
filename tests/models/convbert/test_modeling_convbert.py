@@ -437,6 +437,17 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
                 loaded = torch.jit.load(os.path.join(tmp, "traced_model.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
+    def test_model_for_input_embeds(self):
+        batch_size = 2
+        seq_length = 10
+        inputs_embeds = torch.rand([batch_size, seq_length, 768])
+        config = self.model_tester.get_config()
+        model = ConvBertModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(inputs_embeds=inputs_embeds)
+        self.assertEqual(result.last_hidden_state.shape, (batch_size, seq_length, config.hidden_size))
+
 
 @require_torch
 class ConvBertModelIntegrationTest(unittest.TestCase):
@@ -455,3 +466,23 @@ class ConvBertModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+def test():
+    print()
+    k = ids_tensor((2, 2), 10)
+    print(k)
+    print(k.shape)
+    print(k.size())
+
+    print()
+    import torch
+    from transformers import ConvBertConfig, ConvBertForTokenClassification
+    embeddings = torch.tensor([1,2])
+    mask = torch.tensor([1])
+    convbert_model_config = ConvBertConfig()
+    convbert_model = ConvBertForTokenClassification(convbert_model_config)
+    # outputs = convbert_model(inputs_embeds=embeddings, attention_mask=mask)
+    j = convbert_model.convbert.embeddings.word_embeddings(k)
+    print(j)
+    print(j.size())
+
