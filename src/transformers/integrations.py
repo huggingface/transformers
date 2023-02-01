@@ -1084,7 +1084,7 @@ class DagsHubCallback(MLflowCallback):
         )
         self.path = Path("artifacts")
 
-        if not self.remote:
+        if self.remote is None:
             raise RuntimeError(
                 "DagsHubCallback requires the `MLFLOW_TRACKING_URI` environment variable to be set. Did you run"
                 " `dagshub.init()`?"
