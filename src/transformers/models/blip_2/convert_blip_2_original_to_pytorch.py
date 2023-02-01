@@ -17,8 +17,6 @@ import argparse
 
 import torch
 from PIL import Image
-from torchvision import transforms
-from torchvision.transforms.functional import InterpolationMode
 
 import requests
 
@@ -79,7 +77,7 @@ def get_blip2_config(model_name):
     if "opt-2.7b" in model_name:
         # TODO support objects right away instead of dicts
         text_config = OPTConfig.from_pretrained("facebook/opt-2.7b").to_dict()
-    
+
     return Blip2Config(text_config=text_config)
 
 
@@ -132,7 +130,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=False)
     assert len(missing_keys) == 0
-    assert unexpected_keys == ['qformer.embeddings.position_ids']
+    assert unexpected_keys == ["qformer.embeddings.position_ids"]
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     image = load_demo_image()
@@ -146,13 +144,13 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     with torch.no_grad():
         outputs = hf_model(pixel_values, input_ids)
         print("Shape of decoder logits:", outputs.decoder_logits.shape)
-        print("First values of decoder logits:", outputs.decoder_logits[0,:3,:3])
+        print("First values of decoder logits:", outputs.decoder_logits[0, :3, :3])
 
     # assert values
-    expected_slice_logits = torch.tensor([[ 1.9322,  1.9379,  7.4008],
-        [-1.4743, -1.1191,  8.6590],
-        [-1.4212, -1.2489,  6.1976]], device=device)
-    assert torch.allclose(outputs.decoder_logits[0,:3,:3], expected_slice_logits, atol=1e-4)
+    expected_slice_logits = torch.tensor(
+        [[1.9322, 1.9379, 7.4008], [-1.4743, -1.1191, 8.6590], [-1.4212, -1.2489, 6.1976]], device=device
+    )
+    assert torch.allclose(outputs.decoder_logits[0, :3, :3], expected_slice_logits, atol=1e-4)
     print("Looks ok!")
 
     # outputs = hf_model.generate(image, input_ids)
