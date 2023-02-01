@@ -773,6 +773,10 @@ def pipeline(
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
 
+    # Just keep `load_image_processor`
+    if load_image_processor and load_feature_extractor:
+        load_feature_extractor = False
+
     if (
         tokenizer is None
         and not load_tokenizer

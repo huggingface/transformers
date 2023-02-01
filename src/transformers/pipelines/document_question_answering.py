@@ -281,7 +281,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         image_features = {}
         if input.get("image", None) is not None:
             image = load_image(input["image"])
-            if self.feature_extractor is not None:
+            if self.image_processor is not None:
+                image_features.update(self.image_processor(images=image, return_tensors=self.framework))
+            elif self.feature_extractor is not None:
                 image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
             elif self.model_type == ModelType.VisionEncoderDecoder:
                 raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")

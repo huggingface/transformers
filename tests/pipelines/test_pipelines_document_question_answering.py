@@ -61,7 +61,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
     @require_vision
     def get_test_pipeline(self, model, tokenizer, processor):
         dqa_pipeline = pipeline(
-            "document-question-answering", model=model, tokenizer=tokenizer, feature_extractor=processor
+            "document-question-answering", model=model, tokenizer=tokenizer, image_processor=processor
         )
 
         image = INVOICE_URL
@@ -82,7 +82,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
                 "word_boxes": word_boxes,
             },
             {
-                "image": None,
+                "image": load_image(image),
                 "question": question,
                 "word_boxes": word_boxes,
             },
