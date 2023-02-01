@@ -153,7 +153,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     assert torch.allclose(outputs.decoder_logits[0, :3, :3], expected_slice_logits, atol=1e-4)
     print("Looks ok!")
 
-    # outputs = hf_model.generate(image, input_ids)
+    # outputs = hf_model.generate(pixel_values, input_ids)
     # print(tokenizer.batch_decode(outputs[0], skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:

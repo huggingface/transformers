@@ -1322,7 +1322,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         # TODO add support for AutoModelForSeq2SeqLM here as well
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        language_model = AutoModelForCausalLM.from_config(config.text_config)
+        language_model.prepare_inputs_for_generation = prepare_inputs_for_generation
+        self.language_model = language_model
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1448,7 +1450,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         """
         # TODO perhaps remove autocast?
         with torch.cuda.amp.autocast(enabled=(self.device != torch.device("cpu"))):
-            image_embeds = self.vision_model(pixel_values)
+            image_embeds = self.vision_model(pixel_values, return_dict=True).last_hidden_state
             image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
             query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
@@ -1486,3 +1488,39 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             )
 
             return outputs
+
+
+def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
+    token_type_ids = kwargs.get("token_type_ids", None)
+    # only last token for inputs_ids if past is defined in kwargs
+    if past:
+        input_ids = input_ids[:, -1].unsqueeze(-1)
+        if token_type_ids is not None:
+            token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+
+    attention_mask = kwargs.get("attention_mask", None)
+    position_ids = kwargs.get("position_ids", None)
+
+    if attention_mask is not None and position_ids is None:
+        # create position_ids on the fly for batch generation
+        position_ids = attention_mask.long().cumsum(-1) - 1
+        position_ids.masked_fill_(attention_mask == 0, 1)
+        if past:
+            position_ids = position_ids[:, -1].unsqueeze(-1)
+    else:
+        position_ids = None
+
+    if "inputs_embeds" in kwargs and past is None:  # we only want to use them in the 1st generation step
+        model_inputs = {"inputs_embeds": inputs_embeds}
+    else:
+        model_inputs = {"input_ids": input_ids}
+    model_inputs.update(
+        {
+            "past_key_values": past,
+            "use_cache": kwargs.get("use_cache"),
+            "position_ids": position_ids,
+            "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
+        }
+    )
+    return model_inputs
