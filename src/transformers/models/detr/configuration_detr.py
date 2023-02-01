@@ -14,8 +14,9 @@
 # limitations under the License.
 """ DETR model configuration"""
 
+import copy
 from collections import OrderedDict
-from typing import Mapping
+from typing import Dict, Mapping
 
 from packaging import version
 
@@ -232,6 +233,30 @@ class DetrConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    @classmethod
+    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
+        """Instantiate a [`DetrConfig`] (or a derived class) from a pre-trained backbone model configuration.
+        Args:
+            backbone_config ([`PretrainedConfig`]):
+                The backbone configuration.
+        Returns:
+            [`Mask2FormerConfig`]: An instance of a configuration object
+        """
+        return cls(
+            backbone_config=backbone_config,
+            **kwargs,
+        )
+
+    def to_dict(self) -> Dict[str, any]:
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["backbone_config"] = self.backbone_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output
 
 
 class DetrOnnxConfig(OnnxConfig):
