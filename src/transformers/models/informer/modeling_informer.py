@@ -806,13 +806,13 @@ class ProbSparseAttention(nn.Module):
 
         # __prob_QK
         # calculate the sampled Q_K
-        K_expand = key_states.unsqueeze(2).expand(-1, L_Q, L_K, -1) # torch.Size([52, 14, 14, 4])
-        index_sample = torch.randint(0, L_K, (L_Q, U_part)) # torch.Size([14, 14])
+        # K_expand = key_states.unsqueeze(2).expand(-1, L_Q, L_K, -1) # torch.Size([52, 14, 14, 4])
+        index_sample = torch.randint(0, L_K, (U_part,)) # torch.Size([14])
 
         # real U = U_part(factor*ln(L_k))*L_q
-        K_sample = K_expand[:, :, index_sample, :] # torch.Size([52, 14, 14, 14, 4])
-        Q_K_sample = torch.bmm(query_states, K_sample.transpose(1, 2)) # error
-        # torch.Size([52, 14, 4]) x torch.Size([52, 14, 14, 14, 4])
+        K_sample = key_states[:, index_sample, :] # torch.Size([52, 14, 4])
+        Q_K_sample = torch.bmm(query_states, K_sample.transpose(1, 2))
+        # torch.Size([52, 14, 4]) x torch.Size([52, 4, 14])
 
         # find the Top_k query with sparisty measurement
         M = Q_K_sample.max(dim=-1)[0] - torch.div(Q_K_sample.sum(dim=-1), L_K)
@@ -820,7 +820,10 @@ class ProbSparseAttention(nn.Module):
 
         # use the reduced Q to calculate Q_K
         # factor*ln(L_q)
-        Q_reduce = query_states[:, M_top, :]
+        # Q_reduce = query_states[:, M_top, :]
+        Q_reduce = torch.gather(
+            input=query_states, dim=0, index=torch.tile(M_top[:, :, None], (1, 1, query_states.shape[2]))
+        )
         attn_weights = torch.bmm(Q_reduce, key_states.transpose(1, 2))
 
         src_len = key_states.size(1)
