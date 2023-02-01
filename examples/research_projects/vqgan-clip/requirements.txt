@@ -22,5 +22,6 @@ torch
 torchvision
 tqdm
 transformers==4.26.0
+tokenizers==0.13.2
 typing_extensions
 wandb
