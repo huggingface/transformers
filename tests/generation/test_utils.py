@@ -2359,17 +2359,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertTrue(diff < 1e-4)
 
-    def test_decoder_generate_with_inputs_embeds(self):
-        article = """I need input_ids to generate"""
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=5).to(torch_device)
-        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-        inputs_embeds = model.get_input_embeddings()(input_ids)
-
-        # cannot generate from `inputs_embeds` for decoder only
-        with self.assertRaises(ValueError):
-            model.generate(inputs_embeds=inputs_embeds)
-
     def test_generate_input_ids_as_kwarg(self):
         article = """I need input_ids to generate"""
         tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -3130,6 +3119,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(expectation == len(generated_tokens[0]))
 
     def test_generate_from_input_embeds_decoder_only(self):
+        # Note: the model must support generation from input embeddings
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
