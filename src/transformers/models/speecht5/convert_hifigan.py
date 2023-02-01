@@ -19,7 +19,7 @@ import argparse
 import numpy as np
 import torch
 
-from transformers import SpeechT5HiFiGAN, SpeechT5HiFiGANConfig, logging
+from transformers import SpeechT5HifiGan, SpeechT5HifiGanConfig, logging
 
 
 logging.set_verbosity_info()
@@ -64,11 +64,11 @@ def convert_hifigan_checkpoint(
     repo_id=None,
 ):
     if config_path is not None:
-        config = SpeechT5HiFiGANConfig.from_pretrained(config_path)
+        config = SpeechT5HifiGanConfig.from_pretrained(config_path)
     else:
-        config = SpeechT5HiFiGANConfig()
+        config = SpeechT5HifiGanConfig()
 
-    model = SpeechT5HiFiGAN(config)
+    model = SpeechT5HifiGan(config)
 
     orig_checkpoint = torch.load(checkpoint_path)
     load_weights(orig_checkpoint["model"]["generator"], model, config)

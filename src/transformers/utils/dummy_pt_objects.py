@@ -5549,7 +5549,7 @@ class SpeechT5ForTextToSpeech(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class SpeechT5HiFiGAN(metaclass=DummyObject):
+class SpeechT5HifiGan(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

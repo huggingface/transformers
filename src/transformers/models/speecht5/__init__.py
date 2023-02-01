@@ -27,8 +27,12 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_hifigan": ["SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP", "SpeechT5HiFiGANConfig"],
-    "configuration_speecht5": ["SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "SpeechT5Config"],
+    "configuration_speecht5": [
+        "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP",
+        "SpeechT5Config",
+        "SpeechT5HifiGanConfig",
+    ],
 }
 
 try:
@@ -75,12 +79,16 @@ else:
         "SpeechT5ForTextToSpeech",
         "SpeechT5Model",
         "SpeechT5PreTrainedModel",
-        "SpeechT5HiFiGAN",
+        "SpeechT5HifiGan",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_hifigan import SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP, SpeechT5HiFiGANConfig
-    from .configuration_speecht5 import SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP, SpeechT5Config
+    from .configuration_speecht5 import (
+        SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP,
+        SpeechT5Config,
+        SpeechT5HifiGanConfig,
+    )
 
     try:
         if not is_sentencepiece_available():
@@ -121,7 +129,7 @@ if TYPE_CHECKING:
             SpeechT5ForSpeechToSpeech,
             SpeechT5ForSpeechToText,
             SpeechT5ForTextToSpeech,
-            SpeechT5HiFiGAN,
+            SpeechT5HifiGan,
             SpeechT5Model,
             SpeechT5PreTrainedModel,
         )

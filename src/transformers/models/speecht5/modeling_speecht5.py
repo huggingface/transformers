@@ -36,8 +36,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import torch_int_div
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_hifigan import SpeechT5HiFiGANConfig
-from .configuration_speecht5 import SpeechT5Config
+from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
 
 
 logger = logging.get_logger(__name__)
@@ -2570,12 +2569,12 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import SpeechT5ProcessorForTextToSpeech, SpeechT5ForTextToSpeech, SpeechT5HiFiGAN
+        >>> from transformers import SpeechT5ProcessorForTextToSpeech, SpeechT5ForTextToSpeech, SpeechT5HifiGan
         >>> import torch
 
         >>> processor = SpeechT5ProcessorForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
         >>> model = SpeechT5ForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
-        >>> vocoder = SpeechT5HiFiGAN.from_pretrained("Matthijs/speecht5_hifigan")
+        >>> vocoder = SpeechT5HifiGan.from_pretrained("Matthijs/speecht5_hifigan")
 
         >>> inputs = processor("Hello, my dog is cute", return_tensors="pt")
         >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file
@@ -2765,7 +2764,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import SpeechT5ForSpeechToSpeech, SpeechT5HiFiGAN
+        >>> from transformers import SpeechT5ForSpeechToSpeech, SpeechT5HifiGan
         >>> from transformers import (
         ...     SpeechT5WaveformFeatureExtractor,
         ...     SpeechT5SpectrogramFeatureExtractor,
@@ -2783,7 +2782,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         >>> processor = SpeechT5ProcessorForSpeechToSpeech(waveform_feature_extractor, spectrogram_feature_extractor)
 
         >>> model = SpeechT5ForSpeechToSpeech.from_pretrained("Matthijs/speecht5_vc")
-        >>> vocoder = SpeechT5HiFiGAN.from_pretrained("Matthijs/speecht5_hifigan")
+        >>> vocoder = SpeechT5HifiGan.from_pretrained("Matthijs/speecht5_hifigan")
 
         >>> # audio file is decoded on the fly
         >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
@@ -2902,14 +2901,14 @@ HIFIGAN_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`SpeechT5HiFiGANConfig`]):
+        config ([`SpeechT5HifiGanConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
-class HiFiGANResidualBlock(nn.Module):
+class HifiGanResidualBlock(nn.Module):
     def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
@@ -2968,14 +2967,14 @@ class HiFiGANResidualBlock(nn.Module):
 
 
 @add_start_docstrings(
-    """Hi-Fi GAN vocoder.""",
+    """HiFi-GAN vocoder.""",
     HIFIGAN_START_DOCSTRING,
 )
-class SpeechT5HiFiGAN(PreTrainedModel):
-    config_class = SpeechT5HiFiGANConfig
+class SpeechT5HifiGan(PreTrainedModel):
+    config_class = SpeechT5HifiGanConfig
     main_input_name = "spectrogram"
 
-    def __init__(self, config: SpeechT5HiFiGANConfig):
+    def __init__(self, config: SpeechT5HifiGanConfig):
         super().__init__(config)
         self.num_kernels = len(config.resblock_kernel_sizes)
         self.num_upsamples = len(config.upsample_rates)
@@ -3003,7 +3002,7 @@ class SpeechT5HiFiGAN(PreTrainedModel):
         for i in range(len(self.upsampler)):
             channels = config.upsample_initial_channel // (2 ** (i + 1))
             for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
-                self.resblocks.append(HiFiGANResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
+                self.resblocks.append(HifiGanResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 

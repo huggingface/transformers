@@ -19,7 +19,7 @@ import inspect
 import tempfile
 import unittest
 
-from transformers import SpeechT5Config, SpeechT5HiFiGANConfig
+from transformers import SpeechT5Config, SpeechT5HifiGanConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_sentencepiece,
@@ -48,7 +48,7 @@ if is_torch_available():
         SpeechT5ForSpeechToSpeech,
         SpeechT5ForSpeechToText,
         SpeechT5ForTextToSpeech,
-        SpeechT5HiFiGAN,
+        SpeechT5HifiGan,
         SpeechT5Model,
         SpeechT5ProcessorForSpeechToSpeech,
         SpeechT5ProcessorForSpeechToText,
@@ -1443,7 +1443,7 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
         self.assertLessEqual(generated_speech.shape[0], 310)
 
 
-class SpeechT5HiFiGANTester:
+class SpeechT5HifiGanTester:
     def __init__(
         self,
         parent,
@@ -1464,12 +1464,12 @@ class SpeechT5HiFiGANTester:
         return config, input_values
 
     def get_config(self):
-        return SpeechT5HiFiGANConfig(
+        return SpeechT5HifiGanConfig(
             model_in_dim=self.num_mel_bins,
         )
 
     def create_and_check_model(self, config, input_values):
-        model = SpeechT5HiFiGAN(config=config).to(torch_device).eval()
+        model = SpeechT5HifiGan(config=config).to(torch_device).eval()
         result = model(input_values)
         self.parent.assertEqual(result.shape, (self.seq_length * 256,))
 
@@ -1480,8 +1480,8 @@ class SpeechT5HiFiGANTester:
 
 
 @require_torch
-class SpeechT5HiFiGANTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (SpeechT5HiFiGAN,) if is_torch_available() else ()
+class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (SpeechT5HifiGan,) if is_torch_available() else ()
     test_torchscript = False
     test_pruning = False
     test_resize_embeddings = False
@@ -1496,8 +1496,8 @@ class SpeechT5HiFiGANTest(ModelTesterMixin, unittest.TestCase):
     input_name = "spectrogram"
 
     def setUp(self):
-        self.model_tester = SpeechT5HiFiGANTester(self)
-        self.config_tester = ConfigTester(self, config_class=SpeechT5HiFiGANConfig)
+        self.model_tester = SpeechT5HifiGanTester(self)
+        self.config_tester = ConfigTester(self, config_class=SpeechT5HifiGanConfig)
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
@@ -1550,10 +1550,10 @@ class SpeechT5HiFiGANTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # skip because it fails on automapping of SpeechT5HiFiGANConfig
+    # skip because it fails on automapping of SpeechT5HifiGanConfig
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip because it fails on automapping of SpeechT5HiFiGANConfig
+    # skip because it fails on automapping of SpeechT5HifiGanConfig
     def test_save_load_fast_init_to_base(self):
         pass

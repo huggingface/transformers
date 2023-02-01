@@ -281,7 +281,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPTextModel",
     "AltCLIPVisionModel",
     "AltRobertaModel",
-    "SpeechT5HiFiGAN",
+    "SpeechT5HifiGan",
 ]
 
 # Update this list for models that have multiple model types for the same
