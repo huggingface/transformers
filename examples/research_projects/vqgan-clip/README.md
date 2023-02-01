@@ -37,11 +37,23 @@ vqgan_clip.generate("a picture of a smiling woman")
 ```
 
 ### Edit an image
+To get a test image, run 
+`git clone https://huggingface.co/datasets/erwann/vqgan-clip-pic test_images`
+
+To edit:
 ```
 from VQGAN_CLIP import VQGAN_CLIP
 vqgan_clip = VQGAN_CLIP()
-vqgan_clip.generate("a picture of a smiling woman",
-                    image_path="sad_woman.jpg")
+
+vqgan_clip.lr = .07
+vqgan_clip.iterations = 15
+vqgan_clip.generate(
+    pos_prompts= ["a picture of a beautiful asian woman", "a picture of a woman from Japan"],
+    neg_prompts=["a picture of an Indian person", "a picture of a white person"],
+    image_path="./test_images/face.jpeg",
+    show_intermediate=True,
+    save_intermediate=True,
+)
 ```
 
 ### Make an animation from the most recent generation
