@@ -478,13 +478,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = None
 
 
-MODEL_FOR_SPEECH_TO_SPEECH_MAPPING = None
-
-
 MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
-
-
-MODEL_FOR_TEXT_TO_SPEECH_MAPPING = None
 
 
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
@@ -672,21 +666,7 @@ class AutoModelForSpeechSeq2Seq(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class AutoModelForSpeechToSpeech(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class AutoModelForTableQuestionAnswering(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class AutoModelForTextToSpeech(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
