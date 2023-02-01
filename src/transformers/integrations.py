@@ -120,7 +120,7 @@ def is_mlflow_available():
 
 
 def is_dagshub_available():
-    return importlib.util.find_spec("dagshub") is not None
+    return None not in [importlib.util.find_spec("dagshub"), importlib.util.find_spec("mlflow")]
 
 
 def is_fairscale_available():
@@ -1060,12 +1060,9 @@ class DagsHubCallback(MLflowCallback):
         super().__init__()
         if not is_dagshub_available():
             raise ImportError("DagsHubCallback requires dagshub to be installed. Run `pip install dagshub`.")
-        from glob import glob
 
         from dagshub.upload import Repo
-
         self.Repo = Repo
-        self.glob = glob
 
     def setup(self, *args, **kwargs):
         """
@@ -1076,16 +1073,18 @@ class DagsHubCallback(MLflowCallback):
                 Whether to save the data and model artifacts for the experiment. Default to `False`.
         """
 
-        self.model = args[2]
         self.log_artifacts = os.getenv("HF_DAGSHUB_LOG_ARTIFACTS", "FALSE").upper() in ENV_VARS_TRUE_VALUES
         self.name = os.getenv("HF_DAGSHUB_MODEL_NAME") or "main"
-        self.remote = os.getenv("MLFLOW_TRACKING_URI") or input("Please input a remote url.")
+        self.remote = os.getenv("MLFLOW_TRACKING_URI")
         self.repo = self.Repo(
             owner=self.remote.split(os.sep)[-2],
             name=self.remote.split(os.sep)[-1].split(".")[0],
             branch=os.getenv("BRANCH") or "main",
         )
         self.path = Path("artifacts")
+
+        if not self.remote:
+            raise RuntimeError("DagsHubCallback requires the `MLFLOW_TRACKING_URI` environment variable to be set. Did you run `dagshub.init()`?")
 
         super().setup(*args, **kwargs)
 
@@ -1432,7 +1431,7 @@ class ClearMLCallback(TrainerCallback):
             if self._clearml_task is None:
                 self._clearml_task = self._clearml.Task.init(
                     project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
-                    task_name=os.getenv("CLEARML_TASK", "Trainer"),
+    
                     auto_connect_frameworks={"tensorboard": False, "pytorch": False},
                     output_uri=True,
                 )
