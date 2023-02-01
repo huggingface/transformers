@@ -59,11 +59,11 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/vit-base-patch16-224",
-    # See all Pix2StructEncoder models at https://huggingface.co/models?filter=vit
+    # See all Pix2StructVision models at https://huggingface.co/models?filter=vit
 ]
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pix2Struct
+# Adapted from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pix2Struct
 class Pix2StructLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -90,7 +90,23 @@ class Pix2StructLayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-class Pix2StructEncoderEmbeddings(nn.Module):
+try:
+    from apex.normalization import FusedRMSNorm
+
+    Pix2StructLayerNorm = FusedRMSNorm  # noqa
+
+    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Pix2StructLayerNorm")
+except ImportError:
+    # using the normal Pix2StructLayerNorm
+    pass
+except Exception:
+    logger.warning("discovered apex but it failed to load, falling back to Pix2StructLayerNorm")
+    pass
+
+ALL_LAYERNORM_LAYERS.append(Pix2StructLayerNorm)
+
+
+class Pix2StructVisionEmbeddings(nn.Module):
     r"""
     Construct the embeddings from patch. In `Pix2Struct` the input is different from classic Vision-transformer models.
     Here the input is a sequence of `seq_len` patches. Each patch is represented by a vector of `hidden_size` values.
@@ -125,7 +141,7 @@ class Pix2StructEncoderEmbeddings(nn.Module):
         return embeddings
 
 
-class Pix2StructEncoderAttention(nn.Module):
+class Pix2StructVisionAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.d_model = config.hidden_size
@@ -268,7 +284,7 @@ class Pix2StructEncoderAttention(nn.Module):
         return outputs
 
 
-class Pix2StructEncoderMlp(nn.Module):
+class Pix2StructVisionMlp(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.wi_0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
@@ -293,22 +309,17 @@ class Pix2StructEncoderMlp(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->Pix2StructEncoder
-class Pix2StructEncoderLayer(nn.Module):
+class Pix2StructVisionLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = Pix2StructEncoderAttention(config)
-        self.mlp = Pix2StructEncoderMlp(config)
+        self.attention = Pix2StructVisionAttention(config)
+        self.mlp = Pix2StructVisionMlp(config)
         self.pre_mlp_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pre_attention_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        if not config.layer_norm_bias:
-            self.pre_mlp_layer_norm.bias = None
-            self.pre_attention_layer_norm.bias = None
 
     def forward(
         self,
@@ -320,7 +331,7 @@ class Pix2StructEncoderLayer(nn.Module):
         self_attention_outputs = self.attention(
             self.pre_attention_layer_norm(
                 hidden_states
-            ),  # in Pix2StructEncoder, layernorm is applied before self-attention
+            ),  # in Pix2StructVision, layernorm is applied before self-attention
             mask=attention_mask,
             output_attentions=output_attentions,
         )
@@ -330,7 +341,7 @@ class Pix2StructEncoderLayer(nn.Module):
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        # in Pix2StructEncoder, layernorm is also applied after self-attention
+        # in Pix2StructVision, layernorm is also applied after self-attention
         layer_output = self.pre_mlp_layer_norm(hidden_states)
         layer_output = self.mlp(layer_output) + hidden_states  # second residual connection
 
@@ -339,11 +350,11 @@ class Pix2StructEncoderLayer(nn.Module):
         return outputs
 
 
-class Pix2StructEncoder(nn.Module):
+class Pix2StructVision(nn.Module):
     def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([Pix2StructEncoderLayer(config) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([Pix2StructVisionLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -398,15 +409,14 @@ class Pix2StructEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->Pix2StructEncoder
-class Pix2StructEncoderPreTrainedModel(PreTrainedModel):
+class Pix2StructVisionPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
     config_class = Pix2StructConfig
-    base_model_prefix = "vit"
+    base_model_prefix = "pix2struct_encoder"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = []
@@ -422,13 +432,11 @@ class Pix2StructEncoderPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, Pix2StructLayerNorm):
-            if module.bias is not None:
-                module.bias.data.zero_()
             if module.weight is not None:
                 module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: Pix2StructEncoder, value: bool = False) -> None:
-        if isinstance(module, Pix2StructEncoder):
+    def _set_gradient_checkpointing(self, module: Pix2StructVision, value: bool = False) -> None:
+        if isinstance(module, Pix2StructVision):
             module.gradient_checkpointing = value
 
 
@@ -447,7 +455,7 @@ VIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`Pix2StructEncoderImageProcessor.__call__`] for details.
+            [`Pix2StructVisionImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -467,21 +475,18 @@ VIT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Pix2StructEncoder Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Pix2StructVision Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTModel with ViT->Pix2StructEncoder
-class Pix2StructEncoderModel(Pix2StructEncoderPreTrainedModel):
+class Pix2StructVisionModel(Pix2StructVisionPreTrainedModel):
     def __init__(self, config: Pix2StructConfig):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = Pix2StructEncoderEmbeddings(config)
-        self.encoder = Pix2StructEncoder(config)
+        self.embeddings = Pix2StructVisionEmbeddings(config)
+        self.encoder = Pix2StructVision(config)
 
         self.layernorm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        if not config.layer_norm_bias:
-            self.layernorm.bias = None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -561,65 +566,7 @@ class Pix2StructEncoderModel(Pix2StructEncoderPreTrainedModel):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->Pix2StructEncoder
-class Pix2StructEncoderPooler(nn.Module):
-    def __init__(self, config: Pix2StructConfig):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.mlp_bias)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
-
-
-class Pix2StructDecoderLayerNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Construct a layernorm module in the Pix2StructDecoder style. No bias and no subtraction of mean.
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-
-        # Pix2StructDecoder uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
-        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
-        # half-precision inputs is done in fp32
-
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
-        # convert into half-precision if necessary
-        if self.weight.dtype in [torch.float16, torch.bfloat16]:
-            hidden_states = hidden_states.to(self.weight.dtype)
-
-        return self.weight * hidden_states
-
-
-try:
-    from apex.normalization import FusedRMSNorm
-
-    Pix2StructDecoderLayerNorm = FusedRMSNorm  # noqa
-
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Pix2StructDecoderLayerNorm")
-except ImportError:
-    # using the normal Pix2StructDecoderLayerNorm
-    pass
-except Exception:
-    logger.warning("discovered apex but it failed to load, falling back to Pix2StructDecoderLayerNorm")
-    pass
-
-ALL_LAYERNORM_LAYERS.append(Pix2StructDecoderLayerNorm)
-
-
-class Pix2StructDecoderDenseActDense(nn.Module):
+class Pix2StructTextDenseActDense(nn.Module):
     def __init__(self, config: Pix2StructTextConfig):
         super().__init__()
         self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
@@ -637,7 +584,7 @@ class Pix2StructDecoderDenseActDense(nn.Module):
         return hidden_states
 
 
-class Pix2StructDecoderDenseGatedActDense(nn.Module):
+class Pix2StructTextDenseGatedActDense(nn.Module):
     def __init__(self, config: Pix2StructTextConfig):
         super().__init__()
         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
@@ -662,15 +609,15 @@ class Pix2StructDecoderDenseGatedActDense(nn.Module):
         return hidden_states
 
 
-class Pix2StructDecoderLayerFF(nn.Module):
+class Pix2StructTextLayerFF(nn.Module):
     def __init__(self, config: Pix2StructTextConfig):
         super().__init__()
         if config.is_gated_act:
-            self.DenseReluDense = Pix2StructDecoderDenseGatedActDense(config)
+            self.DenseReluDense = Pix2StructTextDenseGatedActDense(config)
         else:
-            self.DenseReluDense = Pix2StructDecoderDenseActDense(config)
+            self.DenseReluDense = Pix2StructTextDenseActDense(config)
 
-        self.layer_norm = Pix2StructDecoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = Pix2StructLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
@@ -680,7 +627,7 @@ class Pix2StructDecoderLayerFF(nn.Module):
         return hidden_states
 
 
-class Pix2StructDecoderAttention(nn.Module):
+class Pix2StructTextAttention(nn.Module):
     def __init__(self, config: Pix2StructTextConfig, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -898,11 +845,11 @@ class Pix2StructDecoderAttention(nn.Module):
         return outputs
 
 
-class Pix2StructDecoderLayerSelfAttention(nn.Module):
+class Pix2StructTextLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.attention = Pix2StructDecoderAttention(config, has_relative_attention_bias=has_relative_attention_bias)
-        self.layer_norm = Pix2StructDecoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.attention = Pix2StructTextAttention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.layer_norm = Pix2StructLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -930,11 +877,11 @@ class Pix2StructDecoderLayerSelfAttention(nn.Module):
         return outputs
 
 
-class Pix2StructDecoderLayerCrossAttention(nn.Module):
+class Pix2StructTextLayerCrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = Pix2StructDecoderAttention(config, has_relative_attention_bias=False)
-        self.layer_norm = Pix2StructDecoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.attention = Pix2StructTextAttention(config, has_relative_attention_bias=False)
+        self.layer_norm = Pix2StructLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -966,23 +913,18 @@ class Pix2StructDecoderLayerCrossAttention(nn.Module):
         return outputs
 
 
-class Pix2StructDecoderBlock(nn.Module):
+class Pix2StructTextBlock(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
 
-        self.self_attention = Pix2StructDecoderLayerSelfAttention(
+        self.self_attention = Pix2StructTextLayerSelfAttention(
             config, has_relative_attention_bias=has_relative_attention_bias
         )
 
-        self.encoder_decoder_attention = Pix2StructDecoderLayerCrossAttention(config)
+        self.encoder_decoder_attention = Pix2StructTextLayerCrossAttention(config)
 
-        # self.layer = nn.ModuleList()
-        # self.layer.append(Pix2StructDecoderLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
-        # if self.is_decoder:
-        #     self.layer.append(Pix2StructDecoderLayerCrossAttention(config))
-
-        self.mlp = Pix2StructDecoderLayerFF(config)
+        self.mlp = Pix2StructTextLayerFF(config)
 
     def forward(
         self,
@@ -1086,7 +1028,7 @@ class Pix2StructDecoderBlock(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
-class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
+class Pix2StructTextPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -1095,7 +1037,7 @@ class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
     config_class = Pix2StructTextConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Pix2StructDecoderBlock"]
+    _no_split_modules = ["Pix2StructTextBlock"]
 
     @property
     def dummy_inputs(self):
@@ -1111,9 +1053,9 @@ class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, Pix2StructDecoderLayerNorm):
+        if isinstance(module, Pix2StructLayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, Pix2StructDecoderDenseActDense):
+        elif isinstance(module, Pix2StructTextDenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
             # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
@@ -1123,7 +1065,7 @@ class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
-        elif isinstance(module, Pix2StructDecoderDenseGatedActDense):
+        elif isinstance(module, Pix2StructTextDenseGatedActDense):
             module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
                 module.wi_0.bias.data.zero_()
@@ -1133,7 +1075,7 @@ class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
-        elif isinstance(module, Pix2StructDecoderAttention):
+        elif isinstance(module, Pix2StructTextAttention):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
@@ -1147,7 +1089,7 @@ class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Pix2StructDecoderAttention, Pix2StructTextDecoder)):
+        if isinstance(module, (Pix2StructTextAttention, Pix2StructTextDecoder)):
             module.gradient_checkpointing = value
 
     def _shift_right(self, input_ids):
@@ -1155,8 +1097,8 @@ class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
         pad_token_id = self.config.pad_token_id
 
         assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In Pix2StructDecoder it is usually set to the"
-            " pad_token_id. See Pix2StructDecoder docs for more information"
+            "self.model.config.decoder_start_token_id has to be defined. In Pix2StructText it is usually set to the"
+            " pad_token_id. See Pix2StructText docs for more information"
         )
 
         # shift inputs to the right
@@ -1176,7 +1118,7 @@ class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-class Pix2StructTextDecoder(Pix2StructDecoderPreTrainedModel):
+class Pix2StructTextDecoder(Pix2StructTextPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
@@ -1184,21 +1126,15 @@ class Pix2StructTextDecoder(Pix2StructDecoderPreTrainedModel):
         self.is_decoder = config.is_decoder
 
         self.layer = nn.ModuleList(
-            [
-                Pix2StructDecoderBlock(config, has_relative_attention_bias=bool(i == 0))
-                for i in range(config.num_layers)
-            ]
+            [Pix2StructTextBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
         )
-        self.final_layer_norm = Pix2StructDecoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = Pix2StructLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
         self.gradient_checkpointing = False
 
     def _reorder_cache(self, past, beam_idx):
@@ -1247,10 +1183,6 @@ class Pix2StructTextDecoder(Pix2StructDecoderPreTrainedModel):
         return_dict=None,
         **kwargs,
     ):
-        # Model parallel
-        if self.model_parallel:
-            torch.cuda.set_device(self.first_device)
-            self.embed_tokens = self.embed_tokens.to(self.first_device)
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1326,24 +1258,6 @@ class Pix2StructTextDecoder(Pix2StructDecoderPreTrainedModel):
         for i, (layer_module, past_key_value) in enumerate(zip(self.layer, past_key_values)):
             layer_head_mask = head_mask[i]
             cross_attn_layer_head_mask = cross_attn_head_mask[i]
-            # Model parallel
-            if self.model_parallel:
-                torch.cuda.set_device(hidden_states.device)
-                # Ensure that attention_mask is always on the same device as hidden_states
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(hidden_states.device)
-                if position_bias is not None:
-                    position_bias = position_bias.to(hidden_states.device)
-                if encoder_hidden_states is not None:
-                    encoder_hidden_states = encoder_hidden_states.to(hidden_states.device)
-                if encoder_extended_attention_mask is not None:
-                    encoder_extended_attention_mask = encoder_extended_attention_mask.to(hidden_states.device)
-                if encoder_decoder_position_bias is not None:
-                    encoder_decoder_position_bias = encoder_decoder_position_bias.to(hidden_states.device)
-                if layer_head_mask is not None:
-                    layer_head_mask = layer_head_mask.to(hidden_states.device)
-                if cross_attn_layer_head_mask is not None:
-                    cross_attn_layer_head_mask = cross_attn_layer_head_mask.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -1409,12 +1323,6 @@ class Pix2StructTextDecoder(Pix2StructDecoderPreTrainedModel):
                 if self.is_decoder:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
 
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
-
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -1467,9 +1375,9 @@ class Pix2StructTextDecoder(Pix2StructDecoderPreTrainedModel):
         }
 
 
-Pix2StructDecoder_START_DOCSTRING = r"""
+Pix2StructText_START_DOCSTRING = r"""
 
-    The Pix2StructDecoder model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
+    The Pix2StructText model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
     Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
     Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
     text-to-text denoising generative setting.
@@ -1488,10 +1396,10 @@ Pix2StructDecoder_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-Pix2StructDecoder_INPUTS_DOCSTRING = r"""
+Pix2StructText_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Pix2StructDecoder is a model with relative position
+            Indices of input sequence tokens in the vocabulary. Pix2StructText is a model with relative position
             embeddings so you should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -1499,7 +1407,7 @@ Pix2StructDecoder_INPUTS_DOCSTRING = r"""
 
             [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [Pix2StructDecoder
+            To know more on how to prepare `input_ids` for pretraining take a look a [Pix2StructText
             Training](./t5#training).
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -1516,11 +1424,11 @@ Pix2StructDecoder_INPUTS_DOCSTRING = r"""
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            Pix2StructDecoder uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
+            Pix2StructText uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If
             `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
 
-            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [Pix2StructDecoder
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [Pix2StructText
             Training](./t5#training).
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
@@ -1583,16 +1491,16 @@ Pix2StructDecoder_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-Pix2StructDecoder_ENCODER_INPUTS_DOCSTRING = r"""
+Pix2StructText_ENCODER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Pix2StructDecoder is a model with relative position
+            Indices of input sequence tokens in the vocabulary. Pix2StructText is a model with relative position
             embeddings so you should be able to pad the inputs on both the right and the left.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [Pix2StructDecoder
+            To know more on how to prepare `input_ids` for pretraining take a look a [Pix2StructText
             Training](./t5#training).
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -1621,6 +1529,16 @@ Pix2StructDecoder_ENCODER_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
+class Pix2StructPreTrainedModel(PreTrainedModel):
+    config_class = Pix2StructConfig
+    base_model_prefix = "pix2struct"
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        pass
+
+
 # Warning message for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
 __HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
@@ -1631,10 +1549,10 @@ num_heads)`.
 
 
 @add_start_docstrings(
-    "The bare Pix2StructDecoder Model transformer outputting raw hidden-states without any specific head on top.",
-    Pix2StructDecoder_START_DOCSTRING,
+    "The bare Pix2StructText Model transformer outputting raw hidden-states without any specific head on top.",
+    Pix2StructText_START_DOCSTRING,
 )
-class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
+class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder.embed_tokens.weight",
         r"decoder.embed_tokens.weight",
@@ -1648,7 +1566,7 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
         encoder_config = copy.deepcopy(config.vision_config)
         encoder_config.is_decoder = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = Pix2StructEncoderModel(encoder_config)
+        self.encoder = Pix2StructVisionModel(encoder_config)
 
         decoder_config = copy.deepcopy(config.text_config)
         decoder_config.is_decoder = True
@@ -1659,10 +1577,6 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
 
     def get_input_embeddings(self):
         return self.shared
@@ -1677,7 +1591,7 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
     def get_encoder(self):
         return self.encoder
 
-    @add_start_docstrings_to_model_forward(Pix2StructDecoder_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(Pix2StructText_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1704,18 +1618,18 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, Pix2StructDecoderModel
+        >>> from transformers import AutoTokenizer, Pix2StructTextModel
 
         >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        >>> model = Pix2StructDecoderModel.from_pretrained("t5-small")
+        >>> model = Pix2StructTextModel.from_pretrained("t5-small")
 
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
 
-        >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for Pix2StructDecoderModel.
-        >>> # This is not needed for torch's Pix2StructDecoderForConditionalGeneration as it does this internally using labels arg.
+        >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for Pix2StructTextModel.
+        >>> # This is not needed for torch's Pix2StructTextForConditionalGeneration as it does this internally using labels arg.
         >>> decoder_input_ids = model._shift_right(decoder_input_ids)
 
         >>> # forward pass

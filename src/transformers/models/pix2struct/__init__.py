@@ -50,10 +50,10 @@ else:
         "Pix2StructModel",
         "Pix2StructPreTrainedModel",
         "Pix2StructForConditionalGeneration",
-        "Pix2StructForQuestionAnswering",
+        "Pix2StructTextPreTrainedModel",
+        "Pix2StructTextPreTrainedModel",
         "Pix2StructVisionModel",
         "Pix2StructTextModel",
-        "Pix2StructForImageTextRetrieval",
     ]
 
 if TYPE_CHECKING:
@@ -82,12 +82,12 @@ if TYPE_CHECKING:
         from .modeling_pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pix2StructForConditionalGeneration,
-            Pix2StructForImageTextRetrieval,
-            Pix2StructForQuestionAnswering,
             Pix2StructModel,
             Pix2StructPreTrainedModel,
             Pix2StructTextModel,
+            Pix2StructTextPreTrainedModel,
             Pix2StructVisionModel,
+            Pix2StructVisionPreTrainedModel,
         )
 
 else:

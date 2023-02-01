@@ -1971,9 +1971,9 @@ else:
         [
             "PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Pix2StructForConditionalGeneration",
-            "Pix2StructForImageTextRetrieval",
-            "Pix2StructForQuestionAnswering",
             "Pix2StructModel",
+            "Pix2StructTextPreTrainedModel",
+            "Pix2StructVisionPreTrainedModel",
             "Pix2StructPreTrainedModel",
             "Pix2StructTextModel",
             "Pix2StructVisionModel",
@@ -5137,9 +5137,9 @@ if TYPE_CHECKING:
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pix2StructForConditionalGeneration,
-            Pix2StructForImageTextRetrieval,
-            Pix2StructForQuestionAnswering,
             Pix2StructModel,
+            Pix2StructVisionPreTrainedModel,
+            Pix2StructTextPreTrainedModel,
             Pix2StructPreTrainedModel,
             Pix2StructTextModel,
             Pix2StructVisionModel,
