@@ -174,6 +174,9 @@ concatenates all texts and then splits them in blocks of the same length).
 **Note:** On TPU, you should use the flag `--pad_to_max_length` in conjunction with the `--line_by_line` flag to make
 sure all your batches have the same length.
 
+## Streaming
+
+To use the streaming dataset mode which can be very useful for large datasets, add `--streaming` to the command line. This is currently supported by `run_mlm.py` and `run_clm.py`.
 
 ## Creating a model on the fly
 

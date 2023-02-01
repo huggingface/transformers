@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Mask2FormerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/mask2former-swin-small-coco-instance"
-_IMAGE_PROCESSOR_FOR_DOC = "MaskFormerImageProcessor"
+_IMAGE_PROCESSOR_FOR_DOC = "Mask2FormerImageProcessor"
 
 MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/mask2former-swin-small-coco-instance",
@@ -195,10 +195,10 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     """
     Class for outputs of [`Mask2FormerForUniversalSegmentationOutput`].
 
-    This output can be directly passed to [`~MaskFormerImageProcessor.post_process_semantic_segmentation`] or
-    [`~MaskFormerImageProcessor.post_process_instance_segmentation`] or
-    [`~MaskFormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
-    [`~MaskFormerImageProcessor] for details regarding usage.
+    This output can be directly passed to [`~Mask2FormerImageProcessor.post_process_semantic_segmentation`] or
+    [`~Mask2FormerImageProcessor.post_process_instance_segmentation`] or
+    [`~Mask2FormerImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
+    [`~Mask2FormerImageProcessor] for details regarding usage.
 
     Args:
         loss (`torch.Tensor`, *optional*):
@@ -805,36 +805,42 @@ class Mask2FormerLoss(nn.Module):
         return num_masks_pt
 
 
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
 def multi_scale_deformable_attention(
     value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
-):
-    batch_size, _, num_attn_head, hidden_dim = value.shape
-    _, num_queries, num_attn_head, num_levels, num_points, _ = sampling_locations.shape
+) -> Tensor:
+    batch_size, _, num_heads, hidden_dim = value.shape
+    _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
     value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
-
-    for idx, (height, width) in enumerate(value_spatial_shapes):
-        # batch_size, height*width, num_attn_head, hidden_dim -> batch_size*num_attn_head, hidden_dim, height, width
+    for level_id, (height, width) in enumerate(value_spatial_shapes):
+        # batch_size, height*width, num_heads, hidden_dim
+        # -> batch_size, height*width, num_heads*hidden_dim
+        # -> batch_size, num_heads*hidden_dim, height*width
+        # -> batch_size*num_heads, hidden_dim, height, width
         value_l_ = (
-            value_list[idx].flatten(2).transpose(1, 2).reshape(batch_size * num_attn_head, hidden_dim, height, width)
+            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, hidden_dim, height, width)
         )
-        # (batch_size, num_queries, num_attn_head, num_points) -> (batch_size * num_attn_head, num_queries, num_points, 2)
-        sampling_grid_l_ = sampling_grids[:, :, :, idx].transpose(1, 2).flatten(0, 1)
-        # batch_size*num_attn_head, D_, num_queries, num_points
-        sampling_value_l_ = torch.nn.functional.grid_sample(
+        # batch_size, num_queries, num_heads, num_points, 2
+        # -> batch_size, num_heads, num_queries, num_points, 2
+        # -> batch_size*num_heads, num_queries, num_points, 2
+        sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+        # batch_size*num_heads, hidden_dim, num_queries, num_points
+        sampling_value_l_ = nn.functional.grid_sample(
             value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
         )
         sampling_value_list.append(sampling_value_l_)
-
-    # (batch_size, num_queries, num_attn_head, num_levels, num_points) -> (batch_size, num_attn_head, 1, num_queries, num_levels*num_points)
+    # (batch_size, num_queries, num_heads, num_levels, num_points)
+    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
     attention_weights = attention_weights.transpose(1, 2).reshape(
-        batch_size * num_attn_head, 1, num_queries, num_levels * num_points
+        batch_size * num_heads, 1, num_queries, num_levels * num_points
     )
     output = (
         (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
         .sum(-1)
-        .view(batch_size, num_attn_head * hidden_dim, num_queries)
+        .view(batch_size, num_heads * hidden_dim, num_queries)
     )
     return output.transpose(1, 2).contiguous()
 
@@ -2238,23 +2244,24 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoImageProcessor, Mask2FormerModel
 
-        >>> # download texting image
+        >>> # load image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> # Load image preprocessor and Mask2FormerModel trained on ADE20K instance segmentation dataset
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-instance")
-        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-small-ade-instance")
+        >>> # load image preprocessor and Mask2FormerModel trained on COCO instance segmentation dataset
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-coco-instance")
+        >>> model = Mask2FormerModel.from_pretrained("facebook/mask2former-swin-small-coco-instance")
         >>> inputs = image_processor(image, return_tensors="pt")
 
+        >>> # forward pass
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
+
+        >>> # model outputs last hidden states of shape (batch_size, num_queries, hidden_size)
+        >>> print(outputs.transformer_decoder_last_hidden_state.shape)
+        torch.Size([1, 100, 256])
         ```
         """
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2387,15 +2394,51 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             `Mask2FormerUniversalSegmentationOutput`
 
         Examples:
+
+        Instance segmentation example:
+
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
         >>> import requests
         >>> import torch
 
-        >>> # Load Mask2Former trained on ADE20K panoptic segmentation dataset
-        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-panoptic")
-        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-small-ade-panoptic")
+        >>> # Load Mask2Former trained on COCO instance segmentation dataset
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-coco-instance")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained(
+        ...     "facebook/mask2former-swin-small-coco-instance"
+        ... )
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = image_processor(image, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # Model predicts class_queries_logits of shape `(batch_size, num_queries)`
+        >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
+        >>> class_queries_logits = outputs.class_queries_logits
+        >>> masks_queries_logits = outputs.masks_queries_logits
+
+        >>> # Perform post-processing to get instance segmentation map
+        >>> pred_instance_map = image_processor.post_process_semantic_segmentation(
+        ...     outputs, target_sizes=[image.size[::-1]]
+        ... )[0]
+        >>> print(pred_instance_map.shape)
+        torch.Size([480, 640])
+        ```
+
+        Semantic segmentation example:
+        ```python
+        >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> # Load Mask2Former trained on ADE20k semantic segmentation dataset
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-ade-semantic")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained("facebook/mask2former-swin-small-ade-semantic")
 
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
@@ -2411,16 +2454,46 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> class_queries_logits = outputs.class_queries_logits
         >>> masks_queries_logits = outputs.masks_queries_logits
 
-        >>> # Perform post-processing to get semantic, instance or panoptic segmentation maps
+        >>> # Perform post-processing to get semantic segmentation map
         >>> pred_semantic_map = image_processor.post_process_semantic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]
-        >>> pred_instance_map = image_processor.post_process_instance_segmentation(
-        ...     outputs, target_sizes=[image.size[::-1]]
-        ... )[0]["segmentation"]
+        >>> print(pred_semantic_map.shape)
+        torch.Size([512, 683])
+        ```
+
+        Panoptic segmentation example:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> # Load Mask2Former trained on CityScapes panoptic segmentation dataset
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/mask2former-swin-small-cityscapes-panoptic")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained(
+        ...     "facebook/mask2former-swin-small-cityscapes-panoptic"
+        ... )
+
+        >>> url = "https://cdn-media.huggingface.co/Inference-API/Sample-results-on-the-Cityscapes-dataset-The-above-images-show-how-our-method-can-handle.png"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = image_processor(image, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> # Model predicts class_queries_logits of shape `(batch_size, num_queries)`
+        >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
+        >>> class_queries_logits = outputs.class_queries_logits
+        >>> masks_queries_logits = outputs.masks_queries_logits
+
+        >>> # Perform post-processing to get panoptic segmentation map
         >>> pred_panoptic_map = image_processor.post_process_panoptic_segmentation(
         ...     outputs, target_sizes=[image.size[::-1]]
         ... )[0]["segmentation"]
+        >>> print(pred_panoptic_map.shape)
+        torch.Size([338, 676])
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -2468,7 +2541,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             transformer_decoder_hidden_states = outputs.transformer_decoder_hidden_states
 
         output_auxiliary_logits = (
-            self.config.use_auxiliary_loss if output_auxiliary_logits is None else output_auxiliary_logits
+            self.config.output_auxiliary_logits if output_auxiliary_logits is None else output_auxiliary_logits
         )
         if not output_auxiliary_logits:
             auxiliary_logits = None

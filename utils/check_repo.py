@@ -45,12 +45,18 @@ PRIVATE_MODELS = [
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
     "MaskFormerSwinPreTrainedModel",
+    "BridgeTowerTextModel",
+    "BridgeTowerVisionModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "DetaEncoder",  # Building part of bigger (tested) model.
+    "DetaDecoder",  # Building part of bigger (tested) model.
+    "GraphormerEncoder",  # Building part of bigger (tested) model.
+    "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "CLIPSegDecoder",  # Building part of bigger (tested) model.
     "TableTransformerEncoder",  # Building part of bigger (tested) model.
     "TableTransformerDecoder",  # Building part of bigger (tested) model.
@@ -125,6 +131,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFSegformerDecodeHead",  # Not a regular model.
     "AltRobertaModel",  # Building part of bigger (tested) model.
     "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
+    "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
+    "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -152,6 +160,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
     "GitVisionModel",
+    "GraphormerModel",
+    "GraphormerForGraphClassification",
     "BlipForConditionalGeneration",
     "BlipForImageTextRetrieval",
     "BlipForQuestionAnswering",
@@ -159,6 +169,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BlipTextLMHeadModel",
     "BlipTextModel",
     "Swin2SRForImageSuperResolution",
+    "BridgeTowerForImageAndTextRetrieval",
+    "BridgeTowerForMaskedLM",
     "CLIPSegForImageSegmentation",
     "CLIPSegVisionModel",
     "CLIPSegTextModel",

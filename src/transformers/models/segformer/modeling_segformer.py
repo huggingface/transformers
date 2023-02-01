@@ -42,7 +42,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "SegformerConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "SegformerImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "nvidia/mit-b0"
@@ -491,7 +490,7 @@ SEGFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`SegformerImageProcessor`]. See [`SegformerImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`SegformerImageProcessor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -529,7 +528,6 @@ class SegformerModel(SegformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -589,7 +587,6 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=SegFormerImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -772,11 +769,11 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import SegformerImageProcessor, SegformerForSemanticSegmentation
+        >>> from transformers import AutoImageProcessor, SegformerForSemanticSegmentation
         >>> from PIL import Image
         >>> import requests
 
-        >>> image_processor = SegformerImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+        >>> image_processor = AutoImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
         >>> model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

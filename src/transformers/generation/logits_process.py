@@ -204,6 +204,34 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         return scores
 
 
+class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] enforcing an exponential penalty on tokens that are not in the original input.
+
+    Args:
+        hallucination_penalty (`float`):
+            The parameter for hallucination penalty. 1.0 means no penalty.
+        encoder_input_ids (`torch.LongTensor`):
+            The encoder_input_ids that should not be repeated within the decoder ids.
+    """
+
+    def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):
+        if not isinstance(penalty, float) or not (penalty > 0):
+            raise ValueError(f"`penalty` has to be a strictly positive float, but is {penalty}")
+
+        self.penalty = 1 / penalty
+        self.encoder_input_ids = encoder_input_ids
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        score = torch.gather(scores, 1, self.encoder_input_ids)
+
+        # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
+        score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+
+        scores.scatter_(1, self.encoder_input_ids, score)
+        return scores
+
+
 class TopPLogitsWarper(LogitsWarper):
     """
     [`LogitsWarper`] that performs top-p, i.e. restricting to top tokens summing to prob_cut_off <= prob_cut_off.
@@ -797,7 +825,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     reached.
 
     Args:
-        exponential_decay_length_penalty (`tuple(int, float)`, *optional*):
+        exponential_decay_length_penalty (`tuple(int, float)`):
             This tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where penalty
             starts and `decay_factor` represents the factor of exponential decay
         eos_token_id (`Union[int, List[int]]`):
@@ -807,7 +835,10 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     """
 
     def __init__(
-        self, exponential_decay_length_penalty: Tuple, eos_token_id: Union[int, List[int]], input_ids_seq_length: int
+        self,
+        exponential_decay_length_penalty: Tuple[int, float],
+        eos_token_id: Union[int, List[int]],
+        input_ids_seq_length: int,
     ):
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
         self.regulation_factor = exponential_decay_length_penalty[1]
@@ -889,35 +920,35 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     probs to `inf` so that they are sampled at their corresponding index.
 
     Args:
-        begin_index (`int`, *optional*, defaults to 5 ):
-            This indicates to the processor where the first tokens are generated. This is used to differentiate between
-            the `prompt` tokens and the `generated` tokens. When generating with `WhisperForConditionalGeneration` the
-            `prompt` tokens are the first 4 tokens.
-        eos_token_id (`int`, *optional*, defaults to 50257):
-            The id of the *end-of-sequence* token.
-        no_timestamps_token_id (`int`, *optional*, defaults to 50363):
-            The id of the `"<|notimestamps|>"` token.
-        max_initial_timestamp (`int`, *optional*, defaults to 1):
-            Used to set the maximum value of the initial timestamp. This is used to prevent the model from predicting
-            timestamps that are too far in the future.
+        generate_config (`GenerateConfig`):
+            The generate config used to generate the output. The following parameters are required:
+                eos_token_id (`int`, *optional*, defaults to 50257):
+                    The id of the *end-of-sequence* token.
+                no_timestamps_token_id (`int`, *optional*, defaults to 50363):
+                    The id of the `"<|notimestamps|>"` token.
+                max_initial_timestamp_index (`int`, *optional*, defaults to 1):
+                    Used to set the maximum value of the initial timestamp. This is used to prevent the model from
+                    predicting timestamps that are too far in the future.
     """
 
-    def __init__(
-        self,
-        begin_index=5,
-        eos_token_id=50257,
-        no_timestamps_token_id=50363,
-        max_initial_timestamp=1,
-    ):
-        self.eos_token_id = eos_token_id
-        self.no_timestamps_token_id = no_timestamps_token_id
-        self.timestamp_begin = no_timestamps_token_id + 1
-        self.begin_index = begin_index
-        self.max_initial_timestamp_index = max_initial_timestamp
+    def __init__(self, generate_config):  # support for the kwargs
+        self.eos_token_id = generate_config.eos_token_id
+        self.no_timestamps_token_id = generate_config.no_timestamps_token_id
+        self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+
+        self.begin_index = len(generate_config.forced_decoder_ids) + 2
+        if generate_config.forced_decoder_ids[-1][1] == self.no_timestamps_token_id:
+            self.begin_index -= 1
+        self.max_initial_timestamp_index = generate_config.max_initial_timestamp_index
 
     def __call__(self, input_ids, scores):
         # suppress <|notimestamps|> which is handled by without_timestamps
         scores[:, self.no_timestamps_token_id] = -float("inf")
+
+        if input_ids.shape[1] == self.begin_index - 1:
+            scores[:, :] = -float("inf")
+            scores[:, self.timestamp_begin] = 0
+            return scores
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         for k in range(input_ids.shape[0]):

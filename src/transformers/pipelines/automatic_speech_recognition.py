@@ -31,8 +31,6 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 if is_torch_available():
-    from transformers.generation.logits_process import WhisperTimeStampLogitsProcessor
-
     from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 
 
@@ -56,7 +54,7 @@ def rescale_stride(stride, ratio):
     return new_strides
 
 
-def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, ratio, dtype=None):
+def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, rescale=True, dtype=None):
     inputs_len = inputs.shape[0]
     step = chunk_len - stride_left - stride_right
     for i in range(0, inputs_len, step):
@@ -68,9 +66,15 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
         _stride_left = 0 if i == 0 else stride_left
         is_last = i + step + stride_left >= inputs_len
         _stride_right = 0 if is_last else stride_right
+
         chunk_len = chunk.shape[0]
         stride = (chunk_len, _stride_left, _stride_right)
-        if ratio != 1:
+        if "input_features" in processed:
+            processed_len = processed["input_features"].shape[-1]
+        elif "input_values" in processed:
+            processed_len = processed["input_values"].shape[-1]
+        if processed_len != chunk.shape[-1] and rescale:
+            ratio = processed_len / chunk_len
             stride = rescale_stride([stride], ratio)[0]
         if chunk.shape[0] > _stride_left:
             yield {"is_last": is_last, "stride": stride, **processed}
@@ -90,7 +94,6 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
     # approximation of the token to time ratio : ~0.2seconds
     time_precision = feature_extractor.chunk_length / max_source_positions
     time = 0
-    actual_offset = 0
     for seq_idx, item in enumerate(sequences):
         sequence, stride = item
         if isinstance(sequence, list):
@@ -98,78 +101,84 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
         chunk_len, stride_left, stride_right = stride
         sequence = sequence.squeeze(0)
         # get rid of the `forced_decoder_idx` that are use to parametrize the generation
-        begin_idx = np.where(sequence == timestamp_begin)[0].item() if timestamp_begin in sequence else 0
+        begin_idx = np.where(sequence == timestamp_begin)[0][0] if timestamp_begin in sequence else 0
         sequence = sequence[begin_idx:]
 
-        if seq_idx != 0:
+        timestamp_tokens = sequence >= timestamp_begin
+        if seq_idx != 0 and sum(timestamp_tokens) > 0:
+            consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
+            last_timestamp = np.where(timestamp_tokens)[0][-1]
+            consecutive = np.append(consecutive, last_timestamp) if last_timestamp not in consecutive else consecutive
             time -= stride_left + stride_right
             offset = int((time / feature_extractor.sampling_rate) / time_precision)
-            timestamp_tokens = np.where(sequence >= timestamp_begin)[0][1::2]
-            if len(timestamp_tokens) >= 1:
-                # if a big chunk lenght is used, we need to check all of the previous items
+            overlap_time = int((stride_left / feature_extractor.sampling_rate) / time_precision)
+            # relevant timestamps are in the overlapping part
+            relevant_timestamp = np.where(sequence[consecutive] >= timestamp_begin + overlap_time)[0]
+            if relevant_timestamp.shape[0] > 0:
+                relevant_timestamp = (
+                    consecutive[relevant_timestamp[0] - 1] if relevant_timestamp[0] > 0 else consecutive[0]
+                )
+                # if a big stride is used, we need to check some of the previous items for the best overlap
                 best_match = 0
                 sliced_sequence = []
                 for idx, previous_sequence in enumerate(reversed(items)):
                     previous_tokens = previous_sequence[1:-1]
+                    if previous_sequence[0] < (timestamp_begin + offset - overlap_time) and idx != 0:
+                        break  # the previous sequence is too far in the past
                     if len(previous_tokens) > 0:
+                        # find the longest common sequence between the overlapping parts
                         index_left, index_right, match_length = _fast_find_longest_common_sequence(
-                            sequence, previous_tokens
+                            sequence[1:relevant_timestamp], previous_tokens
                         )
                         # don't do anything if only 1 token was matched
                         if match_length > 1 and match_length > best_match:
                             best_match = match_length
                             best_idx = idx
                             end_of_curr_sequence_idx = (
-                                np.where(sequence[index_left:] >= timestamp_begin)[0][0] + 1 + index_left
+                                np.where(sequence[index_left + 1 :] >= timestamp_begin)[0][0] + 1
                             )
-                            sliced_sequence = sequence[index_left:end_of_curr_sequence_idx]
+                            end_of_curr_sequence_idx = end_of_curr_sequence_idx + 1 + index_left
                             # if all the tokens are matched, suffix
                             if index_left == 0 and match_length == len(previous_tokens):
+                                sliced_sequence = np.insert(
+                                    sequence[index_left + 1 : end_of_curr_sequence_idx], 0, previous_sequence[0]
+                                )
                                 sliced_sequence[-1] = previous_sequence[-1]
                             # if part of the previous sequence is not taken
-                            elif index_left > 0:
+                            elif index_left >= 0:
+                                sliced_sequence = sequence[index_left + 1 : end_of_curr_sequence_idx]
                                 # let's insert the missing part of the previous sequence
-                                sliced_sequence = np.insert(sliced_sequence, 0, previous_sequence[: index_right + 1])
+                                previous_slice = (
+                                    previous_sequence[: index_right + 1] if index_right > 0 else [previous_sequence[0]]
+                                )
+                                sliced_sequence = np.insert(sliced_sequence, 0, previous_slice)
                                 sliced_sequence[-1] += offset
+
                 if len(sliced_sequence) > 0:
                     items[len(items) - best_idx - 1] = sliced_sequence
                     items = items[: len(items) - best_idx]
                     sequence = sequence[end_of_curr_sequence_idx:]
-            actual_offset = items[-1][-1] - timestamp_begin
 
+        # sequence might have changed
         timestamp_tokens = sequence >= timestamp_begin
         consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
+        if sum(timestamp_tokens) > 0:
+            last_timestamp = np.where(timestamp_tokens)[0][-1]
+            consecutive = (
+                np.append(consecutive, last_timestamp + 1) if last_timestamp not in consecutive else consecutive
+            )
 
-        if len(consecutive) > 0:  # if the output contains two consecutive timestamp tokens
+        if len(consecutive) > 0:
             last_slice = 0
-            # take the last timestamp of the previous chunk
             for current_slice in consecutive:
+                actual_offset = items[-1][-1] if seq_idx != 0 or last_slice != 0 else sequence[0]
                 sliced_tokens = sequence[last_slice:current_slice]
-                # set correct timestamps
-                sliced_tokens[0] += actual_offset
-                sliced_tokens[-1] += actual_offset
-                items.append(sliced_tokens)  # correct final sequence
-                last_slice = current_slice
-            # check if we have a non consecutive timestamp at the end
-            if np.where(timestamp_tokens)[0][-1] != current_slice:
-                # offset = items[-1][-1] if len(items) > 0 else timestamp_begin
-                sliced_tokens = sequence[current_slice : np.where(timestamp_tokens)[0][-1] + 1]
-                sliced_tokens[0] += actual_offset
-                sliced_tokens[-1] += actual_offset
+                duration = sliced_tokens[-1] - sliced_tokens[0]
+                sliced_tokens[0] = actual_offset
+                sliced_tokens[-1] = actual_offset + duration
                 items.append(sliced_tokens)
-        else:
-            timestamps = sequence[timestamp_tokens.nonzero()[0].flatten()]
-            if len(timestamps) > 0 and timestamps[-1].item() != timestamp_begin:
-                # no consecutive timestamps but it has a timestamp; use the last one.
-                # single timestamp at the end means no speech after the last timestamp.
-                last_idx = np.argwhere(sequence == timestamps[-1])[0][0]
-                sliced_sequence = sequence[: last_idx + 1]
-                duration = sliced_sequence[-1] - sliced_sequence[0]
-                # We need to discard the previous timing information
-                sliced_sequence[0] = items[-1][-1]
-                sliced_sequence[-1] = items[-1][-1] + duration
-                items.append(sliced_sequence)
-        # The beginning time of the next chunk
+                last_slice = current_slice
+
         time += chunk_len
     result = []
     for i in range(len(items)):
@@ -400,14 +409,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if decoder_kwargs is not None:
             postprocess_params["decoder_kwargs"] = decoder_kwargs
         if return_timestamps is not None:
+            forward_params["return_timestamps"] = return_timestamps
             postprocess_params["return_timestamps"] = return_timestamps
-            if self.model.config.model_type == "whisper":
-                # Whisper is highly specific, if we want timestamps, we need to
-                # force whisper to output timestamp tokens, which means we need
-                # to set this variable to prevent `no_timestamp_token` to be
-                # used in the decoder.
-                if "forced_decoder_ids" not in forward_params.get("generate_kwargs", {}):
-                    forward_params["generate_kwargs"]["forced_decoder_ids"] = None
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -495,9 +498,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if chunk_len < stride_left + stride_right:
                 raise ValueError("Chunk length must be superior to stride length")
 
+            rescale = self.type != "seq2seq_whisper"
             # make sure that
             for item in chunk_iter(
-                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, align_to, self.torch_dtype
+                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, rescale, self.torch_dtype
             ):
                 yield item
         else:
@@ -507,18 +511,20 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
             if stride is not None:
-                if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
-                    raise ValueError("Stride is only usable with CTC models, try removing it")
+                if self.type == "seq2seq":
+                    raise ValueError("Stride is only usable with CTC models, try removing it !")
 
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, generate_kwargs=None):
+    def _forward(self, model_inputs, return_timestamps=False, generate_kwargs=None):
         if generate_kwargs is None:
             generate_kwargs = {}
-
+        if return_timestamps and self.type == "seq2seq_whisper":
+            generate_kwargs["return_timestamps"] = return_timestamps
         is_last = model_inputs.pop("is_last")
-        if self.type == "seq2seq":
+
+        if self.type in {"seq2seq", "seq2seq_whisper"}:
             encoder = self.model.get_encoder()
             # Consume values so we can let extra information flow freely through
             # the pipeline (important for `partial` in microphone)
@@ -543,16 +549,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 **generate_kwargs,
             )
             out = {"tokens": tokens}
-        elif self.type == "seq2seq_whisper":
-            stride = model_inputs.pop("stride", None)
-            tokens = self.model.generate(
-                input_features=model_inputs.pop("input_features"),
-                logits_processor=[WhisperTimeStampLogitsProcessor()],
-                **generate_kwargs,
-            )
-            out = {"tokens": tokens}
-            if stride is not None:
-                out["stride"] = stride
+            if self.type == "seq2seq_whisper":
+                stride = model_inputs.pop("stride", None)
+                if stride is not None:
+                    out["stride"] = stride
 
         else:
             stride = model_inputs.pop("stride", None)
@@ -626,9 +626,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # Simply cast from pyctcdecode format to wav2vec2 format to leverage
                 # pre-existing code later
                 chunk_offset = beams[0][2]
-                word_offsets = []
+                offsets = []
                 for word, (start_offset, end_offset) in chunk_offset:
-                    word_offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
+                    offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
         else:
             skip_special_tokens = self.type != "ctc"
             text = self.tokenizer.decode(items, skip_special_tokens=skip_special_tokens)
