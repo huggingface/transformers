@@ -179,6 +179,9 @@ def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer
             #       fails this test case. Skip for now - a fix for this along with the initial changes in PR #20426 is
             #       too much. Let `ydshieh` to fix it ASAP once #20426 is merged.
             to_skip = True
+        elif test_casse_name == "DocumentQuestionAnsweringPipelineTests" and tokenizer_name.endswith("Fast"):
+            # This pipeline uses `sequence_ids()` which is only available for fast tokenizers.
+            to_skip = True
 
     return to_skip
 
