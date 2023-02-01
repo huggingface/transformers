@@ -3128,3 +3128,25 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         eos_token_id = [873]
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
+
+    def test_generate_from_input_embeds_decoder_only(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+
+        text = "Hello world"
+        input_ids = tokenizer.encode(text, return_tensors="pt")
+
+        # Traditional way of generating text
+        outputs_from_ids = model.generate(input_ids)
+
+        # Same thing, but from input embeddings
+        inputs_embeds = model.transformer.wte(input_ids)
+        outputs_from_embeds = model.generate(input_ids, inputs_embeds=inputs_embeds)
+        self.assertListEqual(outputs_from_ids.tolist(), outputs_from_embeds.tolist())
+
+        # But if we pass different inputs_embeds, we should get different outputs
+        torch.manual_seed(0)
+        random_embeds = torch.rand_like(inputs_embeds)
+        outputs_from_rand_embeds = model.generate(input_ids, inputs_embeds=random_embeds)
+        with self.assertRaises(AssertionError):
+            self.assertListEqual(outputs_from_rand_embeds.tolist(), outputs_from_embeds.tolist())

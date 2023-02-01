@@ -1000,14 +1000,23 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if "inputs_embeds" in kwargs and past_key_values is None:
+            model_inputs = {"inputs_embeds": kwargs.get("inputs_embeds", None)}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids,
+            }
+        )
+        return model_inputs
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
