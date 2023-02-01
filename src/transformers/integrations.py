@@ -1435,6 +1435,7 @@ class ClearMLCallback(TrainerCallback):
             if self._clearml_task is None:
                 self._clearml_task = self._clearml.Task.init(
                     project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
+                    task_name=os.getenv("CLEARML_TASK", "Trainer"),
                     auto_connect_frameworks={"tensorboard": False, "pytorch": False},
                     output_uri=True,
                 )
