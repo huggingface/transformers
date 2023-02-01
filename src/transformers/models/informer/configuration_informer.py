@@ -174,14 +174,16 @@ class InformerConfig(PretrainedConfig):
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
         self.distribution_output = distribution_output
-        self.loss = loss  # Eli: From vanilla ts transformer
+        self.loss = loss
         self.input_size = input_size
         self.num_time_features = num_time_features
-        self.lags_sequence = lags_sequence
+        self.lags_sequence = lags_sequence if lags_sequence is not None else [1, 2, 3, 4, 5, 6, 7]
         self.scaling = scaling
         self.num_dynamic_real_features = num_dynamic_real_features
         self.num_static_real_features = num_static_real_features
         self.num_static_categorical_features = num_static_categorical_features
+
+        # set cardinality
         if cardinality and num_static_categorical_features > 0:
             if len(cardinality) != num_static_categorical_features:
                 raise ValueError(
@@ -204,7 +206,7 @@ class InformerConfig(PretrainedConfig):
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
-        self.d_model = input_size * len(lags_sequence) + self._number_of_features
+        self.d_model = input_size * len(self.lags_sequence) + self._number_of_features
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
