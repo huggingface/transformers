@@ -33,9 +33,9 @@ PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class Pix2StructTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Pix2StructTextModel`]. It is used to instantiate
-    a PIX2STRUCT text model according to the specified arguments, defining the model architecture. Instantiating a
+    a Pix2Struct text model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the `Pix2StructText` used by the
-    [base architectures](https://huggingface.co/Salesforce/pix2struct-vqa-base).
+    [base architectures](https://huggingface.co/google/pix2struct-textcaps-base).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

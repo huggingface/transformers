@@ -26,12 +26,11 @@ from torch.utils.checkpoint import checkpoint
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -42,7 +41,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 
-import collections.abc
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
 
@@ -51,9 +49,8 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, CausalLMOutputWithCrossAttentions, CausalLMOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -80,8 +77,8 @@ PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.t5.modeling_t5.T5LayerNorm
-class T5LayerNorm(nn.Module):
+# Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Pix2Struct
+class Pix2StructLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
         Construct a layernorm module in the T5 style. No bias and no subtraction of mean.
@@ -107,74 +104,40 @@ class T5LayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->Pix2StructEncoder
 class Pix2StructEncoderEmbeddings(nn.Module):
+    r"""
+    Construct the embeddings from patch. In `Pix2Struct` the input is different from classic
+    Vision-transformer models. Here the input is a sequence of `seq_len` patches. Each patch is
+    represented by a vector of `hidden_size` values. 
     """
-    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
-    """
-
-    def __init__(self, config: Pix2StructConfig, use_mask_token: bool = False) -> None:
+    def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
-
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
-        self.patch_embeddings = Pix2StructEncoderPatchEmbeddings(config)
+        self.patch_projection = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.row_embedder = nn.Embedding(config.seq_len, config.hidden_size)
         self.column_embedder = nn.Embedding(config.seq_len, config.hidden_size)
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
 
 
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-    ) -> torch.Tensor:
-        # TODO: fix this
+    def forward(self,pixel_values: torch.Tensor) -> torch.Tensor:
+        # the row and column indices are stored in the first and second position of the pixel_values
+        # pixel_values: `batch_size`, `seq_len`, `hidden_size` + 2
         row_indices = pixel_values[:, :, 0].long()
         col_indices = pixel_values[:, :, 1].long()
 
         pixel_values = pixel_values[:, :, 2:]
 
-        embeddings = self.patch_embeddings.projection(pixel_values)
+        embeddings = self.patch_projection(pixel_values)
         row_embeddings = self.row_embedder(row_indices)
         col_embeddings = self.column_embedder(col_indices)
 
+        # sum all embeddings together
         embeddings = embeddings + row_embeddings + col_embeddings
 
         embeddings = self.dropout(embeddings)
 
         return embeddings
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->Pix2StructEncoder
-class Pix2StructEncoderPatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Linear(hidden_size, hidden_size)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        embeddings = self.projection(pixel_values)
-        return embeddings
-
 
 
 class T5Attention(nn.Module):
@@ -577,8 +540,8 @@ class Pix2StructEncoderLayer(nn.Module):
         self.seq_len_dim = 1
         self.attention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
         self.mlp = Pix2StructEncoderMlp(config)
-        self.pre_mlp_layer_norm = T5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pre_attention_layer_norm = T5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_mlp_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_attention_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if not config.layer_norm_bias:
             self.pre_mlp_layer_norm.bias = None
@@ -684,7 +647,7 @@ class Pix2StructEncoderPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, T5LayerNorm]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, Pix2StructLayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
@@ -694,7 +657,7 @@ class Pix2StructEncoderPreTrainedModel(PreTrainedModel):
             ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, T5LayerNorm):
+        elif isinstance(module, Pix2StructLayerNorm):
             if module.bias is not None:
                 module.bias.data.zero_()
             if module.weight is not None:
@@ -746,14 +709,14 @@ VIT_INPUTS_DOCSTRING = r"""
 )
 # Copied from transformers.models.vit.modeling_vit.ViTModel with ViT->Pix2StructEncoder
 class Pix2StructEncoderModel(Pix2StructEncoderPreTrainedModel):
-    def __init__(self, config: Pix2StructConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+    def __init__(self, config: Pix2StructConfig):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = Pix2StructEncoderEmbeddings(config, use_mask_token=use_mask_token)
+        self.embeddings = Pix2StructEncoderEmbeddings(config)
         self.encoder = Pix2StructEncoder(config)
 
-        self.layernorm = T5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         if not config.layer_norm_bias:
             self.layernorm.bias = None
 
@@ -761,8 +724,8 @@ class Pix2StructEncoderModel(Pix2StructEncoderPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> Pix2StructEncoderPatchEmbeddings:
-        return self.embeddings.patch_embeddings
+    def get_input_embeddings(self):
+        return self.embeddings.patch_projection
 
     def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
         """
@@ -784,7 +747,6 @@ class Pix2StructEncoderModel(Pix2StructEncoderPreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -810,9 +772,7 @@ class Pix2StructEncoderModel(Pix2StructEncoderPreTrainedModel):
             # check where `pixel_values` is not 0
             attention_mask = (pixel_values.sum(dim=-1) != 0).float()
 
-        embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos
-        )
+        embedding_output = self.embeddings(pixel_values)
 
         
 
