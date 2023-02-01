@@ -2404,14 +2404,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         with self.assertRaises(ValueError):
             model.generate(input_ids, input_ids=input_ids)
 
-    def test_generate_too_many_encoder_kwargs(self):
-        article = """I need input_ids to generate"""
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
-        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-        with self.assertRaises(ValueError):
-            model.generate(input_ids=input_ids, inputs_embeds=input_ids)
-
     def test_generate_input_values_as_encoder_kwarg(self):
         input_values = floats_tensor((2, 250))
         model = SpeechEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")

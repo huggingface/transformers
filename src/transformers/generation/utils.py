@@ -525,18 +525,27 @@ class GenerationMixin:
         elif inputs_kwarg is not None:
             inputs = inputs_kwarg
 
-        # 3. Text decoder-only models should complain if the user attempts to pass `inputs_embeds`, but the model
-        # doesn't have its forwarding implemented
-        if not self.config.is_encoder_decoder and input_name == "input_ids" and "inputs_embeds" in model_kwargs:
-            has_inputs_embeds_forwarding = "inputs_embeds" in set(
-                inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
-            )
-            if not has_inputs_embeds_forwarding:
-                raise ValueError(
-                    f"You passed `inputs_embeds` to `.generate()`, but the model class {self.__class__.__name__} "
-                    "doesn't have its forwarding implemented. See the GPT2 implementation for an example "
-                    "(https://github.com/huggingface/transformers/pull/21405), and feel free to open a PR with it :)"
+        # 3. In the presence of `inputs_embeds` for text models:
+        # - decoder-only models should complain if the user attempts to pass `inputs_embeds`, but the model
+        # doesn't have its forwarding implemented. `inputs_embeds` is kept in `model_kwargs` and can coexist with
+        # input_ids (`inputs_embeds` will be used in the 1st generation step, as opposed to `input_ids`)
+        # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
+        # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
+        if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
+            if not self.config.is_encoder_decoder:
+                has_inputs_embeds_forwarding = "inputs_embeds" in set(
+                    inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
                 )
+                if not has_inputs_embeds_forwarding:
+                    raise ValueError(
+                        f"You passed `inputs_embeds` to `.generate()`, but the model class {self.__class__.__name__} "
+                        "doesn't have its forwarding implemented. See the GPT2 implementation for an example "
+                        "(https://github.com/huggingface/transformers/pull/21405), and feel free to open a PR with it!"
+                    )
+            else:
+                if inputs is not None:
+                    raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
+                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
 
         # 4. if `inputs` is still None, try to create `input_ids` from BOS token
         if inputs is None:
@@ -595,15 +604,9 @@ class GenerationMixin:
         }
 
         # 3. make sure that encoder returns `ModelOutput`
-        accepts_inputs_embeds = "inputs_embeds" in set(inspect.signature(self.forward).parameters.keys())
-        has_inputs_embeds = "inputs_embeds" in model_kwargs
-        if accepts_inputs_embeds and has_inputs_embeds:
-            encoder_kwargs["inputs_embeds"] = model_kwargs["inputs_embeds"]
-        else:
-            model_input_name = model_input_name if model_input_name is not None else self.main_input_name
-            encoder_kwargs[model_input_name] = inputs_tensor
-
+        model_input_name = model_input_name if model_input_name is not None else self.main_input_name
         encoder_kwargs["return_dict"] = True
+        encoder_kwargs[model_input_name] = inputs_tensor
         model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs)
 
         return model_kwargs
