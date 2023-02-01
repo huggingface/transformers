@@ -354,7 +354,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 return_overflowing_tokens=True,
                 **tokenizer_kwargs,
             )
-            encoding.pop("overflow_to_sample_mapping")  # We do not use this
+            # TODO: check why slower `LayoutLMTokenizer` and `LayoutLMv2Tokenizer` don't have this key in outputs
+            # FIXME: ydshieh and/or Narsil
+            encoding.pop("overflow_to_sample_mapping", None)  # We do not use this
 
             num_spans = len(encoding["input_ids"])
 
