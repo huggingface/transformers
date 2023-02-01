@@ -44,7 +44,6 @@ class SpeechT5Config(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         vocab_size (`int`, *optional*, defaults to 81):
             Vocabulary size of the SpeechT5 model. Defines the number of different tokens that can be represented by
@@ -144,7 +143,7 @@ class SpeechT5Config(PretrainedConfig):
             ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
         num_mel_bins (`int`, *optional*, defaults to 80):
             Number of mel features used per input features. Used by the speech decoder pre-net. Should correspond to
-            the value used in the `SpeechT5ProcessorForTextToSpeech` or `SpeechT5ProcessorForSpeechToSpeech` class.
+            the value used in the [`SpeechT5Processor`] class.
         speech_decoder_prenet_layers (`int`, *optional*, defaults to 2):
             Number of layers in the speech decoder pre-net.
         speech_decoder_prenet_units (`int`, *optional*, defaults to 256):

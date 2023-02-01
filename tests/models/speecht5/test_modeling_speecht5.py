@@ -45,16 +45,13 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        SpeechT5FeatureExtractor,
         SpeechT5ForSpeechToSpeech,
         SpeechT5ForSpeechToText,
         SpeechT5ForTextToSpeech,
         SpeechT5HifiGan,
         SpeechT5Model,
-        SpeechT5ProcessorForSpeechToSpeech,
-        SpeechT5ProcessorForSpeechToText,
-        SpeechT5ProcessorForTextToSpeech,
-        SpeechT5SpectrogramFeatureExtractor,
-        SpeechT5WaveformFeatureExtractor,
+        SpeechT5Processor,
     )
 
 
@@ -724,7 +721,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
 class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return SpeechT5ProcessorForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
+        return SpeechT5Processor.from_pretrained("Matthijs/speecht5_asr")
 
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
@@ -742,7 +739,7 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(1)
 
-        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
+        input_values = processor(audio=input_speech, return_tensors="pt").input_values.to(torch_device)
 
         generated_ids = model.generate(input_values)
         generated_transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
@@ -759,7 +756,7 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True)
+        inputs = processor(audio=input_speech, return_tensors="pt", padding=True)
 
         input_values = inputs.input_values.to(torch_device)
         attention_mask = inputs.attention_mask.to(torch_device)
@@ -999,7 +996,7 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return SpeechT5ProcessorForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
+        return SpeechT5Processor.from_pretrained("Matthijs/speecht5_tts")
 
     def test_generation(self):
         model = SpeechT5ForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
@@ -1007,7 +1004,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         processor = self.default_processor
 
         input_text = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
-        input_ids = processor(input_text, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = processor(text=input_text, return_tensors="pt").input_ids.to(torch_device)
 
         generated_speech = model.generate_speech(input_ids)
         self.assertEqual(generated_speech.shape, (1800, model.config.num_mel_bins))
@@ -1414,9 +1411,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        waveform_feature_extractor = SpeechT5WaveformFeatureExtractor()
-        spectrogram_feature_extractor = SpeechT5SpectrogramFeatureExtractor()
-        return SpeechT5ProcessorForSpeechToSpeech(waveform_feature_extractor, spectrogram_feature_extractor)
+        return SpeechT5Processor.from_pretrained("Matthijs/speecht5_vc")
 
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
@@ -1433,7 +1428,7 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
         processor = self.default_processor
 
         input_speech = self._load_datasamples(1)
-        input_values = processor(input_speech, return_tensors="pt").input_values.to(torch_device)
+        input_values = processor(audio=input_speech, return_tensors="pt").input_values.to(torch_device)
 
         speaker_embeddings = torch.zeros((1, 512))
         generated_speech = model.generate_speech(input_values, speaker_embeddings=speaker_embeddings)

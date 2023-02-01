@@ -2263,9 +2263,9 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into `input_values`, the [`SpeechT5ProcessorForSpeechToText`] should be
+            soundfile*). To prepare the array into `input_values`, the [`SpeechT5Processor`] should be
             used for padding and conversion into a tensor of type `torch.FloatTensor`. See
-            [`SpeechT5ProcessorForSpeechToText.__call__`] for details.
+            [`SpeechT5Processor.__call__`] for details.
 
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -2292,18 +2292,18 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import SpeechT5ProcessorForSpeechToText, SpeechT5ForSpeechToText
+        >>> from transformers import SpeechT5Processor, SpeechT5ForSpeechToText
         >>> from datasets import load_dataset
 
         >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-        >>> processor = SpeechT5ProcessorForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
+        >>> processor = SpeechT5Processor.from_pretrained("Matthijs/speecht5_asr")
         >>> model = SpeechT5ForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
 
         >>> # audio file is decoded on the fly
-        >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+        >>> inputs = processor(audio=dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
         >>> predicted_ids = model.generate(**inputs, max_length=100)
 
         >>> # transcribe speech
@@ -2313,7 +2313,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         ```
 
         ```python
-        >>> inputs["labels"] = processor(text=dataset[0]["text"], return_tensors="pt").input_ids
+        >>> inputs["labels"] = processor(text_target=dataset[0]["text"], return_tensors="pt").input_ids
 
         >>> # compute loss
         >>> loss = model(**inputs).loss
@@ -2557,26 +2557,26 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             Tensor containing the speaker embeddings.
         labels (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`, *optional*):
             Float values of target mel spectrogram. Spectrograms can be obtained using
-            [`SpeechT5ProcessorForTextToSpeech`]. See [`SpeechT5ProcessorForTextToSpeech.__call__`] for details.
+            [`SpeechT5Processor`]. See [`SpeechT5Processor.__call__`] for details.
         stop_labels (`torch.FloatTensor` of shape `(batch_size, unreduced_sequence_length)`, *optional*):
             Labels for computing the stop token loss. Values are 0.0 until the end of the sequence, after which they
             become 1.0. The sequence length of this tensor is `config.reduction_factor` times larger than the length of
-            the target mel spectrogram. Labels can be obtained using [`SpeechT5ProcessorForTextToSpeech`]. See
-            [`SpeechT5ProcessorForTextToSpeech.__call__`] for details.
+            the target mel spectrogram. Labels can be obtained using [`SpeechT5Processor`]. See
+            [`SpeechT5Processor.__call__`] for details.
 
         Returns:
 
         Example:
 
         ```python
-        >>> from transformers import SpeechT5ProcessorForTextToSpeech, SpeechT5ForTextToSpeech, SpeechT5HifiGan
+        >>> from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
         >>> import torch
 
-        >>> processor = SpeechT5ProcessorForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
+        >>> processor = SpeechT5Processor.from_pretrained("Matthijs/speecht5_tts")
         >>> model = SpeechT5ForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
         >>> vocoder = SpeechT5HifiGan.from_pretrained("Matthijs/speecht5_hifigan")
 
-        >>> inputs = processor("Hello, my dog is cute", return_tensors="pt")
+        >>> inputs = processor(text="Hello, my dog is cute", return_tensors="pt")
         >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file
 
         >>> # generate speech
@@ -2739,9 +2739,9 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into `input_values`, the [`SpeechT5ProcessorForSpeechToSpeech`] should be
+            soundfile*). To prepare the array into `input_values`, the [`SpeechT5Processor`] should be
             used for padding and conversion into a tensor of type `torch.FloatTensor`. See
-            [`SpeechT5ProcessorForSpeechToSpeech.__call__`] for details.
+            [`SpeechT5Processor.__call__`] for details.
         decoder_input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`):
             Float values of input mel spectrogram.
 
@@ -2752,24 +2752,19 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             Tensor containing the speaker embeddings.
         labels (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`, *optional*):
             Float values of target mel spectrogram. Spectrograms can be obtained using
-            [`SpeechT5ProcessorForSpeechToSpeech`]. See [`SpeechT5ProcessorForSpeechToSpeech.__call__`] for details.
+            [`SpeechT5Processor`]. See [`SpeechT5Processor.__call__`] for details.
         stop_labels (`torch.FloatTensor` of shape `(batch_size, unreduced_sequence_length)`, *optional*):
             Labels for computing the stop token loss. Values are 0.0 until the end of the sequence, after which they
             become 1.0. The sequence length of this tensor is `config.reduction_factor` times larger than the length of
-            the target mel spectrogram. Labels can be obtained using [`SpeechT5ProcessorForSpeechToSpeech`]. See
-            [`SpeechT5ProcessorForSpeechToSpeech.__call__`] for details.
+            the target mel spectrogram. Labels can be obtained using [`SpeechT5Processor`]. See
+            [`SpeechT5Processor.__call__`] for details.
 
         Returns:
 
         Example:
 
         ```python
-        >>> from transformers import SpeechT5ForSpeechToSpeech, SpeechT5HifiGan
-        >>> from transformers import (
-        ...     SpeechT5WaveformFeatureExtractor,
-        ...     SpeechT5SpectrogramFeatureExtractor,
-        ...     SpeechT5ProcessorForSpeechToSpeech,
-        ... )
+        >>> from transformers import SpeechT5Processor, SpeechT5ForSpeechToSpeech, SpeechT5HifiGan
         >>> from datasets import load_dataset
         >>> import torch
 
@@ -2777,15 +2772,12 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-        >>> waveform_feature_extractor = SpeechT5WaveformFeatureExtractor()
-        >>> spectrogram_feature_extractor = SpeechT5SpectrogramFeatureExtractor()
-        >>> processor = SpeechT5ProcessorForSpeechToSpeech(waveform_feature_extractor, spectrogram_feature_extractor)
-
+        >>> processor = SpeechT5Processor.from_pretrained("Matthijs/speecht5_vc")
         >>> model = SpeechT5ForSpeechToSpeech.from_pretrained("Matthijs/speecht5_vc")
         >>> vocoder = SpeechT5HifiGan.from_pretrained("Matthijs/speecht5_hifigan")
 
         >>> # audio file is decoded on the fly
-        >>> inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+        >>> inputs = processor(audio=dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 
         >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file
 
@@ -2858,9 +2850,9 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
 
                 Values can be obtained by loading a *.flac* or *.wav* audio file into an array of type `List[float]` or
                 a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install soundfile*). To prepare the array
-                into `input_values`, the [`SpeechT5ProcessorForSpeechToSpeech`] should be used for padding and
+                into `input_values`, the [`SpeechT5Processor`] should be used for padding and
                 conversion into a tensor of type `torch.FloatTensor`. See
-                [`SpeechT5ProcessorForSpeechToSpeech.__call__`] for details.
+                [`SpeechT5Processor.__call__`] for details.
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
             threshold (`float`, *optional*, defaults to 0.5):

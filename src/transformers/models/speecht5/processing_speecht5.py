@@ -19,21 +19,21 @@ import warnings
 from ...processing_utils import ProcessorMixin
 
 
-class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
+class SpeechT5Processor(ProcessorMixin):
     r"""
-    Constructs a SpeechT5 processor which wraps a waveform feature extractor and a tokenizer into a single processor.
+    Constructs a SpeechT5 processor which wraps a feature extractor and a tokenizer into a single processor.
 
-    [`SpeechT5ProcessorForSpeechToText`] offers all the functionalities of [`SpeechT5WaveformFeatureExtractor`] and
-    [`SpeechT5Tokenizer`]. See the docstring of [`~SpeechT5ProcessorForSpeechToText.__call__`] and
-    [`~SpeechT5ProcessorForSpeechToText.decode`] for more information.
+    [`SpeechT5Processor`] offers all the functionalities of [`SpeechT5FeatureExtractor`] and
+    [`SpeechT5Tokenizer`]. See the docstring of [`~SpeechT5Processor.__call__`] and
+    [`~SpeechT5Processor.decode`] for more information.
 
     Args:
-        feature_extractor (`SpeechT5WaveformFeatureExtractor`):
-            An instance of [`SpeechT5WaveformFeatureExtractor`]. The feature extractor is a required input.
+        feature_extractor (`SpeechT5FeatureExtractor`):
+            An instance of [`SpeechT5FeatureExtractor`]. The feature extractor is a required input.
         tokenizer (`SpeechT5Tokenizer`):
             An instance of [`SpeechT5Tokenizer`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "SpeechT5WaveformFeatureExtractor"
+    feature_extractor_class = "SpeechT5FeatureExtractor"
     tokenizer_class = "SpeechT5Tokenizer"
 
     def __init__(self, feature_extractor, tokenizer):
@@ -41,47 +41,74 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        This method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
-        [`~SpeechT5WaveformFeatureExtractor.__call__`] and returns its output.
+        Processes audio and text input, as well as audio and text targets.
 
-        You can process your labels by using the argument `text` (either in the same call as your audio inputs, or in a
-        separate call). This forwards its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.__call__`].
+        You can process audio by using the argument `audio`, or process audio labels by using the argument `audio_target`.
+        This forwards the arguments to SpeechT5FeatureExtractor's [`~SpeechT5FeatureExtractor.__call__`].
+
+        You can process text by using the argument `text`, or process text labels by using the argument `text_target`.
+        This forwards the arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.__call__`].
+
+        Valid input combinations are:
+
+        - `text` only
+        - `audio` only
+        - `text_target` only
+        - `audio_target` only
+        - `text` and `audio_target`
+        - `audio` and `audio_target`
+        - `text` and `text_target`
+        - `audio` and `text_target`
 
         Please refer to the docstring of the above two methods for more information.
         """
-        if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
-            audio = kwargs.pop("raw_speech")
-        else:
-            audio = kwargs.pop("audio", None)
-
-        sampling_rate = kwargs.pop("sampling_rate", None)
+        audio = kwargs.pop("audio", None)
         text = kwargs.pop("text", None)
+        text_target = kwargs.pop("text_target", None)
+        audio_target = kwargs.pop("audio_target", None)
+        sampling_rate = kwargs.pop("sampling_rate", None)
 
-        if len(args) > 0:
-            audio = args[0]
-            args = args[1:]
-
-        if audio is None and text is None:
-            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+        if audio is not None and text is not None:
+            raise ValueError("Cannot process both `audio` and `text` inputs. Did you mean `audio_target` or `text_target`?")
+        if audio_target is not None and text_target is not None:
+            raise ValueError("Cannot process both `audio_target` and `text_target` inputs. Did you mean `audio` or `text`?")
+        if audio is None and audio_target is None and text is None and text_target is None:
+            raise ValueError("You need to specify either an `audio`, `audio_target`, `text`, or `text_target` input to process.")
 
         if audio is not None:
             inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
-        if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
-
-        if text is None:
-            return inputs
-        elif audio is None:
-            return encodings
+        elif text is not None:
+            inputs = self.tokenizer(text, **kwargs)
         else:
-            inputs["labels"] = encodings["input_ids"]
-            return inputs
+            inputs = None
+
+        if audio_target is not None:
+            audio_target_features = self.feature_extractor(audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs)
+            if inputs is None:
+                return audio_target_features
+            else:
+                inputs["labels"] = audio_target_features["input_values"]
+                inputs["stop_labels"] = audio_target_features["stop_labels"]
+                decoder_attention_mask = audio_target_features.get("attention_mask")
+                if decoder_attention_mask is not None:
+                    inputs["decoder_attention_mask"] = decoder_attention_mask
+
+        if text_target is not None:
+            encodings_target = self.tokenizer(text_target, **kwargs)
+            if inputs is None:
+                return encodings_target
+            else:
+                inputs["labels"] = encodings_target["input_ids"]
+                decoder_attention_mask = encodings_target.get("attention_mask")
+                if decoder_attention_mask is not None:
+                    inputs["decoder_attention_mask"] = decoder_attention_mask
+
+        return inputs
 
     def pad(self, *args, **kwargs):
         """
-        This method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
-        [`~SpeechT5WaveformFeatureExtractor.pad`] and returns its output.
+        This method forwards all its arguments to SpeechT5FeatureExtractor's
+        [`~SpeechT5FeatureExtractor.pad`] and returns its output.
 
         You can process your labels by using the argument `text` (either in the same call as your audio inputs, or in a
         separate call). This forwards its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.pad`].
@@ -121,138 +148,3 @@ class SpeechT5ProcessorForSpeechToText(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
-
-
-class SpeechT5ProcessorForTextToSpeech(ProcessorMixin):
-    r"""
-    Constructs a SpeechT5 processor which wraps a tokenizer and a spectrogram feature extractor into a single
-    processor.
-
-    [`SpeechT5ProcessorForTextToSpeech`] offers all the functionalities of [`SpeechT5Tokenizer`] and
-    [`SpeechT5SpectrogramFeatureExtractor`]. See the docstring of [`~SpeechT5ProcessorForTextToSpeech.__call__`] for
-    more information.
-
-    Args:
-        tokenizer (`SpeechT5Tokenizer`):
-            An instance of [`SpeechT5Tokenizer`]. The tokenizer is a required input.
-        feature_extractor (`SpeechT5SpectrogramFeatureExtractor`):
-            An instance of [`SpeechT5SpectrogramFeatureExtractor`]. The feature extractor is a required input.
-    """
-    feature_extractor_class = "SpeechT5SpectrogramFeatureExtractor"
-    tokenizer_class = "SpeechT5Tokenizer"
-
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
-
-    def __call__(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.__call__`] and returns its
-        output.
-
-        You can process your labels by using the argument `audio` (either in the same call as your text inputs, or in a
-        separate call). This forwards its arguments to SpeechT5SpectrogramFeatureExtractor's
-        [`~SpeechT5SpectrogramFeatureExtractor.__call__`].
-
-        Please refer to the docstring of the above two methods for more information.
-        """
-        text = kwargs.pop("text", None)
-        audio = kwargs.pop("audio", None)
-        sampling_rate = kwargs.pop("sampling_rate", None)
-
-        if len(args) > 0:
-            text = args[0]
-            args = args[1:]
-
-        if text is None and audio is None:
-            raise ValueError("You need to specify either a `text` or `audio` input to process.")
-
-        if text is not None:
-            inputs = self.tokenizer(text, **kwargs)
-        if audio is not None:
-            encodings = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
-
-        if audio is None:
-            return inputs
-        elif text is None:
-            return encodings
-        else:
-            inputs["labels"] = encodings["input_values"]
-            inputs["stop_labels"] = encodings["stop_labels"]
-            return inputs
-
-
-class SpeechT5ProcessorForSpeechToSpeech(ProcessorMixin):
-    r"""
-    Constructs a SpeechT5 processor which wraps a waveform feature extractor and spectrogram feature extractor into a
-    single processor.
-
-    [`SpeechT5ProcessorForSpeechToSpeech`] offers all the functionalities of [`SpeechT5WaveformFeatureExtractor`] and
-    [`SpeechT5SpectrogramFeatureExtractor`]. See the docstring of [`~SpeechT5ProcessorForSpeechToSpeech.__call__`] for
-    more information.
-
-    Args:
-        feature_extractor_encoder (`SpeechT5WaveformFeatureExtractor`):
-            An instance of [`SpeechT5WaveformFeatureExtractor`]. This is a required input.
-        feature_extractor_decoder (`SpeechT5SpectrogramFeatureExtractor`):
-            An instance of [`SpeechT5SpectrogramFeatureExtractor`]. This is a required input.
-    """
-    attributes = ["feature_extractor_encoder", "feature_extractor_decoder"]
-
-    feature_extractor_encoder_class = "SpeechT5WaveformFeatureExtractor"
-    feature_extractor_decoder_class = "SpeechT5SpectrogramFeatureExtractor"
-
-    def __init__(self, feature_extractor_encoder, feature_extractor_decoder):
-        super().__init__(feature_extractor_encoder, feature_extractor_decoder)
-
-    def __call__(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to SpeechT5WaveformFeatureExtractor's
-        [`~SpeechT5WaveformFeatureExtractor.__call__`] and returns its output.
-
-        You can process your labels by using the argument `decoder_audio`. This forwards its arguments to
-        SpeechT5SpectrogramFeatureExtractor's [`~SpeechT5SpectrogramFeatureExtractor.__call__`].
-
-        Please refer to the docstring of the above two methods for more information.
-        """
-        encoder_audio = kwargs.pop("encoder_audio", None)
-        decoder_audio = kwargs.pop("decoder_audio", None)
-        sampling_rate = kwargs.pop("sampling_rate", None)
-
-        if len(args) > 0:
-            encoder_audio = args[0]
-            args = args[1:]
-
-        if encoder_audio is None and decoder_audio is None:
-            raise ValueError("You need to specify either an `encoder_audio` or `decoder_audio` input to process.")
-
-        if encoder_audio is not None:
-            encoder_inputs = self.feature_extractor_encoder(
-                encoder_audio, *args, sampling_rate=sampling_rate, **kwargs
-            )
-        if decoder_audio is not None:
-            decoder_inputs = self.feature_extractor_decoder(
-                decoder_audio, *args, sampling_rate=sampling_rate, **kwargs
-            )
-
-        if decoder_audio is None:
-            return encoder_inputs
-        elif encoder_audio is None:
-            return decoder_inputs
-        else:
-            encoder_inputs["labels"] = decoder_inputs["input_values"]
-            encoder_inputs["stop_labels"] = decoder_inputs["stop_labels"]
-            decoder_attention_mask = decoder_inputs.get("attention_mask")
-            if decoder_attention_mask is not None:
-                encoder_inputs["decoder_attention_mask"] = decoder_attention_mask
-            return encoder_inputs
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        raise NotImplementedError(
-            "`from_pretrained` is not currently available for SpeechT5ProcessorForSpeechToSpeech"
-        )
-
-    def save_pretrained(self, save_directory, push_to_hub: bool = False, **kwargs):
-        raise NotImplementedError(
-            "`save_pretrained` is not currently available for SpeechT5ProcessorForSpeechToSpeech"
-        )

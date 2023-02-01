@@ -28,12 +28,14 @@ from ...utils import PaddingStrategy, TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-# Adapted from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor, with Wav2Vec2 tips removed.
-class SpeechT5WaveformFeatureExtractor(SequenceFeatureExtractor):
+class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a SpeechT5 feature extractor for use by the SpeechT5 speech encoder prenet.
+    Constructs a SpeechT5 feature extractor.
 
-    This class pre-processes a raw speech signal by (optionally) normalizing to zero-mean unit-variance.
+    This class can pre-process a raw speech signal by (optionally) normalizing to zero-mean unit-variance,
+    for use by the SpeechT5 speech encoder prenet.
+
+    This class can also extract log-mel filter bank features from raw speech, for use by the SpeechT5 speech decoder prenet.
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
@@ -45,11 +47,29 @@ class SpeechT5WaveformFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
-        do_normalize (`bool`, *optional*, defaults to `True`):
+        do_normalize (`bool`, *optional*, defaults to `False`):
             Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
             improve the performance for some models.
-        return_attention_mask (`bool`, *optional*, defaults to `False`):
-            Whether or not [`~SpeechT5WaveformFeatureExtractor.__call__`] should return `attention_mask`.
+        num_mel_bins (`int`, *optional*, defaults to 80):
+            The number of mel-frequency bins in the extracted spectrogram features.
+        hop_length (`int`, *optional*, defaults to 16):
+            Number of ms between windows. Otherwise referred to as "shift" in many papers.
+        win_length (`int`, *optional*, defaults to 64):
+            Number of ms per window.
+        win_function (`str`, *optional*, defaults to `"hann_window"`):
+            Name for the window function used for windowing, must be accessible via `torch.{win_function}`
+        frame_signal_scale (`float`, *optional*, defaults to 1.0):
+            Constant multiplied in creating the frames before applying DFT.
+        fmin (`float`, *optional*, defaults to 80):
+            Minimum mel frequency in Hz.
+        fmax (`float`, *optional*, defaults to 7600):
+            Maximum mel frequency in Hz.
+        mel_floor (`float`, *optional*, defaults to 1e-10):
+            Minimum value of mel frequency banks.
+        reduction_factor (`int`, *optional*, defaults to 2):
+            Spectrogram length reduction factor.
+        return_attention_mask (`bool`, *optional*, defaults to `True`):
+            Whether or not [`~SpeechT5FeatureExtractor.__call__`] should return `attention_mask`.
     """
 
     model_input_names = ["input_values", "attention_mask"]
@@ -59,15 +79,41 @@ class SpeechT5WaveformFeatureExtractor(SequenceFeatureExtractor):
         feature_size: int = 1,
         sampling_rate: int = 16000,
         padding_value: float = 0.0,
-        return_attention_mask: bool = False,
-        do_normalize: bool = True,
+        do_normalize: bool = False,
+        num_mel_bins: int = 80,
+        hop_length: int = 16,
+        win_length: int = 64,
+        win_function: str = "hann_window",
+        frame_signal_scale: float = 1.0,
+        fmin: float = 80,
+        fmax: float = 7600,
+        mel_floor: float = 1e-10,
+        reduction_factor: int = 2,
+        return_attention_mask: bool = True,
         **kwargs
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.return_attention_mask = return_attention_mask
         self.do_normalize = do_normalize
+        self.return_attention_mask = return_attention_mask
+
+        self.num_mel_bins = num_mel_bins
+        self.hop_length = hop_length
+        self.win_length = win_length
+        self.win_function = win_function
+        self.frame_signal_scale = frame_signal_scale
+        self.fmin = fmin
+        self.fmax = fmax
+        self.mel_floor = mel_floor
+        self.reduction_factor = reduction_factor
+
+        self.sample_size = win_length * sampling_rate // 1000
+        self.sample_stride = hop_length * sampling_rate // 1000
+
+        self.n_fft = 2 ** int(np.ceil(np.log2(self.sample_size)))
+        self.n_freqs = (self.n_fft // 2) + 1
 
     @staticmethod
+    # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
     def zero_mean_unit_var_norm(
         input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
     ) -> List[np.ndarray]:
@@ -88,198 +134,6 @@ class SpeechT5WaveformFeatureExtractor(SequenceFeatureExtractor):
             normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
 
         return normed_input_values
-
-    def __call__(
-        self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
-        truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
-        **kwargs
-    ) -> BatchFeature:
-        """
-        Main method to featurize and prepare for the model one or several sequence(s).
-
-        Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
-                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`):
-                Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            pad_to_multiple_of (`int`, *optional*):
-                If set will pad the sequence to a multiple of the provided value.
-
-                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            return_attention_mask (`bool`, *optional*):
-                Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific feature_extractor's default.
-
-                [What are attention masks?](../glossary#attention-mask)
-
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return Numpy `np.ndarray` objects.
-            sampling_rate (`int`, *optional*):
-                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
-                `sampling_rate` at the forward call to prevent silent errors.
-        """
-
-        if sampling_rate is not None:
-            if sampling_rate != self.sampling_rate:
-                raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
-                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
-                    f" {self.sampling_rate} and not {sampling_rate}."
-                )
-        else:
-            logger.warning(
-                "It is strongly recommended to pass the ``sampling_rate`` argument to this function. "
-                "Failing to do so can result in silent errors that might be hard to debug."
-            )
-
-        is_batched = bool(
-            isinstance(raw_speech, (list, tuple))
-            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
-        )
-
-        # always return batch
-        if not is_batched:
-            raw_speech = [raw_speech]
-
-        # convert into correct format for padding
-        encoded_inputs = BatchFeature({"input_values": raw_speech})
-
-        padded_inputs = self.pad(
-            encoded_inputs,
-            padding=padding,
-            max_length=max_length,
-            truncation=truncation,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
-        )
-
-        # convert input values to correct format
-        input_values = padded_inputs["input_values"]
-        if not isinstance(input_values[0], np.ndarray):
-            padded_inputs["input_values"] = [np.asarray(array, dtype=np.float32) for array in input_values]
-        elif (
-            not isinstance(input_values, np.ndarray)
-            and isinstance(input_values[0], np.ndarray)
-            and input_values[0].dtype is np.dtype(np.float64)
-        ):
-            padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
-        elif isinstance(input_values, np.ndarray) and input_values.dtype is np.dtype(np.float64):
-            padded_inputs["input_values"] = input_values.astype(np.float32)
-
-        # convert attention_mask to correct format
-        attention_mask = padded_inputs.get("attention_mask")
-        if attention_mask is not None:
-            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
-
-        # zero-mean and unit-variance normalization
-        if self.do_normalize:
-            attention_mask = (
-                attention_mask
-                if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
-                else None
-            )
-            padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
-                padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
-            )
-
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
-
-        return padded_inputs
-
-
-class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
-    r"""
-    Constructs a SpeechT5 spectrogram feature extractor for use by the SpeechT5 speech decoder prenet.
-
-    This class extracts log mel-filter bank features from raw speech.
-
-    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
-    most of the main methods. Users should refer to this superclass for more information regarding those methods.
-
-    Args:
-        feature_size (`int`, *optional*, defaults to 80):
-            The feature dimension of the extracted features. This is the number of mel-frequency bins.
-        sampling_rate (`int`, *optional*, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-        padding_value (`float`, *optional*, defaults to 0.0):
-            The value that is used to fill the padding vectors.
-        hop_length (`int`, *optional*, defaults to 16):
-            Number of ms between windows. Otherwise referred to as "shift" in many papers.
-        win_length (`int`, *optional*, defaults to 64):
-            Number of ms per window
-        win_function (`str`, *optional*, defaults to `"hann_window"`):
-            Name for the window function used for windowing, must be accessible via `torch.{win_function}`
-        frame_signal_scale (`float`, *optional*, defaults to 1.0):
-            Constant multiplied in creating the frames before applying DFT.
-        fmin (`float`, *optional*, defaults to 80):
-            Minimum mel frequency in Hz.
-        fmax (`float`, *optional*, defaults to 7600):
-            Maximum mel frequency in Hz.
-        mel_floor (`float`, *optional*, defaults to 1e-10):
-            Minimum value of mel frequency banks.
-        reduction_factor (`int`, *optional*, defaults to 2):
-            Spectrogram length reduction factor.
-    """
-
-    model_input_names = ["input_values", "attention_mask"]
-
-    def __init__(
-        self,
-        feature_size: int = 80,
-        sampling_rate: int = 16000,
-        padding_value: float = 0.0,
-        hop_length: int = 16,
-        win_length: int = 64,
-        win_function: str = "hann_window",
-        frame_signal_scale: float = 1.0,
-        fmin: float = 80,
-        fmax: float = 7600,
-        mel_floor: float = 1e-10,
-        reduction_factor: int = 2,
-        **kwargs
-    ):
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.hop_length = hop_length
-        self.win_length = win_length
-        self.win_function = win_function
-        self.frame_signal_scale = frame_signal_scale
-        self.fmin = fmin
-        self.fmax = fmax
-        self.mel_floor = mel_floor
-        self.reduction_factor = reduction_factor
-        self.return_attention_mask = True
-
-        self.sample_size = win_length * sampling_rate // 1000
-        self.sample_stride = hop_length * sampling_rate // 1000
-
-        self.n_fft = 2 ** int(np.ceil(np.log2(self.sample_size)))
-        self.n_freqs = (self.n_fft // 2) + 1
 
     @staticmethod
     def _center_pad(one_waveform, n_fft, pad_mode):
@@ -361,7 +215,7 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
             n_freqs=self.n_freqs,
             f_min=self.fmin,
             f_max=self.fmax,
-            n_mels=self.feature_size,
+            n_mels=self.num_mel_bins,
             sample_rate=self.sampling_rate,
             norm="slaney",
             mel_scale="slaney",
@@ -378,7 +232,8 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        audio: Optional[Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]]] = None,
+        audio_target: Optional[Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]]] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         truncation: bool = False,
@@ -391,11 +246,18 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
         """
         Main method to featurize and prepare for the model one or several sequence(s).
 
+        Pass in a value for `audio` to extract waveform features. Pass in a value for `audio_target`
+        to extract log-mel spectrogram features.
+
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
-                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+            audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
+                The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
+                values, a list of numpy arrays or a list of list of float values. This outputs waveform features.
+            audio_target (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
+                The sequence or batch of sequences to be processed as targets. Each sequence can be a numpy array, a
+                list of float values, a list of numpy arrays or a list of list of float values. This outputs log-mel
+                spectrogram features.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
@@ -420,13 +282,6 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
 
                 [What are attention masks?](../glossary#attention-mask)
 
-                <Tip>
-
-                For Speech2TextTransoformer models, `attention_mask` should alwys be passed for batched inference, to
-                avoid subtle bugs.
-
-                </Tip>
-
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -434,45 +289,56 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
-                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
+                The sampling rate at which the `audio` or `audio_target` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
         """
+        if audio is not None:
+            speech = audio
+        elif audio_target is not None:
+            speech = audio_target
+        else:
+            raise ValueError("You must provide either `audio` or `audio_target` values.")
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
                     f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
-                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
+                    f" {self.sampling_rate}. Please make sure that the provided audio input was sampled with"
                     f" {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                "It is strongly recommended to pass the ``sampling_rate`` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
         is_batched = bool(
-            isinstance(raw_speech, (list, tuple))
-            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
+            isinstance(speech, (list, tuple))
+            and (isinstance(speech[0], np.ndarray) or isinstance(speech[0], (tuple, list)))
         )
 
         if is_batched:
-            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
-        elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
-            raw_speech = raw_speech.astype(np.float32)
+            speech = [np.asarray(speech, dtype=np.float32) for speech in speech]
+        elif not is_batched and not isinstance(speech, np.ndarray):
+            speech = np.asarray(speech, dtype=np.float32)
+        elif isinstance(speech, np.ndarray) and speech.dtype is np.dtype(np.float64):
+            speech = speech.astype(np.float32)
 
         # always return batch
         if not is_batched:
-            raw_speech = [raw_speech]
+            speech = [speech]
 
-        # extract fbank features
-        features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
-        fbank_sizes = [len(x) for x in features]
+        # needed to make pad() work on spectrogram inputs
+        feature_size_hack = self.feature_size
 
         # convert into correct format for padding
-        encoded_inputs = BatchFeature({"input_values": features})
+        if audio is not None:
+            encoded_inputs = BatchFeature({"input_values": speech})
+        else:
+            features = [self._extract_fbank_features(waveform) for waveform in speech]
+            fbank_sizes = [len(x) for x in features]
+            encoded_inputs = BatchFeature({"input_values": features})
+            self.feature_size = self.num_mel_bins
 
         padded_inputs = self.pad(
             encoded_inputs,
@@ -484,28 +350,51 @@ class SpeechT5SpectrogramFeatureExtractor(SequenceFeatureExtractor):
             **kwargs,
         )
 
-        # make sure list is in array format
-        input_features = padded_inputs.get("input_values")
-        if isinstance(input_features[0], list):
-            padded_inputs["input_values"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+        self.feature_size = feature_size_hack
 
+        # convert input values to correct format
+        input_values = padded_inputs["input_values"]
+        if not isinstance(input_values[0], np.ndarray):
+            padded_inputs["input_values"] = [np.asarray(array, dtype=np.float32) for array in input_values]
+        elif (
+            not isinstance(input_values, np.ndarray)
+            and isinstance(input_values[0], np.ndarray)
+            and input_values[0].dtype is np.dtype(np.float64)
+        ):
+            padded_inputs["input_values"] = [array.astype(np.float32) for array in input_values]
+        elif isinstance(input_values, np.ndarray) and input_values.dtype is np.dtype(np.float64):
+            padded_inputs["input_values"] = input_values.astype(np.float32)
+
+        # convert attention_mask to correct format
         attention_mask = padded_inputs.get("attention_mask")
         if attention_mask is not None:
             padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
 
-        # make labels for stop prediction
-        stop_labels = []
-        for i, l in enumerate(fbank_sizes):
-            labels = np.zeros(len(padded_inputs["input_values"][i]))
-            labels[l - 1 :] = 1.0
-            stop_labels.append(labels)
-        padded_inputs["stop_labels"] = stop_labels
+        # zero-mean and unit-variance normalization
+        if audio is not None and self.do_normalize:
+            attention_mask = (
+                attention_mask
+                if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
+                else None
+            )
+            padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
+                padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
+            )
 
-        # thin out frames for reduction factor
-        if self.reduction_factor > 1:
-            padded_inputs["input_values"] = self._reduce(padded_inputs["input_values"])
-            if attention_mask is not None:
-                padded_inputs["attention_mask"] = self._reduce(padded_inputs["attention_mask"])
+        if audio is None:
+            # make labels for stop prediction
+            stop_labels = []
+            for i, l in enumerate(fbank_sizes):
+                labels = np.zeros(len(padded_inputs["input_values"][i]))
+                labels[l - 1 :] = 1.0
+                stop_labels.append(labels)
+            padded_inputs["stop_labels"] = stop_labels
+
+            # thin out frames for reduction factor
+            if self.reduction_factor > 1:
+                padded_inputs["input_values"] = self._reduce(padded_inputs["input_values"])
+                if attention_mask is not None:
+                    padded_inputs["attention_mask"] = self._reduce(padded_inputs["attention_mask"])
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

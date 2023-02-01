@@ -49,10 +49,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_speecht5"] = [
-        "SpeechT5SpectrogramFeatureExtractor",
-        "SpeechT5WaveformFeatureExtractor",
-    ]
+    _import_structure["feature_extraction_speecht5"] = ["SpeechT5FeatureExtractor"]
 
 try:
     if not (is_speech_available() and is_sentencepiece_available()):
@@ -60,11 +57,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["processing_speecht5"] = [
-        "SpeechT5ProcessorForSpeechToSpeech",
-        "SpeechT5ProcessorForSpeechToText",
-        "SpeechT5ProcessorForTextToSpeech",
-    ]
+    _import_structure["processing_speecht5"] = ["SpeechT5Processor"]
 
 try:
     if not is_torch_available():
@@ -104,7 +97,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_speecht5 import SpeechT5SpectrogramFeatureExtractor, SpeechT5WaveformFeatureExtractor
+        from .feature_extraction_speecht5 import SpeechT5FeatureExtractor
 
     try:
         if not (is_speech_available() and is_sentencepiece_available()):
@@ -112,11 +105,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .processing_speecht5 import (
-            SpeechT5ProcessorForSpeechToSpeech,
-            SpeechT5ProcessorForSpeechToText,
-            SpeechT5ProcessorForTextToSpeech,
-        )
+        from .processing_speecht5 import SpeechT5Processor
 
     try:
         if not is_torch_available():

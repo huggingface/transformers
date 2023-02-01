@@ -20,15 +20,12 @@ import torch
 
 from transformers import (
     SpeechT5Config,
+    SpeechT5FeatureExtractor,
     SpeechT5ForSpeechToSpeech,
     SpeechT5ForSpeechToText,
     SpeechT5ForTextToSpeech,
-    SpeechT5ProcessorForSpeechToSpeech,
-    SpeechT5ProcessorForSpeechToText,
-    SpeechT5ProcessorForTextToSpeech,
-    SpeechT5SpectrogramFeatureExtractor,
+    SpeechT5Processor,
     SpeechT5Tokenizer,
-    SpeechT5WaveformFeatureExtractor,
     logging,
 )
 from transformers.tokenization_utils import AddedToken
@@ -336,11 +333,8 @@ def convert_speecht5_checkpoint(
     else:
         config = SpeechT5Config()
 
-    tokenizer_class = SpeechT5Tokenizer
-
     if task == "s2t":
         config.max_length = config.max_text_positions
-        processor_class = SpeechT5ProcessorForSpeechToText
         model = SpeechT5ForSpeechToText(config)
     elif task == "t2s":
         config.max_speech_positions = 1876
@@ -355,7 +349,7 @@ def convert_speecht5_checkpoint(
         raise ValueError(f"Unknown task name: {task}")
 
     if vocab_path:
-        tokenizer = tokenizer_class(vocab_path, model_max_length=config.max_text_positions)
+        tokenizer = SpeechT5Tokenizer(vocab_path, model_max_length=config.max_text_positions)
 
         if task == "pretrain":
             # Mask token behaves like a normal word, i.e. include the space before it
@@ -364,33 +358,9 @@ def convert_speecht5_checkpoint(
             tokenizer.add_special_tokens({"mask_token": mask_token})
             tokenizer.add_tokens(["<ctc_blank>"])
 
-    if task == "s2t":
-        feature_extractor = SpeechT5WaveformFeatureExtractor(
-            feature_size=1,
-            sampling_rate=16000,
-            padding_value=0.0,
-            do_normalize=False,
-            return_attention_mask=True,
-        )
-        processor = processor_class(feature_extractor=feature_extractor, tokenizer=tokenizer)
-        processor.save_pretrained(pytorch_dump_folder_path)
-
-    if task == "t2s":
-        feature_extractor = SpeechT5SpectrogramFeatureExtractor()
-        processor = SpeechT5ProcessorForTextToSpeech(tokenizer=tokenizer, feature_extractor=feature_extractor)
-        processor.save_pretrained(pytorch_dump_folder_path)
-
-    if task == "s2s":
-        feature_extractor_encoder = SpeechT5WaveformFeatureExtractor(
-            feature_size=1,
-            sampling_rate=16000,
-            padding_value=0.0,
-            do_normalize=False,
-            return_attention_mask=True,
-        )
-        feature_extractor_decoder = SpeechT5SpectrogramFeatureExtractor()
-        processor = SpeechT5ProcessorForSpeechToSpeech(feature_extractor_encoder, feature_extractor_decoder)
-        # processor.save_pretrained(pytorch_dump_folder_path)
+    feature_extractor = SpeechT5FeatureExtractor()
+    processor = SpeechT5Processor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+    processor.save_pretrained(pytorch_dump_folder_path)
 
     fairseq_checkpoint = torch.load(checkpoint_path)
     recursively_load_weights(fairseq_checkpoint["model"], model, task)
@@ -399,8 +369,7 @@ def convert_speecht5_checkpoint(
 
     if repo_id:
         print("Pushing to the hub...")
-        if task != "s2s":
-            processor.push_to_hub(repo_id)
+        processor.push_to_hub(repo_id)
         model.push_to_hub(repo_id)
 
 
