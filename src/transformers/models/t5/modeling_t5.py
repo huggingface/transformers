@@ -264,7 +264,6 @@ class T5LayerNorm(nn.Module):
 try:
     from apex.normalization import FusedRMSNorm
 
-
     T5LayerNorm = FusedRMSNorm  # noqa
 
     logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of T5LayerNorm")
