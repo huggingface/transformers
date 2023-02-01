@@ -27,20 +27,11 @@ from lavis.models import load_model_and_preprocess
 from transformers import AutoTokenizer, Blip2Config, Blip2ForConditionalGeneration, OPTConfig
 
 
-def load_demo_image(image_size, device):
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+def load_demo_image():
+    url = "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-    transform = transforms.Compose(
-        [
-            transforms.Resize((image_size, image_size), interpolation=InterpolationMode.BICUBIC),
-            transforms.ToTensor(),
-            transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-        ]
-    )
-    pixel_values = transform(image).unsqueeze(0).to(device)
-
-    return pixel_values
+    return image
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
@@ -143,21 +134,26 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     assert len(missing_keys) == 0
     assert unexpected_keys == ['qformer.embeddings.position_ids']
 
-    image_size = 224
-    pixel_values = load_demo_image(image_size=image_size, device="cpu")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    image = load_demo_image()
+    pixel_values = vis_processors["eval"](image).unsqueeze(0).to(device)
     tokenizer = AutoTokenizer.from_pretrained("facebook/opt-2.7b")
-    input_ids = tokenizer(["a picture of"], return_tensors="pt").input_ids
+    input_ids = tokenizer(["" + "\n"], return_tensors="pt").input_ids.to(device)
 
+    print("Input ids:", input_ids)
+
+    hf_model.to(device)
     with torch.no_grad():
         outputs = hf_model(pixel_values, input_ids)
-        print("Outputs:", outputs.keys())
+        print("Shape of decoder logits:", outputs.decoder_logits.shape)
+        print("First values of decoder logits:", outputs.decoder_logits[0,:3,:3])
 
-    # TODO assert values
-    # out_itm = hf_itm_model(question_input_ids, image, use_itm_head=True)
-    # out = hf_itm_model(question_input_ids, image, use_itm_head=False)
-
-    # assert out[0].item() == 0.2110687494277954
-    # assert torch.nn.functional.softmax(out_itm[0], dim=1)[:, 1].item() == 0.45698845386505127
+    # assert values
+    expected_slice_logits = torch.tensor([[ 1.9322,  1.9379,  7.4008],
+        [-1.4743, -1.1191,  8.6590],
+        [-1.4212, -1.2489,  6.1976]], device=device)
+    assert torch.allclose(outputs.decoder_logits[0,:3,:3], expected_slice_logits, atol=1e-4)
+    print("Looks ok!")
 
     # outputs = hf_model.generate(image, input_ids)
     # print(tokenizer.batch_decode(outputs[0], skip_special_tokens=True))
