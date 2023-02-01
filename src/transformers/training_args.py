@@ -582,13 +582,12 @@ class TrainingArguments:
             Automatically recursively wrap layers with XLA FSDP if they have at least the specified number of parameters. This setting may only be used with xla_fsdp. It is
             one of two (mutually exclusive) training arguments that determines an auto wrap policy for XLA FSDP; the other is xla_fsdp_transformer_layer_cls_to_wrap.
         xla_fsdp_transformer_layer_cls_to_wrap (`List[str]`, *optional*):
-            Automatically recursively wrap layers with XLA FSDP if their transformer layer class name matches one in the specified list (case-sensitive). This setting 
-            may only be used with xla_fsdp. It is one of two (mutually exclusive) training arguments that determines an auto wrap policy for XLA FSDP; the other is 
+            Automatically recursively wrap layers with XLA FSDP if their transformer layer class name matches one in the specified list (case-sensitive). This setting
+            may only be used with xla_fsdp. It is one of two (mutually exclusive) training arguments that determines an auto wrap policy for XLA FSDP; the other is
             xla_fsdp_min_num_params.
         xla_fsdp_grad_ckpt (`bool`, *optional*, defaults to `False`):
             Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be used with
             xla_fsdp when an auto wrapping policy is specified through xla_fsdp_min_num_params or xla_fsdp_transformer_layer_cls_to_wrap.
-
     
 
     """
@@ -1038,8 +1037,8 @@ class TrainingArguments:
         default=0,
         metadata={
             "help": (
-                "Automatically recursively wrap layers with XLA FSDP if they have at least the specified number of parameters." 
-                " This setting is only useful when used with xla_fsdp."
+                "Automatically recursively wrap layers with XLA FSDP if they have at least the specified number of"
+                " parameters. This setting is only useful when used with xla_fsdp."
             ),
         },
     )
@@ -1047,8 +1046,8 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Automatically recursively wrap layers with XLA FSDP if their transformer layer class name matches one in the"
-                " specified list (case-sensitive). This setting is only useful when used with xla_fsdp."
+                "Automatically recursively wrap layers with XLA FSDP if their transformer layer class name matches one"
+                " in the specified list (case-sensitive). This setting is only useful when used with xla_fsdp."
             ),
         },
     )
@@ -1056,7 +1055,8 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": (
-                "Will use gradient checkpointing over each XLA FSDP wrapped layer. This setting is only useful when used with xla_fsdp."
+                "Will use gradient checkpointing over each XLA FSDP wrapped layer. This setting is only useful when"
+                " used with xla_fsdp."
             ),
         },
     )
@@ -1432,19 +1432,19 @@ class TrainingArguments:
                 self.xla_fsdp_config["compute_dtype"] = getattr(torch, self.xla_fsdp_config["compute_dtype"])
             if "buffer_dtype" in self.xla_fsdp_config:
                 self.xla_fsdp_config["buffer_dtype"] = getattr(torch, self.xla_fsdp_config["buffer_dtype"])
-            
+
             if self.xla_fsdp_min_num_params > 0 and self.xla_fsdp_transformer_layer_cls_to_wrap is not None:
                 raise ValueError(
-                    "`--xla_fsdp_min_num_params` and `--xla_fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
+                    "`--xla_fsdp_min_num_params` and `--xla_fsdp_transformer_layer_cls_to_wrap` are mutually"
+                    " exclusive."
                 )
         else:
             if self.xla_fsdp_min_num_params > 0:
                 warnings.warn("`--xla_fsdp_min_num_params` is useful only when `--xla_fsdp` is specified.")
             if self.xla_fsdp_transformer_layer_cls_to_wrap is not None:
-                warnings.warn("`--xla_fsdp_transformer_layer_cls_to_wrap` is useful only when `--xla_fsdp` is specified.")
-            if self.xla_fsdp_grad_ckpt:
-                warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla_fsdp` is specified.")
-
+                warnings.warn(
+                    "`--xla_fsdp_transformer_layer_cls_to_wrap` is useful only when `--xla_fsdp` is specified."
+                )
 
 
         if self.push_to_hub_token is not None:

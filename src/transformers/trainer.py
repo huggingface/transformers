@@ -1471,13 +1471,11 @@ class Trainer:
                 )
         elif self.args.xla_fsdp is not None:
             try:
-                from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP, checkpoint_module
-                from torch_xla.distributed.fsdp.wrap import (size_based_auto_wrap_policy,
-                                                             transformer_auto_wrap_policy)
+                from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
+                from torch_xla.distributed.fsdp import checkpoint_module
+                from torch_xla.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
             except ImportError:
-                raise ImportError(
-                    "Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0."
-                )
+                raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
             auto_wrap_policy = None
             auto_wrapper_callable = None
             if self.args.xla_fsdp_min_num_params > 0:
@@ -1487,9 +1485,7 @@ class Trainer:
             elif self.args.xla_fsdp_transformer_layer_cls_to_wrap is not None:
                 transformer_cls_to_wrap = set()
                 for layer_class in self.args.xla_fsdp_transformer_layer_cls_to_wrap:
-                    transformer_cls = get_module_class_from_name(
-                        model, layer_class
-                    )
+                    transformer_cls = get_module_class_from_name(model, layer_class)
                     if transformer_cls is None:
                         raise Exception("Could not find the transformer layer class to wrap in the model.")
                     else:
@@ -1497,23 +1493,19 @@ class Trainer:
                 auto_wrap_policy = functools.partial(
                     transformer_auto_wrap_policy,
                     # Transformer layer class to wrap
-                    transformer_layer_cls=transformer_cls_to_wrap
+                    transformer_layer_cls=transformer_cls_to_wrap,
                 )
             fsdp_kwargs = self.args.xla_fsdp_config
             if self.args.xla_fsdp_grad_ckpt:
-            # Apply gradient checkpointing to auto-wrapped sub-modules if specified
-                auto_wrapper_callable = lambda m, *args, **kwargs: FSDP(
-                    checkpoint_module(m), *args, **kwargs)
+                # Apply gradient checkpointing to auto-wrapped sub-modules if specified
+                auto_wrapper_callable = lambda m, *args, **kwargs: FSDP(checkpoint_module(m), *args, **kwargs)
             # Wrap the base model with an outer FSDP wrapper
             # Also, copy the signature of the original model's forward method -- otherwise
-            # columns not appearing in the forward method's argument will be dropped by 
+            # columns not appearing in the forward method's argument will be dropped by
             # the `_remove_unused_columns` method
             forward_signature = inspect.signature(model.forward.__func__)
             model = FSDP(
-                model, 
-                auto_wrap_policy=auto_wrap_policy, 
-                auto_wrapper_callable=auto_wrapper_callable, 
-                **fsdp_kwargs
+                model, auto_wrap_policy=auto_wrap_policy, auto_wrapper_callable=auto_wrapper_callable, **fsdp_kwargs
             )
             model.forward.__func__.__signature__ = forward_signature
             self.model = model
