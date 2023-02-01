@@ -525,7 +525,20 @@ class GenerationMixin:
         elif inputs_kwarg is not None:
             inputs = inputs_kwarg
 
-        # 3. if `inputs` is still None, try to create `input_ids` from BOS token
+        # 3. Text decoder-only models should complain if the user attempts to pass `inputs_embeds`, but the model
+        # doesn't have its forwarding implemented
+        if not self.config.is_encoder_decoder and input_name == "input_ids" and "inputs_embeds" in model_kwargs:
+            has_inputs_embeds_forwarding = "inputs_embeds" in set(
+                inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
+            )
+            if not has_inputs_embeds_forwarding:
+                raise ValueError(
+                    f"You passed `inputs_embeds` to `.generate()`, but the model class {self.__class__.__name__} "
+                    "doesn't have its forwarding implemented. See the GPT2 implementation for an example "
+                    "(https://github.com/huggingface/transformers/pull/21405), and feel free to open a PR with it :)"
+                )
+
+        # 4. if `inputs` is still None, try to create `input_ids` from BOS token
         if inputs is None:
             inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
 
