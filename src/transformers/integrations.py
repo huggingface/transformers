@@ -1085,25 +1085,17 @@ class DagsHubCallback(MLflowCallback):
             name=self.remote.split(os.sep)[-1].split(".")[0],
             branch=os.getenv("BRANCH") or "main",
         )
-        self.paths = {
-            "artifacts": Path("artifacts"),
-            "models": Path("artifacts") / "models",
-            "data": Path("artifacts") / "data",
-        }
-        for path in self.paths.values():
-            Path(path).mkdir(parents=True, exist_ok=True)
+        self.path = Path("artifacts")
+        Path(path).mkdir(parents=True, exist_ok=True)
 
         super().setup(*args, **kwargs)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self.log_artifacts:
             if getattr(self, "train_dataloader", None):
-                print(self.train_dataloader.dataset)
+                torch.save(self.train_dataloader.dataset, os.path.join(args.output_dir, "dataset.pt"))
 
-            Path(self.paths["models"] / self.name).mkdir(parents=True, exist_ok=True)
-
-            self.repo.directory(str(self.paths["models"])).add_dir(args.output_dir)
-            self.repo.directory(str(self.paths["artifacts"])).commit("updated artifacts", versioning="dvc", force=True)
+            self.repo.directory(str(self.path)).add_dir(args.output_dir)
 
 
 class NeptuneMissingConfiguration(Exception):
