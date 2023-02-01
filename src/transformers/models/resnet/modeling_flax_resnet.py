@@ -46,12 +46,12 @@ RESNET_START_DOCSTRING = r"""
     general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
-    
+
     - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
     - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
     - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
     - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
-    
+
     Parameters:
         config ([`ResNetConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -62,7 +62,7 @@ RESNET_START_DOCSTRING = r"""
 
             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
             specified all the computation will be performed with the given `dtype`.
-            
+
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
 
@@ -89,7 +89,7 @@ class FlaxResNetConvLayer(nn.Module):
     out_channels: int
     kernel_size: int = 3
     stride: int = 1
-    activation: str = "relu"
+    activation: Optional[str] = "relu"
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -100,15 +100,12 @@ class FlaxResNetConvLayer(nn.Module):
             padding=self.kernel_size // 2,
             dtype=self.dtype,
             use_bias=False,
-            kernel_init=nn.initializers.variance_scaling(2.0, mode="fan_out", distribution="normal"),
-            param_dtype=self.dtype,
+            kernel_init=nn.initializers.variance_scaling(2.0, mode="fan_out", distribution="normal", dtype=self.dtype),
         )
-        self.normalization = nn.BatchNorm(
-            momentum=0.9, epsilon=1e-05, dtype=self.dtype
-        )
+        self.normalization = nn.BatchNorm(momentum=0.9, epsilon=1e-05, dtype=self.dtype)
         self.activation_func = ACT2FN[self.activation] if self.activation is not None else None
 
-    def __call__(self, x: jnp.ndarray, train:bool = False) -> jnp.ndarray:
+    def __call__(self, x: jnp.ndarray, train: bool = False) -> jnp.ndarray:
         hidden_state = self.convolution(x)
         hidden_state = self.normalization(hidden_state, use_running_average=not train)
         if self.activation_func is not None:
@@ -135,16 +132,14 @@ class FlaxResNetEmbeddings(nn.Module):
             dtype=self.dtype,
         )
 
-    def __call__(self, pixel_values: jnp.ndarray, train : bool = False) -> jnp.ndarray:
+    def __call__(self, pixel_values: jnp.ndarray, train: bool = False) -> jnp.ndarray:
         num_channels = pixel_values.shape[-1]
         if num_channels != self.config.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
         embedding = self.embedder(pixel_values, train=train)
-        embedding = nn.max_pool(
-            embedding, window_shape=(3, 3), strides=(2, 2), padding=((1, 1), (1, 1))
-        )
+        embedding = nn.max_pool(embedding, window_shape=(3, 3), strides=(2, 2), padding=((1, 1), (1, 1)))
         return embedding
 
 
@@ -167,13 +162,10 @@ class FlaxResNetShortCut(nn.Module):
             use_bias=False,
             kernel_init=nn.initializers.variance_scaling(2.0, mode="fan_out", distribution="normal"),
             dtype=self.dtype,
-            param_dtype=self.dtype,
         )
-        self.normalization = nn.BatchNorm(
-            momentum=0.9, epsilon=1e-05, dtype=self.dtype
-        ) 
+        self.normalization = nn.BatchNorm(momentum=0.9, epsilon=1e-05, dtype=self.dtype)
 
-    def __call__(self, x: jnp.ndarray, train : bool = False) -> jnp.ndarray:
+    def __call__(self, x: jnp.ndarray, train: bool = False) -> jnp.ndarray:
         hidden_state = self.convolution(x)
         hidden_state = self.normalization(hidden_state, use_running_average=not train)
         return hidden_state
@@ -187,7 +179,7 @@ class FlaxResNetBasicLayer(nn.Module):
     in_channels: int
     out_channels: int
     stride: int = 1
-    activation = "relu"
+    activation: Optional[str] = "relu"
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -205,7 +197,7 @@ class FlaxResNetBasicLayer(nn.Module):
         )
         self.activation_func = ACT2FN[self.activation]
 
-    def __call__(self, hidden_state, train : bool = False):
+    def __call__(self, hidden_state, train: bool = False):
         residual = hidden_state
         hidden_state = self.layer(hidden_state, train=train)
 
@@ -218,7 +210,7 @@ class FlaxResNetBasicLayer(nn.Module):
         return hidden_state
 
 
-class ResNetBottleNeckLayer(nn.Module):
+class FlaxResNetBottleNeckLayer(nn.Module):
     """
     A classic ResNet's bottleneck layer composed by three `3x3` convolutions. The first `1x1` convolution reduces the
     input by a factor of `reduction` in order to make the second `3x3` convolution faster. The last `1x1` convolution
@@ -228,7 +220,7 @@ class ResNetBottleNeckLayer(nn.Module):
     in_channels: int
     out_channels: int
     stride: int = 1
-    activation: str = "relu"  # NOTE: Fixing type hinting
+    activation: Optional[str] = "relu"
     reduction: int = 4
     dtype: jnp.dtype = jnp.float32
 
@@ -261,7 +253,7 @@ class ResNetBottleNeckLayer(nn.Module):
         return hidden_state
 
 
-class ResNetStage(nn.Module):
+class FlaxResNetStage(nn.Module):
     """
     A ResNet stage composed by stacked layers.
     """
@@ -275,7 +267,7 @@ class ResNetStage(nn.Module):
 
     def setup(self):
 
-        layer = ResNetBottleNeckLayer if self.config.layer_type == "bottleneck" else FlaxResNetBasicLayer
+        layer = FlaxResNetBottleNeckLayer if self.config.layer_type == "bottleneck" else FlaxResNetBasicLayer
 
         self.layers = [
             # downsampling is done in the first layer with stride of 2
@@ -291,9 +283,8 @@ class ResNetStage(nn.Module):
                 for _ in range(self.depth - 1)
             ],
         ]
-        # print(self.layers)
 
-    def __call__(self, x: jnp.ndarray, train : bool = False) -> jnp.ndarray:
+    def __call__(self, x: jnp.ndarray, train: bool = False) -> jnp.ndarray:
         hidden_state = x
         for layer in self.layers:
             hidden_state = layer(hidden_state, train=train)
@@ -307,7 +298,7 @@ class FlaxResNetEncoder(nn.Module):
     def setup(self):
         in_out_channels = zip(self.config.hidden_sizes, self.config.hidden_sizes[1:])
         self.stages = [
-            ResNetStage(
+            FlaxResNetStage(
                 self.config,
                 self.config.embedding_size,
                 self.config.hidden_sizes[0],
@@ -316,13 +307,17 @@ class FlaxResNetEncoder(nn.Module):
                 dtype=self.dtype,
             ),
             *[
-                ResNetStage(self.config, in_channels, out_channels, depth=depth, dtype=self.dtype)
+                FlaxResNetStage(self.config, in_channels, out_channels, depth=depth, dtype=self.dtype)
                 for (in_channels, out_channels), depth in zip(in_out_channels, self.config.depths[1:])
             ],
         ]
 
     def __call__(
-            self, hidden_state: jnp.ndarray, output_hidden_states: bool = False, return_dict: bool = True, train: bool = False
+        self,
+        hidden_state: jnp.ndarray,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        train: bool = False,
     ) -> FlaxBaseModelOutputWithNoAttention:
         hidden_states = () if output_hidden_states else None
 
@@ -375,7 +370,7 @@ class FlaxResNetPreTrainedModel(FlaxPreTrainedModel):
 
         rngs = {"params": rng}
 
-        random_params_dict = self.module.init(rngs, pixel_values, return_dict=False)
+        random_params = self.module.init(rngs, pixel_values, return_dict=False)
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -385,14 +380,14 @@ class FlaxResNetPreTrainedModel(FlaxPreTrainedModel):
             self._missing_keys = set()
             return freeze(unflatten_dict(params))
         else:
-            return random_params_dict
+            return random_params
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     def __call__(
         self,
         pixel_values,
         params: dict = None,
-        train : bool = False,
+        train: bool = False,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
@@ -417,7 +412,9 @@ class FlaxResNetPreTrainedModel(FlaxPreTrainedModel):
             return_dict,
             rngs=rngs,
             mutable=["batch_stats"],
-        )
+        )[
+            0
+        ]  # NOTE: Return the output class from tuple. Seems to be working but is a ideal solution ?
 
 
 class FlaxResNetModule(nn.Module):
@@ -433,7 +430,7 @@ class FlaxResNetModule(nn.Module):
     def __call__(
         self,
         pixel_values,
-        train : bool = False,
+        train: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ) -> FlaxBaseModelOutputWithPoolingAndNoAttention:
@@ -453,15 +450,13 @@ class FlaxResNetModule(nn.Module):
 
         pooled_output = self.pooler(
             last_hidden_state,
-            window_shape=(last_hidden_state.shape[1], last_hidden_state.shape[1]),
-            strides=(last_hidden_state.shape[1], last_hidden_state.shape[1]),
+            window_shape=(last_hidden_state.shape[1], last_hidden_state.shape[2]),
+            strides=(last_hidden_state.shape[1], last_hidden_state.shape[2]),
             padding=((0, 0), (0, 0)),
         )
 
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[
-                1:
-            ] 
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return FlaxBaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
@@ -482,7 +477,7 @@ FLAX_VISION_MODEL_DOCSTRING = """
     Returns:
 
     Examples:
-    
+
     ```python
     >>> from transformers import AutoImageProcessor, FlaxResNetModel
     >>> from PIL import Image
@@ -515,8 +510,6 @@ class FlaxResNetForImageClassificationModule(nn.Module):
             self.classifier = nn.Dense(
                 self.config.num_labels,
                 dtype=self.dtype,
-                param_dtype=self.dtype,
-                kernel_init=jax.nn.initializers.variance_scaling(0.02, "fan_in", "truncated_normal"),
             )
         else:
             self.classifier = None
@@ -524,7 +517,7 @@ class FlaxResNetForImageClassificationModule(nn.Module):
     def __call__(
         self,
         pixel_values=None,
-        train : bool = False,
+        train: bool = False,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -545,6 +538,7 @@ class FlaxResNetForImageClassificationModule(nn.Module):
             logits = self.classifier(pooled_output)
         else:
             logits = pooled_output
+        logits = logits.reshape(1, self.config.num_labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -568,7 +562,7 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
     Returns:
 
     Example:
-    
+
     ```python
     >>> from transformers import AutoImageProcessor, FlaxResNetForImageClassification
     >>> from PIL import Image
