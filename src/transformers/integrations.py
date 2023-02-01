@@ -1061,7 +1061,7 @@ class DagsHubCallback(MLflowCallback):
 
             Path(self.paths["models"] / self.name).mkdir(parents=True, exist_ok=True)
 
-            self.repo.directory(args.output_dir).add_dir(str(self.paths["models"]))
+            self.repo.directory(str(self.paths["models"])).add_dir(args.output_dir)
             self.repo.directory(str(self.paths["artifacts"])).commit("updated artifacts", versioning="dvc", force=True)
 
 
