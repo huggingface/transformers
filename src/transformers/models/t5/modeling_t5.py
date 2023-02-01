@@ -264,20 +264,6 @@ class T5LayerNorm(nn.Module):
 try:
     from apex.normalization import FusedRMSNorm
 
-    # class T5LayerNorm(FusedRMSNorm):
-    #     r"""
-    # A FusedRMSNorm layer in the T5 style. This class also handles the case of # half-precision inputs by converting
-    them to float32 before the layer norm # computation and then back to the original dtype. # Args: # hidden_size
-    (`int`, required): # The hidden size of the layer norm. # eps (`float`, optional, defaults to 1e-6): # The epsilon
-    value to use in the layer norm computation. #"""
-    #     def __init__(self, hidden_size, eps=1e-6):
-    #         super().__init__(hidden_size, eps=eps)
-    #     def forward(self, hidden_states):
-    #         original_dtype = hidden_states.dtype
-    #         if original_dtype in [torch.float16, torch.bfloat16]:
-    #             hidden_states = hidden_states.to(torch.float32)
-    #         hidden_states = super().forward(hidden_states.to(original_dtype))
-    #         return hidden_states.to(original_dtype)
 
     T5LayerNorm = FusedRMSNorm  # noqa
 
