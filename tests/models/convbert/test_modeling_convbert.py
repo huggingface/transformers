@@ -466,25 +466,3 @@ class ConvBertModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
-
-def test():
-    print()
-    k = ids_tensor((2, 2), 10)
-    print(k)
-    print(k.shape)
-    print(k.size())
-
-    print()
-    import torch
-
-    from transformers import ConvBertConfig, ConvBertForTokenClassification
-
-    embeddings = torch.tensor([1, 2])
-    mask = torch.tensor([1])
-    convbert_model_config = ConvBertConfig()
-    convbert_model = ConvBertForTokenClassification(convbert_model_config)
-    # outputs = convbert_model(inputs_embeds=embeddings, attention_mask=mask)
-    j = convbert_model.convbert.embeddings.word_embeddings(k)
-    print(j)
-    print(j.size())
