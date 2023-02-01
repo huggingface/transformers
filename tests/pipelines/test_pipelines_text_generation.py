@@ -143,7 +143,7 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             ],
         )
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer)
         return text_generator, ["This is a test", "Another test"]
 
@@ -212,7 +212,11 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         # it requires BOS token to exist.
         # Special case for Pegasus which will always append EOS so will
         # work even without BOS.
-        if text_generator.tokenizer.bos_token_id is not None or "Pegasus" in tokenizer.__class__.__name__:
+        if (
+            text_generator.tokenizer.bos_token_id is not None
+            or "Pegasus" in tokenizer.__class__.__name__
+            or "Git" in model.__class__.__name__
+        ):
             outputs = text_generator("")
             self.assertEqual(outputs, [{"generated_text": ANY(str)}])
         else:

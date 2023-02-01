@@ -1972,7 +1972,7 @@ class JukeboxPrior(PreTrainedModel):
 
     def prior_preprocess(self, tokens, conds):
         """
-        Shifts the input tokens to account for the dictionnary merge. The embed_dim_shift give by how much the music
+        Shifts the input tokens to account for the dictionary merge. The embed_dim_shift give by how much the music
         tokens should be shifted by. It is equal to `lyric_vocab_size`.
         """
         batch_size = tokens[0].shape[0]
@@ -2501,11 +2501,11 @@ class JukeboxModel(JukeboxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import JukeboxTokenizer, JukeboxModel, set_seed
+        >>> from transformers import AutoTokenizer, JukeboxModel, set_seed
         >>> import torch
 
         >>> metas = dict(artist="Zac Brown Band", genres="Country", lyrics="I met a traveller from an antique land")
-        >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
         >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0).eval()
 
         >>> labels = tokenizer(**metas)["input_ids"]
@@ -2594,10 +2594,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import JukeboxTokenizer, JukeboxModel, set_seed
+        >>> from transformers import AutoTokenizer, JukeboxModel, set_seed
 
         >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0).eval()
-        >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
 
         >>> lyrics = "Hey, are you awake? Can you talk to me?"
         >>> artist = "Zac Brown Band"

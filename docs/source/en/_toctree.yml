@@ -44,6 +44,8 @@
       title: Use tokenizers from 🤗 Tokenizers
     - local: multilingual
       title: Inference for multilingual models
+    - local: generation_strategies
+      title: Text generation strategies
     - sections:
       - local: tasks/sequence_classification
         title: Text classification
@@ -52,7 +54,9 @@
       - local: tasks/question_answering
         title: Question answering
       - local: tasks/language_modeling
-        title: Language modeling
+        title: Causal language modeling
+      - local: tasks/masked_language_modeling
+        title: Masked language modeling
       - local: tasks/translation
         title: Translation
       - local: tasks/summarization
@@ -73,6 +77,10 @@
       title: Image classification
     - local: tasks/semantic_segmentation
       title: Semantic segmentation
+    - local: tasks/video_classification
+      title: Video classification
+    - local: tasks/object_detection
+      title: Object detection
     title: Computer Vision
   - sections:
     - local: performance
@@ -105,6 +113,8 @@
       title: Debugging
     - local: hpo_train
       title: Hyperparameter Search using Trainer API
+    - local: tf_xla
+      title: XLA Integration for TensorFlow Models
     title: Performance and scalability
   - sections:
     - local: contributing
@@ -135,7 +145,7 @@
   - local: glossary
     title: Glossary
   - local: task_summary
-    title: Summary of the tasks
+    title: What 🤗 Transformers can do
   - local: model_summary
     title: Summary of the models
   - local: tokenizer_summary
@@ -283,8 +293,6 @@
         title: I-BERT
       - local: model_doc/jukebox
         title: Jukebox
-      - local: model_doc/layoutlm
-        title: LayoutLM
       - local: model_doc/led
         title: LED
       - local: model_doc/lilt
@@ -365,8 +373,6 @@
         title: T5
       - local: model_doc/t5v1.1
         title: T5v1.1
-      - local: model_doc/tapas
-        title: TAPAS
       - local: model_doc/tapex
         title: TAPEX
       - local: model_doc/transfo-xl
@@ -404,6 +410,8 @@
         title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
+      - local: model_doc/deta
+        title: DETA
       - local: model_doc/detr
         title: DETR
       - local: model_doc/dinat
@@ -412,12 +420,16 @@
         title: DiT
       - local: model_doc/dpt
         title: DPT
+      - local: model_doc/efficientformer
+        title: EfficientFormer
       - local: model_doc/glpn
         title: GLPN
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
         title: LeViT
+      - local: model_doc/mask2former
+        title: Mask2Former
       - local: model_doc/maskformer
         title: MaskFormer
       - local: model_doc/mobilenet_v1
@@ -446,6 +458,8 @@
         title: Table Transformer
       - local: model_doc/timesformer
         title: TimeSformer
+      - local: model_doc/upernet
+        title: UperNet
       - local: model_doc/van
         title: VAN
       - local: model_doc/videomae
@@ -498,8 +512,12 @@
       title: Audio models
     - isExpanded: false
       sections:
+      - local: model_doc/altclip
+        title: AltCLIP
       - local: model_doc/blip
         title: BLIP
+      - local: model_doc/bridgetower
+        title: BridgeTower
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip
@@ -512,8 +530,12 @@
         title: Donut
       - local: model_doc/flava
         title: FLAVA
+      - local: model_doc/git
+        title: GIT
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/layoutlm
+        title: LayoutLM
       - local: model_doc/layoutlmv2
         title: LayoutLMV2
       - local: model_doc/layoutlmv3
@@ -522,12 +544,16 @@
         title: LayoutXLM
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/oneformer
+        title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/speech-encoder-decoder
         title: Speech Encoder Decoder Models
+      - local: model_doc/tapas
+        title: TAPAS
       - local: model_doc/trocr
         title: TrOCR
       - local: model_doc/vilt
@@ -553,6 +579,11 @@
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models
+    - isExpanded: false
+      sections:
+      - local: model_doc/graphormer
+        title: Graphormer
+      title: Graph models
     title: Models
   - sections:
     - local: internal/modeling_utils

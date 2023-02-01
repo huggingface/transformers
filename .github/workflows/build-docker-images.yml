@@ -115,9 +115,6 @@ jobs:
   # Can't build 2 images in a single job `latest-torch-deepspeed-docker` (for `nvcr.io/nvidia`)
   latest-torch-deepspeed-docker-for-push-ci-daily-build:
     name: "Latest PyTorch + DeepSpeed (Push CI - Daily Build)"
-    # Can't run in parallel, otherwise get an error:
-    #   `Error response from daemon: Get "https://registry-1.docker.io/v2/": received unexpected HTTP status: 503 Service Unavailable`
-    needs: latest-torch-deepspeed-docker
     runs-on: ubuntu-latest
     steps:
       -
