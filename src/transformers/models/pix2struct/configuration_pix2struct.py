@@ -58,7 +58,7 @@ class Pix2StructTextConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 77):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+        dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
             to 1e-5): The epsilon used by the layer normalization layers.
@@ -118,6 +118,7 @@ class Pix2StructTextConfig(PretrainedConfig):
         initializer_factor=1.0,
         feed_forward_proj="gated-gelu",
         is_encoder_decoder=True,
+        decoder_start_token_id=0,
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
@@ -143,6 +144,9 @@ class Pix2StructTextConfig(PretrainedConfig):
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
+
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
 
         if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
             raise ValueError(
@@ -204,7 +208,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
             The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+        dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
             to 1e-5): The epsilon used by the layer normalization layers.
@@ -245,8 +249,8 @@ class Pix2StructVisionConfig(PretrainedConfig):
         num_channels=3,
         image_size=384,
         patch_size=16,
-        hidden_act="gelu",
-        layer_norm_eps=0.00001,
+        dense_act_fn="gelu_new",
+        layer_norm_eps=1e-6,
         hidden_dropout_prob=0.0,
         attention_dropout=0.0,
         initializer_range=1e-10,
@@ -255,6 +259,9 @@ class Pix2StructVisionConfig(PretrainedConfig):
         qkv_bias=False,
         mlp_bias=False,
         layer_norm_bias=False,
+        relative_attention_num_buckets=32,
+        relative_attention_max_distance=128,
+        d_kv=64,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -272,11 +279,14 @@ class Pix2StructVisionConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
-        self.hidden_act = hidden_act
+        self.dense_act_fn = dense_act_fn
         self.seq_len = seq_len
         self.qkv_bias = qkv_bias
         self.mlp_bias = mlp_bias
         self.layer_norm_bias = layer_norm_bias
+        self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.relative_attention_max_distance = relative_attention_max_distance
+        self.d_kv = d_kv
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":

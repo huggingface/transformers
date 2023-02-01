@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for PIX2STRUCT."""
-
+import math
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -77,8 +77,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         size: Dict[str, int] = None,
         patch_size: Dict[str, int] = (16, 16),
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
         **kwargs
     ) -> None:
@@ -91,8 +89,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         self.patch_size = patch_size
         self.do_extract_flattened_patches = do_extract_flattened_patches
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [127, 127, 127] 
-        self.image_std = image_std if image_std is not None else [127, 127, 127]
         self.do_convert_rgb = do_convert_rgb
 
     def extract_flattened_patches(
@@ -111,8 +107,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     def normalize(
         self,
         image: np.ndarray,
-        mean: Union[float, List[float]],
-        std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs
     ) -> np.ndarray:
@@ -129,7 +123,15 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
+        if image.dtype == np.uint8:
+            image = image.astype(np.float32)
+
+        # take mean across the whole `image`
+        mean = np.mean(image)
+        std = np.std(image)
+        adjusted_stddev = max(std, 1.0/math.sqrt(np.prod(image.shape)))
+
+        return normalize(image, mean=mean, std=adjusted_stddev, data_format=data_format, **kwargs)
 
     def preprocess(
         self,
@@ -138,8 +140,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         size: Optional[Dict[str, int]] = None,
         max_patches: Optional[int] = None,
         do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         do_convert_rgb: bool = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
@@ -182,8 +182,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         """
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_extract_flattened_patches = do_extract_flattened_patches if do_extract_flattened_patches is not None else self.do_extract_flattened_patches
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         size = size if size is not None else self.size
@@ -198,9 +196,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if do_normalize and (image_mean is None or image_std is None):
-            raise ValueError("Image mean and std must be specified if do_normalize is True.")
-
         # PIL RGBA images are converted to RGB
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
@@ -209,16 +204,18 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+            images = [self.normalize(image=image, data_format=data_format) for image in images]
         
         if do_extract_flattened_patches:
             # convert to torch tensor and permute
             images = [self.extract_flattened_patches(image=image, max_patches=max_patches) for image in images]
+            attention_masks = [(image.sum(dim=-1) != 0).float() for image in images]
 
         # images = [to_channel_dimension_format(image, data_format) for image in images]
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
+        attention_masks = [to_numpy_array(image) for image in attention_masks]
 
-        encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        encoded_outputs = BatchFeature(data={"pixel_values": images, "attention_mask":attention_masks}, tensor_type=return_tensors)
 
         return encoded_outputs

@@ -325,6 +325,7 @@ def normalize(
     if not isinstance(image, np.ndarray):
         raise ValueError("image must be a numpy array")
 
+
     input_data_format = infer_channel_dimension_format(image)
     channel_axis = get_channel_dimension_axis(image)
     num_channels = image.shape[channel_axis]
@@ -730,7 +731,11 @@ def extract_flattened_patches(image, max_patches, patch_size):
 
     # convert to torch if 
     if not isinstance(image, torch.Tensor):
-        image = torch.from_numpy(image).permute(2, 0, 1)
+        # check if channels first:
+        if image.shape[0] != 3:
+            image = torch.from_numpy(image).permute(2, 0, 1)
+        else:
+            image = torch.from_numpy(image)
 
 
     patch_height, patch_width = patch_size
@@ -757,7 +762,8 @@ def extract_flattened_patches(image, max_patches, patch_size):
         image.unsqueeze(0),
         size=(resized_height, resized_width),
         mode='bilinear',
-        align_corners=False).squeeze(0)
+        align_corners=False,
+        antialias=True).squeeze(0)
     
     # [1, rows, columns, patch_height * patch_width * image_channels]
     patches = torch_extract_patches(image, patch_height, patch_width, padding="SAME")
@@ -789,4 +795,4 @@ def extract_flattened_patches(image, max_patches, patch_size):
     # [max_patches, 2 + patch_height * patch_width * image_channels]
     result = torch.nn.functional.pad(result, [0, 0, 0, max_patches - (rows * columns)])
 
-    return result.float().numpy()
+    return result.float()

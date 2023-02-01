@@ -27,6 +27,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
+    Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -50,7 +51,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, CausalLMOutputWithCrossAttentions, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -79,6 +80,33 @@ PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.t5.modeling_t5.T5LayerNorm
+class T5LayerNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Construct a layernorm module in the T5 style. No bias and no subtraction of mean.
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+
+        # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
+        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
+        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
+        # half-precision inputs is done in fp32
+
+        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+
+        # convert into half-precision if necessary
+        if self.weight.dtype in [torch.float16, torch.bfloat16]:
+            hidden_states = hidden_states.to(self.weight.dtype)
+
+        return self.weight * hidden_states
+
+
 # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->Pix2StructEncoder
 class Pix2StructEncoderEmbeddings(nn.Module):
     """
@@ -91,10 +119,8 @@ class Pix2StructEncoderEmbeddings(nn.Module):
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = Pix2StructEncoderPatchEmbeddings(config)
 
-        # self.embedder_0 = nn.Parameter(torch.zeros(config.hidden_size, config.seq_len))
-        self.embedder_0 = nn.Embedding(config.seq_len, config.hidden_size)
-        # self.embedder_1 = nn.Parameter(torch.zeros(config.hidden_size, config.seq_len))
-        self.embedder_1 = nn.Embedding(config.seq_len, config.hidden_size)
+        self.row_embedder = nn.Embedding(config.seq_len, config.hidden_size)
+        self.column_embedder = nn.Embedding(config.seq_len, config.hidden_size)
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
@@ -106,9 +132,16 @@ class Pix2StructEncoderEmbeddings(nn.Module):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
     ) -> torch.Tensor:
         # TODO: fix this
-        pixel_values = pixel_values[:, :, :-2]
+        row_indices = pixel_values[:, :, 0].long()
+        col_indices = pixel_values[:, :, 1].long()
+
+        pixel_values = pixel_values[:, :, 2:]
 
         embeddings = self.patch_embeddings.projection(pixel_values)
+        row_embeddings = self.row_embedder(row_indices)
+        col_embeddings = self.column_embedder(col_indices)
+
+        embeddings = embeddings + row_embeddings + col_embeddings
 
         embeddings = self.dropout(embeddings)
 
@@ -141,6 +174,230 @@ class Pix2StructEncoderPatchEmbeddings(nn.Module):
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         embeddings = self.projection(pixel_values)
         return embeddings
+
+
+
+class T5Attention(nn.Module):
+    def __init__(self, config, has_relative_attention_bias=False):
+        super().__init__()
+        self.is_decoder = config.is_decoder
+        self.has_relative_attention_bias = has_relative_attention_bias
+        self.relative_attention_num_buckets = config.relative_attention_num_buckets
+        self.relative_attention_max_distance = config.relative_attention_max_distance
+        self.d_model = config.hidden_size
+        self.key_value_proj_dim = config.d_kv
+        self.n_heads = config.num_attention_heads
+        self.dropout = config.attention_dropout
+        self.inner_dim = self.n_heads * self.key_value_proj_dim
+
+        # Mesh TensorFlow initialization to avoid scaling before softmax
+        self.query = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.key = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.value = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+
+        if self.has_relative_attention_bias:
+            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
+        self.gradient_checkpointing = False
+
+
+
+    @staticmethod
+    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+        """
+        Adapted from Mesh Tensorflow:
+        https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
+
+        Translate relative position to a bucket number for relative attention. The relative position is defined as
+        memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
+        position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
+        small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
+        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
+        This should allow for more graceful generalization to longer sequences than the model has been trained on
+
+        Args:
+            relative_position: an int32 Tensor
+            bidirectional: a boolean - whether the attention is bidirectional
+            num_buckets: an integer
+            max_distance: an integer
+
+        Returns:
+            a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
+        """
+        relative_buckets = 0
+        if bidirectional:
+            num_buckets //= 2
+            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
+            relative_position = torch.abs(relative_position)
+        else:
+            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
+        # now relative_position is in the range [0, inf)
+
+        # half of the buckets are for exact increments in positions
+        max_exact = num_buckets // 2
+        is_small = relative_position < max_exact
+
+        # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
+        relative_position_if_large = max_exact + (
+            torch.log(relative_position.float() / max_exact)
+            / math.log(max_distance / max_exact)
+            * (num_buckets - max_exact)
+        ).to(torch.long)
+        relative_position_if_large = torch.min(
+            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
+        )
+
+        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
+        return relative_buckets
+
+    def compute_bias(self, query_length, key_length, device=None):
+        """Compute binned relative position bias"""
+        if device is None:
+            device = self.relative_attention_bias.weight.device
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
+        relative_position = memory_position - context_position  # shape (query_length, key_length)
+        relative_position_bucket = self._relative_position_bucket(
+            relative_position,  # shape (query_length, key_length)
+            bidirectional=(not self.is_decoder),
+            num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
+        )
+        values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
+        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
+        return values
+
+    def forward(
+        self,
+        hidden_states,
+        mask=None,
+        key_value_states=None,
+        position_bias=None,
+        past_key_value=None,
+        layer_head_mask=None,
+        query_length=None,
+        use_cache=False,
+        output_attentions=False,
+    ):
+        """
+        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
+        """
+        # Input is (batch_size, seq_length, dim)
+        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
+        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
+        batch_size, seq_length = hidden_states.shape[:2]
+
+        real_seq_length = seq_length
+
+        if past_key_value is not None:
+            assert (
+                len(past_key_value) == 2
+            ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
+
+        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
+
+        def shape(states):
+            """projection"""
+            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+
+        def unshape(states):
+            """reshape"""
+            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
+
+        def project(hidden_states, proj_layer, key_value_states, past_key_value):
+            """projects hidden states correctly to key/query states"""
+            if key_value_states is None:
+                # self-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = shape(proj_layer(hidden_states))
+            elif past_key_value is None:
+                # cross-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = shape(proj_layer(key_value_states))
+
+            if past_key_value is not None:
+                if key_value_states is None:
+                    # self-attn
+                    # (batch_size, n_heads, key_length, dim_per_head)
+                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
+                elif past_key_value.shape[2] != key_value_states.shape[1]:
+                    # checking that the `sequence_length` of the `past_key_value` is the same as
+                    # the provided `key_value_states` to support prefix tuning
+                    # cross-attn
+                    # (batch_size, n_heads, seq_length, dim_per_head)
+                    hidden_states = shape(proj_layer(key_value_states))
+                else:
+                    # cross-attn
+                    hidden_states = past_key_value
+            return hidden_states
+
+        # get query states
+        query_states = shape(self.query(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
+
+        # get key/value states
+        key_states = project(
+            hidden_states, self.key, key_value_states, past_key_value[0] if past_key_value is not None else None
+        )
+        value_states = project(
+            hidden_states, self.value, key_value_states, past_key_value[1] if past_key_value is not None else None
+        )
+
+        # compute scores
+        scores = torch.matmul(
+            query_states, key_states.transpose(3, 2)
+        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
+
+        if position_bias is None:
+            if not self.has_relative_attention_bias:
+                position_bias = torch.zeros(
+                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                )
+                if self.gradient_checkpointing and self.training:
+                    position_bias.requires_grad = True
+            else:
+                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
+
+            # if key and values are already calculated
+            # we want only the last query position bias
+            if past_key_value is not None:
+                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+
+            if mask is not None:
+                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+
+        
+        position_bias_masked = position_bias
+        if position_bias_masked is not None:
+            # replace 0 by -inf
+            position_bias_masked = position_bias_masked.masked_fill(position_bias_masked == 0, -10000.0)
+            position_bias_masked = position_bias_masked.masked_fill(position_bias_masked != -10000, 0)
+
+        scores += position_bias_masked
+        
+        
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
+            scores
+        )  # (batch_size, n_heads, seq_length, key_length)
+        attn_weights = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )  # (batch_size, n_heads, seq_length, key_length)
+
+        # Mask heads if we want to
+        if layer_head_mask is not None:
+            attn_weights = attn_weights * layer_head_mask
+
+        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+        attn_output = self.o(attn_output)
+
+        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
+        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
+
+        if output_attentions:
+            outputs = outputs + (attn_weights,)
+        return outputs
+
+
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->Pix2StructEncoder
@@ -224,69 +481,74 @@ class Pix2StructEncoderSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->Pix2StructEncoder
-class Pix2StructEncoderAttention(nn.Module):
-    def __init__(self, config: Pix2StructConfig) -> None:
-        super().__init__()
-        self.attention = Pix2StructEncoderSelfAttention(config)
-        self.output = Pix2StructEncoderSelfOutput(config)
-        self.pruned_heads = set()
+# # Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->Pix2StructEncoder
+# class Pix2StructEncoderAttention(nn.Module):
+#     def __init__(self, config: Pix2StructConfig) -> None:
+#         super().__init__()
+#         self.attention = Pix2StructEncoderSelfAttention(config)
+#         self.output = Pix2StructEncoderSelfOutput(config)
+#         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
+#     def forward(
+#         self,
+#         hidden_states: torch.Tensor,
+#         head_mask: Optional[torch.Tensor] = None,
+#         output_attentions: bool = False,
+#     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+#         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+#         attention_output = self.output(self_outputs[0], hidden_states)
 
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
-
-        attention_output = self.output(self_outputs[0], hidden_states)
-
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
-
+#         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+#         return outputs
 
 class Pix2StructEncoderMlp(nn.Module):
-    def __init__(self, config: Pix2StructConfig) -> None:
+    def __init__(self, config):
         super().__init__()
         self.wi_0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
         self.wi_1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
         self.wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.act = ACT2FN[config.dense_act_fn]
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        intermediate_hidden_states_0 = self.wi_0(hidden_states)
-        intermediate_hidden_states_1 = self.wi_1(hidden_states)
+    def forward(self, hidden_states):
+        hidden_gelu = self.act(self.wi_0(hidden_states))
+        hidden_linear = self.wi_1(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.dropout(hidden_states)
 
-        intermediate_hidden_states_0 = self.intermediate_act_fn(intermediate_hidden_states_0)
-        intermediate_hidden_states_1 = self.intermediate_act_fn(intermediate_hidden_states_1)
-
-        hidden_states = intermediate_hidden_states_0 + intermediate_hidden_states_1
+        # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
+        # See https://github.com/huggingface/transformers/issues/20287
+        # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
+        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
 
         hidden_states = self.wo(hidden_states)
-
         return hidden_states
+
+# class Pix2StructEncoderMlp(nn.Module):
+#     def __init__(self, config: Pix2StructConfig) -> None:
+#         super().__init__()
+#         self.wi_0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
+#         self.wi_1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
+#         if isinstance(config.hidden_act, str):
+#             self.intermediate_act_fn = ACT2FN[config.hidden_act]
+#         else:
+#             self.intermediate_act_fn = config.hidden_act
+#         self.wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+
+#     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+#         intermediate_hidden_states_0 = self.wi_0(hidden_states)
+#         intermediate_hidden_states_1 = self.wi_1(hidden_states)
+
+#         intermediate_hidden_states_0 = self.intermediate_act_fn(intermediate_hidden_states_0)
+#         intermediate_hidden_states_1 = self.intermediate_act_fn(intermediate_hidden_states_1)
+
+#         hidden_states = intermediate_hidden_states_0 + intermediate_hidden_states_1
+
+#         hidden_states = self.wo(hidden_states)
+
+#         return hidden_states
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->Pix2StructEncoder
@@ -309,14 +571,14 @@ class Pix2StructEncoderOutput(nn.Module):
 class Pix2StructEncoderLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: Pix2StructConfig) -> None:
+    def __init__(self, config: Pix2StructConfig, has_relative_attention_bias=False) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = Pix2StructEncoderAttention(config)
+        self.attention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
         self.mlp = Pix2StructEncoderMlp(config)
-        self.pre_mlp_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pre_attention_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_mlp_layer_norm = T5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_attention_layer_norm = T5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if not config.layer_norm_bias:
             self.pre_mlp_layer_norm.bias = None
@@ -325,12 +587,13 @@ class Pix2StructEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.pre_attention_layer_norm(hidden_states),  # in Pix2StructEncoder, layernorm is applied before self-attention
-            head_mask,
+            mask=attention_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -341,7 +604,7 @@ class Pix2StructEncoderLayer(nn.Module):
 
         # in Pix2StructEncoder, layernorm is also applied after self-attention
         layer_output = self.pre_mlp_layer_norm(hidden_states)
-        layer_output = self.mlp(layer_output)
+        layer_output = self.mlp(layer_output) + hidden_states # second residual connection
 
         outputs = (layer_output,) + outputs
 
@@ -353,12 +616,13 @@ class Pix2StructEncoder(nn.Module):
     def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([Pix2StructEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([Pix2StructEncoderLayer(config) for i in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -384,10 +648,11 @@ class Pix2StructEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
+                    attention_mask,
                     layer_head_mask,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -419,7 +684,7 @@ class Pix2StructEncoderPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, T5LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
@@ -429,7 +694,7 @@ class Pix2StructEncoderPreTrainedModel(PreTrainedModel):
             ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, T5LayerNorm):
             if module.bias is not None:
                 module.bias.data.zero_()
             if module.weight is not None:
@@ -488,7 +753,7 @@ class Pix2StructEncoderModel(Pix2StructEncoderPreTrainedModel):
         self.embeddings = Pix2StructEncoderEmbeddings(config, use_mask_token=use_mask_token)
         self.encoder = Pix2StructEncoder(config)
 
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm = T5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         if not config.layer_norm_bias:
             self.layernorm.bias = None
 
@@ -518,6 +783,7 @@ class Pix2StructEncoderModel(Pix2StructEncoderPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -540,12 +806,19 @@ class Pix2StructEncoderModel(Pix2StructEncoderPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
+        if attention_mask is None:
+            # check where `pixel_values` is not 0
+            attention_mask = (pixel_values.sum(dim=-1) != 0).float()
+
         embedding_output = self.embeddings(
             pixel_values, bool_masked_pos=bool_masked_pos
         )
 
+        
+
         encoder_outputs = self.encoder(
             embedding_output,
+            attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1153,7 +1426,7 @@ class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Pix2StructDecoderAttention, Pix2StructDecoderStack)):
+        if isinstance(module, (Pix2StructDecoderAttention, Pix2StructTextDecoder)):
             module.gradient_checkpointing = value
 
     def _shift_right(self, input_ids):
@@ -1182,7 +1455,7 @@ class Pix2StructDecoderPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-class Pix2StructDecoderStack(Pix2StructDecoderPreTrainedModel):
+class Pix2StructTextDecoder(Pix2StructDecoderPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
@@ -1195,12 +1468,39 @@ class Pix2StructDecoderStack(Pix2StructDecoderPreTrainedModel):
         self.final_layer_norm = Pix2StructDecoderLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+
         # Initialize weights and apply final processing
         self.post_init()
         # Model parallel
         self.model_parallel = False
         self.device_map = None
         self.gradient_checkpointing = False
+    
+    def _reorder_cache(self, past, beam_idx):
+        # if decoder past is not included in output
+        # speedy decoding is disabled and no need to reorder
+        if past is None:
+            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
+            return past
+
+        reordered_decoder_past = ()
+        for layer_past_states in past:
+            # get the correct batch idx from layer past batch dim
+            # batch dim of `past` is at 2nd position
+            reordered_layer_past_states = ()
+            for layer_past_state in layer_past_states:
+                # need to set correct `past` for each of the four key / value states
+                reordered_layer_past_states = reordered_layer_past_states + (
+                    layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
+                )
+
+            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
+            assert len(reordered_layer_past_states) == len(layer_past_states)
+
+            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
+        return reordered_decoder_past
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -1222,6 +1522,7 @@ class Pix2StructDecoderStack(Pix2StructDecoderPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         # Model parallel
         if self.model_parallel:
@@ -1394,6 +1695,8 @@ class Pix2StructDecoderStack(Pix2StructDecoderPreTrainedModel):
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
+        logits = self.lm_head(hidden_states)
+
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1402,7 +1705,8 @@ class Pix2StructDecoderStack(Pix2StructDecoderPreTrainedModel):
             return tuple(
                 v
                 for v in [
-                    hidden_states,
+                    logits,
+                    # hidden_states,
                     present_key_value_states,
                     all_hidden_states,
                     all_attentions,
@@ -1410,14 +1714,35 @@ class Pix2StructDecoderStack(Pix2StructDecoderPreTrainedModel):
                 ]
                 if v is not None
             )
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
+        return CausalLMOutputWithCrossAttentions(
+            loss=None,
+            logits=logits,
+            # last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
         )
 
+
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
+        input_shape = input_ids.shape
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = input_ids.new_ones(input_shape)
+
+        # cut decoder_input_ids if past_key_values is used
+        if past_key_values is not None:
+            input_ids = input_ids[:, -1:]
+
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "encoder_hidden_states": model_kwargs.get("encoder_hidden_states", None),
+            "encoder_attention_mask": model_kwargs.get("encoder_attention_mask", None),
+            "is_decoder": True,
+        }
 
 Pix2StructDecoder_START_DOCSTRING = r"""
 
@@ -1605,9 +1930,9 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
         decoder_config = copy.deepcopy(config.text_config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
-        self.decoder = Pix2StructDecoderStack(decoder_config)
-
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.decoder_input_ids = decoder_config.pad_token_id
+        self.decoder_eos_token_ids = decoder_config.eos_token_id
+        self.decoder = Pix2StructTextDecoder(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1687,6 +2012,7 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 pixel_values=pixel_values,
+                attention_mask=attention_mask,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1721,8 +2047,9 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
         if not return_dict:
             return decoder_outputs + encoder_outputs
 
-        return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
+        return Seq2SeqLMOutput(
+            loss=None,
+            logits=decoder_outputs.logits,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
@@ -1731,3 +2058,44 @@ class Pix2StructForConditionalGeneration(Pix2StructDecoderPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+    
+    @torch.no_grad()
+    def generate(
+        self,
+        pixel_values: torch.FloatTensor,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        **generate_kwargs,
+    ):
+        batch_size, _, _ = pixel_values.shape
+
+        vision_outputs = self.encoder(
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+        )
+
+        image_embeds = vision_outputs[0]
+
+        if isinstance(input_ids, list):
+            input_ids = torch.LongTensor(input_ids)
+        elif input_ids is None:
+            input_ids = (
+                torch.LongTensor([[self.decoder_input_ids]])
+                .repeat(batch_size, 1)
+                .to(image_embeds.device)
+            )
+        
+        if decoder_attention_mask is None:
+            decoder_attention_mask = torch.ones_like(input_ids).to(image_embeds.device)
+
+        outputs = self.decoder.generate(
+            input_ids=input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=attention_mask,
+            **generate_kwargs,
+        )
+
+        return outputs
