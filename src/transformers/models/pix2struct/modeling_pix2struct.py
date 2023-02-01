@@ -1089,7 +1089,7 @@ class Pix2StructTextPreTrainedModel(PreTrainedModel):
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Pix2StructTextAttention, Pix2StructTextDecoder)):
+        if isinstance(module, (Pix2StructTextAttention, Pix2StructTextModel)):
             module.gradient_checkpointing = value
 
     def _shift_right(self, input_ids):
@@ -1118,7 +1118,7 @@ class Pix2StructTextPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-class Pix2StructTextDecoder(Pix2StructTextPreTrainedModel):
+class Pix2StructTextModel(Pix2StructTextPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
@@ -1573,7 +1573,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         decoder_config.is_encoder_decoder = False
         self.decoder_input_ids = decoder_config.pad_token_id
         self.decoder_eos_token_ids = decoder_config.eos_token_id
-        self.decoder = Pix2StructTextDecoder(decoder_config)
+        self.decoder = Pix2StructTextModel(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()

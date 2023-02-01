@@ -1972,11 +1972,11 @@ else:
             "PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Pix2StructForConditionalGeneration",
             "Pix2StructModel",
-            "Pix2StructTextPreTrainedModel",
-            "Pix2StructVisionPreTrainedModel",
             "Pix2StructPreTrainedModel",
             "Pix2StructTextModel",
+            "Pix2StructTextPreTrainedModel",
             "Pix2StructVisionModel",
+            "Pix2StructVisionPreTrainedModel",
         ]
     )
     _import_structure["models.plbart"].extend(
@@ -5138,11 +5138,11 @@ if TYPE_CHECKING:
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pix2StructForConditionalGeneration,
             Pix2StructModel,
-            Pix2StructVisionPreTrainedModel,
-            Pix2StructTextPreTrainedModel,
             Pix2StructPreTrainedModel,
             Pix2StructTextModel,
+            Pix2StructTextPreTrainedModel,
             Pix2StructVisionModel,
+            Pix2StructVisionPreTrainedModel,
         )
         from .models.plbart import (
             PLBART_PRETRAINED_MODEL_ARCHIVE_LIST,

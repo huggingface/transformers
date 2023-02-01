@@ -4574,20 +4574,6 @@ class Pix2StructForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Pix2StructForImageTextRetrieval(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class Pix2StructForQuestionAnswering(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class Pix2StructModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -4609,7 +4595,21 @@ class Pix2StructTextModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class Pix2StructTextPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Pix2StructVisionModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Pix2StructVisionPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

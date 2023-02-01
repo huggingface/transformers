@@ -51,7 +51,7 @@ else:
         "Pix2StructPreTrainedModel",
         "Pix2StructForConditionalGeneration",
         "Pix2StructTextPreTrainedModel",
-        "Pix2StructTextPreTrainedModel",
+        "Pix2StructVisionPreTrainedModel",
         "Pix2StructVisionModel",
         "Pix2StructTextModel",
     ]
