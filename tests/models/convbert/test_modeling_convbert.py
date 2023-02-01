@@ -437,6 +437,7 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
                 loaded = torch.jit.load(os.path.join(tmp, "traced_model.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
 
+    @slow
     def test_model_for_input_embeds(self):
         batch_size = 2
         seq_length = 10
