@@ -1086,7 +1086,6 @@ class DagsHubCallback(MLflowCallback):
             branch=os.getenv("BRANCH") or "main",
         )
         self.path = Path("artifacts")
-        Path(self.path).mkdir(parents=True, exist_ok=True)
 
         super().setup(*args, **kwargs)
 
