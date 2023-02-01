@@ -1445,6 +1445,8 @@ class TrainingArguments:
                 warnings.warn(
                     "`--xla_fsdp_transformer_layer_cls_to_wrap` is useful only when `--xla_fsdp` is specified."
                 )
+            if self.xla_fsdp_grad_ckpt:
+                warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla_fsdp` is specified.")
 
 
         if self.push_to_hub_token is not None:
