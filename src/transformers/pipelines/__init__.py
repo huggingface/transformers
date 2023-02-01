@@ -789,6 +789,17 @@ def pipeline(
         # necessary for the task, so we're force-trying to load it.
         load_tokenizer = True
     if (
+        image_processor is None
+        and not load_image_processor
+        and normalized_task not in NO_IMAGE_PROCESSOR_TASKS
+        # Using class name to avoid importing the real class.
+        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
+    ):
+        # This is a special category of models, that are fusions of multiple models
+        # so the model_config might not define a tokenizer, but it seems to be
+        # necessary for the task, so we're force-trying to load it.
+        load_image_processor = True
+    if (
         feature_extractor is None
         and not load_feature_extractor
         and normalized_task not in NO_FEATURE_EXTRACTOR_TASKS
