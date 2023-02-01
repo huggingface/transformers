@@ -804,23 +804,25 @@ class ProbSparseAttention(nn.Module):
         L_Q = query_states.size(1)
         u = min(self.factor * np.ceil(np.log1p(L_Q)).astype("int").item(), L_Q)
 
+        # __prob_QK
         # calculate the sampled Q_K
         K_expand = key_states.unsqueeze(2).expand(-1, L_Q, L_K, -1)
         index_sample = torch.randint(0, L_K, (L_Q, U_part))
+
         # real U = U_part(factor*ln(L_k))*L_q
-        K_sample = K_expand[:, torch.arange(L_Q).unsqueeze(1), index_sample, :]
-        Q_K_sample = torch.bmm(query_states, key_states.transpose(1, 2))
+        K_sample = K_expand[:, :, index_sample, :]
+        Q_K_sample = torch.bmm(query_states, K_sample.transpose(1, 2))
 
         # find the Top_k query with sparisty measurement
         M = Q_K_sample.max(dim=-1)[0] - torch.div(Q_K_sample.sum(dim=-1), L_K)
         M_top = M.topk(u, sorted=False)[1]
 
         # use the reduced Q to calculate Q_K
-        # TODO
+        # factor*ln(L_q)
+        Q_reduce = query_states[:, M_top, :]
+        attn_weights = torch.bmm(Q_reduce, key_states.transpose(1, 2))
 
         src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
@@ -880,6 +882,7 @@ class ProbSparseAttention(nn.Module):
 
 # Eli: TriangularCausalMask, ProbMask, FullAttention, ProbAttention and AttentionLayer
 # are from the original Informer repository (see the exact source below)
+
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/utils/masking.py
 class ProbMask:
@@ -1422,6 +1425,7 @@ INFORMER_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerEncoder with TimeSeriesTransformer->Informer
 class InformerEncoder(InformerPreTrainedModel):
     """
@@ -1446,8 +1450,9 @@ class InformerEncoder(InformerPreTrainedModel):
 
         if config.distil is not None:
             self.conv_layers = nn.ModuleList([ConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)])
+            self.conv_layers.append(None)
         else:
-            self.conv_layers = None
+            self.conv_layers = [None] * config.encoder_layers
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1515,7 +1520,7 @@ class InformerEncoder(InformerPreTrainedModel):
                     f" {head_mask.size()[0]}."
                 )
 
-        for idx, encoder_layer in enumerate(self.layers):
+        for idx, encoder_layer, conv_layer in enumerate(zip(self.layers, self.conv_layers)):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1545,7 +1550,8 @@ class InformerEncoder(InformerPreTrainedModel):
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                         output_attentions=output_attentions,
                     )
-                    # TODO support for conv_layers
+                    if conv_layer is not None:
+                        hidden_states = conv_layer(hidden_states)
 
                 hidden_states = layer_outputs[0]
 
@@ -1732,7 +1738,6 @@ class InformerDecoder(InformerPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1757,7 +1762,6 @@ class InformerDecoder(InformerPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
