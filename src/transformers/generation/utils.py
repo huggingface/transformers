@@ -519,46 +519,17 @@ class GenerationMixin:
         inputs_kwarg = model_kwargs.pop(input_name, None)
         if inputs_kwarg is not None and inputs is not None:
             raise ValueError(
-                f"`inputs`: {inputs}` were passed alongside "
-                f"{input_name} which is not allowed."
+                f"`inputs`: {inputs}` were passed alongside {input_name} which is not allowed."
                 f"Make sure to either pass {inputs} or {input_name}=..."
             )
         elif inputs_kwarg is not None:
             inputs = inputs_kwarg
 
-        # 3. models with `input_ids` can also make use of `inputs_embeds`
-        if self._can_retrieve_inputs_from_name(inputs, "inputs_embeds", model_kwargs):
-            inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
-
-        # 4. Only encoder-decoder models can have non `input_ids` input format
-        if not self.config.is_encoder_decoder and input_name != "input_ids":
-            raise ValueError(
-                f"If {input_name} is passed as model-specific keyword "
-                "input then model has to be an encoder-decoder and not a "
-                f"{self.__class__.__name__}."
-            )
-
-        # 5. if `inputs` is still None, try to create `input_ids` from BOS token
+        # 3. if `inputs` is still None, try to create `input_ids` from BOS token
         if inputs is None:
             inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
 
         return inputs, input_name, model_kwargs
-
-    def _can_retrieve_inputs_from_name(
-        self, inputs: Optional[torch.Tensor], name: str, model_kwargs: Dict[str, torch.Tensor]
-    ) -> torch.Tensor:
-        """
-        If `inputs` is None and `name` is in both forward function and keyword arguments, then inputs can be retrieved
-        from name
-        """
-        can_retrieve_inputs = model_kwargs.get(name, None) is not None and name in set(
-            inspect.signature(self.forward).parameters.keys()
-        )
-
-        if can_retrieve_inputs and inputs is not None:
-            raise ValueError(f"Cannot only pass one of {name} and {self.main_input_name}")
-
-        return can_retrieve_inputs
 
     def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         """
@@ -611,9 +582,15 @@ class GenerationMixin:
         }
 
         # 3. make sure that encoder returns `ModelOutput`
-        model_input_name = model_input_name if model_input_name is not None else self.main_input_name
+        accepts_inputs_embeds = "inputs_embeds" in set(inspect.signature(self.forward).parameters.keys())
+        has_inputs_embeds = "inputs_embeds" in model_kwargs
+        if accepts_inputs_embeds and has_inputs_embeds:
+            encoder_kwargs["inputs_embeds"] = model_kwargs["inputs_embeds"]
+        else:
+            model_input_name = model_input_name if model_input_name is not None else self.main_input_name
+            encoder_kwargs[model_input_name] = inputs_tensor
+
         encoder_kwargs["return_dict"] = True
-        encoder_kwargs[model_input_name] = inputs_tensor
         model_kwargs["encoder_outputs"]: ModelOutput = encoder(**encoder_kwargs)
 
         return model_kwargs
