@@ -1520,7 +1520,7 @@ class InformerEncoder(InformerPreTrainedModel):
                     f" {head_mask.size()[0]}."
                 )
 
-        for idx, encoder_layer, conv_layer in enumerate(zip(self.layers, self.conv_layers)):
+        for idx, (encoder_layer, conv_layer) in enumerate(zip(self.layers, self.conv_layers)):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
