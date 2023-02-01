@@ -14,8 +14,6 @@
 # limitations under the License.
 """Speech processor class for SpeechT5."""
 
-import warnings
-
 from ...processing_utils import ProcessorMixin
 
 
@@ -23,9 +21,8 @@ class SpeechT5Processor(ProcessorMixin):
     r"""
     Constructs a SpeechT5 processor which wraps a feature extractor and a tokenizer into a single processor.
 
-    [`SpeechT5Processor`] offers all the functionalities of [`SpeechT5FeatureExtractor`] and
-    [`SpeechT5Tokenizer`]. See the docstring of [`~SpeechT5Processor.__call__`] and
-    [`~SpeechT5Processor.decode`] for more information.
+    [`SpeechT5Processor`] offers all the functionalities of [`SpeechT5FeatureExtractor`] and [`SpeechT5Tokenizer`]. See
+    the docstring of [`~SpeechT5Processor.__call__`] and [`~SpeechT5Processor.decode`] for more information.
 
     Args:
         feature_extractor (`SpeechT5FeatureExtractor`):
@@ -43,8 +40,9 @@ class SpeechT5Processor(ProcessorMixin):
         """
         Processes audio and text input, as well as audio and text targets.
 
-        You can process audio by using the argument `audio`, or process audio labels by using the argument `audio_target`.
-        This forwards the arguments to SpeechT5FeatureExtractor's [`~SpeechT5FeatureExtractor.__call__`].
+        You can process audio by using the argument `audio`, or process audio targets by using the argument
+        `audio_target`. This forwards the arguments to SpeechT5FeatureExtractor's
+        [`~SpeechT5FeatureExtractor.__call__`].
 
         You can process text by using the argument `text`, or process text labels by using the argument `text_target`.
         This forwards the arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.__call__`].
@@ -69,11 +67,17 @@ class SpeechT5Processor(ProcessorMixin):
         sampling_rate = kwargs.pop("sampling_rate", None)
 
         if audio is not None and text is not None:
-            raise ValueError("Cannot process both `audio` and `text` inputs. Did you mean `audio_target` or `text_target`?")
+            raise ValueError(
+                "Cannot process both `audio` and `text` inputs. Did you mean `audio_target` or `text_target`?"
+            )
         if audio_target is not None and text_target is not None:
-            raise ValueError("Cannot process both `audio_target` and `text_target` inputs. Did you mean `audio` or `text`?")
+            raise ValueError(
+                "Cannot process both `audio_target` and `text_target` inputs. Did you mean `audio` or `text`?"
+            )
         if audio is None and audio_target is None and text is None and text_target is None:
-            raise ValueError("You need to specify either an `audio`, `audio_target`, `text`, or `text_target` input to process.")
+            raise ValueError(
+                "You need to specify either an `audio`, `audio_target`, `text`, or `text_target` input to process."
+            )
 
         if audio is not None:
             inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
@@ -83,7 +87,9 @@ class SpeechT5Processor(ProcessorMixin):
             inputs = None
 
         if audio_target is not None:
-            audio_target_features = self.feature_extractor(audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs)
+            audio_target_features = self.feature_extractor(
+                audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs
+            )
             if inputs is None:
                 return audio_target_features
             else:
@@ -107,8 +113,8 @@ class SpeechT5Processor(ProcessorMixin):
 
     def pad(self, *args, **kwargs):
         """
-        This method forwards all its arguments to SpeechT5FeatureExtractor's
-        [`~SpeechT5FeatureExtractor.pad`] and returns its output.
+        This method forwards all its arguments to SpeechT5FeatureExtractor's [`~SpeechT5FeatureExtractor.pad`] and
+        returns its output.
 
         You can process your labels by using the argument `text` (either in the same call as your audio inputs, or in a
         separate call). This forwards its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.pad`].

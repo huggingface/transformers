@@ -32,10 +32,11 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a SpeechT5 feature extractor.
 
-    This class can pre-process a raw speech signal by (optionally) normalizing to zero-mean unit-variance,
-    for use by the SpeechT5 speech encoder prenet.
+    This class can pre-process a raw speech signal by (optionally) normalizing to zero-mean unit-variance, for use by
+    the SpeechT5 speech encoder prenet.
 
-    This class can also extract log-mel filter bank features from raw speech, for use by the SpeechT5 speech decoder prenet.
+    This class can also extract log-mel filter bank features from raw speech, for use by the SpeechT5 speech decoder
+    prenet.
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
@@ -246,8 +247,8 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         """
         Main method to featurize and prepare for the model one or several sequence(s).
 
-        Pass in a value for `audio` to extract waveform features. Pass in a value for `audio_target`
-        to extract log-mel spectrogram features.
+        Pass in a value for `audio` to extract waveform features. Pass in a value for `audio_target` to extract log-mel
+        spectrogram features.
 
         Args:
             audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
@@ -289,8 +290,8 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
-                The sampling rate at which the `audio` or `audio_target` input was sampled. It is strongly recommended to pass
-                `sampling_rate` at the forward call to prevent silent errors.
+                The sampling rate at which the `audio` or `audio_target` input was sampled. It is strongly recommended
+                to pass `sampling_rate` at the forward call to prevent silent errors.
         """
         if audio is not None:
             speech = audio

@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers import is_speech_available, BatchFeature
+from transformers import BatchFeature, is_speech_available
 from transformers.testing_utils import require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torch_available
 
@@ -101,8 +101,6 @@ class SpeechT5FeatureExtractionTester(unittest.TestCase):
             "sampling_rate": self.sampling_rate,
             "do_normalize": self.do_normalize,
             "num_mel_bins": self.num_mel_bins,
-            "padding_value": self.padding_value,
-            "sampling_rate": self.sampling_rate,
             "hop_length": self.hop_length,
             "win_length": self.win_length,
             "win_function": self.win_function,

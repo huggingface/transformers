@@ -26,10 +26,7 @@ from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 
 if is_speech_available() and is_torch_available():
-    from transformers import (
-        SpeechT5FeatureExtractor,
-        SpeechT5Processor,
-    )
+    from transformers import SpeechT5FeatureExtractor, SpeechT5Processor
 
     from .test_feature_extraction_speecht5 import floats_list
 
@@ -92,9 +89,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.feature_extractor, SpeechT5FeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = SpeechT5Processor(
-            tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
-        )
+        processor = SpeechT5Processor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")

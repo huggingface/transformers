@@ -45,7 +45,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SpeechT5FeatureExtractor,
         SpeechT5ForSpeechToSpeech,
         SpeechT5ForSpeechToText,
         SpeechT5ForTextToSpeech,
