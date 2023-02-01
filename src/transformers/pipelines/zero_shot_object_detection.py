@@ -173,7 +173,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         for model_output in model_outputs:
             label = model_output["candidate_label"]
             model_output = BaseModelOutput(model_output)
-            outputs = self.feature_extractor.post_process_object_detection(
+            outputs = self.image_processor.post_process_object_detection(
                 outputs=model_output, threshold=threshold, target_sizes=model_output["target_size"]
             )[0]
 
