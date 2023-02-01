@@ -25,7 +25,6 @@ from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
     MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
-    AutoFeatureExtractor,
     AutoImageProcessor,
     AutoModelForImageSegmentation,
     AutoModelForInstanceSegmentation,
