@@ -1059,7 +1059,7 @@ class DagsHubCallback(MLflowCallback):
     def __init__(self):
         super().__init__()
         if not is_dagshub_available():
-            raise RuntimeError("DagsHubCallback requires dagshub to be installed. Run `pip install dagshub`.")
+            raise ImportError("DagsHubCallback requires dagshub to be installed. Run `pip install dagshub`.")
         from glob import glob
 
         from dagshub.upload import Repo
