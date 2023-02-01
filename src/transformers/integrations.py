@@ -1062,6 +1062,7 @@ class DagsHubCallback(MLflowCallback):
             raise ImportError("DagsHubCallback requires dagshub to be installed. Run `pip install dagshub`.")
 
         from dagshub.upload import Repo
+
         self.Repo = Repo
 
     def setup(self, *args, **kwargs):
@@ -1084,7 +1085,10 @@ class DagsHubCallback(MLflowCallback):
         self.path = Path("artifacts")
 
         if not self.remote:
-            raise RuntimeError("DagsHubCallback requires the `MLFLOW_TRACKING_URI` environment variable to be set. Did you run `dagshub.init()`?")
+            raise RuntimeError(
+                "DagsHubCallback requires the `MLFLOW_TRACKING_URI` environment variable to be set. Did you run"
+                " `dagshub.init()`?"
+            )
 
         super().setup(*args, **kwargs)
 
@@ -1431,7 +1435,6 @@ class ClearMLCallback(TrainerCallback):
             if self._clearml_task is None:
                 self._clearml_task = self._clearml.Task.init(
                     project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
-    
                     auto_connect_frameworks={"tensorboard": False, "pytorch": False},
                     output_uri=True,
                 )
