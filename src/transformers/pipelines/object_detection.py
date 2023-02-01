@@ -137,9 +137,7 @@ class ObjectDetectionPipeline(Pipeline):
             annotation = [dict(zip(keys, vals)) for vals in zip(scores.tolist(), labels, boxes) if vals[0] > threshold]
         else:
             # This is a regular ForObjectDetectionModel
-            raw_annotations = self.image_processor.post_process_object_detection(
-                model_outputs, threshold, target_size
-            )
+            raw_annotations = self.image_processor.post_process_object_detection(model_outputs, threshold, target_size)
             raw_annotation = raw_annotations[0]
             scores = raw_annotation["scores"]
             labels = raw_annotation["labels"]
