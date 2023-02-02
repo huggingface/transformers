@@ -343,7 +343,7 @@ class Blip2Config(PretrainedConfig):
         self.text_config = CONFIG_MAPPING["opt"](**text_config)
 
         self.num_query_tokens = num_query_tokens
-        self.text_config.encoder_hidden_size = self.vision_config.hidden_size
+        self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
 
