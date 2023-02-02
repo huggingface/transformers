@@ -68,7 +68,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         f_min: float = 0,
         f_max: float = 14000,
         top_db: int = None,
-        mel_scale: str = "htk",
+        max_length: int = 48000,
         **kwargs
     ):
         super().__init__(
@@ -78,6 +78,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
             **kwargs,
         )
+        self.max_length = max_length
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.chunk_length = chunk_length
@@ -93,7 +94,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             f_min=f_min,
             f_max=f_max,
             sample_rate=sampling_rate,
-            norm="htk",
+            norm=None,
             mel_scale="htk",
         )
         self.mel_filters_slaney = self.get_mel_filter_banks(
@@ -107,17 +108,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         )
         self.top_db = top_db
 
-    def _power_to_db(self, mel_spectrogram, a_min=1e-10, ref=1.0):
-        """
-        Power to db, this function is the numpy implementation of librosa.power_to_lb
-        """
-        log_spec = 10 * np.log10(np.clip(mel_spectrogram, a_min=a_min, a_max=None))
-        log_spec -= 10.0 * np.log10(np.maximum(a_min, ref))
-        if self.top_db is not None:
-            if self.top_db < 0:
-                raise ValueError("top_db must be non-negative")
-            log_spec = np.clip(log_spec, min=np.maximum(log_spec) - self.top_db, max=np.inf)
-        return log_spec
+
 
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array]) -> np.ndarray:
         """
@@ -184,7 +175,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         return mel_fusion
 
     def _get_audio_features(
-        self, waveform: np.array, max_length, padding, pad_to_multiple_of, truncation, filling
+        self, waveform: np.array, max_length, padding, pad_to_multiple_of, truncation
     ) -> np.array:
         """
         Possible cases :
