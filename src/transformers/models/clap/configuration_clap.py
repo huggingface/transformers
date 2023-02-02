@@ -304,9 +304,9 @@ class CLAPAudioConfig(PretrainedConfig):
         self.aff_block_r = aff_block_r
         self.enable_patch_fusion = enable_patch_fusion
         self.spectrogram_window_size = spectrogram_window_size
-        self.spectrogram_window = spectrogram_window
-        self.spectrogram_center = spectrogram_center
-        self.spectrogram_pad_mode = spectrogram_pad_mode
+        # self.spectrogram_window = spectrogram_window
+        # self.spectrogram_center = spectrogram_center
+        # self.spectrogram_pad_mode = spectrogram_pad_mode
         self.spectrogram_freeze_parameters = spectrogram_freeze_parameters
         self.spectrogram_ref = spectrogram_ref
         self.spectrogram_amin = spectrogram_amin
