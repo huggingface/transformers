@@ -25,7 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput
+from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_cpmant import CPMAntConfig
@@ -805,7 +805,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
+        output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -884,7 +884,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         if not return_dict:
             return tuple(v for v in [logits, hidden_states, present_key_values] if v is not None)
 
-        return CausalLMOutput(
+        return CausalLMOutputWithPast(
             logits=logits,
             hidden_states=hidden_states,
             past_key_values=present_key_values,
