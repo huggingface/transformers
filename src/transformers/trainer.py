@@ -597,26 +597,27 @@ class Trainer:
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
                 #  bf16 does not need grad scaling
                 self.do_grad_scaling = self.amp_dtype == torch.float16
-                if self.sharded_ddp is not None:
-                    self.scaler = ShardedGradScaler()
-                elif self.fsdp is not None:
-                    if self.amp_dtype == torch.float16:
-                        from torch.distributed.fsdp.sharded_grad_scaler import (
-                            ShardedGradScaler as FSDPShardedGradScaler,
-                        )
+                if self.do_grad_scaling:
+                    if self.sharded_ddp is not None:
+                        self.scaler = ShardedGradScaler()
+                    elif self.fsdp is not None:
+                        if self.amp_dtype == torch.float16:
+                            from torch.distributed.fsdp.sharded_grad_scaler import (
+                                ShardedGradScaler as FSDPShardedGradScaler,
+                            )
 
-                        self.scaler = FSDPShardedGradScaler()
+                            self.scaler = FSDPShardedGradScaler()
+                        else:
+                            self.do_grad_scaling = False
+                            self.use_cuda_amp = False
+                            self.amp_dtype = None
+
+                    elif is_torch_tpu_available():
+                        from torch_xla.amp import GradScaler
+
+                        self.scaler = GradScaler()
                     else:
-                        self.do_grad_scaling = False
-                        self.use_cuda_amp = False
-                        self.amp_dtype = None
-
-                elif is_torch_tpu_available():
-                    from torch_xla.amp import GradScaler
-
-                    self.scaler = GradScaler()
-                else:
-                    self.scaler = torch.cuda.amp.GradScaler()
+                        self.scaler = torch.cuda.amp.GradScaler()
             elif args.half_precision_backend == "cpu_amp":
                 self.use_cpu_amp = True
                 self.amp_dtype = torch.bfloat16
