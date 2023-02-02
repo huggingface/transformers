@@ -2182,7 +2182,9 @@ class CLAPSwinTransformer(nn.Module):
 
     def crop_wav(self, hidden_states, crop_size, spe_pos=None):
         time_steps = hidden_states.shape[2]
-        tx = torch.zeros(hidden_states.shape[0], hidden_states.shape[1], crop_size, hidden_states.shape[3]).to(hidden_states.device)
+        tx = torch.zeros(hidden_states.shape[0], hidden_states.shape[1], crop_size, hidden_states.shape[3]).to(
+            hidden_states.device
+        )
         for i in range(len(x)):
             if spe_pos is None:
                 crop_pos = random.randint(0, time_steps - crop_size - 1)
@@ -2197,26 +2199,39 @@ class CLAPSwinTransformer(nn.Module):
 
         target_T = int(self.spec_size * self.freq_ratio)
         target_F = self.spec_size // self.freq_ratio
-        
+
         if time_steps > target_T or freq_steps > target_F:
-            raise ValueError(
-                "the wav size should less than or equal to the swin input size"
-            )
-        
+            raise ValueError("the wav size should less than or equal to the swin input size")
+
         # to avoid bicubic zero error
         if time_steps < target_T:
-            hidden_states = nn.functional.interpolate(hidden_states, (target_T, hidden_states.shape[3]), mode="bicubic", align_corners=True)
+            hidden_states = nn.functional.interpolate(
+                hidden_states, (target_T, hidden_states.shape[3]), mode="bicubic", align_corners=True
+            )
         if freq_steps < target_F:
-            hidden_states = nn.functional.interpolate(hidden_states, (hidden_states.shape[2], target_F), mode="bicubic", align_corners=True)
-    
+            hidden_states = nn.functional.interpolate(
+                hidden_states, (hidden_states.shape[2], target_F), mode="bicubic", align_corners=True
+            )
+
         # hidden_states = hidden_states.contiguous().view(hidden_states.shape[0], hidden_states.shape[1], hidden_states.shape[-1] * self.freq_ratio, hidden_states.shape[2] // self.freq_ratio)
 
         hidden_states = hidden_states.permute(0, 1, 3, 2).contiguous()
-        hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], hidden_states.shape[2], self.freq_ratio, hidden_states.shape[3] // self.freq_ratio)
-        
+        hidden_states = hidden_states.reshape(
+            hidden_states.shape[0],
+            hidden_states.shape[1],
+            hidden_states.shape[2],
+            self.freq_ratio,
+            hidden_states.shape[3] // self.freq_ratio,
+        )
+
         hidden_states = hidden_states.permute(0, 1, 3, 2, 4).contiguous()
-        hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], hidden_states.shape[2] * hidden_states.shape[3], hidden_states.shape[4])
-        
+        hidden_states = hidden_states.reshape(
+            hidden_states.shape[0],
+            hidden_states.shape[1],
+            hidden_states.shape[2] * hidden_states.shape[3],
+            hidden_states.shape[4],
+        )
+
         return hidden_states
 
     def forward(
