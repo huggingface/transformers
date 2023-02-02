@@ -146,6 +146,8 @@
     title: Glossary
   - local: task_summary
     title: What 🤗 Transformers can do
+  - local: tasks_explained
+    title: How 🤗 Transformers solve tasks
   - local: model_summary
     title: Summary of the models
   - local: tokenizer_summary
