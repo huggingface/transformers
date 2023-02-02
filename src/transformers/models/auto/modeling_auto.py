@@ -478,7 +478,6 @@ MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         ("timesformer", "TimesformerForVideoClassification"),
-        ("tvlt", "TvltForVideoClassification"),
         ("videomae", "VideoMAEForVideoClassification"),
     ]
 )
@@ -711,7 +710,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("roformer", "RoFormerForQuestionAnswering"),
         ("splinter", "SplinterForQuestionAnswering"),
         ("squeezebert", "SqueezeBertForQuestionAnswering"),
-        ("tvlt", "TvltForQuestionAnswering"),
         ("xlm", "XLMForQuestionAnsweringSimple"),
         ("xlm-roberta", "XLMRobertaForQuestionAnswering"),
         ("xlm-roberta-xl", "XLMRobertaXLForQuestionAnswering"),
