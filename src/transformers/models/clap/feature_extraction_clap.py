@@ -17,6 +17,7 @@
 from typing import List, Optional, Union
 
 import numpy as np
+import torchvision
 from numpy.fft import fft
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -64,6 +65,11 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         n_fft=400,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
+        norm = None,
+        f_min:float =0,
+        f_max:float =14000,
+        top_db:int = None,
+        mel_scale: str = "htk",
         **kwargs
     ):
         super().__init__(
@@ -79,139 +85,147 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
-        self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
-
-    def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
-        # Initialize the weights
-        n_mels = int(n_mels)
-        weights = np.zeros((n_mels, int(1 + n_fft // 2)), dtype=dtype)
-
-        # Center freqs of each FFT bin
-        fftfreqs = np.fft.rfftfreq(n=n_fft, d=1.0 / sr)
-
-        # 'Center freqs' of mel bands - uniformly spaced between limits
-        min_mel = 0.0
-        max_mel = 45.245640471924965
-
-        mels = np.linspace(min_mel, max_mel, n_mels + 2)
-
-        mels = np.asanyarray(mels)
-
-        # Fill in the linear scale
-        f_min = 0.0
-        f_sp = 200.0 / 3
-        freqs = f_min + f_sp * mels
-
-        # And now the nonlinear scale
-        min_log_hz = 1000.0  # beginning of log region (Hz)
-        min_log_mel = (min_log_hz - f_min) / f_sp  # same (Mels)
-        logstep = np.log(6.4) / 27.0  # step size for log region
-
-        # If we have vector data, vectorize
-        log_t = mels >= min_log_mel
-        freqs[log_t] = min_log_hz * np.exp(logstep * (mels[log_t] - min_log_mel))
-
-        mel_f = freqs
-
-        fdiff = np.diff(mel_f)
-        ramps = np.subtract.outer(mel_f, fftfreqs)
-
-        for i in range(n_mels):
-            # lower and upper slopes for all bins
-            lower = -ramps[i] / fdiff[i]
-            upper = ramps[i + 2] / fdiff[i + 1]
-
-            # .. then intersect them with each other and zero
-            weights[i] = np.maximum(0, np.minimum(lower, upper))
-
-        # Slaney-style mel is scaled to be approx constant energy per channel
-        enorm = 2.0 / (mel_f[2 : n_mels + 2] - mel_f[:n_mels])
-        weights *= enorm[:, np.newaxis]
-
-        return weights
-
-    def fram_wave(self, waveform, center=True):
+        self.f_min = f_min # should be in super and would initialized them
+        self.f_max = f_max # should be in super and would initialized them
+        self.norm = norm # should be in super and would initialized them
+        self.mel_filters = self.get_mel_filter_banks(n_freqs = int(1+ n_fft//2), n_mels = feature_size, f_min = f_min, f_max = f_max, sample_rate = sampling_rate, norm = "htk", mel_scale = "htk")
+        self.mel_filters_slaney = self.get_mel_filter_banks(n_freqs = int(1+ n_fft//2), n_mels = feature_size, f_min = f_min, f_max = f_max, sample_rate = sampling_rate, norm = "slaney", mel_scale = "slaney")
+        self.top_db = top_db
+    
+    def _power_to_db(self, mel_spectrogram, a_min=1e-10, ref=1.0):
+        """ 
+        Power to db, this function is the numpy implementation of 
+        librosa.power_to_lb
         """
-        Transform a raw waveform into a list of smaller waveforms. The window length defines how much of the signal is
-        contain in each frame (smalle waveform), while the hope length defines the step between the beginning of each
-        new frame.
-
-        Centering is done by reflecting the waveform which is first centered around `frame_idx * hop_length`.
-        """
-        frames = []
-        for i in range(0, waveform.shape[0] + 1, self.hop_length):
-            half_window = (self.n_fft - 1) // 2 + 1
-            if center:
-                start = i - half_window if i > half_window else 0
-                end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
-
-                frame = waveform[start:end]
-
-                if start == 0:
-                    padd_width = (-i + half_window, 0)
-                    frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-                elif end == waveform.shape[0]:
-                    padd_width = (0, (i - waveform.shape[0] + half_window))
-                    frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-            else:
-                frame = waveform[i : i + self.n_fft]
-                frame_width = frame.shape[0]
-                if frame_width < waveform.shape[0]:
-                    frame = np.lib.pad(
-                        frame, pad_width=(0, self.n_fft - frame_width), mode="constant", constant_values=0
-                    )
-
-            frames.append(frame)
-        return np.stack(frames, 0)
-
-    def stft(self, frames, window):
-        """
-        Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
-        results as `torch.stft`.
-        """
-        frame_size = frames.shape[1]
-        fft_size = self.n_fft
-
-        if fft_size is None:
-            fft_size = frame_size
-
-        if fft_size < frame_size:
-            raise ValueError("FFT size must greater or equal the frame size")
-        # number of FFT bins to store
-        num_fft_bins = (fft_size >> 1) + 1
-
-        data = np.empty((len(frames), num_fft_bins), dtype=np.complex64)
-        fft_signal = np.zeros(fft_size)
-
-        for f, frame in enumerate(frames):
-            if window is not None:
-                np.multiply(frame, window, out=fft_signal[:frame_size])
-            else:
-                fft_signal[:frame_size] = frame
-            data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
-        return data.T
-
-    def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
+        log_spec = 10 * np.log10(np.clip(mel_spectrogram, a_min=a_min, a_max=None))
+        log_spec -= 10.0 * np.log10(np.maximum(a_min, ref))
+        if self.top_db is not None:
+            if self.top_db < 0:
+                raise ValueError("top_db must be non-negative")
+            log_spec = np.clip(log_spec,  min=np.maximum(log_spec) - self.top_db, max=np.inf)
+        return log_spec
+    
+    def _np_extract_fbank_features(self, waveform: np.array, mel_filters:Optional[np.array]) -> np.ndarray:
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
         implementation with 1e-5 tolerance.
         """
         window = np.hanning(self.n_fft + 1)[:-1]
 
-        frames = self.fram_wave(waveform)
-        stft = self.stft(frames, window=window)
-        magnitudes = np.abs(stft[:, :-1]) ** 2
+        frames = self._fram_wave(waveform)
+        stft = self._stft(frames, window=window)
+        
+        # if the imaginary parts are taken : (real, imag) = stftl; real ** 2 + imag ** 2
+        magnitudes = np.abs(stft) ** 2
+        mel_spec = np.matmul(magnitudes, self.mel_filters)
 
-        filters = self.mel_filters
-        mel_spec = filters @ magnitudes
+        return self._power_to_db(mel_spec)
 
-        log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
-        log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
+    @staticmethod
+    # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
+    def zero_mean_unit_var_norm(
+        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
+    ) -> List[np.ndarray]:
+        """
+        Every array in the list is normalized to have zero mean and unit variance
+        """
+        if attention_mask is not None:
+            attention_mask = np.array(attention_mask, np.int32)
+            normed_input_values = []
 
-        return log_spec
+            for vector, length in zip(input_values, attention_mask.sum(-1)):
+                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                if length < normed_slice.shape[0]:
+                    normed_slice[length:] = padding_value
+
+                normed_input_values.append(normed_slice)
+        else:
+            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
+
+        return normed_input_values
+
+    def _random_mel_fusion(self, mel, total_frames, chunk_frames):
+        ranges = np.array_split(list(range(0, total_frames - chunk_frames + 1)), 3)
+        if len(ranges[1]) == 0:
+            # if the audio is too short, we just use the first chunk
+            ranges[1] = [0]
+        if len(ranges[2]) == 0:
+            # if the audio is too short, we just use the first chunk
+            ranges[2] = [0]
+        # randomly choose index for each part
+        idx_front = np.random.choice(ranges[0])
+        idx_middle = np.random.choice(ranges[1])
+        idx_back = np.random.choice(ranges[2])
+        # select mel
+        mel_chunk_front = mel[idx_front : idx_front + chunk_frames, :]
+        mel_chunk_middle = mel[idx_middle : idx_middle + chunk_frames, :]
+        mel_chunk_back = mel[idx_back : idx_back + chunk_frames, :]
+
+        # shrink the mel TODO add this as a numpy function
+        mel_shrink = torchvision.transforms.Resize(size=[chunk_frames, 64])(mel[None])[0]
+        # logging.info(f"mel_shrink.shape: {mel_shrink.shape}")
+
+        # stack
+        mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], dim=0)
+        return mel_fusion
+
+    def _get_audio_features(
+        self, waveform: np.array, max_length, padding, pad_to_multiple_of, truncation, filling
+    ) -> np.array:
+        """
+        Possible cases :
+            - wave > max_length
+                - rand_trun
+                - fusion
+            - wave < max_length
+                - repeat
+                - fusion
+
+        """
+        if len(waveform) > max_length:
+            if truncation == "rand_trunc":
+                longer = True
+            elif truncation == "fusion":
+                mel = self._np_extract_fbank_features(audio_data)
+                chunk_frames = max_length // self.hop_size + 1  # the +1 related to how the spectrogram is computed
+                total_frames = mel.shape[0]
+                if chunk_frames == total_frames:
+                    # there is a corner case where the audio length is larger than max_length but smaller than max_length+hop_size.
+                    # In this case, we just use the whole audio.
+                    input_mel = np.stack([mel, mel, mel, mel], dim=0)
+                    longer = False
+                else:
+                    input_mel = self._random_mel_fusion(mel, total_frames, chunk_frames)
+                    longer = True
+
+            else:
+                raise NotImplementedError(f"data_truncating {truncation} not implemented")
+            # random crop to max_length (for compatibility) -> this should be handled by self.pad
+            overflow = len(audio_data) - max_length
+            idx = np.random.randint(0, overflow + 1)
+            audio_data = audio_data[idx : idx + max_length]
+        else:
+            longer = False
+            # only use repeat as a new possible value for padding. you repeat the audio before applying the usual max_length padding
+            if len(audio_data) < max_length and padding == "repeatpad":  # do nothing if equal
+                n_repeat = int(max_length / len(audio_data))
+                audio_data = audio_data.repeat(n_repeat)
+            else:
+                audio_data = self.pad(
+                    audio_data,
+                    padding=padding,
+                    max_length=max_length if max_length else self.n_samples,
+                    truncation=truncation,
+                    pad_to_multiple_of=pad_to_multiple_of,
+                )
+            if truncation == "fusion":
+                mel = self._np_extract_fbank_features(audio_data, self.mel_filters_slaney)
+                input_mel = np.stack([mel, mel, mel, mel], dim=0)
+            else:
+                input_mel = self._np_extract_fbank_features(
+                    audio_data, self.mel_filters_slaney
+                )  
+        return input_mel, longer
 
     def __call__(
         self,
@@ -237,7 +251,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of (`int`, *optional*, defaults to None):
                 If set will pad the sequence to a multiple of the provided value.
 
-                This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+                This is especially useful to enable the use of np.array Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
@@ -255,7 +269,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'pt'`: Return PyTorch `torch.np.array` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
@@ -294,28 +308,39 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [np.asarray([raw_speech]).T]
 
-        batched_speech = BatchFeature({"input_features": raw_speech})
-
         # convert into correct format for padding
+        padded_inputs = [
+            self._get_audio_features(
+                waveform,
+                truncation,
+                pad_to_multiple_of,
+                padding,
+                max_length if max_length else self.max_length,
+            )
+            for waveform in input_features[0]
+        ]
 
-        padded_inputs = self.pad(
-            batched_speech,
-            padding=padding,
-            max_length=max_length if max_length else self.n_samples,
-            truncation=truncation,
-            pad_to_multiple_of=pad_to_multiple_of,
-        )
-        # make sure list is in array format
-        input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
+        input_mel = []
+        is_longer = []
+        for mel, longer in input_features:
+            input_mel.append(mel)
+            is_longer.append(longer)
 
-        input_features = [self._np_extract_fbank_features(waveform) for waveform in input_features[0]]
+        if self.enable_fusion and is_longer.sum() == 0:
+            # if no audio is longer than 10s, then randomly select one audio to be longer
+            rand_idx = np.random.randint(0, len(input_features))
+            input_mel[rand_idx] = True
 
-        if isinstance(input_features[0], List):
-            padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+        if isinstance(input_features[0]["mel"], List):
+            padded_inputs["input_features"] = [np.asarray(mel, dtype=np.float32) for feature in input_mel]
         else:
             padded_inputs["input_features"] = input_features
 
+        # make sure list is in array format
+        input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
+
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+            is_longer = is_longer.convert_to_tensors(return_tensors)
 
-        return padded_inputs
+        return padded_inputs, is_longer

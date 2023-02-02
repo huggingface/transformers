@@ -18,6 +18,10 @@
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+from numpy.fft import fft
+import math
+
+import warnings
 
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from .utils import PaddingStrategy, TensorType, is_tf_tensor, is_torch_tensor, logging, to_numpy
@@ -364,3 +368,241 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             )
 
         return padding_strategy
+    
+    @staticmethod
+    def hz_to_mel(freq: float, mel_scale: str = "htk") -> float:
+        r"""Convert Hz to Mels.
+
+        Args:
+            freqs (float): 
+                Frequencies in Hz
+            mel_scale (str, *optional*): 
+                Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
+
+        Returns:
+            mels (float): Frequency in Mels
+        """
+
+        if mel_scale not in ["slaney", "htk"]:
+            raise ValueError('mel_scale should be one of "htk" or "slaney".')
+
+        if mel_scale == "htk":
+            return 2595.0 * math.log10(1.0 + (freq / 700.0))
+
+        # Fill in the linear part
+        f_min = 0.0
+        f_sp = 200.0 / 3
+
+        mels = (freq - f_min) / f_sp
+
+        # Fill in the log-scale part
+        min_log_hz = 1000.0
+        min_log_mel = (min_log_hz - f_min) / f_sp
+        logstep = math.log(6.4) / 27.0
+
+        if freq >= min_log_hz:
+            mels = min_log_mel + math.log(freq / min_log_hz) / logstep
+
+        return mels
+
+    @staticmethod
+    def mel_to_hz(mels: np.array, mel_scale: str = "htk") -> np.array:
+        """Convert mel bin numbers to frequencies.
+
+        Args:
+            mels (np.array): Mel frequencies
+            mel_scale (str, optional): Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
+
+        Returns:
+            freqs (np.array): Mels converted in Hz
+        """
+
+        if mel_scale not in ["slaney", "htk"]:
+            raise ValueError('mel_scale should be one of "htk" or "slaney".')
+
+        if mel_scale == "htk":
+            return 700.0 * (10.0 ** (mels / 2595.0) - 1.0)
+
+        # Fill in the linear scale
+        f_min = 0.0
+        f_sp = 200.0 / 3
+        freqs = f_min + f_sp * mels
+
+        # And now the nonlinear scale
+        min_log_hz = 1000.0
+        min_log_mel = (min_log_hz - f_min) / f_sp
+        logstep = math.log(6.4) / 27.0
+
+        log_t = mels >= min_log_mel
+        freqs[log_t] = min_log_hz * np.exp(logstep * (mels[log_t] - min_log_mel))
+
+        return freqs
+
+    @staticmethod
+    def create_triangular_filterbank(
+        all_freqs: np.array,
+        f_pts: np.array,
+    ) -> np.array:
+        """Create a triangular filter bank.
+
+        Args:
+            all_freqs (np.array): STFT freq points of size (`n_freqs`).
+            f_pts (np.array): Filter mid points of size (`n_filter`).
+
+        Returns:
+            fb (np.array): The filter bank of size (`n_freqs`, `n_filter`).
+        """
+        # Adopted from Librosa
+        # calculate the difference between each filter mid point and each stft freq point in hertz
+        f_diff = f_pts[1:] - f_pts[:-1]  # (n_filter + 1)
+        slopes = np.expand_dims(f_pts, 0) - np.expand_dims(all_freqs, 1) # (n_freqs, n_filter + 2)
+        # create overlapping triangles
+        zero = np.zeros(1)
+        down_slopes = (-1.0 * slopes[:, :-2]) / f_diff[:-1]  # (n_freqs, n_filter)
+        up_slopes = slopes[:, 2:] / f_diff[1:]  # (n_freqs, n_filter)
+        fb = np.maximum(zero, np.minimum(down_slopes, up_slopes))
+
+        return fb
+
+    def get_mel_filter_banks(
+        self,
+        n_freqs: int,
+        f_min: float,
+        f_max: float,
+        n_mels: int,
+        sample_rate: int,
+        norm: Optional[str] = None,
+        mel_scale: str = "htk",
+    ) -> np.array:
+        r"""Create a frequency bin conversion matrix used to obtain the Mel Frequency Cepstral Coefficient. 
+        This is called a `mel filter bank`, and various implementation exist, which differ in the number of filters, 
+        the shape of the filters, the way the filters are spaced, the bandwidth of
+        the filters, and the manner in which the spectrum is warped. The goal of these features is to approximate the non-linear human perception
+        of the variation in pitch with respect to the frequency. 
+        This code is heavily inspired from the `torchaudio` implementation, refer to XXX for more details.
+        
+
+        Note:
+            We will try to specify which variation correspond to which MFCCs from the litterature. The main features are: 
+                - MFCC FB-20: introduced in 1980 by Davis and Mermelstein [4]; Davis and Mermelstein assume sampling frequency of 10 kHz; speech bandwidth [0, 4600] Hz
+                - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) described in Young, 1995 [5]; Young uses a filter bank of 24 filters for speech bandwidth [0, 8000] Hz (sampling rate ≥ 16 kHz)
+                - MFCC FB-40: from the Auditory Toolbox for MATLAB [6] written by Slaney in 1998; Slaney assumes sampling rate of 16 kHz, and speech bandwidth [133, 6854] Hz
+                - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris, 2004 [3]; Skowronski and Harris assume sampling rate of 12.5 kHz and speech bandwidth [0, 6250] Hz
+            
+            
+        Args:
+            n_freqs (int): Number of frequencies to highlight/apply
+            f_min (float): Minimum frequency (Hz)
+            f_max (float): Maximum frequency (Hz)
+            n_mels (int): Number of mel filterbanks
+            sample_rate (int): Sample rate of the audio waveform
+            norm (str or None, optional): If "slaney", divide the triangular mel weights by the width of the mel band
+                (area normalization). (Default: ``None``)
+            mel_scale (str, optional): Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
+
+        Returns:
+            Tensor: Triangular filter banks (fb matrix) of size (``n_freqs``, ``n_mels``)
+            meaning number of frequencies to highlight/apply to x the number of filterbanks.
+            Each column is a filterbank so that assuming there is a matrix A of
+            size (..., ``n_freqs``), the applied result would be
+            ``A * melscale_fbanks(A.size(-1), ...)``.
+
+        """
+
+        if norm is not None and norm != "slaney":
+            raise ValueError('norm must be one of None or "slaney"')
+
+        # freq bins
+        all_freqs = np.linspace(0, sample_rate // 2, n_freqs)
+
+        # calculate mel freq bins
+        m_min = self.hz_to_mel(f_min, mel_scale=mel_scale)
+        m_max = self.hz_to_mel(f_max, mel_scale=mel_scale)
+
+        m_pts = np.linspace(m_min, m_max, n_mels + 2)
+        f_pts = self.mel_to_hz(m_pts, mel_scale=mel_scale)
+
+        # create filterbank
+        filterbank = self.create_triangular_filterbank(all_freqs, f_pts)
+
+        if norm is not None and norm == "slaney":
+            # Slaney-style mel is scaled to be approx constant energy per channel
+            enorm = 2.0 / (f_pts[2 : n_mels + 2] - f_pts[:n_mels])
+            filterbank *= np.expand_dims(enorm,0)
+
+        if (filterbank.max(axis=0) == 0.0).any():
+            warnings.warn(
+                "At least one mel filterbank has all zero values. "
+                f"The value for `n_mels` ({n_mels}) may be set too high. "
+                f"Or, the value for `n_freqs` ({n_freqs}) may be set too low."
+            )
+
+        return filterbank
+        
+    def _stft(self, frames, window):
+        """
+        Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
+        results as `torch.stft`.
+        """
+        frame_size = frames.shape[1]
+        fft_size = self.n_fft
+
+        if fft_size is None:
+            fft_size = frame_size
+
+        if fft_size < frame_size:
+            raise ValueError("FFT size must greater or equal the frame size")
+        # number of FFT bins to store
+        num_fft_bins = (fft_size >> 1) + 1
+
+        data = np.empty((len(frames), num_fft_bins), dtype=np.complex64)
+        fft_signal = np.zeros(fft_size)
+
+        for f, frame in enumerate(frames):
+            if window is not None:
+                np.multiply(frame, window, out=fft_signal[:frame_size])
+            else:
+                fft_signal[:frame_size] = frame
+            # TODO can we use fftn on the other dimensions? 
+            data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
+        return data.T
+        
+        
+    def _fram_wave(self, waveform, center=True):
+        """
+        Transform a raw waveform into a list of smaller waveforms. The window length defines how much of the signal is
+        contain in each frame (smalle waveform), while the hope length defines the step between the beginning of each
+        new frame.
+
+        Centering is done by reflecting the waveform which is first centered around `frame_idx * hop_length`.
+        """
+        frames = []
+        for i in range(0, waveform.shape[0] + 1, self.hop_length):
+            half_window = (self.n_fft - 1) // 2 + 1
+            if center:
+                start = i - half_window if i > half_window else 0
+                end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
+
+                frame = waveform[start:end]
+                
+                # TODO can all of this be automatically replaced with np.pad(audio,self.n_fft // 2, self.n_fft // 2), mode=self.pad_mode)
+                # as we have an array of frames
+                
+                if start == 0:
+                    padd_width = (-i + half_window, 0)
+                    frame = np.pad(frame, pad_width=padd_width, mode="reflect")
+
+                elif end == waveform.shape[0]:
+                    padd_width = (0, (i - waveform.shape[0] + half_window))
+                    frame = np.pad(frame, pad_width=padd_width, mode="reflect")
+
+            else:
+                frame = waveform[i : i + self.n_fft]
+                frame_width = frame.shape[0]
+                if frame_width < waveform.shape[0]:
+                    frame = np.lib.pad(
+                        frame, pad_width=(0, self.n_fft - frame_width), mode="constant", constant_values=0
+                    )
+
+            frames.append(frame)
+        return np.stack(frames, 0)
