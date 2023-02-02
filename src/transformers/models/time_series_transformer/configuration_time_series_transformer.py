@@ -77,6 +77,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             The dimension of the embedding for each of the static categorical features. Should be a list of integers,
             having the same length as `num_static_categorical_features`. Cannot be `None` if
             `num_static_categorical_features` is > 0.
+        d_model (`int`, *optional*, defaults to 64):
+            Dimensionality of the transformer layers.
         encoder_layers (`int`, *optional*, defaults to 2):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 2):
@@ -153,6 +155,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         decoder_layers: int = 2,
         is_encoder_decoder: bool = True,
         activation_function: str = "gelu",
+        d_model: int = 64,
         dropout: float = 0.1,
         encoder_layerdrop: float = 0.1,
         decoder_layerdrop: float = 0.1,
@@ -194,7 +197,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
-        self.d_model = input_size * len(lags_sequence) + self._number_of_features
+        self.feature_size = input_size * len(lags_sequence) + self._number_of_features
+        self.d_model = d_model
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
