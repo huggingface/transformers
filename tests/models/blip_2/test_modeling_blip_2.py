@@ -16,14 +16,12 @@
 
 
 import inspect
-import os
-import tempfile
 import unittest
 
 import numpy as np
 
 import requests
-from transformers import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
+from transformers import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig, OPTConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -278,7 +276,7 @@ class Blip2QFormerModelTester:
         )
 
 
-class Blip2TextImageModelsModelTester:
+class Blip2ForConditionalGenerationModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
 
         if text_kwargs is None:
@@ -292,27 +290,30 @@ class Blip2TextImageModelsModelTester:
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.qformer_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        _, input_ids, attention_mask = self.qformer_model_tester.prepare_config_and_inputs()
+        _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return Blip2Config.from_text_vision_configs(
-            self.qformer_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return Blip2Config.from_vision_qformer_text_configs(
+            vision_config=self.vision_model_tester.get_config(),
+            qformer_config=self.qformer_model_tester.get_config(),
+            text_config=self.get_tiny_text_config(),
+            num_query_tokens=10,
         )
+
+    def get_tiny_text_config(self):
+        return OPTConfig(num_hidden_layers=2)
 
     def create_and_check_for_conditional_generation(self, config, input_ids, attention_mask, pixel_values):
         model = Blip2ForConditionalGeneration(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
+            result = model(pixel_values, input_ids, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.qformer_model_tester.batch_size)
-        )
-        self.parent.assertEqual(
-            result.logits_per_text.shape, (self.qformer_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.decoder_logits.shape, (self.vision_model_tester.batch_size, self.qformer_model_tester.batch_size)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -328,7 +329,7 @@ class Blip2TextImageModelsModelTester:
 
 
 @require_torch
-class Blip2TextImageModelTest(ModelTesterMixin, unittest.TestCase):
+class Blip2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
@@ -338,11 +339,11 @@ class Blip2TextImageModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = Blip2TextImageModelsModelTester(self)
+        self.model_tester = Blip2ForConditionalGenerationModelTester(self)
 
-    def test_model(self):
+    def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+        self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -452,57 +453,6 @@ class Blip2TextImageModelTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            return
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        configs_no_init.return_dict = False
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            try:
-                input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # Blip2 needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
-
     # def test_load_vision_text_config(self):
     #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -537,10 +487,10 @@ def prepare_img():
 @slow
 class Blip2ModelIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
-        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip_2-image-captioning-base").to(
+        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b").to(
             torch_device
         )
-        processor = Blip2Processor.from_pretrained("Salesforce/blip_2-image-captioning-base")
+        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         image = prepare_img()
 
         # image only
@@ -565,9 +515,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_image_captioning_fp16(self):
         model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip_2-image-captioning-base", torch_dtype=torch.float16
+            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
         ).to(torch_device)
-        processor = Blip2Processor.from_pretrained("Salesforce/blip_2-image-captioning-base")
+        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         image = prepare_img()
 
         # image only
