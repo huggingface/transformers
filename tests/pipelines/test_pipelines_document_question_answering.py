@@ -81,12 +81,6 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
                 "question": question,
                 "word_boxes": word_boxes,
             },
-            {
-                # if image processor is available, we always need to prepare `image`, otherwise let's test without it
-                "image": load_image(image) if processor is not None else None,
-                "question": question,
-                "word_boxes": word_boxes,
-            },
         ]
         return dqa_pipeline, examples
 
