@@ -241,7 +241,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
                 n_repeat = int(max_length / len(waveform))
                 waveform = waveform.repeat(n_repeat)
 
-            waveform = np.pad(waveform, (0, max_length - waveform.shape[0]))
+            waveform = np.pad(waveform, (0, max_length - waveform.shape[0]), mode="constant", constant_values=0)
             input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
             if truncation == "fusion":
                 input_mel = np.stack([input_mel, input_mel, input_mel, input_mel], axis=0)

@@ -36,23 +36,9 @@ class CLAPProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
     feature_extractor_class = "CLAPFeatureExtractor"
-    tokenizer_class = ("CLAPTokenizer", "CLAPTokenizerFast")
+    tokenizer_class = ("PreTrainedTokenizer", "PreTrainedTokenizerFast")
 
-    def __init__(self, feature_extractor=None, tokenizer=None, **kwargs):
-        if "feature_extractor" in kwargs:
-            warnings.warn(
-                "The `feature_extractor` argument is deprecated and will be removed in v5, use `feature_extractor`"
-                " instead.",
-                FutureWarning,
-            )
-            feature_extractor = kwargs.pop("feature_extractor")
-
-        feature_extractor = feature_extractor if feature_extractor is not None else feature_extractor
-        if feature_extractor is None:
-            raise ValueError("You need to specify an `feature_extractor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
+    def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
     def __call__(self, text=None, audios=None, return_tensors=None, **kwargs):
@@ -90,6 +76,7 @@ class CLAPProcessor(ProcessorMixin):
               `None`).
             - **audio_features** -- Audio features to be fed to a model. Returned when `audios` is not `None`.
         """
+        sampling_rate = kwargs.pop("sampling_rate", None)
 
         if text is None and audios is None:
             raise ValueError("You have to specify either text or audios. Both cannot be none.")
@@ -98,10 +85,12 @@ class CLAPProcessor(ProcessorMixin):
             encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
 
         if audios is not None:
-            audio_features = self.feature_extractor(audios, return_tensors=return_tensors, **kwargs)
+            audio_features = self.feature_extractor(
+                audios, sampling_rate=sampling_rate, return_tensors=return_tensors, **kwargs
+            )
 
         if text is not None and audios is not None:
-            encoding["audio_features"] = audio_features.pixel_values
+            encoding["audio_features"] = audio_features.input_features
             return encoding
         elif text is not None:
             return encoding
@@ -127,20 +116,3 @@ class CLAPProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
-
-    @property
-    def feature_extractor_class(self):
-        warnings.warn(
-            "`feature_extractor_class` is deprecated and will be removed in v5. Use `feature_extractor_class`"
-            " instead.",
-            FutureWarning,
-        )
-        return self.feature_extractor_class
-
-    @property
-    def feature_extractor(self):
-        warnings.warn(
-            "`feature_extractor` is deprecated and will be removed in v5. Use `feature_extractor` instead.",
-            FutureWarning,
-        )
-        return self.feature_extractor
