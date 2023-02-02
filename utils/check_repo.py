@@ -267,6 +267,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPTextModel",
     "AltCLIPVisionModel",
     "AltRobertaModel",
+    "TvltForAudioVisualClassification",
+    "TvltForQuestionAnswering",
 ]
 
 # Update this list for models that have multiple model types for the same
