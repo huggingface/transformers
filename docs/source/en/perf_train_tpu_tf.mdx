@@ -27,13 +27,13 @@ Using TPU Nodes can have some quite unexpected behaviour for people who aren’t
 
 <Tip>
 
-If you can fit all your data in memory as `np.ndarray` or `tf.Tensor`, then you can `fit()` on that data even when using Colab or a TPU Node, without needing to upload it to Google Cloud Storage.
+**Tip:** If you can fit all your data in memory as `np.ndarray` or `tf.Tensor`, then you can `fit()` on that data even when using Colab or a TPU Node, without needing to upload it to Google Cloud Storage.
 
 </Tip>
 
 <Tip>
 
-The methods `Dataset.to_tf_dataset()` and its higher-level wrapper `model.prepare_tf_dataset()` , which you will see throughout our TF code examples, will both fail on a TPU Node. The reason for this is that even though they create a `tf.data.Dataset` it is not a “pure” `tf.data` pipeline and uses `tf.numpy_function` or `Dataset.from_generator()` to stream data from the underlying HuggingFace `Dataset`. This HuggingFace `Dataset` is backed by data that is on a local disc and which the remote TPU Node will not be able to read.
+**🤗Specific HuggingFace Tip🤗:** The methods `Dataset.to_tf_dataset()` and its higher-level wrapper `model.prepare_tf_dataset()` , which you will see throughout our TF code examples, will both fail on a TPU Node. The reason for this is that even though they create a `tf.data.Dataset` it is not a “pure” `tf.data` pipeline and uses `tf.numpy_function` or `Dataset.from_generator()` to stream data from the underlying HuggingFace `Dataset`. This HuggingFace `Dataset` is backed by data that is on a local disc and which the remote TPU Node will not be able to read.
 
 </Tip>
 
@@ -55,9 +55,13 @@ Debugging on TPU is generally a bit harder than on CPU/GPU, so we recommend gett
 
 <Tip>
 
-XLA compiled code is usually faster - so even if you’re not planning to run on TPU, adding `jit_compile=True` can improve your performance. Be sure to note the caveats below about XLA compatibility, though!
+**Tip:** XLA compiled code is usually faster - so even if you’re not planning to run on TPU, adding `jit_compile=True` can improve your performance. Be sure to note the caveats below about XLA compatibility, though!
 
-And a second tip, born of painful experience: Although using `jit_compile=True` is a good way to get a speed boost and test if your CPU/GPU code is XLA-compatible, it can actually cause a lot of problems if you leave it in when actually training on TPU. XLA compilation will happen implicitly on TPU, so remember to remove that line before actually running your code on a TPU!
+</Tip>
+
+<Tip warning={true}>
+
+**Tip born of painful experience:** Although using `jit_compile=True` is a good way to get a speed boost and test if your CPU/GPU code is XLA-compatible, it can actually cause a lot of problems if you leave it in when actually training on TPU. XLA compilation will happen implicitly on TPU, so remember to remove that line before actually running your code on a TPU!
 
 </Tip>
 
@@ -67,7 +71,7 @@ In many cases, your code is probably XLA-compatible already! However, there are 
 
 <Tip>
 
-At HuggingFace we’ve put a lot of effort into rewriting our TensorFlow models and loss functions to be XLA-compatible. Our models and loss functions generally obey rule #1 and #2 by default, so you can skip over them if you’re using `transformers` models. Don’t forget about these rules when writing your own models and loss functions, though!
+**🤗Specific HuggingFace Tip🤗:** We’ve put a lot of effort into rewriting our TensorFlow models and loss functions to be XLA-compatible. Our models and loss functions generally obey rule #1 and #2 by default, so you can skip over them if you’re using `transformers` models. Don’t forget about these rules when writing your own models and loss functions, though!
 
 </Tip>
 
@@ -124,7 +128,7 @@ There isn’t a perfect solution to this problem. However, you can try some tric
 
 <Tip>
 
-HuggingFace tokenizers and data collators have methods that can help you here. You can use `padding="max_length"` or `padding="longest"` when calling tokenizers to get them to output padded data. Our tokenizers and data collators also have a `pad_to_multiple_of` argument that you can use to reduce the number of unique input shapes you see!
+**🤗Specific HuggingFace Tip🤗:** Our tokenizers and data collators have methods that can help you here. You can use `padding="max_length"` or `padding="longest"` when calling tokenizers to get them to output padded data. Our tokenizers and data collators also have a `pad_to_multiple_of` argument that you can use to reduce the number of unique input shapes you see!
 
 </Tip>
 
@@ -136,13 +140,13 @@ Once your training is XLA-compatible and (if you’re using TPU Node / Colab) yo
 
 There was a lot in here, so let’s summarize with a quick checklist you can follow when you want to get your model ready for TPU training:
 
-[ ]  Make sure your code follows the three rules of XLA
-[ ]  Compile your model with `jit_compile=True` on CPU/GPU and confirm that you can train it with XLA
-[ ]  Either load your dataset into memory or use a TPU-compatible dataset loading approach (see notebook)
-[ ]  Migrate your code either to Colab (with accelerator set to “TPU”) or a TPU VM on Google Cloud
-[ ]  Add TPU initializer code (see notebook)
-[ ]  Create your `TPUStrategy` and make sure dataset loading and model creation are inside the `strategy.scope()` (see notebook)
-[ ]  Don’t forget to take `jit_compile=True` out again when you move to TPU!
-[ ]  🙏🙏🙏🥺🥺🥺
-[ ]  Call model.fit()
-[ ]  You did it!
+- [ ]  Make sure your code follows the three rules of XLA
+- [ ]  Compile your model with `jit_compile=True` on CPU/GPU and confirm that you can train it with XLA
+- [ ]  Either load your dataset into memory or use a TPU-compatible dataset loading approach (see notebook)
+- [ ]  Migrate your code either to Colab (with accelerator set to “TPU”) or a TPU VM on Google Cloud
+- [ ]  Add TPU initializer code (see notebook)
+- [ ]  Create your `TPUStrategy` and make sure dataset loading and model creation are inside the `strategy.scope()` (see notebook)
+- [ ]  Don’t forget to take `jit_compile=True` out again when you move to TPU!
+- [ ]  🙏🙏🙏🥺🥺🥺
+- [ ]  Call model.fit()
+- [ ]  You did it!
