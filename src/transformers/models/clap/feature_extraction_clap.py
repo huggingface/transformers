@@ -53,7 +53,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             Padding value used to pad the audio. Should correspond to silences.
     """
 
-    model_input_names = ["input_features"]
+    model_input_names = ["input_features", "is_longer"]
 
     def __init__(
         self,
@@ -69,6 +69,8 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         f_max: float = 14000,
         top_db: int = None,
         max_length: int = 48000,
+        truncation:str = "fusion",
+        padding:str = "repeatpad",
         **kwargs
     ):
         super().__init__(
@@ -110,21 +112,25 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
 
 
-    def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array]) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
         implementation with 1e-5 tolerance.
         """
         window = np.hanning(self.n_fft + 1)[:-1]
 
+        # TODO why don't we take the last value?
+        # window = np.hanning(self.n_fft + 1)[:-1]
+        
+        
         frames = self._fram_wave(waveform)
         stft = self._stft(frames, window=window)
 
         # if the imaginary parts are taken : (real, imag) = stftl; real ** 2 + imag ** 2
         magnitudes = np.abs(stft) ** 2
-        mel_spec = np.matmul(magnitudes, self.mel_filters)
-
-        return self._power_to_db(mel_spec)
+        mel_spec = np.matmul(mel_filters.T, magnitudes)
+        log_mel_spec = self._power_to_db(mel_spec)
+        return log_mel_spec.T
 
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
@@ -166,16 +172,18 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         mel_chunk_middle = mel[idx_middle : idx_middle + chunk_frames, :]
         mel_chunk_back = mel[idx_back : idx_back + chunk_frames, :]
 
-        # shrink the mel TODO add this as a numpy function
-        mel_shrink = torchvision.transforms.Resize(size=[chunk_frames, 64])(mel[None])[0]
+        # shrink the mel TODO add this as a numpy function, also no hard codes `64`
+        mel_shrink = np.resize(mel, [chunk_frames, 64]) # current flags are probalby wrong
+        import torch
+        mel_shrink = torchvision.transforms.Resize(size=[chunk_frames, 64])(torch.tensor(mel[None]))[0]
         # logging.info(f"mel_shrink.shape: {mel_shrink.shape}")
 
         # stack
-        mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], dim=0)
+        mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], axis=0)
         return mel_fusion
 
     def _get_audio_features(
-        self, waveform: np.array, max_length, padding, pad_to_multiple_of, truncation
+        self, waveform: np.array, max_length, truncation, padding, pad_to_multiple_of
     ) -> np.array:
         """
         Possible cases :
@@ -187,15 +195,15 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
                 - fusion
 
         """
-        if len(waveform) > max_length:
+        if waveform.shape[0] > max_length:
             if truncation == "rand_trunc":
                 longer = True
             elif truncation == "fusion":
-                mel = self._np_extract_fbank_features(waveform)
-                chunk_frames = max_length // self.hop_size + 1  # the +1 related to how the spectrogram is computed
+                mel = self._np_extract_fbank_features(waveform, self.mel_filters)
+                chunk_frames = max_length // self.hop_length + 1  # the +1 related to how the spectrogram is computed
                 total_frames = mel.shape[0]
                 if chunk_frames == total_frames:
-                    # there is a corner case where the audio length is larger than max_length but smaller than max_length+hop_size.
+                    # there is a corner case where the audio length is larger than max_length but smaller than max_length+hop_length.
                     # In this case, we just use the whole audio.
                     input_mel = np.stack([mel, mel, mel, mel], dim=0)
                     longer = False
@@ -212,7 +220,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         else:
             longer = False
             # only use repeat as a new possible value for padding. you repeat the audio before applying the usual max_length padding
-            if len(waveform) < max_length and padding == "repeatpad":  # do nothing if equal
+            if waveform.shape[0] < max_length and padding == "repeatpad":  # do nothing if equal
                 n_repeat = int(max_length / len(waveform))
                 waveform = waveform.repeat(n_repeat)
             else:
@@ -233,11 +241,11 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        truncation: bool = True,
+        truncation: str = "fusion",
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = None,
-        padding: Optional[str] = "max_length",
+        padding: Optional[str] = "repeatpad",
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
         **kwargs
@@ -302,7 +310,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         )
 
         if is_batched:
-            raw_speech = [np.asarray([speech], dtype=np.float32).T for speech in raw_speech]
+            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
             raw_speech = np.asarray(raw_speech, dtype=np.float32)
         elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
@@ -310,16 +318,16 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
         # always return batch
         if not is_batched:
-            raw_speech = [np.asarray([raw_speech]).T]
+            raw_speech = [np.asarray(raw_speech)]
 
         # convert into correct format for padding
         padded_inputs = [
             self._get_audio_features(
                 waveform,
-                truncation,
-                pad_to_multiple_of,
-                padding,
                 max_length if max_length else self.max_length,
+                truncation,
+                padding,
+                pad_to_multiple_of,
             )
             for waveform in raw_speech
         ]
@@ -330,7 +338,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             input_mel.append(mel)
             is_longer.append(longer)
 
-        if self.enable_fusion and is_longer.sum() == 0:
+        if truncation == "fusion" and sum(is_longer) == 0:
             # if no audio is longer than 10s, then randomly select one audio to be longer
             rand_idx = np.random.randint(0, len(input_mel))
             is_longer[rand_idx] = True
@@ -338,9 +346,10 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         if isinstance(input_mel[0], List):
             input_mel = [np.asarray(mel, dtype=np.float32) for feature in input_mel]
 
-        if return_tensors is not None:
-            input_mel = input_mel.convert_to_tensors(return_tensors)
-            is_longer = is_longer.convert_to_tensors(return_tensors)
-
         input_features = {"input_features": input_mel, "is_longer": is_longer}
+        input_features = BatchFeature(input_features)
+
+        if return_tensors is not None:
+            input_features = input_features.convert_to_tensors(return_tensors)
+
         return input_features

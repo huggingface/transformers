@@ -618,7 +618,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             framed_waveform (`np.array` of shape (waveform.shape // self.hop_length , self.n_fft)):
                 The framed waveforms that can be fed `np.fft`.
         """
-
+        # TODO: test if stereo audio works???
         frames = []
         for i in range(0, waveform.shape[0] + 1, self.hop_length):
             half_window = (self.n_fft - 1) // 2 + 1
@@ -641,8 +641,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                     frame = np.lib.pad(
                         frame, pad_width=(0, self.n_fft - frame_width), mode="constant", constant_values=0
                     )
-
             frames.append(frame)
-        framed_waveform = np.stack(frames, 0)
 
-        return framed_waveform
+        frames = np.stack(frames, 0)
+
+        return frames

@@ -35,7 +35,6 @@ class CLAPProcessor(ProcessorMixin):
         tokenizer ([`CLAPTokenizerFast`]):
             The tokenizer is a required input.
     """
-    attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "CLAPFeatureExtractor"
     tokenizer_class = ("CLAPTokenizer", "CLAPTokenizerFast")
 
