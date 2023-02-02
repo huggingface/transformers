@@ -22,8 +22,15 @@ import requests
 
 # pip3 install salesforce-lavis
 from lavis.models import load_model_and_preprocess
-from transformers import AutoTokenizer, Blip2Config, Blip2ForConditionalGeneration, OPTConfig, BlipImageProcessor, Blip2Processor
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+from transformers import (
+    AutoTokenizer,
+    Blip2Config,
+    Blip2ForConditionalGeneration,
+    Blip2Processor,
+    BlipImageProcessor,
+    OPTConfig,
+)
+from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
 def load_demo_image():
@@ -140,7 +147,9 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     input_ids = tokenizer(["" + "\n"], return_tensors="pt").input_ids.to(device)
 
     # create processor
-    image_processor = BlipImageProcessor(size={"height":224, "width":224}, image_mean=OPENAI_CLIP_MEAN, image_std=OPENAI_CLIP_STD)
+    image_processor = BlipImageProcessor(
+        size={"height": 224, "width": 224}, image_mean=OPENAI_CLIP_MEAN, image_std=OPENAI_CLIP_STD
+    )
     processor = Blip2Processor(image_processor=image_processor, tokenizer=tokenizer)
     pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(device)
 

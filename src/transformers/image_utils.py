@@ -30,13 +30,11 @@ from .utils import (
     requires_backends,
     to_numpy,
 )
-from .utils.constants import (  # noqa: F401
+from .utils.constants import (  # noqa: F401; just here for backwards compatibility
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    OPENAI_CLIP_MEAN,
-    OPENAI_CLIP_STD,
 )
 
 
