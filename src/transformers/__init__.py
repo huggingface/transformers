@@ -2310,9 +2310,9 @@ else:
     _import_structure["models.tvlt"].extend(
         [
             "TVLT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TvltForAudioVisualClassification",
             "TvltForPreTraining",
             "TvltForQuestionAnswering",
-            "TvltForVideoClassification",
             "TvltModel",
             "TvltPreTrainedModel",
         ]
@@ -5420,9 +5420,9 @@ if TYPE_CHECKING:
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.tvlt import (
             TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TvltForAudioVisualClassification,
             TvltForPreTraining,
             TvltForQuestionAnswering,
-            TvltForVideoClassification,
             TvltModel,
             TvltPreTrainedModel,
         )
