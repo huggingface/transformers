@@ -41,7 +41,7 @@ You can open any page of the documentation as a notebook in Colab (there is a bu
 
 ### PyTorch Examples
 
-#### Natural Language Processing
+#### Natural Language Processing[[pytorch-nlp]]
 
 | Notebook     |      Description      |   |   |
 |:----------|:-------------|:-------------|------:|
@@ -59,7 +59,7 @@ You can open any page of the documentation as a notebook in Colab (there is a bu
 | [How to generate text (with constraints)](https://github.com/huggingface/blog/blob/main/notebooks/53_constrained_beam_search.ipynb)| How to guide language generation with user-provided constraints | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/main/notebooks/53_constrained_beam_search.ipynb)| [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/blog/blob/main/notebooks/53_constrained_beam_search.ipynb)|
 | [Reformer](https://github.com/huggingface/blog/blob/main/notebooks/03_reformer.ipynb)| How Reformer pushes the limits of language modeling | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/patrickvonplaten/blog/blob/main/notebooks/03_reformer.ipynb)| [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/patrickvonplaten/blog/blob/main/notebooks/03_reformer.ipynb)|
 
-#### Computer Vision
+#### Computer Vision[[pytorch-cv]]
 
 | Notebook                                                                                                                                                                   | Description                                                                                                            |                                                                                                                                                                                                            |   |
 |:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------:|
@@ -72,7 +72,7 @@ You can open any page of the documentation as a notebook in Colab (there is a bu
 | [How to fine-tune a SegFormer model on semantic segmentation](https://github.com/huggingface/notebooks/blob/main/examples/semantic_segmentation.ipynb)                     | Show how to preprocess the data and fine-tune a pretrained SegFormer model on Semantic Segmentation                    | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/semantic_segmentation.ipynb)                | [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/notebooks/blob/main/examples/semantic_segmentation.ipynb)|
 | [How to fine-tune a VideoMAE model on video classification](https://github.com/huggingface/notebooks/blob/main/examples/video_classification.ipynb)          | Show how to preprocess the data and fine-tune a pretrained VideoMAE model on Video Classification                      | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/video_classification.ipynb)                | [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/notebooks/blob/main/examples/video_classification.ipynb)|
 
-#### Audio
+#### Audio[[pytorch-audio]]
 
 | Notebook     |      Description      |   |   |
 |:----------|:-------------|:-------------|------:|
@@ -80,7 +80,7 @@ You can open any page of the documentation as a notebook in Colab (there is a bu
 | [How to fine-tune a speech recognition model in any language](https://github.com/huggingface/notebooks/blob/main/examples/multi_lingual_speech_recognition.ipynb)| Show how to preprocess the data and fine-tune a multi-lingually pretrained speech model on Common Voice | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multi_lingual_speech_recognition.ipynb)| [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/notebooks/blob/main/examples/multi_lingual_speech_recognition.ipynb)|
 | [How to fine-tune a model on audio classification](https://github.com/huggingface/notebooks/blob/main/examples/audio_classification.ipynb)| Show how to preprocess the data and fine-tune a pretrained Speech model on Keyword Spotting | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb)| [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb)|
 
-#### Other modalities 
+#### Other modalities[[pytorch-other]]
 
 | Notebook     | Description                                                                             |   |   |
 |:----------|:----------------------------------------------------------------------------------------|:-------------|------:|
@@ -88,7 +88,7 @@ You can open any page of the documentation as a notebook in Colab (there is a bu
 | [How to generate protein folds](https://github.com/huggingface/notebooks/blob/main/examples/protein_folding.ipynb) | See how to go from protein sequence to a full protein model and PDB file                | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/protein_folding.ipynb) | [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/notebooks/blob/main/examples/protein_folding.ipynb) |
 | [Probabilistic Time Series Forecasting](https://github.com/huggingface/notebooks/blob/main/examples/time-series-transformers.ipynb) | See how to train Time Series Transformer on a custom dataset                            | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/time-series-transformers.ipynb) | [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/notebooks/blob/main/examples/time-series-transformers.ipynb) |
 
-#### Utility notebooks
+#### Utility notebooks[[pytorch-utility]]
 
 | Notebook     |      Description      |   |   |
 |:----------|:-------------|:-------------|------:|
@@ -97,7 +97,7 @@ You can open any page of the documentation as a notebook in Colab (there is a bu
 
 ### TensorFlow Examples
 
-#### Natural Language Processing
+#### Natural Language Processing[[tensorflow-nlp]]
 
 | Notebook     |      Description      |   |   |
 |:----------|:-------------|:-------------|------:|
@@ -111,14 +111,14 @@ You can open any page of the documentation as a notebook in Colab (there is a bu
 | [How to fine-tune a model on translation](https://github.com/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)| Show how to preprocess the data and fine-tune a pretrained model on WMT. | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)| [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb)|
 | [How to fine-tune a model on summarization](https://github.com/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)| Show how to preprocess the data and fine-tune a pretrained model on XSUM. | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)| [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb)|
 
-#### Computer Vision
+#### Computer Vision[[tensorflow-cv]]
 
 | Notebook                                                                                                                                                 | Description                                                                                         |   |   |
 |:---------------------------------------------------------------------------------------------------------------------------------------------------------|:----------------------------------------------------------------------------------------------------|:-------------|------:|
 | [How to fine-tune a model on image classification](https://github.com/huggingface/notebooks/blob/main/examples/image_classification-tf.ipynb)            | Show how to preprocess the data and fine-tune any pretrained Vision model on Image Classification   | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification-tf.ipynb)| [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/notebooks/blob/main/examples/image_classification-tf.ipynb)|
 | [How to fine-tune a SegFormer model on semantic segmentation](https://github.com/huggingface/notebooks/blob/main/examples/semantic_segmentation-tf.ipynb) | Show how to preprocess the data and fine-tune a pretrained SegFormer model on Semantic Segmentation | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/semantic_segmentation-tf.ipynb)| [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/notebooks/blob/main/examples/semantic_segmentation-tf.ipynb)|
 
-#### Other modalities
+#### Other modalities[[tensorflow-other]]
 
 | Notebook     |      Description      |   |   |
 |:----------|:-------------|:-------------|------:|
