@@ -25,7 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput
+from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_cpmant import CPMAntConfig
@@ -793,7 +793,7 @@ CPMANT_START_DOCSTRING = r"""
 
 CPMANT_INPUTS_DOCSTRING = r"""
     Args:
-        input (`torch.Tensor` of shape `(batch_size, seq_len)`):
+        input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -826,25 +826,24 @@ class CPMAntModel(CPMAntPreTrainedModel):
     def __init__(self, config: CPMAntConfig):
         super().__init__(config)
         self.encoder = CPMAntEncoder()
-        self.prompt_embedding = nn.Embedding(config.prompt_types * config.prompt_length, config.dim_model)
         self.segment_embedding = nn.Embedding(config.segment_types, config.dim_model)
-        self.input_embedding = nn.Embedding(config.vocab_size, config.dim_model)
+        self.input_embedding = nn.Embedding(
+            config.vocab_size + config.prompt_types * config.prompt_length, config.dim_model
+        )
         self.position_bias = CPMAntSegmentPositionEmbedding()
         self.prompt_length = config.prompt_length
 
     def get_input_embeddings(self):
         embeddings = {
-            "prompt": self.prompt_embedding,
             "segment": self.segment_embedding,
-            "input": self.input_embedding,
+            "input_ids": self.input_embedding,
             "position": self.position_bias,
         }
         return embeddings
 
     def set_input_embeddings(self, embeddings, **kwargs):
-        self.prompt_embedding = embeddings["prompt"]
         self.segment_embedding = embeddings["segment"]
-        self.input_embedding = embeddings["input"]
+        self.input_embedding = embeddings["input_ids"]
         self.position_bias = embeddings["position"]
 
     def _prepare_attention_mask(self, input, span, context, length):
@@ -870,7 +869,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
     )
     def forward(
         self,
-        input: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         length: Optional[torch.Tensor] = None,
         context: Optional[torch.Tensor] = None,
         position: Optional[torch.Tensor] = None,
@@ -881,7 +880,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
     ):
         r"""
         Args:
-            input (`torch.Tensor` of shape `(batch_size, seq_len)`):
+            input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
                 Indices of input sequence tokens in the vocabulary.
 
                 Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -906,15 +905,12 @@ class CPMAntModel(CPMAntPreTrainedModel):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
-        input_prompt = input[:, : self.prompt_length].contiguous()
-        input_ids = input[:, self.prompt_length :].contiguous()
-
-        prompt_states = self.prompt_embedding(input_prompt)
+        input_ids = input_ids.contiguous()
         hidden_states = self.input_embedding(input_ids)
         segment_states = self.segment_embedding(segment)
-        hidden_states = torch.cat([prompt_states, hidden_states], 1) + segment_states
+        hidden_states = hidden_states + segment_states
 
-        attention_mask = self._prepare_attention_mask(input, span, context, length)
+        attention_mask = self._prepare_attention_mask(input_ids, span, context, length)
         position_bias = self.position_bias(position, position, segment, segment)
 
         hidden_states = self.encoder(hidden_states, attention_mask, position_bias)
@@ -936,9 +932,10 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
     def __init__(self, config: CPMAntConfig):
         super().__init__(config)
         self.encoder = CPMAntEncoder(use_cache=config.use_cache)
-        self.prompt_embedding = nn.Embedding(config.prompt_types * config.prompt_length, config.dim_model)
         self.segment_embedding = nn.Embedding(config.segment_types, config.dim_model)
-        self.input_embedding = nn.Embedding(config.vocab_size, config.dim_model)
+        self.input_embedding = nn.Embedding(
+            config.vocab_size + config.prompt_types * config.prompt_length, config.dim_model
+        )
         self.position_bias = CPMAntSegmentPositionEmbedding()
         self.prompt_length = config.prompt_length
         self.lm_head = nn.Linear(config.dim_model, config.vocab_size, bias=False)
@@ -947,12 +944,12 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutput,
+        output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
         self,
-        input: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
         length: Optional[torch.Tensor] = None,
         context: Optional[torch.Tensor] = None,
         position: Optional[torch.Tensor] = None,
@@ -965,7 +962,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
     ):
         r"""
         Args:
-            input (`torch.Tensor` of shape `(batch_size, seq_len)`):
+            input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
                 Indices of input sequence tokens in the vocabulary.
 
                 Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
@@ -996,24 +993,22 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         if past_key_values is None:
             past_length = 0
             past_key_values = tuple([None] * self.encoder.num_layers)
-            input_prompt = input[:, : self.prompt_length].contiguous()
-            input_ids = input[:, self.prompt_length :].contiguous()
-
-            prompt_states = self.prompt_embedding(input_prompt)
+            input_ids = input_ids.contiguous()
             hidden_states = self.input_embedding(input_ids)
             segment_states = self.segment_embedding(segment)
-            hidden_states = torch.cat([prompt_states, hidden_states], 1) + segment_states
+            hidden_states = hidden_states + segment_states
 
         else:
             past_length = past_key_values[0][0].size(-2)
             segment_states = self.segment_embedding(segment)
-            hidden_states = self.input_embedding(input) + segment_states[:, -1:, :]
+            hidden_states = self.input_embedding(input_ids) + segment_states[:, -1:, :]
 
-        attention_mask = self._prepare_attention_mask(input, span, context, length, past_length)
+        attention_mask = self._prepare_attention_mask(input_ids, span, context, length)
         position_bias = self.position_bias(position, position, segment, segment)
 
         attention_mask = attention_mask[:, past_length:, :]
         position_bias = position_bias[:, :, past_length:, :]
+        hidden_states = hidden_states[:, past_length:, :]
 
         self.encoder.use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.return_dict
@@ -1023,21 +1018,21 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         if not return_dict:
             return tuple(v for v in [logits, hidden_states, present_key_values] if v is not None)
 
-        return CausalLMOutput(
+        return CausalLMOutputWithPast(
             logits=logits,
             hidden_states=hidden_states,
+            past_key_values=present_key_values,
         )
 
-    def _prepare_attention_mask(self, input, span, context, length, past_length):
-        batch = input.size(0)
-        seqlen = input.size(1) + past_length
-        device = input.device
+    def _prepare_attention_mask(self, input_ids, span, context, length):
+        batch = input_ids.size(0)
+        seqlen = input_ids.size(1)
+        device = input_ids.device
         directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(-1, 1)
         attention_mask = context[:, None, :] | (
             context[:, :, None].logical_not() & directional_mask_2d.view(1, seqlen, seqlen)
         )
         attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
-        # mask for left paddding
         mask_1d = torch.tensor(list(range(seqlen))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
         attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
         return attention_mask
@@ -1048,80 +1043,42 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
     def set_input_embeddings(self, embeddings, **kwargs):
         self.lm_head = embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **kwargs):
-        input_tensors = list(map(self._convert_to_tensors, input_ids))
-        keys = set(input_tensors[0].keys())
-        padded = {}
-        for key in keys:
-            padded[key] = self.pad(input_tensors, key, padding_side="left")
-        return padded
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        batch, length = input_ids.shape
+        cur_length = max(kwargs["length"].tolist())
+        if cur_length != length:
+            difference = length - cur_length
+            kwargs["length"] = torch.tensor(length).repeat(batch).int()
+            context = torch.tensor([1] * difference).repeat(batch).reshape(batch, -1).int()
+            kwargs["context"] = torch.cat((kwargs["context"], context), dim=1).int()
+            position = torch.tensor([x for x in range(cur_length, length)]).repeat(batch).reshape(batch, -1)
+            kwargs["position"] = torch.cat((kwargs["position"], position), dim=1).int()
+            span = torch.tensor([0] * difference).repeat(batch).reshape(batch, -1)
+            kwargs["span"] = torch.cat((kwargs["span"], span), dim=1).int()
+            segment = torch.tensor([2] * difference).repeat(batch).reshape(batch, -1)
+            kwargs["segment"] = torch.cat((kwargs["segment"], segment), dim=1).int()
 
-    def _convert_to_tensors(self, input_ids, task_id=2):
-        model_inputs = {}
-        input_ids = torch.cat((torch.tensor([6]), input_ids), axis=0)
-        input_ids = [j for j in input_ids if j != torch.tensor(1)]
+        return {
+            "input_ids": input_ids,
+            "length": kwargs["length"],
+            "context": kwargs["context"],
+            "position": kwargs["position"],
+            "span": kwargs["span"],
+            "segment": kwargs["segment"],
+            "use_cache": kwargs["use_cache"],
+            "past_key_values": kwargs.get("past_key_values", None),
+        }
 
-        model_inputs["input"] = [x + self.prompt_length * task_id for x in range(self.prompt_length)] + input_ids
-        model_inputs["length"] = len(model_inputs["input"])
-        model_inputs["position"] = list(range(len(model_inputs["input"])))
-        model_inputs["span"] = [0] * len(model_inputs["input"])
-        model_inputs["context"] = [True] * len(model_inputs["input"])
-        model_inputs["segment"] = [0] * self.prompt_length + [2] * len(input_ids)
+    def _expand_inputs_for_generation(self, input_ids, expand_size, **kwargs):
+        input_ids = input_ids.repeat_interleave(expand_size, dim=0)
+        for key in ["length", "context", "position", "span", "segment"]:
+            kwargs[key] = kwargs[key].repeat_interleave(expand_size, dim=0).int()
+        return input_ids, kwargs
 
-        for key in model_inputs:
-            model_inputs[key] = torch.tensor(model_inputs[key]).int().unsqueeze(0)
-
-        return model_inputs
-
-    def _reorder_cache(past_key_values, beam_idx):
-        past_key_values = [list(each) if each is not None else each for each in past_key_values]  # type: ignore # noqa: E501
+    def _reorder_cache(self, past_key_values, beam_idx):
+        past_key_values = [list(each) if each is not None else each for each in past_key_values]
         for key_value_layer in past_key_values:
             if key_value_layer is not None:
                 key_value_layer[0] = key_value_layer[0][beam_idx]
                 key_value_layer[1] = key_value_layer[1][beam_idx]
         return past_key_values
-
-    def pad(self, orig_items, key, padding_value=0, padding_side="left"):
-        items = []
-        if isinstance(orig_items[0][key], list):
-            if not isinstance(orig_items[0][key][0], torch.Tensor):
-                raise TypeError("The type of orig_items[0][key][0] should be tensor!")
-            for it in orig_items:
-                for tr in it[key]:
-                    items.append({key: tr})
-        else:
-            if not isinstance(orig_items[0][key][0], torch.Tensor):
-                raise TypeError("The type of orig_items[0][key][0] should be tensor!")
-            items = orig_items
-
-        batch_size = len(items)
-        shape = items[0][key].shape
-        dim = len(shape)
-        if dim > 3:
-            raise ValueError(f"input should have at most 3 dimensions, got {dim}")
-        max_length = max(item[key].shape[-1] for item in items)
-        min_length = min(item[key].shape[-1] for item in items)
-        dtype = items[0][key].dtype
-
-        if dim == 1:
-            return torch.cat([item[key] for item in items], dim=0)
-        elif dim == 2:
-            if max_length == min_length:
-                return torch.cat([item[key] for item in items], dim=0)
-            tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
-        else:
-            tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
-
-        for i, item in enumerate(items):
-            if dim == 2:
-                if padding_side == "left":
-                    tensor[i, -len(item[key][0]) :] = item[key][0].clone()
-                else:
-                    tensor[i, : len(item[key][0])] = item[key][0].clone()
-            elif dim == 3:
-                if padding_side == "left":
-                    tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
-                else:
-                    tensor[i, : len(item[key][0]), :] = item[key][0].clone()
-
-        return tensor

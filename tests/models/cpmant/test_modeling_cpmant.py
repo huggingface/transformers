@@ -100,7 +100,7 @@ class CPMAntModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = dict()
-        input_ids["input"] = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).type(torch.int32)
+        input_ids["input_ids"] = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).type(torch.int32)
         input_ids["length"] = torch.tensor([self.seq_length] * self.batch_size)
         input_ids["context"] = ids_tensor([self.batch_size, self.seq_length], 2).type(torch.int32)
         input_ids["position"] = ids_tensor([self.batch_size, self.seq_length], self.seq_length).type(torch.int32)
@@ -121,7 +121,10 @@ class CPMAntModelTester:
         logits, hidden_states = model(**input_ids)
 
         self.parent.assertEqual(hidden_states.shape, (self.batch_size, self.seq_length, config.dim_model))
-        self.parent.assertEqual(logits.shape, (self.batch_size, self.seq_length, config.vocab_size))
+        self.parent.assertEqual(
+            logits.shape,
+            (self.batch_size, self.seq_length, config.vocab_size + config.prompt_types * config.prompt_length),
+        )
 
     def create_and_check_lm_head_model(self, config, input_ids, *args):
         model = CPMAntForCausalLM(config)
@@ -185,11 +188,26 @@ class CPMAntModelTest(unittest.TestCase):
         model_path = "openbmb/cpm-ant-10b"
         model = CPMAntForCausalLM.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
-        texts = "昨天多云转阴，"
-        expected_output = "昨天多云转阴，今天雨夹雪，气温骤降至零下5°C。在这冰天雪地的日子里，我们迎来了祖国母亲的生日。在这普天同庆的日子里，我们迎来了祖国母亲的生日。\n"
+        texts = "今天天气不错，"
+        expected_output = "今天天气不错，阳光明媚，我和妈妈一起去超市买东西。在结账的时候，我看到了一个熟悉的身影，那是我的好朋友——小宇。他正和妈妈在一起挑选东西。我走过去"
         model_inputs = tokenizer(texts, return_tensors="pt")
         token_ids = model.generate(**model_inputs)
         output_texts = tokenizer.decode(token_ids)
+        self.assertEqual(expected_output, output_texts)
+
+    @slow
+    def test_batch_generation(self):
+        model_path = "openbmb/cpm-ant-10b"
+        model = CPMAntForCausalLM.from_pretrained(model_path)
+        tokenizer = CPMAntTokenizer.from_pretrained(model_path)
+        texts = ["今天天气不错，", "新年快乐，"]
+        expected_output = [
+            "今天天气不错，阳光明媚，我和妈妈一起去超市买东西。在结账的时候，我看到了一个熟悉的身影，那是我的好朋友——小宇。他正和妈妈在一起挑选东西。我走过去",
+            "新年快乐，万事如意。在这辞旧迎新的美好时刻，我谨代表《农村新技术》杂志社全体同仁，向长期以来关心、支持本刊发展的各级领导、各界朋友和广大读者致以衷心的感谢和诚",
+        ]
+        model_inputs = tokenizer(texts, return_tensors="pt", padding=True)
+        token_ids = model.generate(**model_inputs)
+        output_texts = tokenizer.batch_decode(token_ids)
         self.assertEqual(expected_output, output_texts)
 
 
@@ -197,19 +215,18 @@ class CPMAntModelTest(unittest.TestCase):
 class CPMAntModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        texts = ["今天天气真好！"]
+        texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
         model = CPMAntModel.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
-        input_ids = tokenizer.get_model_input(texts)
-        logits = model(**input_ids)[0]
-        vocab_size = 30720
-        expected_shape = torch.Size((1, 38, vocab_size))
+        inputs = tokenizer(texts, return_tensors="pt")
+        logits = model(**inputs)[0]
+        expected_shape = torch.Size((1, 38, 31744))
 
         self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[0.4556, 0.5342, 0.5063], [1.0547, 1.0283, 0.9883], [1.5820, 1.5537, 1.5273]]],
+            [[[0.4078, 0.3699, 0.3349], [0.8038, 0.7638, 0.7443], [2.3982, 2.3758, 2.3742]]],
         )
         self.assertTrue(torch.allclose(logits[:, :3, :3], expected_slice, atol=1e-2))
 
@@ -218,18 +235,17 @@ class CPMAntModelIntegrationTest(unittest.TestCase):
 class CPMAntForCausalLMlIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_casual(self):
-        texts = ["今天天气真好！"]
+        texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
         model = CPMAntForCausalLM.from_pretrained(model_path)
         tokenizer = CPMAntTokenizer.from_pretrained(model_path)
-        input_ids = tokenizer.get_model_input(texts)
-        logits = model(**input_ids).logits
-        vocab_size = 30720
-        expected_shape = torch.Size((1, 38, vocab_size))
+        inputs = tokenizer(texts, return_tensors="pt")
+        logits = model(**inputs).logits
+        expected_shape = torch.Size((1, 38, 30720))
 
         self.assertEqual(logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[0.4556, 0.5342, 0.5063], [1.0547, 1.0283, 0.9883], [1.5820, 1.5537, 1.5273]]],
+            [[[0.4078, 0.3699, 0.3349], [0.8038, 0.7638, 0.7443], [2.3982, 2.3758, 2.3742]]],
         )
         self.assertTrue(torch.allclose(logits[:, :3, :3], expected_slice, atol=1e-2))

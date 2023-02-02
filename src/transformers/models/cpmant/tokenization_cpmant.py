@@ -19,6 +19,7 @@ from importlib.util import find_spec
 from typing import Optional, Tuple
 
 from transformers import is_torch_available
+from transformers.utils import PaddingStrategy
 
 
 if is_torch_available():
@@ -51,49 +52,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
-
-
-def pad(orig_items, key, padding_value=0, padding_side="left"):
-    items = []
-    if isinstance(orig_items[0][key], list):
-        assert isinstance(orig_items[0][key][0], torch.Tensor)
-        for it in orig_items:
-            for tr in it[key]:
-                items.append({key: tr})
-    else:
-        assert isinstance(orig_items[0][key], torch.Tensor)
-        items = orig_items
-
-    batch_size = len(items)
-    shape = items[0][key].shape
-    dim = len(shape)
-    assert dim <= 3
-    max_length = max(item[key].shape[-1] for item in items)
-    min_length = min(item[key].shape[-1] for item in items)
-    dtype = items[0][key].dtype
-
-    if dim == 1:
-        return torch.cat([item[key] for item in items], dim=0)
-    elif dim == 2:
-        if max_length == min_length:
-            return torch.cat([item[key] for item in items], dim=0)
-        tensor = torch.zeros((batch_size, max_length), dtype=dtype) + padding_value
-    else:
-        tensor = torch.zeros((batch_size, max_length, shape[-1]), dtype=dtype) + padding_value
-
-    for i, item in enumerate(items):
-        if dim == 2:
-            if padding_side == "left":
-                tensor[i, -len(item[key][0]) :] = item[key][0].clone()
-            else:
-                tensor[i, : len(item[key][0])] = item[key][0].clone()
-        elif dim == 3:
-            if padding_side == "left":
-                tensor[i, -len(item[key][0]) :, :] = item[key][0].clone()
-            else:
-                tensor[i, : len(item[key][0]), :] = item[key][0].clone()
-
-    return tensor
 
 
 def load_vocab(vocab_file):
@@ -175,6 +133,7 @@ class CPMAntTokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             line_token=line_token,
             space_token=space_token,
+            padding_side="left",
             **kwargs,
         )
         self.bod_token = bod_token
@@ -211,7 +170,7 @@ class CPMAntTokenizer(PreTrainedTokenizer):
         return self.encoder[self.bos_token]
 
     @property
-    def pad_id(self):
+    def pad_token_id(self):
         return self.encoder[self.pad_token]
 
     @property
@@ -243,8 +202,8 @@ class CPMAntTokenizer(PreTrainedTokenizer):
         if isinstance(tokens[0], list):
             tokens = tokens[0]
         tokens = [i for i in tokens if i >= 0]
-        text = "".join([self.decoder[x] for x in tokens if x != self.pad_id])
-        return text
+        text = "".join([self.decoder[x] for x in tokens if x != self.pad_token_id and x != self.eos_id])
+        return self.postprocess(text)
 
     def check(self, token):
         return token in self.encoder
@@ -254,6 +213,11 @@ class CPMAntTokenizer(PreTrainedTokenizer):
 
     def convert_ids_to_tokens(self, ids):
         return [self.decoder[x] if x >= 0 else self.unk_token for x in ids]
+
+    def postprocess(self, text):
+        begin = text.find(self.bos_token)
+        end = text.find(self.eos_token)
+        return text[begin + len(self.bos_token) : end]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if os.path.isdir(save_directory):
@@ -275,27 +239,44 @@ class CPMAntTokenizer(PreTrainedTokenizer):
                 index += 1
         return (vocab_file,)
 
-    def _convert_to_tensors(self, input_text, prompt_length=32, task_id=2):
-        model_inputs = {}
-        input_ids = [self.bos_id] + self.encode(input_text)
+    def prepare_for_model(self, first_ids, pair_ids=None, task_id=2, prompt_length=32, **kwargs):
+        input_ids = [self.bos_id] + first_ids
         input_ids = [j for j in input_ids if j != self.unk_id]
-
-        model_inputs["input"] = [x + prompt_length * task_id for x in range(prompt_length)] + input_ids
-        model_inputs["length"] = len(model_inputs["input"])
-        model_inputs["position"] = list(range(len(model_inputs["input"])))
-        model_inputs["span"] = [0] * len(model_inputs["input"])
-        model_inputs["context"] = [True] * len(model_inputs["input"])
+        model_inputs = {}
+        model_inputs["input_ids"] = [x + prompt_length * task_id for x in range(prompt_length)] + input_ids
+        model_inputs["length"] = len(model_inputs["input_ids"])
+        model_inputs["position"] = list(range(len(model_inputs["input_ids"])))
+        model_inputs["span"] = [0] * len(model_inputs["input_ids"])
+        model_inputs["context"] = [True] * len(model_inputs["input_ids"])
         model_inputs["segment"] = [0] * prompt_length + [2] * len(input_ids)
-
-        for key in model_inputs:
-            model_inputs[key] = torch.tensor(model_inputs[key]).int().unsqueeze(0)
-
         return model_inputs
 
-    def get_model_input(self, text_list):
-        input_tensors = list(map(self._convert_to_tensors, text_list))
-        keys = set(input_tensors[0].keys())
-        padded = {}
-        for key in keys:
-            padded[key] = pad(input_tensors, key, padding_side="left")
-        return padded
+    def _pad(self, encoded_inputs, max_length, padding_strategy, return_attention_mask, **kwargs):
+        required_input = encoded_inputs[self.model_input_names[0]]
+        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
+        # Initialize attention mask if not present.
+        if return_attention_mask and "attention_mask" not in encoded_inputs:
+            encoded_inputs["attention_mask"] = [1] * len(required_input)
+        if needs_to_be_padded:
+            difference = max_length - len(required_input)
+            for key in encoded_inputs.keys():
+                if key != "length":
+                    encoded_inputs[key] = [self.pad_token_id] * difference + encoded_inputs[key]
+            if return_attention_mask:
+                encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+        return encoded_inputs
+
+    def _encode_plus(self, text, *args, **kwargs):
+        outputs = super()._encode_plus(text, *args, **kwargs)
+        for k in outputs.keys():
+            outputs[k] = torch.tensor(outputs[k]).unsqueeze(0)
+            if k != "input_ids":
+                outputs[k] = outputs[k].int()
+        return outputs
+
+    def _batch_encode_plus(self, batch_text_or_text_pairs, *args, **kwargs):
+        batch_outputs = super()._batch_encode_plus(batch_text_or_text_pairs, *args, **kwargs)
+        for k in batch_outputs.keys():
+            if k != "input_ids":
+                batch_outputs[k] = batch_outputs[k].int()
+        return batch_outputs
