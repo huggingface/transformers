@@ -368,10 +368,18 @@ class Trainer:
 
         # At this stage the model is already loaded
         if getattr(model, "is_loaded_in_8bit", False):
-            raise ValueError(
-                "The model you want to train is loaded in 8-bit precision. "
-                "Training an 8-bit model is not supported yet. "
-            )
+            if getattr(model, "_is_int8_training_enabled", False):
+                logger.info(
+                    "The model is loaded in 8-bit precision. To train this model you need to add additional modules"
+                    " inside the model such as adapters using `peft` library and freeze the model weights. Please"
+                    " check "
+                    " the examples in https://github.com/huggingface/peft for more details."
+                )
+            else:
+                raise ValueError(
+                    "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
+                    " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
+                )
 
         # Setup Sharded DDP training
         self.sharded_ddp = None
@@ -458,7 +466,7 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        if self.place_model_on_device:
+        if self.place_model_on_device and not getattr(model, "is_loaded_in_8bit", False):
             self._move_model_to_device(model, args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
