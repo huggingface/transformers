@@ -16,16 +16,9 @@
 
 import copy
 import os
-from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
-
-
-if TYPE_CHECKING:
-    from ...processing_utils import ProcessorMixin
-    from ...utils import TensorType
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -38,94 +31,116 @@ CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CLAPTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLAPTextModel`]. It is used to instantiate a CLAP
-    text encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the text encoder of the CLAP
-    [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
+    This is the configuration class to store the configuration of a [`CLAPTextModel`] or a [`TFCLAPTextModel`]. It is
+    used to instantiate a RoBERTa model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the RoBERTa
+    [roberta-base](https://huggingface.co/roberta-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
+
     Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the CLAP text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`CLAPModel`].
-        hidden_size (`int`, *optional*, defaults to 512):
+        vocab_size (`int`, *optional*, defaults to 30522):
+            Vocabulary size of the RoBERTa model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`CLAPTextModel`] or [`TFCLAPTextModel`].
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"relu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"relu"`,
+            `"relu"`, `"silu"` and `"relu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
+        max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
-            defaults to 1e-5): The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+        type_vocab_size (`int`, *optional*, defaults to 2):
+            The vocabulary size of the `token_type_ids` passed when calling [`CLAPTextModel`] or [`TFCLAPTextModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
+        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
+            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
 
-    Example:
+    Examples:
 
     ```python
     >>> from transformers import CLAPTextConfig, CLAPTextModel
 
-    >>> # Initializing a CLAPTextConfig with laion-ai/base style configuration
+    >>> # Initializing a RoBERTa configuration
     >>> configuration = CLAPTextConfig()
 
-    >>> # Initializing a CLAPTextModel (with random weights) from the laion-ai/base style configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = CLAPTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "clap_text_model"
+    model_type = "roberta"
 
     def __init__(
         self,
-        vocab_size=49408,
-        hidden_size=512,
-        intermediate_size=2048,
-        projection_dim=512,
+        vocab_size=50265,
+        hidden_size=768,
+        fusion_hidden_size=768,
         num_hidden_layers=12,
-        num_attention_heads=8,
-        max_position_embeddings=77,
-        hidden_act="quick_gelu",
-        layer_norm_eps=0.00001,
-        dropout=0.0,
-        attention_dropout=0.0,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=514,
+        type_vocab_size=1,
         initializer_range=0.02,
-        initializer_factor=1.0,
+        layer_norm_eps=1e-12,
+        projection_hidden_size=768,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        position_embedding_type="absolute",
+        use_cache=True,
+        classifier_dropout=None,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
-        self.dropout = dropout
+        self.fusion_hidden_size = fusion_hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.max_position_embeddings = max_position_embeddings
-        self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.intermediate_size = intermediate_size
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.position_embedding_type = position_embedding_type
+        self.use_cache = use_cache
+        self.classifier_dropout = classifier_dropout
+        self.projection_hidden_size = projection_hidden_size
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -145,7 +160,7 @@ class CLAPTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class CLAPVisionConfig(PretrainedConfig):
+class CLAPAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLAPVisionModel`]. It is used to instantiate a
     CLAP vision encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -168,10 +183,10 @@ class CLAPVisionConfig(PretrainedConfig):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
             The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
-            defaults to 1e-5): The epsilon used by the layer normalization layers.
+        hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"relu"`,
+            `"relu"`, `"selu"` and `"relu_new"` ``"relu"` are supported. layer_norm_eps (`float`, *optional*, defaults
+            to 1e-5): The epsilon used by the layer normalization layers.
         dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -185,10 +200,10 @@ class CLAPVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLAPVisionConfig, CLAPVisionModel
+    >>> from transformers import CLAPAudioConfig, CLAPVisionModel
 
-    >>> # Initializing a CLAPVisionConfig with laion-ai/base style configuration
-    >>> configuration = CLAPVisionConfig()
+    >>> # Initializing a CLAPAudioConfig with laion-ai/base style configuration
+    >>> configuration = CLAPAudioConfig()
 
     >>> # Initializing a CLAPVisionModel (with random weights) from the laion-ai/base style configuration
     >>> model = CLAPVisionModel(configuration)
@@ -201,38 +216,108 @@ class CLAPVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        intermediate_size=3072,
-        projection_dim=512,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        num_channels=3,
+        sample_rate=48000,
+        audio_length=1024,
+        window_size=8,
+        hop_size=1024,
+        fmin=50,
+        fmax=14000,
+        mel_bins=64,
+        clip_samples=480000,
+        spec_size=256,
+        hidden_act="relu",
+        patch_size=4,
+        patch_stride=(4, 4),
+        num_classes=527,
+        hidden_size=96,
+        projection_hidden_size=768,
+        depths=[2, 2, 6, 2],
+        num_heads=[4, 8, 16, 32],
+        enable_fusion=False,
+        hidden_dropout_prob=0.1,
+        fusion_type=None,
         image_size=224,
-        patch_size=32,
-        hidden_act="quick_gelu",
-        layer_norm_eps=0.00001,
-        dropout=0.0,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
+        input_channels=3,
+        patch_embed_input_channels=1,
+        flatten_patch_embeds=True,
+        patch_embeds_hidden_size=96,
+        enable_patch_layer_norm=True,
+        swin_drop_rate=0.0,
+        swin_attention_drop_rate=0.0,
+        swin_drop_path_rate=0.1,
+        swin_qkv_bias=True,
+        swin_norm_before_mlp="ln",
+        swin_mlp_ratio=4.0,
+        swin_use_checkpoint=False,
+        swin_absolute_positional_embedding=False,
+        swin_hidden_act="gelu",
+        aff_block_r=4,
+        enable_patch_fusion=False,
+        spectrogram_window_size=1024,
+        spectrogram_window='hann',
+        spectrogram_center=True,
+        spectrogram_pad_mode='reflect',
+        spectrogram_freeze_parameters=True,
+        spectrogram_ref=1.0,
+        spectrogram_amin=1e-10,
+        spectrogram_top_db=None,
+        spectrogram_time_drop_width=64, 
+        spectrogram_time_stripes_num=2, 
+        spectrogram_freq_drop_width=8, 
+        spectrogram_freq_stripes_num=2,
         **kwargs
     ):
         super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
-        self.dropout = dropout
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
+        self.sample_rate = sample_rate
+        self.audio_length = audio_length
+        self.window_size = window_size
+        self.hop_size = hop_size
+        self.fmin = fmin
+        self.fmax = fmax
+        self.mel_bins = mel_bins
+        self.clip_samples = clip_samples
+        self.spec_size = spec_size
         self.patch_size = patch_size
-        self.image_size = image_size
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.attention_dropout = attention_dropout
-        self.layer_norm_eps = layer_norm_eps
+        self.patch_stride = patch_stride
+        self.num_classes = num_classes
+        self.hidden_size = hidden_size
+        self.depths = depths
+        self.num_heads = num_heads
+        self.window_size = window_size
+        self.enable_fusion = enable_fusion
+        self.fusion_type = fusion_type
         self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.projection_hidden_size = projection_hidden_size
+        self.image_size = image_size
+        self.input_channels = input_channels
+        self.flatten_patch_embeds = flatten_patch_embeds
+        self.patch_embeds_hidden_size = patch_embeds_hidden_size
+        self.enable_patch_layer_norm = enable_patch_layer_norm
+        self.swin_drop_rate = swin_drop_rate
+        self.swin_attention_drop_rate = swin_attention_drop_rate
+        self.swin_drop_path_rate = swin_drop_path_rate
+        self.swin_qkv_bias = swin_qkv_bias
+        self.swin_norm_before_mlp = swin_norm_before_mlp
+        self.swin_mlp_ratio = swin_mlp_ratio
+        self.swin_use_checkpoint = swin_use_checkpoint
+        self.swin_absolute_positional_embedding = swin_absolute_positional_embedding
+        self.patch_embed_input_channels = patch_embed_input_channels
+        self.swin_hidden_act = swin_hidden_act
+        self.aff_block_r = aff_block_r
+        self.enable_patch_fusion = enable_patch_fusion
+        self.spectrogram_window_size = spectrogram_window_size
+        self.spectrogram_window = spectrogram_window
+        self.spectrogram_center = spectrogram_center
+        self.spectrogram_pad_mode = spectrogram_pad_mode
+        self.spectrogram_freeze_parameters = spectrogram_freeze_parameters
+        self.spectrogram_ref = spectrogram_ref
+        self.spectrogram_amin = spectrogram_amin
+        self.spectrogram_top_db = spectrogram_top_db
+        self.spectrogram_time_drop_width = spectrogram_time_drop_width
+        self.spectrogram_time_stripes_num = spectrogram_time_stripes_num
+        self.spectrogram_freq_drop_width = spectrogram_freq_drop_width
+        self.spectrogram_freq_stripes_num = spectrogram_freq_stripes_num
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -266,7 +351,7 @@ class CLAPConfig(PretrainedConfig):
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`CLAPTextConfig`].
         vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLAPVisionConfig`].
+            Dictionary of configuration options used to initialize [`CLAPAudioConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
@@ -288,12 +373,12 @@ class CLAPConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a CLAPConfig from a CLAPTextConfig and a CLAPVisionConfig
-    >>> from transformers import CLAPTextConfig, CLAPVisionConfig
+    >>> # We can also initialize a CLAPConfig from a CLAPTextConfig and a CLAPAudioConfig
+    >>> from transformers import CLAPTextConfig, CLAPAudioConfig
 
     >>> # Initializing a CLAPText and CLAPVision configuration
     >>> config_text = CLAPTextConfig()
-    >>> config_vision = CLAPVisionConfig()
+    >>> config_vision = CLAPAudioConfig()
 
     >>> config = CLAPConfig.from_text_vision_configs(config_text, config_vision)
     ```"""
@@ -302,7 +387,14 @@ class CLAPConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(
-        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
+        self,
+        text_config=None,
+        vision_config=None,
+        logit_scale_init_value=(1 / 0.07),
+        fusion_num_hidden_layers=2,
+        projection_dim=512,
+        projection_hidden_act="relu",
+        **kwargs
     ):
         super().__init__(**kwargs)
 
@@ -320,17 +412,29 @@ class CLAPConfig(PretrainedConfig):
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the CLAPVisionConfig with default values.")
+            logger.info("vision_config is None. initializing the CLAPAudioConfig with default values.")
 
         self.text_config = CLAPTextConfig(**text_config)
-        self.vision_config = CLAPVisionConfig(**vision_config)
+        self.vision_config = CLAPAudioConfig(**vision_config)
+
+        self.text_config.fusion_num_hidden_layers = fusion_num_hidden_layers
+        self.vision_config.fusion_num_hidden_layers = fusion_num_hidden_layers
+
+        self.text_config.projection_dim = projection_dim
+        self.vision_config.projection_dim = projection_dim
+
+        self.text_config.projection_hidden_act = projection_hidden_act
+        self.vision_config.projection_hidden_act = projection_hidden_act
 
         self.projection_dim = projection_dim
+        self.projection_hidden_act = projection_hidden_act
+        self.hidden_size = self.text_config.hidden_size
+
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: CLAPTextConfig, vision_config: CLAPVisionConfig, **kwargs):
+    def from_text_vision_configs(cls, text_config: CLAPTextConfig, vision_config: CLAPAudioConfig, **kwargs):
         r"""
         Instantiate a [`CLAPConfig`] (or a derived class) from clap text model configuration and clap vision model
         configuration.
@@ -353,50 +457,3 @@ class CLAPConfig(PretrainedConfig):
         output["vision_config"] = self.vision_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
-
-
-class CLAPOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
-            ]
-        )
-
-    @property
-    def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("logits_per_image", {0: "batch"}),
-                ("logits_per_text", {0: "batch"}),
-                ("text_embeds", {0: "batch"}),
-                ("image_embeds", {0: "batch"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    def generate_dummy_inputs(
-        self,
-        processor: "ProcessorMixin",
-        batch_size: int = -1,
-        seq_length: int = -1,
-        framework: Optional["TensorType"] = None,
-    ) -> Mapping[str, Any]:
-
-        text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
-        )
-        image_input_dict = super().generate_dummy_inputs(
-            processor.feature_extractor, batch_size=batch_size, framework=framework
-        )
-        return {**text_input_dict, **image_input_dict}
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 14
