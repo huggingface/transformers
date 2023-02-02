@@ -394,33 +394,6 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     return _no_grad_trunc_normal_(tensor, mean, std, a, b)
 
 
-def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):
-    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
-    if mode == "fan_in":
-        denom = fan_in
-    elif mode == "fan_out":
-        denom = fan_out
-    elif mode == "fan_avg":
-        denom = (fan_in + fan_out) / 2
-
-    variance = scale / denom
-
-    if distribution == "truncated_normal":
-        # constant is stddev of standard normal truncated to (-2, 2)
-        trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
-    elif distribution == "normal":
-        tensor.normal_(std=math.sqrt(variance))
-    elif distribution == "uniform":
-        bound = math.sqrt(3 * variance)
-        tensor.uniform_(-bound, bound)
-    else:
-        raise ValueError(f"invalid distribution {distribution}")
-
-
-def lecun_normal_(tensor):
-    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
-
-
 def window_partition(x, window_size):
     """
     Args:
@@ -634,8 +607,8 @@ class CLAPAudioOutput(nn.Module):
         return hidden_states
 
 
-
-class SwinLayer(nn.Module):
+# Copied from transformers.models.swin.modeling_swin.SwinLayer with Swin->CLAPAudio
+class CLAPAudioSwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -756,137 +729,6 @@ class SwinLayer(nn.Module):
 
         layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
         return layer_outputs
-
-# class CLAPAudioSwinTransformerBlock(nn.Module):
-#     def __init__(
-#         self,
-#         config,
-#         input_resolution,
-#         shift_size=0,
-#         drop_path=0.0,
-#         idx_layer=0,
-#     ):
-#         super().__init__()
-#         self.hidden_dim = config.hidden_size * 2**idx_layer
-#         self.input_resolution = input_resolution
-#         self.num_heads = config.num_heads[idx_layer]
-#         self.shift_size = shift_size
-#         self.window_size = config.window_size
-#         self.mlp_ratio = config.mlp_ratio
-#         self.norm_before_mlp = config.swin_norm_before_mlp
-
-#         if min(self.input_resolution) <= self.window_size:
-#             # if window size is larger than input resolution, we don't partition windows
-#             self.shift_size = 0
-#             self.window_size = min(self.input_resolution)
-#         assert 0 <= self.shift_size < self.window_size, "shift_size must in 0-window_size"
-
-#         self.norm1 = nn.LayerNorm(self.hidden_dim)
-#         self.attn = CLAPAudioAttention(
-#             config=config,
-#             dim=self.hidden_dim,
-#             num_heads=self.num_heads,
-#             window_size=self.window_size,
-#         )
-
-#         self.drop_path = CLAPDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-#         if self.norm_before_mlp == "ln":
-#             self.norm2 = nn.LayerNorm(self.hidden_dim)
-#         elif self.norm_before_mlp == "bn":
-#             self.norm2 = lambda x: nn.BatchNorm1d(self.hidden_dim)(x.transpose(1, 2)).transpose(1, 2)
-#         else:
-#             raise NotImplementedError
-#         mlp_hidden_dim = int(self.hidden_dim * self.mlp_ratio)
-#         # self.mlp = CLAPAudioMLP(in_features=self.hidden_dim, hidden_features=mlp_hidden_dim, config=config)
-#         self.intermediate = CLAPAudioIntermediate(config, self.hidden_dim)
-#         self.output = CLAPAudioOutput(config, self.hidden_dim)
-
-#         if self.shift_size > 0:
-#             # calculate attention mask for SW-MSA
-#             H, W = self.input_resolution
-#             img_mask = torch.zeros((1, H, W, 1))  # 1 H W 1
-#             h_slices = (
-#                 slice(0, -self.window_size),
-#                 slice(-self.window_size, -self.shift_size),
-#                 slice(-self.shift_size, None),
-#             )
-#             w_slices = (
-#                 slice(0, -self.window_size),
-#                 slice(-self.window_size, -self.shift_size),
-#                 slice(-self.shift_size, None),
-#             )
-#             cnt = 0
-#             for h in h_slices:
-#                 for w in w_slices:
-#                     img_mask[:, h, w, :] = cnt
-#                     cnt += 1
-
-#             mask_windows = window_partition(img_mask, self.window_size)  # nW, window_size, window_size, 1
-#             mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
-#             attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-#             attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
-#         else:
-#             attn_mask = None
-
-#         self.register_buffer("attn_mask", attn_mask)
-
-#     def forward(self, x, output_attentions=False):
-#         # pdb.set_trace()
-#         H, W = self.input_resolution
-#         # print("H: ", H)
-#         # print("W: ", W)
-#         # pdb.set_trace()
-#         B, L, C = x.shape
-#         # assert L == H * W, "input feature has wrong size"
-
-#         shortcut = x
-#         x = self.norm1(x)
-#         x = x.view(B, H, W, C)
-
-#         # cyclic shift
-#         if self.shift_size > 0:
-#             shifted_x = torch.roll(x, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
-#         else:
-#             shifted_x = x
-
-#         # partition windows
-#         x_windows = window_partition(shifted_x, self.window_size)  # nW*B, window_size, window_size, C
-#         x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
-
-#         # W-MSA/SW-MSA
-#         attention_outputs = self.attn(x_windows, attention_mask=self.attn_mask, output_attentions=output_attentions)  # nW*B, window_size*window_size, C
-#         attn_windows = attention_outputs[0]
-
-#         # merge windows
-#         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
-#         shifted_x = window_reverse(attn_windows, self.window_size, H, W)  # B H' W' C
-
-#         # reverse cyclic shift
-#         if self.shift_size > 0:
-#             x = torch.roll(shifted_x, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
-#         else:
-#             x = shifted_x
-#         x = x.view(B, H * W, C)
-
-#         # FFN
-#         x = shortcut + self.drop_path(x)
-#         layer_output = self.norm2(x)
-
-#         layer_output = self.intermediate(layer_output)
-#         layer_output = x + self.output(layer_output)
-
-#         if output_attentions:
-#             attn = attention_outputs[1]
-#         else:
-#             attn = None
-
-#         return layer_output, attn
-
-#     def extra_repr(self):
-#         return (
-#             f"dim={self.dim}, input_resolution={self.input_resolution}, num_heads={self.num_heads}, "
-#             f"window_size={self.window_size}, shift_size={self.shift_size}, mlp_ratio={self.mlp_ratio}"
-#         )
 
 
 # contrastive loss function, adapted from
@@ -1805,61 +1647,6 @@ class CLAPPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         pass
-        # """Initialize the weights"""
-        # factor = self.config.initializer_factor
-        # if isinstance(module, CLAPTextEmbeddings):
-        #     module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        #     module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        # elif isinstance(module, CLAPVisionEmbeddings):
-        #     factor = self.config.initializer_factor
-        #     nn.init.normal_(module.class_embedding, mean=0.0, std=module.hidden_size**-0.5 * factor)
-        #     nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-        #     nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        # elif isinstance(module, CLAPAttention):
-        #     factor = self.config.initializer_factor
-        #     in_proj_std = (module.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-        #     out_proj_std = (module.hidden_size**-0.5) * factor
-        #     nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-        #     nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-        #     nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-        #     nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        # elif isinstance(module, CLAPMLP):
-        #     factor = self.config.initializer_factor
-        #     in_proj_std = (
-        #         (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-        #     )
-        #     fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-        #     nn.init.normal_(module.fc1.weight, std=fc_std)
-        #     nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        # elif isinstance(module, CLAPModel):
-        #     nn.init.normal_(
-        #         module.text_projection.weight,
-        #         std=module.text_hidden_size**-0.5 * self.config.initializer_factor,
-        #     )
-        #     nn.init.normal_(
-        #         module.visual_projection.weight,
-        #         std=module.vision_hidden_size**-0.5 * self.config.initializer_factor,
-        #     )
-        # elif isinstance(module, CLAPVisionModelWithProjection):
-        #     nn.init.normal_(
-        #         module.visual_projection.weight,
-        #         std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-        #     )
-        # elif isinstance(module, CLAPTextModelWithProjection):
-        #     nn.init.normal_(
-        #         module.text_projection.weight,
-        #         std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-        #     )
-
-        # if isinstance(module, nn.LayerNorm):
-        #     module.bias.data.zero_()
-        #     module.weight.data.fill_(1.0)
-        # if isinstance(module, nn.Linear) and module.bias is not None:
-        #     module.bias.data.zero_()
-
-    # def _set_gradient_checkpointing(self, module, value=False):
-    #     if isinstance(module, CLAPEncoder):
-    #         module.gradient_checkpointing = value
 
 
 @add_start_docstrings(CLAP_START_DOCSTRING)
@@ -2163,7 +1950,7 @@ class CLAPAudioLayer(nn.Module):
         self.input_resolution = input_resolution
         self.blocks = nn.ModuleList(
             [
-                SwinLayer(
+                CLAPAudioSwinLayer(
                     config=config,
                     dim=dim,
                     input_resolution=input_resolution,
@@ -2436,18 +2223,6 @@ class CLAPSwinTransformer(nn.Module):
 
         return (framewise_output, torch.sigmoid(hidden_states), fine_grained_latent_output, latent_output)
 
-    def crop_wav(self, hidden_states, crop_size, spe_pos=None):
-        time_steps = hidden_states.shape[2]
-        tx = torch.zeros(hidden_states.shape[0], hidden_states.shape[1], crop_size, hidden_states.shape[3]).to(
-            hidden_states.device
-        )
-        for i in range(len(x)):
-            if spe_pos is None:
-                crop_pos = random.randint(0, time_steps - crop_size - 1)
-            else:
-                crop_pos = spe_pos
-            tx[i][0] = x[i, 0, crop_pos : crop_pos + crop_size, :]
-        return tx
 
     # Reshape the wavform to a img size, if you want to use the pretrained swin transformer model
     def reshape_wav2img(self, hidden_states):
