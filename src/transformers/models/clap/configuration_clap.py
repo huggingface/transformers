@@ -243,9 +243,9 @@ class CLAPAudioConfig(PretrainedConfig):
         patch_embeds_hidden_size=96,
         enable_patch_layer_norm=True,
         swin_drop_rate=0.0,
-        swin_attention_drop_rate=0.0,
+        attention_probs_dropout_prob=0.0,
         swin_drop_path_rate=0.1,
-        swin_qkv_bias=True,
+        qkv_bias=True,
         swin_norm_before_mlp="ln",
         swin_mlp_ratio=4.0,
         swin_use_checkpoint=False,
@@ -292,9 +292,9 @@ class CLAPAudioConfig(PretrainedConfig):
         self.patch_embeds_hidden_size = patch_embeds_hidden_size
         self.enable_patch_layer_norm = enable_patch_layer_norm
         self.swin_drop_rate = swin_drop_rate
-        self.swin_attention_drop_rate = swin_attention_drop_rate
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.swin_drop_path_rate = swin_drop_path_rate
-        self.swin_qkv_bias = swin_qkv_bias
+        self.qkv_bias = qkv_bias
         self.swin_norm_before_mlp = swin_norm_before_mlp
         self.swin_mlp_ratio = swin_mlp_ratio
         self.swin_use_checkpoint = swin_use_checkpoint
