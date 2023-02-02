@@ -591,10 +591,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_resize_embeddings_untied(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 
@@ -640,10 +637,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
             model(**self._prepare_for_class(inputs_dict, model_class))
 
     def test_resize_tokens_embeddings(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 
