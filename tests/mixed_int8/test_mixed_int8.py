@@ -40,24 +40,23 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
+    class LoRALayer(nn.Module):
+        """Wraps a linear layer with LoRA-like adapter - Used for testing purposes only"""
 
-class LoRALayer(nn.Module):
-    """Wraps a linear layer with LoRA-like adapter - Used for testing purposes only"""
+        def __init__(self, module: nn.Module, rank: int):
+            super().__init__()
+            self.module = module
+            self.adapter = nn.Sequential(
+                nn.Linear(module.in_features, rank, bias=False),
+                nn.Linear(rank, module.out_features, bias=False),
+            )
+            small_std = (2.0 / (5 * min(module.in_features, module.out_features))) ** 0.5
+            nn.init.normal_(self.adapter[0].weight, std=small_std)
+            nn.init.zeros_(self.adapter[1].weight)
+            self.adapter.to(module.weight.device)
 
-    def __init__(self, module: nn.Module, rank: int):
-        super().__init__()
-        self.module = module
-        self.adapter = nn.Sequential(
-            nn.Linear(module.in_features, rank, bias=False),
-            nn.Linear(rank, module.out_features, bias=False),
-        )
-        small_std = (2.0 / (5 * min(module.in_features, module.out_features))) ** 0.5
-        nn.init.normal_(self.adapter[0].weight, std=small_std)
-        nn.init.zeros_(self.adapter[1].weight)
-        self.adapter.to(module.weight.device)
-
-    def forward(self, input, *args, **kwargs):
-        return self.module(input, *args, **kwargs) + self.adapter(input)
+        def forward(self, input, *args, **kwargs):
+            return self.module(input, *args, **kwargs) + self.adapter(input)
 
 
 @require_bitsandbytes
