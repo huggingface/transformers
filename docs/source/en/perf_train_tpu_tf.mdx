@@ -25,17 +25,17 @@ When you use a **TPU Node**, you are effectively indirectly accessing a remote T
 
 Using TPU Nodes can have some quite unexpected behaviour for people who aren’t used to them! In particular, because the TPU is located on a physically different system to the machine you’re running your Python code on, your data cannot be local to your machine - any data pipeline that loads from your machine’s internal storage will totally fail! Instead, data must be stored in Google Cloud Storage where your data pipeline can still access it, even when the pipeline is running on the remote TPU node.
 
----
+<Tip>
 
-**Tip:** If you can fit all your data in memory as `np.ndarray` or `tf.Tensor`, then you can `fit()` on that data even when using Colab or a TPU Node, without needing to upload it to Google Cloud Storage.
+ If you can fit all your data in memory as `np.ndarray` or `tf.Tensor`, then you can `fit()` on that data even when using Colab or a TPU Node, without needing to upload it to Google Cloud Storage.
 
----
+</Tip>
 
----
+<Tip>
 
-**🤗Specific HuggingFace Tip🤗:** The methods `Dataset.to_tf_dataset()` and its higher-level wrapper `model.prepare_tf_dataset()` , which you will see throughout our TF code examples, will both fail on a TPU Node. The reason for this is that even though they create a `tf.data.Dataset` it is not a “pure” `tf.data` pipeline and uses `tf.numpy_function` or `Dataset.from_generator()` to stream data from the underlying HuggingFace `Dataset`. This HuggingFace `Dataset` is backed by data that is on a local disc and which the remote TPU Node will not be able to read.
+The methods `Dataset.to_tf_dataset()` and its higher-level wrapper `model.prepare_tf_dataset()` , which you will see throughout our TF code examples, will both fail on a TPU Node. The reason for this is that even though they create a `tf.data.Dataset` it is not a “pure” `tf.data` pipeline and uses `tf.numpy_function` or `Dataset.from_generator()` to stream data from the underlying HuggingFace `Dataset`. This HuggingFace `Dataset` is backed by data that is on a local disc and which the remote TPU Node will not be able to read.
 
----
+</Tip>
 
 The second way to access a TPU is via a **TPU VM.** When using a TPU VM, you connect directly to the machine that the TPU is attached to, much like training on a GPU VM. TPU VMs are generally easier to work with, particularly when it comes to your data pipeline. All of the above warnings do not apply to TPU VMs!
 
@@ -53,27 +53,23 @@ XLA is an optimizing compiler, used by both TensorFlow and JAX. In JAX it is the
 
 Debugging on TPU is generally a bit harder than on CPU/GPU, so we recommend getting your code running on CPU/GPU with XLA first before trying it on TPU. You don’t have to train for long, of course - just for a few steps to make sure that your model and data pipeline are working like you expect them to.
 
----
+<Tip>
 
-**Tip:** XLA compiled code is usually faster - so even if you’re not planning to run on TPU, adding `jit_compile=True` can improve your performance. Be sure to note the caveats below about XLA compatibility, though!
+XLA compiled code is usually faster - so even if you’re not planning to run on TPU, adding `jit_compile=True` can improve your performance. Be sure to note the caveats below about XLA compatibility, though!
 
----
+And a second tip, born of painful experience: Although using `jit_compile=True` is a good way to get a speed boost and test if your CPU/GPU code is XLA-compatible, it can actually cause a lot of problems if you leave it in when actually training on TPU. XLA compilation will happen implicitly on TPU, so remember to remove that line before actually running your code on a TPU!
 
----
-
-**Tip born of painful experience:** Although using `jit_compile=True` is a good way to get a speed boost and test if your CPU/GPU code is XLA-compatible, it can actually cause a lot of problems if you leave it in when actually training on TPU. XLA compilation will happen implicitly on TPU, so remember to remove that line before actually running your code on a TPU!
-
----
+</Tip>
 
 ### How do I make my model XLA compatible?
 
 In many cases, your code is probably XLA-compatible already! However, there are a few things that work in normal TensorFlow that don’t work in XLA. We’ve distilled them into three core rules below:
 
----
+<Tip>
 
-**🤗Specific HuggingFace Tip🤗:** We’ve put a lot of effort into rewriting our TensorFlow models and loss functions to be XLA-compatible. Our models and loss functions generally obey rule #1 and #2 by default, so you can skip over them if you’re using `transformers` models. Don’t forget about these rules when writing your own models and loss functions, though!
+At HuggingFace we’ve put a lot of effort into rewriting our TensorFlow models and loss functions to be XLA-compatible. Our models and loss functions generally obey rule #1 and #2 by default, so you can skip over them if you’re using `transformers` models. Don’t forget about these rules when writing your own models and loss functions, though!
 
----
+</Tip>
 
 **XLA Rule #1: Your code cannot have “data-dependent conditionals”**
 
@@ -126,11 +122,11 @@ How can you get around rule #3? The key is **padding** - if you pad all your inp
 
 There isn’t a perfect solution to this problem. However, you can try some tricks. One very useful trick is to **pad batches of samples up to a multiple of a number like 32 or 64 tokens.** This often only increases the number of tokens by a small amount, but it hugely reduces the number of unique input shapes, because every input shape now has to be a multiple of 32 or 64. Fewer unique input shapes means fewer XLA compilations!
 
----
+<Tip>
 
-**🤗Specific HuggingFace Tip🤗:** HuggingFace tokenizers and data collators have methods that can help you here. You can use `padding="max_length"` or `padding="longest"` when calling tokenizers to get them to output padded data. Our tokenizers and data collators also have a `pad_to_multiple_of` argument that you can use to reduce the number of unique input shapes you see!
+HuggingFace tokenizers and data collators have methods that can help you here. You can use `padding="max_length"` or `padding="longest"` when calling tokenizers to get them to output padded data. Our tokenizers and data collators also have a `pad_to_multiple_of` argument that you can use to reduce the number of unique input shapes you see!
 
----
+</Tip>
 
 ### How do I actually train my model on TPU?
 
