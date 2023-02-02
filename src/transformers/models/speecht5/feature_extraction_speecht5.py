@@ -293,11 +293,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 The sampling rate at which the `audio` or `audio_target` input was sampled. It is strongly recommended
                 to pass `sampling_rate` at the forward call to prevent silent errors.
         """
-        if audio is not None:
-            speech = audio
-        elif audio_target is not None:
-            speech = audio_target
-        else:
+        if audio is None and audio_target is None:
             raise ValueError("You must provide either `audio` or `audio_target` values.")
 
         if sampling_rate is not None:
@@ -313,6 +309,57 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
+        if audio is not None:
+            inputs = self._process_audio(
+                audio,
+                False,
+                padding,
+                max_length,
+                truncation,
+                pad_to_multiple_of,
+                return_attention_mask,
+                return_tensors,
+                **kwargs,
+            )
+        else:
+            inputs = None
+
+        if audio_target is not None:
+            inputs_target = self._process_audio(
+                audio_target,
+                True,
+                padding,
+                max_length,
+                truncation,
+                pad_to_multiple_of,
+                return_attention_mask,
+                return_tensors,
+                **kwargs,
+            )
+
+            if inputs is None:
+                return inputs_target
+            else:
+                inputs["labels"] = inputs_target["input_values"]
+                inputs["stop_labels"] = inputs_target["stop_labels"]
+                decoder_attention_mask = inputs_target.get("attention_mask")
+                if decoder_attention_mask is not None:
+                    inputs["decoder_attention_mask"] = decoder_attention_mask
+
+        return inputs
+
+    def _process_audio(
+        self,
+        speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        is_target: bool = False,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        max_length: Optional[int] = None,
+        truncation: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs
+    ) -> BatchFeature:
         is_batched = bool(
             isinstance(speech, (list, tuple))
             and (isinstance(speech[0], np.ndarray) or isinstance(speech[0], (tuple, list)))
@@ -333,13 +380,13 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         feature_size_hack = self.feature_size
 
         # convert into correct format for padding
-        if audio is not None:
-            encoded_inputs = BatchFeature({"input_values": speech})
-        else:
+        if is_target:
             features = [self._extract_fbank_features(waveform) for waveform in speech]
             fbank_sizes = [len(x) for x in features]
             encoded_inputs = BatchFeature({"input_values": features})
             self.feature_size = self.num_mel_bins
+        else:
+            encoded_inputs = BatchFeature({"input_values": speech})
 
         padded_inputs = self.pad(
             encoded_inputs,
@@ -372,7 +419,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
 
         # zero-mean and unit-variance normalization
-        if audio is not None and self.do_normalize:
+        if not is_target and self.do_normalize:
             attention_mask = (
                 attention_mask
                 if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
@@ -382,7 +429,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
             )
 
-        if audio is None:
+        if is_target:
             # make labels for stop prediction
             stop_labels = []
             for i, l in enumerate(fbank_sizes):
