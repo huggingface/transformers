@@ -670,7 +670,7 @@ class Trainer:
 
         # torch.compile
         if args.torch_compile and not is_torch_compile_available():
-            raise RuntimeError("Using torch.compile requires a nighly install of PyTorch.")
+            raise RuntimeError("Using torch.compile requires a nighty install of PyTorch.")
 
     def add_callback(self, callback):
         """
