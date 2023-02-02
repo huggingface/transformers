@@ -1323,6 +1323,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         # TODO add support for AutoModelForSeq2SeqLM here as well
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         language_model = AutoModelForCausalLM.from_config(config.text_config)
+        # TODO remove this hack
         language_model.prepare_inputs_for_generation = prepare_inputs_for_generation
         self.language_model = language_model
 
@@ -1438,12 +1439,12 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         Overrides `generate` function to be able to use the model as a conditional generator.
 
         Args:
-            pixel_values (`torch.FloatTensor` of shape *(batch_size, image_width, image_height)*:
-                Input image to be processed
-            input_ids (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
+            pixel_values (`torch.FloatTensor` of shape (batch_size, num_channels, height, width)):
+                Input images to be processed.
+            input_ids (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
                 The sequence used as a prompt for the generation.
-            attention_mask (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            attention_mask (`torch.LongTensor` of shape (batch_size, sequence_length), *optional*):
+                Mask to avoid performing attention on padding token indices
 
         Returns:
             captions (list): A list of strings of length batch_size * num_captions.
@@ -1523,7 +1524,7 @@ def prepare_inputs_for_generation(input_ids, past=None, inputs_embeds=None, **kw
             "past_key_values": past,
             # "use_cache": kwargs.get("use_cache"),
             # "position_ids": position_ids,
-            "attention_mask": attention_mask,
+            # "attention_mask": attention_mask,
             # "token_type_ids": token_type_ids,
         }
     )
