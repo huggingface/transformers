@@ -161,7 +161,6 @@ class DetrConfig(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         init_xavier_std=1.0,
-        classifier_dropout=0.0,
         scale_embedding=False,
         auxiliary_loss=False,
         position_embedding_type="sine",
