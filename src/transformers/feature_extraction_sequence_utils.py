@@ -500,15 +500,15 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 Number of frequencies to highlight/apply
             f_min (float):
                 Minimum frequency (Hz)
-            f_max (float): 
+            f_max (float):
                 Maximum frequency (Hz)
-            n_mels (int): 
+            n_mels (int):
                 Number of mel filterbanks
-            sample_rate (int): 
+            sample_rate (int):
                 Sample rate of the audio waveform
-            norm (str or None, optional): 
+            norm (str or None, optional):
                 If "slaney", divide the triangular mel weights by the width of the mel band (area normalization). (Default: ``None``)
-            mel_scale (str, optional): 
+            mel_scale (str, optional):
                 Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
 
         Returns:
@@ -558,8 +558,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 A framed audio signal obtained using `self._fram_wav`.
             window (`np.array` of dimension `(self.n_freqs, self.n_mels)`:
                 A array reprensenting the function that will be used to reduces the amplitude of the
-                discontinuities at the boundaries of each frame when computing the FFT. Each frame will 
-                be multiplied by the window. For more information on this phenomena, called *Spectral leakage*, 
+                discontinuities at the boundaries of each frame when computing the FFT. Each frame will
+                be multiplied by the window. For more information on this phenomena, called *Spectral leakage*,
                 refer to [this tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
         """
         frame_size = frames.shape[1]

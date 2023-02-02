@@ -69,8 +69,8 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         f_max: float = 14000,
         top_db: int = None,
         max_length: int = 48000,
-        truncation:str = "fusion",
-        padding:str = "repeatpad",
+        truncation: str = "fusion",
+        padding: str = "repeatpad",
         **kwargs
     ):
         super().__init__(
@@ -110,8 +110,6 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         )
         self.top_db = top_db
 
-
-
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
@@ -121,8 +119,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
         # TODO why don't we take the last value?
         # window = np.hanning(self.n_fft + 1)[:-1]
-        
-        
+
         frames = self._fram_wave(waveform)
         stft = self._stft(frames, window=window)
 
@@ -173,8 +170,9 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         mel_chunk_back = mel[idx_back : idx_back + chunk_frames, :]
 
         # shrink the mel TODO add this as a numpy function, also no hard codes `64`
-        mel_shrink = np.resize(mel, [chunk_frames, 64]) # current flags are probalby wrong
+        mel_shrink = np.resize(mel, [chunk_frames, 64])  # current flags are probalby wrong
         import torch
+
         mel_shrink = torchvision.transforms.Resize(size=[chunk_frames, 64])(torch.tensor(mel[None]))[0]
         # logging.info(f"mel_shrink.shape: {mel_shrink.shape}")
 
@@ -182,9 +180,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], axis=0)
         return mel_fusion
 
-    def _get_audio_features(
-        self, waveform: np.array, max_length, truncation, padding, pad_to_multiple_of
-    ) -> np.array:
+    def _get_audio_features(self, waveform: np.array, max_length, truncation, padding, pad_to_multiple_of) -> np.array:
         """
         Possible cases :
             - wave > max_length

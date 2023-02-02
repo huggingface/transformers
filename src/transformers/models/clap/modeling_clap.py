@@ -150,6 +150,7 @@ class CLAPAudioModelOutput(ModelOutput):
         embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
     """
+
     framewise_output: torch.FloatTensor = None
     clipwise_output: torch.FloatTensor = None
     fine_grained_embedding: torch.FloatTensor = None
@@ -315,12 +316,16 @@ class CLAPAudioPatchEmbed(nn.Module):
             padding=padding,
         )
 
-
         self.norm = nn.LayerNorm(config.patch_embeds_hidden_size) if config.enable_patch_layer_norm else nn.Identity()
         if self.enable_patch_fusion:
             self.fusion_model = CLAPAudioAFFBlock(config)
-            self.mel_conv2d = nn.Conv2d(config.patch_embed_input_channels, config.patch_embeds_hidden_size, kernel_size=(patch_size[0], patch_size[1]*3), stride=(patch_stride[0], patch_stride[1] * 3), padding=padding)
-
+            self.mel_conv2d = nn.Conv2d(
+                config.patch_embed_input_channels,
+                config.patch_embeds_hidden_size,
+                kernel_size=(patch_size[0], patch_size[1] * 3),
+                stride=(patch_stride[0], patch_stride[1] * 3),
+                padding=padding,
+            )
 
     def forward(self, x, longer_idx=None):
         if self.enable_fusion:
@@ -2219,7 +2224,6 @@ class CLAPSwinTransformer(nn.Module):
 
         return (fpx, torch.sigmoid(x), fine_grained_latent_output, latent_output)
 
-
     def crop_wav(self, x, crop_size, spe_pos=None):
         time_steps = x.shape[2]
         tx = torch.zeros(x.shape[0], x.shape[1], crop_size, x.shape[3]).to(x.device)
@@ -2250,33 +2254,31 @@ class CLAPSwinTransformer(nn.Module):
         return x
 
     def forward(
-        self, 
+        self,
         mel_fusion=None,
         longer=None,
         waveform=None,
-        mixup_lambda=None, 
+        mixup_lambda=None,
         device=None,
         return_dict=False,
     ):  # out_feat_keys: List[str] = None):
         mel_fusion = mel_fusion[None, :].to(0)
         waveform = waveform[None, :].to(0)
 
-
         if self.enable_fusion and longer.sum() == 0:
             # if no audio is longer than 10s, then randomly select one audio to be longer
             longer[torch.randint(0, longer.shape[0], (1,))] = True
 
-        
         x = mel_fusion.to(device=device, non_blocking=True)
         x = x.transpose(1, 3)
         x = self.bn0(x)
         x = x.transpose(1, 3)
-        
+
         longer_list_idx = None
         if self.enable_fusion:
             longer_list = longer.to(device=device, non_blocking=True)
             longer_list_idx = torch.where(longer_list)[0]
-            
+
         if self.training:
             x = self.spec_augmenter(x)
             if mixup_lambda is not None:
@@ -2296,4 +2298,3 @@ class CLAPSwinTransformer(nn.Module):
             fine_grained_embedding=fine_grained_embedding,
             embedding=output_embeddingss,
         )
-
