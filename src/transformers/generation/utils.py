@@ -859,7 +859,7 @@ class GenerationMixin:
                 ExponentialDecayLengthPenalty(
                     generation_config.exponential_decay_length_penalty,
                     generation_config.eos_token_id,
-                    generation_config.input_ids_seq_length,
+                    input_ids_seq_length,
                 )
             )
         if generation_config.suppress_tokens is not None:
