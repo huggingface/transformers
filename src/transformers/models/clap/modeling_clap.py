@@ -136,6 +136,27 @@ class CLAPTextModelOutput(ModelOutput):
 
 
 @dataclass
+class CLAPAudioModelOutput(ModelOutput):
+    """
+    Base class for text model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        framewise_output (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+    """
+    framewise_output: torch.FloatTensor = None
+    clipwise_output: torch.FloatTensor = None
+    fine_grained_embedding: torch.FloatTensor = None
+    embedding: torch.FloatTensor = None
+
+
+@dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->CLAP
 class CLAPOutput(ModelOutput):
     """
@@ -278,7 +299,8 @@ class CLAPAudioPatchEmbed(nn.Module):
         self.grid_size = (img_size[0] // patch_stride[0], img_size[1] // patch_stride[1])
         self.num_patches = self.grid_size[0] * self.grid_size[1]
         self.flatten = config.flatten_patch_embeds
-        self.enable_fusion = config.enable_patch_fusion
+        self.enable_patch_fusion = config.enable_patch_fusion
+        self.enable_fusion = config.enable_fusion
         self.fusion_type = config.fusion_type
 
         padding = ((patch_size[0] - patch_stride[0]) // 2, (patch_size[1] - patch_stride[1]) // 2)
@@ -293,9 +315,12 @@ class CLAPAudioPatchEmbed(nn.Module):
             padding=padding,
         )
 
+
         self.norm = nn.LayerNorm(config.patch_embeds_hidden_size) if config.enable_patch_layer_norm else nn.Identity()
-        if self.enable_fusion:
+        if self.enable_patch_fusion:
             self.fusion_model = CLAPAudioAFFBlock(config)
+            self.mel_conv2d = nn.Conv2d(config.patch_embed_input_channels, config.patch_embeds_hidden_size, kernel_size=(patch_size[0], patch_size[1]*3), stride=(patch_stride[0], patch_stride[1] * 3), padding=padding)
+
 
     def forward(self, x, longer_idx=None):
         if self.enable_fusion:
@@ -1669,29 +1694,29 @@ class CLAPModel(CLAPPreTrainedModel):
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.vision_config, CLAPAudioConfig):
+        if not isinstance(config.audio_config, CLAPAudioConfig):
             raise ValueError(
-                "config.vision_config is expected to be of type CLAPAudioConfig but is of type"
-                f" {type(config.vision_config)}."
+                "config.audio_config is expected to be of type CLAPAudioConfig but is of type"
+                f" {type(config.audio_config)}."
             )
 
         text_config = config.text_config
-        vision_config = config.vision_config
+        audio_config = config.audio_config
 
         self.logit_scale_a = nn.Parameter(torch.ones([]) * np.log(config.logit_scale_init_value))
         self.logit_scale_t = nn.Parameter(torch.ones([]) * np.log(config.logit_scale_init_value))
 
         self.projection_dim = config.projection_dim
         self.text_hidden_size = text_config.hidden_size
-        self.vision_hidden_size = vision_config.hidden_size
+        self.vision_hidden_size = audio_config.hidden_size
 
         self.text_model = CLAPTextModel(text_config)
         self.text_transform = CLAPFusionLayer(text_config)
         self.text_projection = CLAPProjectionLayer(text_config)
 
-        self.audio_model = CLAPSwinTransformer(config=vision_config)
-        self.audio_transform = CLAPFusionLayer(vision_config)
-        self.audio_projection = CLAPProjectionLayer(vision_config)
+        self.audio_model = CLAPSwinTransformer(config=audio_config)
+        self.audio_transform = CLAPFusionLayer(audio_config)
+        self.audio_projection = CLAPProjectionLayer(audio_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1767,13 +1792,10 @@ class CLAPModel(CLAPPreTrainedModel):
             mel_fusion=mel_fusion,
             longer=longer,
             waveform=waveform,
-            # attention_mask=attention_mask,
-            # output_attentions=output_attentions,
-            # output_hidden_states=output_hidden_states,
-            # return_dict=return_dict,
+            return_dict=return_dict,
         )
 
-        pooled_output = audio_outputs[1]
+        pooled_output = audio_outputs[-1] if not return_dict else audio_outputs.embedding
 
         audio_features = self.audio_projection(pooled_output)
         audio_features = F.normalize(audio_features, dim=-1)
@@ -2196,14 +2218,8 @@ class CLAPSwinTransformer(nn.Module):
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
 
-        output_dict = {
-            "framewise_output": fpx,  # already sigmoided
-            "clipwise_output": torch.sigmoid(x),
-            "fine_grained_embedding": fine_grained_latent_output,
-            "embedding": latent_output,
-        }
+        return (fpx, torch.sigmoid(x), fine_grained_latent_output, latent_output)
 
-        return output_dict
 
     def crop_wav(self, x, crop_size, spe_pos=None):
         time_steps = x.shape[2]
@@ -2240,8 +2256,12 @@ class CLAPSwinTransformer(nn.Module):
         longer=None,
         waveform=None,
         mixup_lambda=None, 
-        device=None
+        device=None,
+        return_dict=False,
     ):  # out_feat_keys: List[str] = None):
+        mel_fusion = mel_fusion[None, :].to(0)
+        waveform = waveform[None, :].to(0)
+
 
         if self.enable_fusion and longer.sum() == 0:
             # if no audio is longer than 10s, then randomly select one audio to be longer
@@ -2261,7 +2281,7 @@ class CLAPSwinTransformer(nn.Module):
                 x = do_mixup(x, mixup_lambda)
 
             x = self.reshape_wav2img(x)
-            output_dict = self.forward_features(x)
+            output = self.forward_features(x)
         else:
             longer_list = longer.to(device=device, non_blocking=True)
             x = mel_fusion.to(device=device, non_blocking=True)
@@ -2277,6 +2297,17 @@ class CLAPSwinTransformer(nn.Module):
                 x = do_mixup(x, mixup_lambda)
 
             x = self.reshape_wav2img(x)
-            output_dict = self.forward_features(x, longer_idx=longer_list_idx)
+            output = self.forward_features(x, longer_idx=longer_list_idx)
 
-        return output_dict
+        if not return_dict:
+            return output
+
+        framewise_output, clipwise_output, fine_grained_embedding, output_embeddingss = output
+
+        return CLAPAudioModelOutput(
+            framewise_output=framewise_output,
+            clipwise_output=clipwise_output,
+            fine_grained_embedding=fine_grained_embedding,
+            embedding=output_embeddingss,
+        )
+

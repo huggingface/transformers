@@ -326,7 +326,7 @@ class CLAPAudioConfig(PretrainedConfig):
 
         # get the vision config dict if we are loading from CLAPConfig
         if config_dict.get("model_type") == "clap":
-            config_dict = config_dict["vision_config"]
+            config_dict = config_dict["audio_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
             logger.warning(
@@ -350,7 +350,7 @@ class CLAPConfig(PretrainedConfig):
     Args:
         text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`CLAPTextConfig`].
-        vision_config (`dict`, *optional*):
+        audio_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`CLAPAudioConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
@@ -380,7 +380,7 @@ class CLAPConfig(PretrainedConfig):
     >>> config_text = CLAPTextConfig()
     >>> config_vision = CLAPAudioConfig()
 
-    >>> config = CLAPConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = CLAPConfig.from_text_audio_configs(config_text, config_vision)
     ```"""
 
     model_type = "clap"
@@ -389,7 +389,7 @@ class CLAPConfig(PretrainedConfig):
     def __init__(
         self,
         text_config=None,
-        vision_config=None,
+        audio_config=None,
         logit_scale_init_value=(1 / 0.07),
         fusion_num_hidden_layers=2,
         projection_dim=512,
@@ -400,31 +400,31 @@ class CLAPConfig(PretrainedConfig):
 
         # If `_config_dict` exist, we use them for the backward compatibility.
         text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
+        audio_config_dict = kwargs.pop("audio_config_dict", None)
         if text_config_dict is not None:
             text_config = text_config_dict
-        if vision_config_dict is not None:
-            vision_config = vision_config_dict
+        if audio_config_dict is not None:
+            audio_config = audio_config_dict
 
         if text_config is None:
             text_config = {}
             logger.info("text_config is None. Initializing the CLAPTextConfig with default values.")
 
-        if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. initializing the CLAPAudioConfig with default values.")
+        if audio_config is None:
+            audio_config = {}
+            logger.info("audio_config is None. initializing the CLAPAudioConfig with default values.")
 
         self.text_config = CLAPTextConfig(**text_config)
-        self.vision_config = CLAPAudioConfig(**vision_config)
+        self.audio_config = CLAPAudioConfig(**audio_config)
 
         self.text_config.fusion_num_hidden_layers = fusion_num_hidden_layers
-        self.vision_config.fusion_num_hidden_layers = fusion_num_hidden_layers
+        self.audio_config.fusion_num_hidden_layers = fusion_num_hidden_layers
 
         self.text_config.projection_dim = projection_dim
-        self.vision_config.projection_dim = projection_dim
+        self.audio_config.projection_dim = projection_dim
 
         self.text_config.projection_hidden_act = projection_hidden_act
-        self.vision_config.projection_hidden_act = projection_hidden_act
+        self.audio_config.projection_hidden_act = projection_hidden_act
 
         self.projection_dim = projection_dim
         self.projection_hidden_act = projection_hidden_act
@@ -434,7 +434,7 @@ class CLAPConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: CLAPTextConfig, vision_config: CLAPAudioConfig, **kwargs):
+    def from_text_audio_configs(cls, text_config: CLAPTextConfig, audio_config: CLAPAudioConfig, **kwargs):
         r"""
         Instantiate a [`CLAPConfig`] (or a derived class) from clap text model configuration and clap vision model
         configuration.
@@ -443,7 +443,7 @@ class CLAPConfig(PretrainedConfig):
             [`CLAPConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
 
     def to_dict(self):
         """
@@ -454,6 +454,6 @@ class CLAPConfig(PretrainedConfig):
         """
         output = copy.deepcopy(self.__dict__)
         output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
+        output["audio_config"] = self.audio_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
