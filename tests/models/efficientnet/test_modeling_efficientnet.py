@@ -177,7 +177,9 @@ class EfficientNetModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = EfficientNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EfficientNetConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=EfficientNetConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.create_and_test_config_common_properties()
