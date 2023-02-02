@@ -136,13 +136,13 @@ Once your training is XLA-compatible and (if you’re using TPU Node / Colab) yo
 
 There was a lot in here, so let’s summarize with a quick checklist you can follow when you want to get your model ready for TPU training:
 
-- [ ]  Make sure your code follows the three rules of XLA
-- [ ]  Compile your model with `jit_compile=True` on CPU/GPU and confirm that you can train it with XLA
-- [ ]  Either load your dataset into memory or use a TPU-compatible dataset loading approach (see notebook)
-- [ ]  Migrate your code either to Colab (with accelerator set to “TPU”) or a TPU VM on Google Cloud
-- [ ]  Add TPU initializer code (see notebook)
-- [ ]  Create your `TPUStrategy` and make sure dataset loading and model creation are inside the `strategy.scope()` (see notebook)
-- [ ]  Don’t forget to take `jit_compile=True` out again when you move to TPU!
-- [ ]  🙏🙏🙏🥺🥺🥺
-- [ ]  Call model.fit()
-- [ ]  You did it!
+[ ]  Make sure your code follows the three rules of XLA
+[ ]  Compile your model with `jit_compile=True` on CPU/GPU and confirm that you can train it with XLA
+[ ]  Either load your dataset into memory or use a TPU-compatible dataset loading approach (see notebook)
+[ ]  Migrate your code either to Colab (with accelerator set to “TPU”) or a TPU VM on Google Cloud
+[ ]  Add TPU initializer code (see notebook)
+[ ]  Create your `TPUStrategy` and make sure dataset loading and model creation are inside the `strategy.scope()` (see notebook)
+[ ]  Don’t forget to take `jit_compile=True` out again when you move to TPU!
+[ ]  🙏🙏🙏🥺🥺🥺
+[ ]  Call model.fit()
+[ ]  You did it!
