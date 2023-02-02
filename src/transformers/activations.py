@@ -37,7 +37,7 @@ class PytorchGELUTanh(nn.Module):
     def __init__(self):
         super().__init__()
         if version.parse(torch.__version__) < version.parse("1.12.0"):
-            raise NotImplementedError(
+            raise ImportError(
                 f"You are using torch=={torch.__version__}, but torch>=1.12.0 is required to use "
                 "PytorchGELUTanh. Please upgrade torch."
             )
