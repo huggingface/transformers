@@ -776,6 +776,14 @@ def pipeline(
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
 
+    # If `model` (instance of `PretrainedModel` instead of `str`) is passed (and/or same for config), while
+    # `image_processor` or `feature_extractor` is `None`, the loading will fail. This happens particularly for some
+    # vision tasks when calling `pipeline()` with `model` and only one of the `image_processor` and `feature_extractor`.
+    # TODO: we need to make `NO_IMAGE_PROCESSOR_TASKS` and `NO_FEATURE_EXTRACTOR_TASKS` more robust to avoid such issue.
+    # This block is only temporarily to make CI green.
+    if load_image_processor and load_feature_extractor:
+        load_feature_extractor = False
+
     if (
         tokenizer is None
         and not load_tokenizer
