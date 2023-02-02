@@ -49,9 +49,9 @@ _CONFIG_FOR_DOC = "SpeechT5Config"
 
 
 SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Matthijs/speecht5_asr",
-    "Matthijs/speecht5_tts",
-    "Matthijs/speecht5_vc",
+    "microsoft/speecht5_asr",
+    "microsoft/speecht5_tts",
+    "microsoft/speecht5_vc",
     # See all SpeechT5 models at https://huggingface.co/models?filter=speecht5
 ]
 
@@ -2300,8 +2300,8 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-        >>> processor = SpeechT5Processor.from_pretrained("Matthijs/speecht5_asr")
-        >>> model = SpeechT5ForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
+        >>> processor = SpeechT5Processor.from_pretrained("microsoft/speecht5_asr")
+        >>> model = SpeechT5ForSpeechToText.from_pretrained("microsoft/speecht5_asr")
 
         >>> # audio file is decoded on the fly
         >>> inputs = processor(audio=dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
@@ -2573,9 +2573,9 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         >>> from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
         >>> import torch
 
-        >>> processor = SpeechT5Processor.from_pretrained("Matthijs/speecht5_tts")
-        >>> model = SpeechT5ForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
-        >>> vocoder = SpeechT5HifiGan.from_pretrained("Matthijs/speecht5_hifigan")
+        >>> processor = SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
+        >>> model = SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts")
+        >>> vocoder = SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan")
 
         >>> inputs = processor(text="Hello, my dog is cute", return_tensors="pt")
         >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file
@@ -2772,9 +2772,9 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
 
-        >>> processor = SpeechT5Processor.from_pretrained("Matthijs/speecht5_vc")
-        >>> model = SpeechT5ForSpeechToSpeech.from_pretrained("Matthijs/speecht5_vc")
-        >>> vocoder = SpeechT5HifiGan.from_pretrained("Matthijs/speecht5_hifigan")
+        >>> processor = SpeechT5Processor.from_pretrained("microsoft/speecht5_vc")
+        >>> model = SpeechT5ForSpeechToSpeech.from_pretrained("microsoft/speecht5_vc")
+        >>> vocoder = SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan")
 
         >>> # audio file is decoded on the fly
         >>> inputs = processor(audio=dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")

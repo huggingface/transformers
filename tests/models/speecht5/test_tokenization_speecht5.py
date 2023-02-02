@@ -180,7 +180,7 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="Matthijs/speecht5_asr",
+            model_name="microsoft/speecht5_asr",
             revision="63f2ee29f0d4653c691069ed190536fba977678b",
             sequences=sequences,
         )

@@ -714,7 +714,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
 class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return SpeechT5Processor.from_pretrained("Matthijs/speecht5_asr")
+        return SpeechT5Processor.from_pretrained("microsoft/speecht5_asr")
 
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
@@ -726,7 +726,7 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def test_generation_librispeech(self):
-        model = SpeechT5ForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
+        model = SpeechT5ForSpeechToText.from_pretrained("microsoft/speecht5_asr")
         model.to(torch_device)
         processor = self.default_processor
 
@@ -743,7 +743,7 @@ class SpeechT5ForSpeechToTextIntegrationTests(unittest.TestCase):
         self.assertListEqual(generated_transcript, EXPECTED_TRANSCRIPTIONS)
 
     def test_generation_librispeech_batched(self):
-        model = SpeechT5ForSpeechToText.from_pretrained("Matthijs/speecht5_asr")
+        model = SpeechT5ForSpeechToText.from_pretrained("microsoft/speecht5_asr")
         model.to(torch_device)
         processor = self.default_processor
 
@@ -989,10 +989,10 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return SpeechT5Processor.from_pretrained("Matthijs/speecht5_tts")
+        return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
 
     def test_generation(self):
-        model = SpeechT5ForTextToSpeech.from_pretrained("Matthijs/speecht5_tts")
+        model = SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts")
         model.to(torch_device)
         processor = self.default_processor
 
@@ -1404,7 +1404,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return SpeechT5Processor.from_pretrained("Matthijs/speecht5_vc")
+        return SpeechT5Processor.from_pretrained("microsoft/speecht5_vc")
 
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
@@ -1416,7 +1416,7 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def test_generation_librispeech(self):
-        model = SpeechT5ForSpeechToSpeech.from_pretrained("Matthijs/speecht5_vc")
+        model = SpeechT5ForSpeechToSpeech.from_pretrained("microsoft/speecht5_vc")
         model.to(torch_device)
         processor = self.default_processor
 
