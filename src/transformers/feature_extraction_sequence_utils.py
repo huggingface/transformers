@@ -15,13 +15,12 @@
 """
  Sequence feature extraction class for common feature extractors to preprocess sequences.
 """
+import math
+import warnings
 from typing import Dict, List, Optional, Union
 
 import numpy as np
 from numpy.fft import fft
-import math
-
-import warnings
 
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from .utils import PaddingStrategy, TensorType, is_tf_tensor, is_torch_tensor, logging, to_numpy
@@ -368,15 +367,15 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             )
 
         return padding_strategy
-    
+
     @staticmethod
     def hz_to_mel(freq: float, mel_scale: str = "htk") -> float:
         r"""Convert Hz to Mels.
 
         Args:
-            freqs (float): 
+            freqs (float):
                 Frequencies in Hz
-            mel_scale (str, *optional*): 
+            mel_scale (str, *optional*):
                 Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
 
         Returns:
@@ -455,7 +454,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         # Adopted from Librosa
         # calculate the difference between each filter mid point and each stft freq point in hertz
         f_diff = f_pts[1:] - f_pts[:-1]  # (n_filter + 1)
-        slopes = np.expand_dims(f_pts, 0) - np.expand_dims(all_freqs, 1) # (n_freqs, n_filter + 2)
+        slopes = np.expand_dims(f_pts, 0) - np.expand_dims(all_freqs, 1)  # (n_freqs, n_filter + 2)
         # create overlapping triangles
         zero = np.zeros(1)
         down_slopes = (-1.0 * slopes[:, :-2]) / f_diff[:-1]  # (n_freqs, n_filter)
@@ -474,22 +473,22 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         norm: Optional[str] = None,
         mel_scale: str = "htk",
     ) -> np.array:
-        r"""Create a frequency bin conversion matrix used to obtain the Mel Frequency Cepstral Coefficient. 
-        This is called a `mel filter bank`, and various implementation exist, which differ in the number of filters, 
+        r"""Create a frequency bin conversion matrix used to obtain the Mel Frequency Cepstral Coefficient.
+        This is called a `mel filter bank`, and various implementation exist, which differ in the number of filters,
         the shape of the filters, the way the filters are spaced, the bandwidth of
         the filters, and the manner in which the spectrum is warped. The goal of these features is to approximate the non-linear human perception
-        of the variation in pitch with respect to the frequency. 
+        of the variation in pitch with respect to the frequency.
         This code is heavily inspired from the `torchaudio` implementation, refer to XXX for more details.
-        
+
 
         Note:
-            We will try to specify which variation correspond to which MFCCs from the litterature. The main features are: 
+            We will try to specify which variation correspond to which MFCCs from the litterature. The main features are:
                 - MFCC FB-20: introduced in 1980 by Davis and Mermelstein [4]; Davis and Mermelstein assume sampling frequency of 10 kHz; speech bandwidth [0, 4600] Hz
                 - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) described in Young, 1995 [5]; Young uses a filter bank of 24 filters for speech bandwidth [0, 8000] Hz (sampling rate ≥ 16 kHz)
                 - MFCC FB-40: from the Auditory Toolbox for MATLAB [6] written by Slaney in 1998; Slaney assumes sampling rate of 16 kHz, and speech bandwidth [133, 6854] Hz
                 - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris, 2004 [3]; Skowronski and Harris assume sampling rate of 12.5 kHz and speech bandwidth [0, 6250] Hz
-            
-            
+
+
         Args:
             n_freqs (int): Number of frequencies to highlight/apply
             f_min (float): Minimum frequency (Hz)
@@ -528,7 +527,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         if norm is not None and norm == "slaney":
             # Slaney-style mel is scaled to be approx constant energy per channel
             enorm = 2.0 / (f_pts[2 : n_mels + 2] - f_pts[:n_mels])
-            filterbank *= np.expand_dims(enorm,0)
+            filterbank *= np.expand_dims(enorm, 0)
 
         if (filterbank.max(axis=0) == 0.0).any():
             warnings.warn(
@@ -538,7 +537,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             )
 
         return filterbank
-        
+
     def _stft(self, frames, window):
         """
         Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
@@ -563,11 +562,10 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 np.multiply(frame, window, out=fft_signal[:frame_size])
             else:
                 fft_signal[:frame_size] = frame
-            # TODO can we use fftn on the other dimensions? 
+            # TODO can we use fftn on the other dimensions?
             data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
         return data.T
-        
-        
+
     def _fram_wave(self, waveform, center=True):
         """
         Transform a raw waveform into a list of smaller waveforms. The window length defines how much of the signal is
@@ -584,10 +582,10 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
 
                 frame = waveform[start:end]
-                
+
                 # TODO can all of this be automatically replaced with np.pad(audio,self.n_fft // 2, self.n_fft // 2), mode=self.pad_mode)
                 # as we have an array of frames
-                
+
                 if start == 0:
                     padd_width = (-i + half_window, 0)
                     frame = np.pad(frame, pad_width=padd_width, mode="reflect")

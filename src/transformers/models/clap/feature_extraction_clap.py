@@ -18,7 +18,6 @@ from typing import List, Optional, Union
 
 import numpy as np
 import torchvision
-from numpy.fft import fft
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -26,6 +25,7 @@ from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
+
 
 # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor with Whisper->CLAP
 class CLAPFeatureExtractor(SequenceFeatureExtractor):
@@ -65,10 +65,10 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         n_fft=400,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
-        norm = None,
-        f_min:float =0,
-        f_max:float =14000,
-        top_db:int = None,
+        norm=None,
+        f_min: float = 0,
+        f_max: float = 14000,
+        top_db: int = None,
         mel_scale: str = "htk",
         **kwargs
     ):
@@ -85,16 +85,32 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
-        self.f_min = f_min # should be in super and would initialized them
-        self.f_max = f_max # should be in super and would initialized them
-        self.norm = norm # should be in super and would initialized them
-        self.mel_filters = self.get_mel_filter_banks(n_freqs = int(1+ n_fft//2), n_mels = feature_size, f_min = f_min, f_max = f_max, sample_rate = sampling_rate, norm = "htk", mel_scale = "htk")
-        self.mel_filters_slaney = self.get_mel_filter_banks(n_freqs = int(1+ n_fft//2), n_mels = feature_size, f_min = f_min, f_max = f_max, sample_rate = sampling_rate, norm = "slaney", mel_scale = "slaney")
+        self.f_min = f_min  # should be in super and would initialized them
+        self.f_max = f_max  # should be in super and would initialized them
+        self.norm = norm  # should be in super and would initialized them
+        self.mel_filters = self.get_mel_filter_banks(
+            n_freqs=int(1 + n_fft // 2),
+            n_mels=feature_size,
+            f_min=f_min,
+            f_max=f_max,
+            sample_rate=sampling_rate,
+            norm="htk",
+            mel_scale="htk",
+        )
+        self.mel_filters_slaney = self.get_mel_filter_banks(
+            n_freqs=int(1 + n_fft // 2),
+            n_mels=feature_size,
+            f_min=f_min,
+            f_max=f_max,
+            sample_rate=sampling_rate,
+            norm="slaney",
+            mel_scale="slaney",
+        )
         self.top_db = top_db
-    
+
     def _power_to_db(self, mel_spectrogram, a_min=1e-10, ref=1.0):
-        """ 
-        Power to db, this function is the numpy implementation of 
+        """
+        Power to db, this function is the numpy implementation of
         librosa.power_to_lb
         """
         log_spec = 10 * np.log10(np.clip(mel_spectrogram, a_min=a_min, a_max=None))
@@ -102,10 +118,10 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         if self.top_db is not None:
             if self.top_db < 0:
                 raise ValueError("top_db must be non-negative")
-            log_spec = np.clip(log_spec,  min=np.maximum(log_spec) - self.top_db, max=np.inf)
+            log_spec = np.clip(log_spec, min=np.maximum(log_spec) - self.top_db, max=np.inf)
         return log_spec
-    
-    def _np_extract_fbank_features(self, waveform: np.array, mel_filters:Optional[np.array]) -> np.ndarray:
+
+    def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array]) -> np.ndarray:
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
         implementation with 1e-5 tolerance.
@@ -114,7 +130,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
         frames = self._fram_wave(waveform)
         stft = self._stft(frames, window=window)
-        
+
         # if the imaginary parts are taken : (real, imag) = stftl; real ** 2 + imag ** 2
         magnitudes = np.abs(stft) ** 2
         mel_spec = np.matmul(magnitudes, self.mel_filters)
@@ -186,7 +202,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             if truncation == "rand_trunc":
                 longer = True
             elif truncation == "fusion":
-                mel = self._np_extract_fbank_features(audio_data)
+                mel = self._np_extract_fbank_features(waveform)
                 chunk_frames = max_length // self.hop_size + 1  # the +1 related to how the spectrogram is computed
                 total_frames = mel.shape[0]
                 if chunk_frames == total_frames:
@@ -201,30 +217,28 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             else:
                 raise NotImplementedError(f"data_truncating {truncation} not implemented")
             # random crop to max_length (for compatibility) -> this should be handled by self.pad
-            overflow = len(audio_data) - max_length
+            overflow = len(waveform) - max_length
             idx = np.random.randint(0, overflow + 1)
-            audio_data = audio_data[idx : idx + max_length]
+            waveform = waveform[idx : idx + max_length]
         else:
             longer = False
             # only use repeat as a new possible value for padding. you repeat the audio before applying the usual max_length padding
-            if len(audio_data) < max_length and padding == "repeatpad":  # do nothing if equal
-                n_repeat = int(max_length / len(audio_data))
-                audio_data = audio_data.repeat(n_repeat)
+            if len(waveform) < max_length and padding == "repeatpad":  # do nothing if equal
+                n_repeat = int(max_length / len(waveform))
+                waveform = waveform.repeat(n_repeat)
             else:
-                audio_data = self.pad(
-                    audio_data,
+                waveform = self.pad(
+                    waveform,
                     padding=padding,
                     max_length=max_length if max_length else self.n_samples,
                     truncation=truncation,
                     pad_to_multiple_of=pad_to_multiple_of,
                 )
             if truncation == "fusion":
-                mel = self._np_extract_fbank_features(audio_data, self.mel_filters_slaney)
+                mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
                 input_mel = np.stack([mel, mel, mel, mel], dim=0)
             else:
-                input_mel = self._np_extract_fbank_features(
-                    audio_data, self.mel_filters_slaney
-                )  
+                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
         return input_mel, longer
 
     def __call__(
@@ -317,30 +331,26 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
                 padding,
                 max_length if max_length else self.max_length,
             )
-            for waveform in input_features[0]
+            for waveform in raw_speech
         ]
 
         input_mel = []
         is_longer = []
-        for mel, longer in input_features:
+        for mel, longer in padded_inputs:
             input_mel.append(mel)
             is_longer.append(longer)
 
         if self.enable_fusion and is_longer.sum() == 0:
             # if no audio is longer than 10s, then randomly select one audio to be longer
-            rand_idx = np.random.randint(0, len(input_features))
-            input_mel[rand_idx] = True
+            rand_idx = np.random.randint(0, len(input_mel))
+            is_longer[rand_idx] = True
 
-        if isinstance(input_features[0]["mel"], List):
-            padded_inputs["input_features"] = [np.asarray(mel, dtype=np.float32) for feature in input_mel]
-        else:
-            padded_inputs["input_features"] = input_features
-
-        # make sure list is in array format
-        input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
+        if isinstance(input_mel[0], List):
+            input_mel = [np.asarray(mel, dtype=np.float32) for feature in input_mel]
 
         if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+            input_mel = input_mel.convert_to_tensors(return_tensors)
             is_longer = is_longer.convert_to_tensors(return_tensors)
 
-        return padded_inputs, is_longer
+        input_features = {"input_features": input_mel, "is_longer": is_longer}
+        return input_features
