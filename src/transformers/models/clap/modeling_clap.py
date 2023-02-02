@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -194,50 +194,43 @@ class CLAPOutput(ModelOutput):
         )
 
 
-# from PyTorch internals
-def _ntuple(n):
-    def parse(x):
-        if isinstance(x, collections.abc.Iterable):
-            return x
-        return tuple(repeat(x, n))
-
-    return parse
-
-
-to_1tuple = _ntuple(1)
-to_2tuple = _ntuple(2)
-to_3tuple = _ntuple(3)
-to_4tuple = _ntuple(4)
-to_ntuple = _ntuple
-
-
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+class CLAPDropPath(nn.Module):
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
     misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
     https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
     argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
     """
-    if drop_prob == 0.0 or not training:
-        return x
-    keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
-    random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
-    return output
+    def __init__(self, drop_prob=None):
+        super(CLAPDropPath, self).__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states):
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+        
+        random_tensor = keep_prob + torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor.floor_()  # binarize
+        output = hidden_states.div(keep_prob) * random_tensor
+        return output
 
 
+
+# Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/feature_fusion.py#L133
 class CLAPAudioAFFBlock(nn.Module):
     r"""
-    TODO: add docstring
+    AFF Block from CLAP, since in CLAP we are always in 2D mode, it is not needed to
+    implement the 1D version.
     """
-
     def __init__(self, config: CLAPAudioConfig):
         super(CLAPAudioAFFBlock, self).__init__()
         channels = config.patch_embeds_hidden_size
-        r = config.aff_block_r
-        inter_channels = int(channels // r)
+        downsize_ratio = config.aff_block_r
+        inter_channels = int(channels // downsize_ratio)
 
         self.local_att = nn.Sequential(
             nn.Conv2d(channels, inter_channels, kernel_size=1, stride=1, padding=0),
@@ -257,31 +250,14 @@ class CLAPAudioAFFBlock(nn.Module):
 
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x, residual):
-        flag = False
-        xa = x + residual
-        if xa.size(0) == 1:
-            xa = torch.cat([xa, xa], dim=0)
-            flag = True
-        xl = self.local_att(xa)
-        xg = self.global_att(xa)
-        xlg = xl + xg
-        wei = self.sigmoid(xlg)
-        xo = 2 * x * wei + 2 * residual * (1 - wei)
-        if flag:
-            xo = xo[0].unsqueeze(0)
-        return xo
+    def forward(self, hidden_states, residual):
+        attention_input = hidden_states + residual
 
+        fused_layer_output = self.local_att(attention_input) + self.global_att(attention_input)
+        fused_layer_output = self.sigmoid(fused_layer_output)
 
-class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob=None):
-        super(DropPath, self).__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, x):
-        return drop_path(x, self.drop_prob, self.training)
+        output = 2 * hidden_states * fused_layer_output + 2 * residual * (1 - fused_layer_output)
+        return output
 
 
 class CLAPAudioPatchEmbed(nn.Module):
@@ -289,15 +265,16 @@ class CLAPAudioPatchEmbed(nn.Module):
 
     def __init__(self, config: CLAPAudioConfig):
         super().__init__()
-        img_size = to_2tuple(config.spec_size)
-        patch_size = to_2tuple(config.patch_size)
-        patch_stride = to_2tuple(config.patch_stride)
+        img_size = (config.spec_size, config.spec_size) if isinstance(config.spec_size, int) else config.spec_size
+        patch_size = (config.patch_size, config.patch_size) if isinstance(config.patch_size, int) else config.patch_size
+        patch_stride = (config.patch_stride, config.patch_stride) if isinstance(config.patch_stride, int) else config.patch_stride
 
         self.img_size = img_size
         self.patch_stride = patch_stride
 
         self.grid_size = (img_size[0] // patch_stride[0], img_size[1] // patch_stride[1])
         self.num_patches = self.grid_size[0] * self.grid_size[1]
+
         self.flatten = config.flatten_patch_embeds
         self.enable_patch_fusion = config.enable_patch_fusion
         self.enable_fusion = config.enable_fusion
@@ -314,7 +291,6 @@ class CLAPAudioPatchEmbed(nn.Module):
             stride=patch_stride,
             padding=padding,
         )
-
 
         self.norm = nn.LayerNorm(config.patch_embeds_hidden_size) if config.enable_patch_layer_norm else nn.Identity()
         if self.enable_patch_fusion:
@@ -376,13 +352,14 @@ class CLAPAudioMLP(nn.Module):
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(config.swin_drop_rate)
 
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-        return x
+    def forward(self, hidden_states):
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.drop(hidden_states)
+
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.drop(hidden_states)
+        return hidden_states
 
 
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
@@ -493,7 +470,7 @@ class CLAPAudioWindowAttention(nn.Module):
 
         super().__init__()
         self.hidden_dim = hidden_dim
-        self.window_size = to_2tuple(config.window_size)  # Wh, Ww
+        self.window_size = (config.window_size, config.window_size) if isinstance(config.window_size, int) else config.window_size
         self.num_heads = num_heads
         head_dim = self.hidden_dim // num_heads
         self.scale = head_dim**-0.5
@@ -593,7 +570,7 @@ class CLAPAudioSwinTransformerBlock(nn.Module):
             num_heads=self.num_heads,
         )
 
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = CLAPDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         if self.norm_before_mlp == "ln":
             self.norm2 = nn.LayerNorm(self.hidden_dim)
         elif self.norm_before_mlp == "bn":
@@ -1118,24 +1095,6 @@ class CLAPTextAttention(nn.Module):
         self.output = CLAPTextSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1471,13 +1430,6 @@ class CLAPTextModel(CLAPTextPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
@@ -2071,7 +2023,6 @@ class CLAPAudioPatchMerging(nn.Module):
 class CLAPSwinTransformer(nn.Module):
     def __init__(self, config: CLAPAudioConfig):
         super(CLAPSwinTransformer, self).__init__()
-
         self.config = config
         self.spec_size = config.spec_size
         self.patch_stride = config.patch_stride
@@ -2138,86 +2089,86 @@ class CLAPSwinTransformer(nn.Module):
         )
         self.head = nn.Linear(self.num_classes, self.num_classes)
 
-        self.spectrogram_extractor = Spectrogram(
-            n_fft=config.spectrogram_window_size,
-            hop_length=config.hop_size,
-            win_length=config.spectrogram_window_size,
-            window=config.spectrogram_window,
-            center=config.spectrogram_center,
-            pad_mode=config.spectrogram_pad_mode,
-            freeze_parameters=config.spectrogram_freeze_parameters,
-        )
-        # Logmel feature extractor
-        self.logmel_extractor = LogmelFilterBank(
-            sr=config.sample_rate,
-            n_fft=config.spectrogram_window_size,
-            n_mels=config.mel_bins,
-            fmin=config.fmin,
-            fmax=config.fmax,
-            ref=config.spectrogram_ref,
-            amin=config.spectrogram_amin,
-            top_db=config.spectrogram_top_db,
-            freeze_parameters=config.spectrogram_freeze_parameters,
-        )
-        # Spec augmenter
-        self.spec_augmenter = SpecAugmentation(
-            time_drop_width=config.spectrogram_time_drop_width,
-            time_stripes_num=config.spectrogram_time_stripes_num,
-            freq_drop_width=config.spectrogram_freq_drop_width,
-            freq_stripes_num=config.spectrogram_freq_stripes_num,
-        )
+        # self.spectrogram_extractor = Spectrogram(
+        #     n_fft=config.spectrogram_window_size,
+        #     hop_length=config.hop_size,
+        #     win_length=config.spectrogram_window_size,
+        #     window=config.spectrogram_window,
+        #     center=config.spectrogram_center,
+        #     pad_mode=config.spectrogram_pad_mode,
+        #     freeze_parameters=config.spectrogram_freeze_parameters,
+        # )
+        # # Logmel feature extractor
+        # self.logmel_extractor = LogmelFilterBank(
+        #     sr=config.sample_rate,
+        #     n_fft=config.spectrogram_window_size,
+        #     n_mels=config.mel_bins,
+        #     fmin=config.fmin,
+        #     fmax=config.fmax,
+        #     ref=config.spectrogram_ref,
+        #     amin=config.spectrogram_amin,
+        #     top_db=config.spectrogram_top_db,
+        #     freeze_parameters=config.spectrogram_freeze_parameters,
+        # )
+        # # Spec augmenter
+        # self.spec_augmenter = SpecAugmentation(
+        #     time_drop_width=config.spectrogram_time_drop_width,
+        #     time_stripes_num=config.spectrogram_time_stripes_num,
+        #     freq_drop_width=config.spectrogram_freq_drop_width,
+        #     freq_stripes_num=config.spectrogram_freq_stripes_num,
+        # )
 
-    def _init_weights(self, m):
-        pass
-        # if isinstance(m, nn.Linear):
-        #     trunc_normal_(m.weight, std=.02)
-        #     if isinstance(m, nn.Linear) and m.bias is not None:
-        #         nn.init.constant_(m.bias, 0)
-        # elif isinstance(m, nn.LayerNorm):
-        #     nn.init.constant_(m.bias, 0)
-        #     nn.init.constant_(m.weight, 1.0)
+    def _forward_features(
+        self, 
+        hidden_states, 
+        longer_idx=None
+    ):
+        _, _, frames_num, _  = hidden_states.shape
 
-    def forward_features(self, x, longer_idx=None):
-        # A deprecated optimization for using a hierarchical output from different blocks
-
-        frames_num = x.shape[2]
-        x = self.patch_embed(x, longer_idx=longer_idx)
+        hidden_states = self.patch_embed(hidden_states, longer_idx=longer_idx)
+        
         if self.use_absolute_pos_embedding:
-            x = x + self.absolute_pos_embed
-        x = self.pos_drop(x)
+            hidden_states = hidden_states + self.absolute_pos_embed
+        
+        hidden_states = self.pos_drop(hidden_states)
+        
         for i, layer in enumerate(self.layers):
-            x, attn = layer(x)
-        # for x
-        x = self.norm(x)
-        B, N, C = x.shape
-        SF = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[0]
-        ST = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[1]
-        x = x.permute(0, 2, 1).contiguous().reshape(B, C, SF, ST)
-        B, C, F, T = x.shape
+            hidden_states, _ = layer(hidden_states)
+        
+        hidden_states = self.norm(hidden_states)
+        
+        batch_size, _, n_channels = hidden_states.shape
+
+        freq_shape = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[0]
+        temporal_shape = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[1]
+        
+        hidden_states = hidden_states.permute(0, 2, 1).contiguous().reshape(batch_size, n_channels, freq_shape, temporal_shape)
+
+        batch_size, n_channels, n_frequencies, n_temp = hidden_states.shape
         # group 2D CNN
-        c_freq_bin = F // self.freq_ratio
-        x = x.reshape(B, C, F // c_freq_bin, c_freq_bin, T)
-        x = x.permute(0, 1, 3, 2, 4).contiguous().reshape(B, C, c_freq_bin, -1)
+        c_freq_bin = n_frequencies // self.freq_ratio
+        hidden_states = hidden_states.reshape(batch_size, n_channels, n_frequencies // c_freq_bin, c_freq_bin, n_temp)
+        hidden_states = hidden_states.permute(0, 1, 3, 2, 4).contiguous().reshape(batch_size, n_channels, c_freq_bin, -1)
         # get latent_output
-        fine_grained_latent_output = torch.mean(x, dim=2)
+        fine_grained_latent_output = torch.mean(hidden_states, dim=2)
         fine_grained_latent_output = interpolate(
             fine_grained_latent_output.permute(0, 2, 1).contiguous(), 8 * self.patch_stride[1]
         )
 
-        latent_output = self.avgpool(torch.flatten(x, 2))
+        latent_output = self.avgpool(torch.flatten(hidden_states, 2))
         latent_output = torch.flatten(latent_output, 1)
 
         # display the attention map, if needed
 
-        x = self.tscam_conv(x)
-        x = torch.flatten(x, 2)  # B, C, T
+        hidden_states = self.tscam_conv(hidden_states)
+        hidden_states = torch.flatten(hidden_states, 2)  # B, C, T
 
-        fpx = interpolate(torch.sigmoid(x).permute(0, 2, 1).contiguous(), 8 * self.patch_stride[1])
+        framewise_output = interpolate(torch.sigmoid(hidden_states).permute(0, 2, 1).contiguous(), 8 * self.patch_stride[1])
 
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
+        hidden_states = self.avgpool(hidden_states)
+        hidden_states = torch.flatten(hidden_states, 1)
 
-        return (fpx, torch.sigmoid(x), fine_grained_latent_output, latent_output)
+        return (framewise_output, torch.sigmoid(hidden_states), fine_grained_latent_output, latent_output)
 
 
     def crop_wav(self, x, crop_size, spe_pos=None):
@@ -2233,7 +2184,7 @@ class CLAPSwinTransformer(nn.Module):
 
     # Reshape the wavform to a img size, if you want to use the pretrained swin transformer model
     def reshape_wav2img(self, x):
-        B, C, T, F = x.shape
+        _, _, T, F = x.shape
         target_T = int(self.spec_size * self.freq_ratio)
         target_F = self.spec_size // self.freq_ratio
         assert T <= target_T and F <= target_F, "the wav size should less than or equal to the swin input size"
@@ -2257,7 +2208,8 @@ class CLAPSwinTransformer(nn.Module):
         mixup_lambda=None, 
         device=None,
         return_dict=False,
-    ):  # out_feat_keys: List[str] = None):
+    ):
+        # TODO: remove this
         mel_fusion = mel_fusion[None, :].to(0)
         waveform = waveform[None, :].to(0)
 
@@ -2267,10 +2219,12 @@ class CLAPSwinTransformer(nn.Module):
             longer[torch.randint(0, longer.shape[0], (1,))] = True
 
         
-        x = mel_fusion.to(device=device, non_blocking=True)
-        x = x.transpose(1, 3)
-        x = self.bn0(x)
-        x = x.transpose(1, 3)
+        # TODO: remove .to(device)
+        mel_fusion = mel_fusion.to(device=device, non_blocking=True)
+
+        mel_fusion = mel_fusion.transpose(1, 3)
+        hidden_states = self.bn0(mel_fusion)
+        hidden_states = hidden_states.transpose(1, 3)
         
         longer_list_idx = None
         if self.enable_fusion:
@@ -2278,12 +2232,16 @@ class CLAPSwinTransformer(nn.Module):
             longer_list_idx = torch.where(longer_list)[0]
             
         if self.training:
-            x = self.spec_augmenter(x)
-            if mixup_lambda is not None:
-                x = do_mixup(x, mixup_lambda)
+            raise ValueError(
+                "CLAP does not support training since we need to enable `SpectrogramAugmentation`",
+                " this will be addressed in a future release."
+            )
+            # x = self.spec_augmenter(x)
+            # if mixup_lambda is not None:
+            #     x = do_mixup(x, mixup_lambda)
 
-        x = self.reshape_wav2img(x)
-        output = self.forward_features(x, longer_idx=longer_list_idx)
+        hidden_states = self.reshape_wav2img(hidden_states)
+        output = self._forward_features(hidden_states, longer_idx=longer_list_idx)
 
         if not return_dict:
             return output
@@ -2296,4 +2254,3 @@ class CLAPSwinTransformer(nn.Module):
             fine_grained_embedding=fine_grained_embedding,
             embedding=output_embeddingss,
         )
-
