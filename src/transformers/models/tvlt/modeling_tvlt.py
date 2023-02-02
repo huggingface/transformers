@@ -198,7 +198,6 @@ class TvltEmbeddings(nn.Module):
         embedding_output = torch.cat(
             [self.cls_embedding.repeat(batch_size, 1, 1), pixel_embedding_output, audio_embedding_output], 1
         )
-        input_shape = embedding_output.size()
         masked_pixel_len = pixel_embedding_output.size(1)
 
         attention_mask = None
