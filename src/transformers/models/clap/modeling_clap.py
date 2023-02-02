@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch CLAP model."""
+import collections
 import math
 import random
 from dataclasses import dataclass
@@ -32,7 +33,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward
+from ...pytorch_utils import apply_chunking_to_forward, meshgrid, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -472,80 +473,158 @@ def window_reverse(windows, window_size, H, W):
     return x
 
 
-class CLAPAudioWindowAttention(nn.Module):
-    def __init__(self, config, hidden_dim, num_heads):
-
+# Copied from transformers.models.swin_transformer.modeling_swin_transformer.SwinTransformerLayer with Swin->CLAPAudio
+class CLAPAudioSelfAttention(nn.Module):
+    def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
-        self.hidden_dim = hidden_dim
-        self.window_size = (
-            (config.window_size, config.window_size) if isinstance(config.window_size, int) else config.window_size
-        )
-        self.num_heads = num_heads
-        head_dim = self.hidden_dim // num_heads
-        self.scale = head_dim**-0.5
+        if dim % num_heads != 0:
+            raise ValueError(
+                f"The hidden size ({dim}) is not a multiple of the number of attention heads ({num_heads})"
+            )
 
-        # define a parameter table of relative position bias
+        self.num_attention_heads = num_heads
+        self.attention_head_size = int(dim / num_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.window_size = (
+            window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
+        )
+
         self.relative_position_bias_table = nn.Parameter(
             torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
-        )  # 2*Wh-1 * 2*Ww-1, nH
+        )
 
         # get pair-wise relative position index for each token inside the window
         coords_h = torch.arange(self.window_size[0])
         coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))  # 2, Wh, Ww
-        coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
-        relative_coords[:, :, 0] += self.window_size[0] - 1  # shift to start from 0
+        coords = torch.stack(meshgrid([coords_h, coords_w], indexing="ij"))
+        coords_flatten = torch.flatten(coords, 1)
+        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
+        relative_coords = relative_coords.permute(1, 2, 0).contiguous()
+        relative_coords[:, :, 0] += self.window_size[0] - 1
         relative_coords[:, :, 1] += self.window_size[1] - 1
         relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
-        relative_position_index = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
+        relative_position_index = relative_coords.sum(-1)
         self.register_buffer("relative_position_index", relative_position_index)
 
-        self.qkv = nn.Linear(self.hidden_dim, self.hidden_dim * 3, bias=config.swin_qkv_bias)
-        self.attn_drop = nn.Dropout(config.swin_attention_drop_rate)
-        self.proj = nn.Linear(self.hidden_dim, self.hidden_dim)
-        self.proj_drop = nn.Dropout(config.swin_drop_rate)
+        self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
 
-        trunc_normal_(self.relative_position_bias_table, std=0.02)
-        self.softmax = nn.Softmax(dim=-1)
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    def forward(self, x, mask=None):
-        """
-        Args:
-            x: input features with shape of (num_windows*B, N, C)
-            mask: (0/-inf) mask with shape of (num_windows, Wh*Ww, Wh*Ww) or None
-        """
-        B_, N, C = x.shape
-        qkv = self.qkv(x).reshape(B_, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(new_x_shape)
+        return x.permute(0, 2, 1, 3)
 
-        q = q * self.scale
-        attn = q @ k.transpose(-2, -1)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        batch_size, dim, num_channels = hidden_states.shape
+        mixed_query_layer = self.query(hidden_states)
 
-        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
+        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
+        relative_position_bias = relative_position_bias.view(
             self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
-        )  # Wh*Ww,Wh*Ww,nH
-        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
-        attn = attn + relative_position_bias.unsqueeze(0)
+        )
 
-        if mask is not None:
-            nW = mask.shape[0]
-            attn = attn.view(B_ // nW, nW, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
-            attn = attn.view(-1, self.num_heads, N, N)
-            attn = self.softmax(attn)
-        else:
-            attn = self.softmax(attn)
+        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
+        attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
 
-        attn = self.attn_drop(attn)
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in SwinModel forward() function)
+            mask_shape = attention_mask.shape[0]
+            attention_scores = attention_scores.view(
+                batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim
+            )
+            attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(0)
+            attention_scores = attention_scores.view(-1, self.num_attention_heads, dim, dim)
 
-        x = (attn @ v).transpose(1, 2).reshape(B_, N, C)
-        x = self.proj(x)
-        x = self.proj_drop(x)
-        return x, attn
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
 
-    def extra_repr(self):
-        return f"dim={self.dim}, window_size={self.window_size}, num_heads={self.num_heads}"
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
+
+
+# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->CLAPAudio
+class CLAPAudioSelfOutput(nn.Module):
+    def __init__(self, config, dim):
+        super().__init__()
+        self.dense = nn.Linear(dim, dim)
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        return hidden_states
+
+
+# Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->CLAPAudio
+class CLAPAudioAttention(nn.Module):
+    def __init__(self, config, dim, num_heads, window_size):
+        super().__init__()
+        self.self = CLAPAudioSelfAttention(config, dim, num_heads, window_size)
+        self.output = CLAPAudioSelfOutput(config, dim)
+        self.pruned_heads = set()
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.self.query = prune_linear_layer(self.self.query, index)
+        self.self.key = prune_linear_layer(self.self.key, index)
+        self.self.value = prune_linear_layer(self.self.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
+        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
+        attention_output = self.output(self_outputs[0], hidden_states)
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
 
 
 class CLAPAudioSwinTransformerBlock(nn.Module):
@@ -573,10 +652,11 @@ class CLAPAudioSwinTransformerBlock(nn.Module):
         assert 0 <= self.shift_size < self.window_size, "shift_size must in 0-window_size"
 
         self.norm1 = nn.LayerNorm(self.hidden_dim)
-        self.attn = CLAPAudioWindowAttention(
+        self.attn = CLAPAudioAttention(
             config=config,
-            hidden_dim=self.hidden_dim,
+            dim=self.hidden_dim,
             num_heads=self.num_heads,
+            window_size=self.window_size,
         )
 
         self.drop_path = CLAPDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
@@ -618,7 +698,7 @@ class CLAPAudioSwinTransformerBlock(nn.Module):
 
         self.register_buffer("attn_mask", attn_mask)
 
-    def forward(self, x):
+    def forward(self, x, output_attentions=False):
         # pdb.set_trace()
         H, W = self.input_resolution
         # print("H: ", H)
@@ -642,7 +722,8 @@ class CLAPAudioSwinTransformerBlock(nn.Module):
         x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
 
         # W-MSA/SW-MSA
-        attn_windows, attn = self.attn(x_windows, mask=self.attn_mask)  # nW*B, window_size*window_size, C
+        attention_outputs = self.attn(x_windows, attention_mask=self.attn_mask, output_attentions=output_attentions)  # nW*B, window_size*window_size, C
+        attn_windows = attention_outputs[0]
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
@@ -658,6 +739,11 @@ class CLAPAudioSwinTransformerBlock(nn.Module):
         # FFN
         x = shortcut + self.drop_path(x)
         x = x + self.drop_path(self.mlp(self.norm2(x)))
+
+        if output_attentions:
+            attn = attention_outputs[1]
+        else:
+            attn = None
 
         return x, attn
 
@@ -1975,56 +2061,75 @@ class CLAPAudioLayer(nn.Module):
         else:
             self.downsample = None
 
-    def forward(self, x):
+    def forward(self, x, output_attentions=False):
         attns = []
         for blk in self.blocks:
             if self.use_checkpoint:
                 x = checkpoint.checkpoint(blk, x)
             else:
-                x, attn = blk(x)
-                if not self.training:
+                x, attn = blk(x, output_attentions=output_attentions)
+                if not self.training and output_attentions:
                     attns.append(attn.unsqueeze(0))
         if self.downsample is not None:
-            x = self.downsample(x)
-        if not self.training:
+            x = self.downsample(x, self.input_resolution)
+        if not self.training and output_attentions:
             attn = torch.cat(attns, dim=0)
             attn = torch.mean(attn, dim=0)
         return x, attn
 
 
+# Copied from transformers.models.swin.modeling_swin.SwinPatchMerging with Swin->CLAPAudio
 class CLAPAudioPatchMerging(nn.Module):
-    def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
+    """
+    Patch Merging Layer.
+    Args:
+        input_resolution (`Tuple[int]`):
+            Resolution of input feature.
+        dim (`int`):
+            Number of input channels.
+        norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
+            Normalization layer class.
+    """
+
+    def __init__(self, input_resolution: Tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
-    def forward(self, x):
-        """
-        x: B, H*W, C
-        """
-        H, W = self.input_resolution
-        B, L, C = x.shape
-        assert L == H * W, "input feature has wrong size"
-        assert H % 2 == 0 and W % 2 == 0, f"x size ({H}*{W}) are not even."
+    def maybe_pad(self, input_feature, height, width):
+        should_pad = (height % 2 == 1) or (width % 2 == 1)
+        if should_pad:
+            pad_values = (0, 0, 0, width % 2, 0, height % 2)
+            input_feature = nn.functional.pad(input_feature, pad_values)
 
-        x = x.view(B, H, W, C)
+        return input_feature
 
-        x0 = x[:, 0::2, 0::2, :]  # B H/2 W/2 C
-        x1 = x[:, 1::2, 0::2, :]  # B H/2 W/2 C
-        x2 = x[:, 0::2, 1::2, :]  # B H/2 W/2 C
-        x3 = x[:, 1::2, 1::2, :]  # B H/2 W/2 C
-        x = torch.cat([x0, x1, x2, x3], -1)  # B H/2 W/2 4*C
-        x = x.view(B, -1, 4 * C)  # B H/2*W/2 4*C
+    def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
+        height, width = input_dimensions
+        # `dim` is height * width
+        batch_size, dim, num_channels = input_feature.shape
 
-        x = self.norm(x)
-        x = self.reduction(x)
+        input_feature = input_feature.view(batch_size, height, width, num_channels)
+        # pad input to be disible by width and height, if needed
+        input_feature = self.maybe_pad(input_feature, height, width)
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_0 = input_feature[:, 0::2, 0::2, :]
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_1 = input_feature[:, 1::2, 0::2, :]
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_2 = input_feature[:, 0::2, 1::2, :]
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_3 = input_feature[:, 1::2, 1::2, :]
+        # batch_size height/2 width/2 4*num_channels
+        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
+        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
 
-        return x
+        input_feature = self.norm(input_feature)
+        input_feature = self.reduction(input_feature)
 
-    def extra_repr(self):
-        return f"input_resolution={self.input_resolution}, dim={self.dim}"
+        return input_feature
 
 
 # The Core of HTSAT
@@ -2045,10 +2150,10 @@ class CLAPSwinTransformer(nn.Module):
         self.num_features = int(self.hidden_size * 2 ** (self.num_layers - 1))
 
         self.drop_rate = config.swin_drop_rate
-        self.attn_drop_rate = config.swin_attention_drop_rate
+        self.attn_drop_rate = config.attention_probs_dropout_prob
         self.drop_path_rate = config.swin_drop_path_rate
 
-        self.qkv_bias = config.swin_qkv_bias
+        self.qkv_bias = config.qkv_bias
 
         self.patch_norm = nn.LayerNorm if config.enable_patch_layer_norm else None
         self.norm_layer = nn.LayerNorm if self.patch_norm else None
