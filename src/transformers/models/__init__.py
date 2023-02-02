@@ -58,6 +58,7 @@ from . import (
     decision_transformer,
     deformable_detr,
     deit,
+    deta,
     detr,
     dialogpt,
     dinat,
