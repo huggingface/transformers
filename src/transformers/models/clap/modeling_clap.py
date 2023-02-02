@@ -1985,46 +1985,65 @@ class CLAPAudioLayer(nn.Module):
                 if not self.training:
                     attns.append(attn.unsqueeze(0))
         if self.downsample is not None:
-            x = self.downsample(x)
+            x = self.downsample(x, self.input_resolution)
         if not self.training:
             attn = torch.cat(attns, dim=0)
             attn = torch.mean(attn, dim=0)
         return x, attn
 
 
+# Copied from transformers.models.swin.modeling_swin.SwinPatchMerging with Swin->CLAPAudio
 class CLAPAudioPatchMerging(nn.Module):
-    def __init__(self, input_resolution, dim, norm_layer=nn.LayerNorm):
+    """
+    Patch Merging Layer.
+    Args:
+        input_resolution (`Tuple[int]`):
+            Resolution of input feature.
+        dim (`int`):
+            Number of input channels.
+        norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
+            Normalization layer class.
+    """
+
+    def __init__(self, input_resolution: Tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
         super().__init__()
         self.input_resolution = input_resolution
         self.dim = dim
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
         self.norm = norm_layer(4 * dim)
 
-    def forward(self, x):
-        """
-        x: B, H*W, C
-        """
-        H, W = self.input_resolution
-        B, L, C = x.shape
-        assert L == H * W, "input feature has wrong size"
-        assert H % 2 == 0 and W % 2 == 0, f"x size ({H}*{W}) are not even."
+    def maybe_pad(self, input_feature, height, width):
+        should_pad = (height % 2 == 1) or (width % 2 == 1)
+        if should_pad:
+            pad_values = (0, 0, 0, width % 2, 0, height % 2)
+            input_feature = nn.functional.pad(input_feature, pad_values)
 
-        x = x.view(B, H, W, C)
+        return input_feature
 
-        x0 = x[:, 0::2, 0::2, :]  # B H/2 W/2 C
-        x1 = x[:, 1::2, 0::2, :]  # B H/2 W/2 C
-        x2 = x[:, 0::2, 1::2, :]  # B H/2 W/2 C
-        x3 = x[:, 1::2, 1::2, :]  # B H/2 W/2 C
-        x = torch.cat([x0, x1, x2, x3], -1)  # B H/2 W/2 4*C
-        x = x.view(B, -1, 4 * C)  # B H/2*W/2 4*C
+    def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
+        height, width = input_dimensions
+        # `dim` is height * width
+        batch_size, dim, num_channels = input_feature.shape
 
-        x = self.norm(x)
-        x = self.reduction(x)
+        input_feature = input_feature.view(batch_size, height, width, num_channels)
+        # pad input to be disible by width and height, if needed
+        input_feature = self.maybe_pad(input_feature, height, width)
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_0 = input_feature[:, 0::2, 0::2, :]
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_1 = input_feature[:, 1::2, 0::2, :]
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_2 = input_feature[:, 0::2, 1::2, :]
+        # [batch_size, height/2, width/2, num_channels]
+        input_feature_3 = input_feature[:, 1::2, 1::2, :]
+        # batch_size height/2 width/2 4*num_channels
+        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
+        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
 
-        return x
+        input_feature = self.norm(input_feature)
+        input_feature = self.reduction(input_feature)
 
-    def extra_repr(self):
-        return f"input_resolution={self.input_resolution}, dim={self.dim}"
+        return input_feature
 
 
 # The Core of HTSAT
