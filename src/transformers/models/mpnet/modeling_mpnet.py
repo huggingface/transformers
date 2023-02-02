@@ -66,6 +66,7 @@ class MPNetPreTrainedModel(PreTrainedModel):
     config_class = MPNetConfig
     pretrained_model_archive_map = MPNET_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "mpnet"
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -185,7 +186,7 @@ class MPNetSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        position_bias=None,
+        position_bias: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
@@ -234,13 +235,7 @@ class MPNetSelfAttention(nn.Module):
 
         # Apply relative position embedding (precomputed in MPNetEncoder) if provided.
         if position_bias is not None:
-            try :
-                attention_scores += position_bias
-            except RuntimeError:
-                print(is_cross_attention, past_key_value is not None)
-                print(attention_scores.shape)
-                print(position_bias.shape)
-                print(k.shape)
+            attention_scores += position_bias
 
         if attention_mask is not None:
             attention_scores = attention_scores + attention_mask
@@ -298,7 +293,7 @@ class MPNetAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        position_bias=None,
+        position_bias: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
@@ -368,9 +363,10 @@ class MPNetLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        position_bias = None,
+        encoder_position_bias: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        decoder_position_bias: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False
     ):
@@ -380,7 +376,7 @@ class MPNetLayer(nn.Module):
             hidden_states,
             attention_mask,
             head_mask,
-            position_bias=position_bias,
+            position_bias=encoder_position_bias,
             output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
         )
@@ -407,7 +403,7 @@ class MPNetLayer(nn.Module):
                 attention_output,
                 attention_mask,
                 head_mask,
-                position_bias,
+                decoder_position_bias,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 cross_attn_past_key_value,
@@ -464,7 +460,9 @@ class MPNetEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
-            position_bias = self.compute_position_bias(hidden_states, encoder_hidden_states, past_key_value)
+
+            encoder_position_bias = self.compute_position_bias(hidden_states, past_key_value=past_key_value)
+            decoder_position_bias = self.compute_position_bias(hidden_states, encoder_hidden_states, past_key_value)
 
             if self.gradient_checkpointing and self.training:
 
@@ -485,18 +483,20 @@ class MPNetEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    position_bias,
+                    encoder_position_bias,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    decoder_position_bias,
                 )
             else:
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    position_bias,
+                    encoder_position_bias,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    decoder_position_bias,
                     past_key_value,
                     output_attentions,
                 )
