@@ -364,11 +364,9 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         self.model_name = "facebook/opt-350m"
         super().setUp()
 
-    @unittest.skipIf(
-        version.parse(importlib_metadata.version("bitsandbytes")) < version.parse("0.37.0"),
-        reason="int8 training is not available in bitsandbytes < 0.37.0",
-    )
     def test_training(self):
+        if version.parse(importlib_metadata.version("bitsandbytes")) < version.parse("0.37.0"):
+            return
 
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
