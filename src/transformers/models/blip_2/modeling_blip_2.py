@@ -1481,6 +1481,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             inputs_embeds = self.language_model.model.decoder.embed_tokens(input_ids)
             inputs_embeds = torch.cat([query_embeds, inputs_embeds], dim=1)
 
+            print("Shape of inputs_embeds:", inputs_embeds.shape)
+            print("Shape of attention_mask:", attention_mask.shape)
+
             outputs = self.language_model.generate(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
@@ -1490,7 +1493,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             return outputs
 
 
-def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
+def prepare_inputs_for_generation(input_ids, past=None, inputs_embeds=None, **kwargs):
     token_type_ids = kwargs.get("token_type_ids", None)
     # only last token for inputs_ids if past is defined in kwargs
     if past:
@@ -1514,13 +1517,14 @@ def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
         model_inputs = {"inputs_embeds": inputs_embeds}
     else:
         model_inputs = {"input_ids": input_ids}
+    
     model_inputs.update(
         {
             "past_key_values": past,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
+            # "use_cache": kwargs.get("use_cache"),
+            # "position_ids": position_ids,
             "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
+            # "token_type_ids": token_type_ids,
         }
     )
     return model_inputs
