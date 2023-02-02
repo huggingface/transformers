@@ -364,6 +364,13 @@ class Trainer:
                 " please make sure that you have installed `bitsandbytes>=0.37.0`. "
             )
 
+        if getattr(model, "_is_int8_training_enabled", False):
+            logger.info(
+                "The model is loaded in 8-bit precision. To train this model you need to add additional modules",
+                " inside the model such as adapters using `peft` library and freeze the model weights. Please check ",
+                " the examples in https://github.com/huggingface/peft for more details.",
+            )
+
         # Setup Sharded DDP training
         self.sharded_ddp = None
         if len(args.sharded_ddp) > 0:
