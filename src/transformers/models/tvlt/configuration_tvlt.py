@@ -38,11 +38,11 @@ class TvltConfig(PretrainedConfig):
     Args:
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        audio_size (`int`, *optional*, defaults to 2048):
+        spectrogram_length (`int`, *optional*, defaults to 2048):
             The time length of each audio spectrogram.
-        feature_size (`int`, *optional*, defaults to 128):
+        frequency_length (`int`, *optional*, defaults to 128):
             The frequency length of audio spectrogram.
-        image_patch_size (`int`, *optional*, defaults to 16):
+        image_patch_size (`List[int]`, *optional*, defaults to [16, 16]):
             The size (resolution) of each image patch.
         audio_patch_size (`List[int]`, *optional*, defaults to `[16, 16]`):
             The size (resolution) of each audio patch.
@@ -87,10 +87,12 @@ class TvltConfig(PretrainedConfig):
             image patch masking ratio.
         audio_mask_ratio (`float`, *optional*, defaults to 0.15):
             Audio patch masking ratio.
+        audio_mask_type (`str`, *optional*, defaults to `"frame-level"`):
+            Audio patch masking type, choose between "frame-level" and "patch-level".
         task_matching (`bool`, *optional*, defaults to `True`):
             Whether to use vision audio matching task in pretraining.
         task_mae (`bool`, *optional*, defaults to `True`):
-            Whether to use the masked auto-encoder (MAE) task in pretraining.
+            Whether to use the masked auto-encoder (MAE) in pretraining.
         loss_type (`str`, *optional*, defaults to `"classification"`):
             Loss types including regression and classification.
 
@@ -113,9 +115,9 @@ class TvltConfig(PretrainedConfig):
     def __init__(
         self,
         image_size=224,
-        audio_size=2048,
-        feature_size=128,
-        image_patch_size=16,
+        spectrogram_length=2048,
+        frequency_length=128,
+        image_patch_size=[16, 16],
         audio_patch_size=[16, 16],
         num_image_channels=3,
         num_audio_channels=1,
@@ -137,6 +139,7 @@ class TvltConfig(PretrainedConfig):
         decoder_intermediate_size=2048,
         pixel_mask_ratio=0.75,
         audio_mask_ratio=0.15,
+        audio_mask_type="frame-level",
         task_matching=True,
         task_mae=True,
         loss_type="classification",
@@ -145,8 +148,8 @@ class TvltConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.image_size = image_size
-        self.audio_size = audio_size
-        self.feature_size = feature_size
+        self.spectrogram_length = spectrogram_length
+        self.frequency_length = frequency_length
         self.image_patch_size = image_patch_size
         self.audio_patch_size = audio_patch_size
         self.num_image_channels = num_image_channels
@@ -171,6 +174,7 @@ class TvltConfig(PretrainedConfig):
         self.decoder_intermediate_size = decoder_intermediate_size
         self.pixel_mask_ratio = pixel_mask_ratio
         self.audio_mask_ratio = audio_mask_ratio
+        self.audio_mask_type = audio_mask_type
 
         self.task_matching = task_matching
         self.task_mae = task_mae

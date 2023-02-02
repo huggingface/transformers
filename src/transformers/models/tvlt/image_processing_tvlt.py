@@ -81,7 +81,7 @@ class TvltImageProcessor(BaseImageProcessor):
             Size of the output image after resizing. The shortest edge of the image will be resized to
             `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
             `size` in the `preprocess` method.
-        patch_size (`int` *optional*, defaults to 16):
+        patch_size (`List[int]` *optional*, defaults to [16,16]):
             The patch size of image patch embedding.
         num_frames (`int` *optional*, defaults to 8):
             The maximum number of video frames.
@@ -109,26 +109,20 @@ class TvltImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        init_mask_generator (`bool`, *optional*, defaults to False):
-            Whether to initialize random generator for creating masked audio_mask_position_permutation, set to `True`
-            when using [`~from_pretrained`].
-        seed (`int`, *optional*, defaults to 1):
-            The seed of random generator for creating masked pixel_mask_position_permutation
     """
 
     model_input_names = [
         "pixel_values",
-        "pixel_masks",
+        "pixel_mask",
         "pixel_values_mixed",
-        "pixel_masks_mixed",
-        "pixel_mask_position_permutation",
+        "pixel_mask_mixed",
     ]
 
     def __init__(
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        patch_size: int = 16,
+        patch_size: int = [16, 16],
         num_frames: int = 8,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = True,
@@ -139,7 +133,6 @@ class TvltImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_MEAN,
         image_std: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_STD,
         init_mask_generator=False,
-        seed=1,
         **kwargs
     ) -> None:
         super().__init__(**kwargs)
@@ -160,8 +153,6 @@ class TvltImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
-        if init_mask_generator:
-            self.random_generator = np.random.default_rng(seed=seed)
 
     def resize(
         self,
@@ -383,16 +374,13 @@ class TvltImageProcessor(BaseImageProcessor):
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
 
-            - **pixel_masks** -- Pixel masks to be fed to a model, of shape (batch_size, num_pixel_patches).
+            - **pixel_mask** -- Pixel masks to be fed to a model, of shape (batch_size, num_pixel_patches).
 
             - **pixel_values_mixed** -- Pixel values with both postive or negative to be fed to a model, of shape
               (batch_size, num_channels, height, width).
 
-            - **pixel_masks_mixed** -- Pixel masks with both postive or negative to be fed to a model, of shape
+            - **pixel_mask_mixed** -- Pixel masks with both postive or negative to be fed to a model, of shape
               (batch_size, num_pixel_patches).
-
-            - **pixel_mask_position_permutation** -- Pixel MAE masks position permutation to be fed to a model, of
-              shape (batch_size, num_pixel_patches).
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
@@ -425,7 +413,7 @@ class TvltImageProcessor(BaseImageProcessor):
                 )
 
         max_num_frames = max([len(video) for video in videos])
-        num_patches_per_image = (size["shortest_edge"] // patch_size) ** 2
+        num_patches_per_image = (size["shortest_edge"] // patch_size[0]) ** 2
         video_masks = np.array(
             [
                 len(video) * num_patches_per_image * [1] + (max_num_frames - len(video)) * num_patches_per_image * [0]
@@ -456,17 +444,8 @@ class TvltImageProcessor(BaseImageProcessor):
 
         # If videos contain both positive/negative, use mixed key for video-audio matching task
         if is_mixed:
-            data = {"pixel_values_mixed": videos, "pixel_masks_mixed": video_masks}
+            data = {"pixel_values_mixed": videos, "pixel_mask_mixed": video_masks}
         else:
-            data = {"pixel_values": videos, "pixel_masks": video_masks}
-
-        # return masking tensor
-        if mask_pixel:
-            batch_size = len(videos)
-            max_patch_len = num_patches_per_image * max_num_frames
-            noise = self.random_generator.random((batch_size, max_patch_len))  # noise in [0, 1]
-            # sort noise for each sample
-            ids_shuffle = np.argsort(noise, axis=1)  # ascend: small is keep, large is remove
-            data.update({"pixel_mask_position_permutation": ids_shuffle})
+            data = {"pixel_values": videos, "pixel_mask": video_masks}
 
         return BatchFeature(data=data, tensor_type=return_tensors)

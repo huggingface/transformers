@@ -36,18 +36,16 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
     should refer to this superclass for more information regarding those methods.
 
     Args:
-        audio_size (`Dict[str, int]` *optional*, defaults to 2048):
-            Time length of the output audio spectrogram.
+        spectrogram_length (`Dict[str, int]` *optional*, defaults to 2048):
+            The time length of each audio spectrogram.
         num_channels (`int` *optional*, defaults to 1):
             Number of audio channels.
         patch_size (`List[int]` *optional*, defaults to `[16, 16]`):
             The patch size of audio patch embedding.
         feature_size (`int`, defaults to 128):
-            The feature dimension of the extracted audio spectrogram.
-        masking_type (`str`, defaults to '"frame-level"'):
-            The masking type of MAE on audio with choices in `['frame-level', 'patch-level']`
+            The frequency length of audio spectrogram.
         sampling_rate (`int`, defaults to 41000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in Hertz (Hz).
         hop_length_to_sampling_rate (`int`, defaults to 86):
             Hop length is length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
             For example, with sampling rate 44100, the hop length is 512, with 44100 / 512 = 86
@@ -55,28 +53,20 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             Size of the Fourier transform.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
-        init_mask_generator (`bool`, *optional*, defaults to False):
-            Whether to initialize random generator for creating masked audio_mask_position_permutation, set to true
-            when using from_pretrained.
-        seed (`int`, *optional*, defaults to 1):
-            The seed of random generator for creating masked audio_mask_position_permutation
     """
 
-    model_input_names = ["audio_values", "audio_masks", "audio_mask_position_permutation"]
+    model_input_names = ["audio_values", "audio_mask"]
 
     def __init__(
         self,
-        audio_size=2048,
+        spectrogram_length=2048,
         num_channels=1,
         patch_size=[16, 16],
         feature_size=128,
-        masking_type="frame-level",
         sampling_rate=44100,
         hop_length_to_sampling_rate=86,
         n_fft=2048,
         padding_value=0.0,
-        init_mask_generator=False,
-        seed=1,
         **kwargs
     ):
         super().__init__(
@@ -86,18 +76,15 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             **kwargs,
         )
 
-        self.audio_size = audio_size
+        self.spectrogram_length = spectrogram_length
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.freq_len = feature_size // self.patch_size[1]
-        self.masking_type = masking_type
         self.n_fft = n_fft
         self.hop_length = sampling_rate // hop_length_to_sampling_rate
         self.sampling_rate = sampling_rate
         self.padding_value = padding_value
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
-        if init_mask_generator:
-            self.random_generator = np.random.default_rng(seed=seed)
 
     # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor.get_mel_filters with 45.245640471924965->59.99247463746737
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
@@ -247,7 +234,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         **kwargs
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several audio(s).
+        Main method to prepare one or several audio(s) for the model.
 
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
@@ -283,10 +270,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             - **audio_values** -- Audio values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
 
-            - **audio_masks** -- Audio masks to be fed to a model, of shape (batch_size, num_audio_patches).
-
-            - **audio_mask_position_permutation** -- Audio MAE masks position permutation to be fed to a model, of
-              shape (batch_size, num_audio_patches).
+            - **audio_mask** -- Audio masks to be fed to a model, of shape (batch_size, num_audio_patches).
         """
 
         if sampling_rate is not None:
@@ -318,7 +302,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         # Convert audio signals to log mel spectrograms, truncate by time axis
         audio_features = [
-            self._np_extract_fbank_features(waveform.squeeze()).T[: self.audio_size] for waveform in raw_speech
+            self._np_extract_fbank_features(waveform.squeeze()).T[: self.spectrogram_length] for waveform in raw_speech
         ]
         if isinstance(audio_features[0], List):
             audio_features = [np.asarray(feature, dtype=np.float32) for feature in audio_features]
@@ -328,12 +312,12 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             [ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len for feature in audio_features]
         )  # The maximum number of audio patches in a batch
         if return_attention_mask:
-            audio_masks = [
+            audio_mask = [
                 (ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len) * [1]
                 + (max_patch_len - ceil(feature.shape[0] / self.patch_size[0]) * self.freq_len) * [0]
                 for feature in audio_features
             ]
-            audio_masks = np.array(audio_masks).astype(np.float32)
+            audio_mask = np.array(audio_mask).astype(np.float32)
 
         # convert into correct format for padding
         max_time_len = max_patch_len // self.freq_len * self.patch_size[0]  # The maximum audio size in a batch
@@ -345,26 +329,9 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
 
         # return as BatchFeature
         if return_attention_mask:
-            data = {"audio_values": padded_audio_features, "audio_masks": audio_masks}
+            data = {"audio_values": padded_audio_features, "audio_mask": audio_mask}
         else:
             data = {"audio_values": padded_audio_features}
-
-        # return masking tensor for MAE objective
-        if mask_audio:
-            batch_size = len(padded_audio_features)
-            if self.masking_type == "frame-level":
-                num_time_patches = max_patch_len // self.freq_len
-                noise = (
-                    torch.rand(batch_size, num_time_patches)
-                    .unsqueeze(-1)
-                    .repeat(1, 1, self.freq_len)
-                    .view(batch_size, max_patch_len)
-                )  # noise in [0, 1]
-            elif self.masking_type == "patch-level":
-                noise = self.random_generator.random(batch_size, max_patch_len)  # noise in [0, 1]
-            # sort noise for each sample
-            ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
-            data.update({"audio_mask_position_permutation": ids_shuffle})
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
         return encoded_inputs
