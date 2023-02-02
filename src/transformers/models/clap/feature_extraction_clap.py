@@ -27,7 +27,6 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor with Whisper->CLAP
 class CLAPFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a CLAP feature extractor.
@@ -110,8 +109,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
     def _power_to_db(self, mel_spectrogram, a_min=1e-10, ref=1.0):
         """
-        Power to db, this function is the numpy implementation of
-        librosa.power_to_lb
+        Power to db, this function is the numpy implementation of librosa.power_to_lb
         """
         log_spec = 10 * np.log10(np.clip(mel_spectrogram, a_min=a_min, a_max=None))
         log_spec -= 10.0 * np.log10(np.maximum(a_min, ref))
@@ -265,8 +263,9 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of (`int`, *optional*, defaults to None):
                 If set will pad the sequence to a multiple of the provided value.
 
-                This is especially useful to enable the use of np.array Cores on NVIDIA hardware with compute capability
-                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+                This is especially useful to enable the use of np.array Cores on NVIDIA hardware with compute
+                capability `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of
+                128.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.

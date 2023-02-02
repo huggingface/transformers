@@ -475,18 +475,23 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
     ) -> np.array:
         r"""Create a frequency bin conversion matrix used to obtain the Mel Frequency Cepstral Coefficient.
         This is called a `mel filter bank`, and various implementation exist, which differ in the number of filters,
-        the shape of the filters, the way the filters are spaced, the bandwidth of
-        the filters, and the manner in which the spectrum is warped. The goal of these features is to approximate the non-linear human perception
-        of the variation in pitch with respect to the frequency.
-        This code is heavily inspired from the `torchaudio` implementation, refer to XXX for more details.
+        the shape of the filters, the way the filters are spaced, the bandwidth of the filters, and the manner in which
+        the spectrum is warped. The goal of these features is to approximate the non-linear human perception of the
+        variation in pitch with respect to the frequency. This code is heavily inspired from the `torchaudio`
+        implementation, refer to XXX for more details.
 
 
         Note:
-            We will try to specify which variation correspond to which MFCCs from the litterature. The main features are:
-                - MFCC FB-20: introduced in 1980 by Davis and Mermelstein [4]; Davis and Mermelstein assume sampling frequency of 10 kHz; speech bandwidth [0, 4600] Hz
-                - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) described in Young, 1995 [5]; Young uses a filter bank of 24 filters for speech bandwidth [0, 8000] Hz (sampling rate ≥ 16 kHz)
-                - MFCC FB-40: from the Auditory Toolbox for MATLAB [6] written by Slaney in 1998; Slaney assumes sampling rate of 16 kHz, and speech bandwidth [133, 6854] Hz
-                - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris, 2004 [3]; Skowronski and Harris assume sampling rate of 12.5 kHz and speech bandwidth [0, 6250] Hz
+            We will try to specify which variation correspond to which MFCCs from the litterature. The main features
+            are:
+                - MFCC FB-20: introduced in 1980 by Davis and Mermelstein [4]; Davis and Mermelstein assume sampling
+                  frequency of 10 kHz; speech bandwidth [0, 4600] Hz
+                - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) described in Young, 1995 [5]; Young uses a
+                  filter bank of 24 filters for speech bandwidth [0, 8000] Hz (sampling rate ≥ 16 kHz)
+                - MFCC FB-40: from the Auditory Toolbox for MATLAB [6] written by Slaney in 1998; Slaney assumes
+                  sampling rate of 16 kHz, and speech bandwidth [133, 6854] Hz
+                - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris, 2004 [3]; Skowronski and
+                  Harris assume sampling rate of 12.5 kHz and speech bandwidth [0, 6250] Hz
 
 
         Args:
@@ -500,11 +505,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             mel_scale (str, optional): Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
 
         Returns:
-            Tensor: Triangular filter banks (fb matrix) of size (``n_freqs``, ``n_mels``)
-            meaning number of frequencies to highlight/apply to x the number of filterbanks.
-            Each column is a filterbank so that assuming there is a matrix A of
-            size (..., ``n_freqs``), the applied result would be
-            ``A * melscale_fbanks(A.size(-1), ...)``.
+            Tensor: Triangular filter banks (fb matrix) of size (``n_freqs``, ``n_mels``) meaning number of frequencies
+            to highlight/apply to x the number of filterbanks. Each column is a filterbank so that assuming there is a
+            matrix A of size (..., ``n_freqs``), the applied result would be ``A * melscale_fbanks(A.size(-1), ...)``.
 
         """
 
