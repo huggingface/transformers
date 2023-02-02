@@ -51,6 +51,8 @@ class EfficientNetConfig(PretrainedConfig):
             Scaling coefficient for network width at each stage.
         depth_coefficient (`float`, *optional*, defaults to 3.1):
             Scaling coefficient for network depth at each stage.
+        depth_divisor `int`, *optional*, defaults to 8):
+            A unit of network width.
         kernel_sizes (`List[int]`, optional, defaults to [3, 3, 5, 3, 5, 5, 3]):
             List of kernel sizes to be used in each block.
         in_channels (`List[int]`, optional, defaults to [32, 16, 24, 40, 80, 112, 192]):
@@ -103,6 +105,7 @@ class EfficientNetConfig(PretrainedConfig):
         image_size=600,
         width_coefficient=2.0,
         depth_coefficient=3.1,
+        depth_divisor=8,
         kernel_sizes=[3, 3, 5, 3, 5, 5, 3],
         in_channels=[32, 16, 24, 40, 80, 112, 192],
         out_channels=[16, 24, 40, 80, 112, 192, 320],
@@ -125,6 +128,7 @@ class EfficientNetConfig(PretrainedConfig):
         self.num_stages = num_stages
         self.width_coefficient = width_coefficient
         self.depth_coefficient = depth_coefficient
+        self.depth_divisor = depth_divisor
         self.kernel_size = kernel_sizes
         self.in_channels = in_channels
         self.out_channels = out_channels

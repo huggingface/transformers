@@ -84,6 +84,21 @@ EFFICIENTNET_INPUTS_DOCSTRING = r"""
 """
 
 
+def round_filters(config: EfficientNetConfig, num_channels: int):
+    """
+    Round number of filters based on depth multiplier.
+    """
+    divisor = config.divisor
+    num_channels *= config.width_coefficient
+    new_dim = max(divisor, int(num_channels + divisor / 2) // divisor * divisor)
+
+    # Make sure that round down does not go down by more than 10%.
+    if new_dim < 0.9 * num_channels:
+        new_dim += divisor
+
+    return int(new_dim)
+
+
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     """
@@ -344,6 +359,31 @@ class EfficientNetBlock(nn.Module):
         return hidden_states
 
 
+class EfficientNetEmbeddings(nn.Module):
+    def __init__(self, config: EfficientNetConfig, out_channels: int):
+        super().__init__()
+
+        self.padding = nn.ZeroPad2d(padding=3)
+        self.convolution = nn.Conv2d(
+            config.num_channels, 
+            round_filters(config, 32), 
+            kernel_size=3,
+            stride=2, 
+            padding="valid", 
+            bias=False
+        )
+        self.batchnorm = nn.BatchNorm2d(out_channels)
+        self.activation = ACT2FN[config.hidden_act]
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        features = self.padding(pixel_values)
+        features = self.convolution(features)
+        features = self.batchnorm(features)
+        features = self.activation(features)
+
+        return features
+
+
 def EfficientNet(
     width_coefficient,
     depth_coefficient,
@@ -404,55 +444,16 @@ def EfficientNet(
             `classifier_activation=None` to return the logits of the "top" layer.
     """
 
-    if blocks_args == 'default':
-        blocks_args = DEFAULT_BLOCKS_ARGS
-
-    if not (weights in {'imagenet', None} or file_io.file_exists_v2(weights)):
-        raise ValueError('The `weights` argument should be either '
-                        '`None` (random initialization), `imagenet` '
-                        '(pre-training on ImageNet), '
-                        'or the path to the weights file to be loaded.')
-
-    if weights == 'imagenet' and include_top and classes != 1000:
-        raise ValueError('If using `weights` as `"imagenet"` with `include_top`'
-                        ' as true, `classes` should be 1000')
-
-    # Determine proper input shape
-    input_shape = imagenet_utils.obtain_input_shape(
-        input_shape,
-        default_size=default_size,
-        min_size=32,
-        data_format=backend.image_data_format(),
-        require_flatten=include_top,
-        weights=weights)
-
-    if input_tensor is None:
-        img_input = layers.Input(shape=input_shape)
-    else:
-        if not backend.is_keras_tensor(input_tensor):
-            img_input = layers.Input(tensor=input_tensor, shape=input_shape)
-        else:
-            img_input = input_tensor
+    blocks_args = DEFAULT_BLOCKS_ARGS
 
     bn_axis = 3 if backend.image_data_format() == 'channels_last' else 1
 
-    def round_filters(filters, divisor=depth_divisor):
-        """Round number of filters based on depth multiplier."""
-        filters *= width_coefficient
-        new_filters = max(divisor, int(filters + divisor / 2) // divisor * divisor)
-        # Make sure that round down does not go down by more than 10%.
-        if new_filters < 0.9 * filters:
-            new_filters += divisor
-        return int(new_filters)
 
     def round_repeats(repeats):
         """Round number of repeats based on depth multiplier."""
         return int(math.ceil(depth_coefficient * repeats))
 
     # Build stem
-    x = img_input
-    x = layers.experimental.preprocessing.Rescaling(scale=1./127.5, offset=-1)(x)
-
     x = layers.ZeroPadding2D(
         padding=imagenet_utils.correct_pad(x, 3),
         name='stem_conv_pad')(x)
@@ -467,7 +468,7 @@ def EfficientNet(
     x = get_norm()(axis=bn_axis, name='stem_bn')(x)
     x = layers.Activation(activation, name='stem_activation')(x)
 
-    # Build blocks
+    # Blocks
     blocks_args = copy.deepcopy(blocks_args)
 
     b = 0
@@ -491,7 +492,7 @@ def EfficientNet(
             **args)
         b += 1
 
-
+    # Image classification head
     if include_top:
         x = layers.GlobalAveragePooling2D(name='avg_pool')(x)
         if dropout_rate > 0:
@@ -544,7 +545,7 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, EfficientNetEncoder):
+        if isinstance(module, EfficientNetBlock):
             module.gradient_checkpointing = value
 
 
@@ -694,7 +695,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
-        
+
 class EfficientNetBackbone(EfficientNetPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
