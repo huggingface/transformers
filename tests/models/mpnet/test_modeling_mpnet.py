@@ -166,7 +166,6 @@ class MPNetModelTester:
         self,
         config,
         input_ids,
-        token_type_ids,
         input_mask,
         sequence_labels,
         token_labels,

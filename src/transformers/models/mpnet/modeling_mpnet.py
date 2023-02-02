@@ -499,7 +499,7 @@ class MPNetEncoder(nn.Module):
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
