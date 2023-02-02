@@ -229,6 +229,7 @@ class Pix2StructTextModelTester:
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_labels = use_labels
+        self.d_kv = hidden_size // num_attention_heads,
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
@@ -273,6 +274,7 @@ class Pix2StructTextModelTester:
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
             bos_token_id=self.bos_token_id,
+            d_kv=self.d_kv,
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):

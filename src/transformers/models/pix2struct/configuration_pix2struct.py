@@ -101,12 +101,12 @@ class Pix2StructTextConfig(PretrainedConfig):
     ```"""
     model_type = "pix2struct_text_model"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    attribute_map = {"hidden_size": "hidden_size", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
         vocab_size=50244,
-        d_model=768,
+        hidden_size=768,
         d_kv=64,
         d_ff=2048,
         num_layers=12,
@@ -120,13 +120,14 @@ class Pix2StructTextConfig(PretrainedConfig):
         feed_forward_proj="gated-gelu",
         is_encoder_decoder=True,
         decoder_start_token_id=0,
-        use_cache=True,
+        use_cache=False,
         pad_token_id=0,
         eos_token_id=1,
+        is_decoder=True,
         **kwargs
     ):
         self.vocab_size = vocab_size
-        self.d_model = d_model
+        self.hidden_size = hidden_size
         self.d_kv = d_kv
         self.d_ff = d_ff
         self.num_layers = num_layers
@@ -141,6 +142,7 @@ class Pix2StructTextConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
+        self.is_decoder = is_decoder
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -168,9 +170,9 @@ class Pix2StructTextConfig(PretrainedConfig):
         )
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def from_pretrained(cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from Pix2StructConfig
         if config_dict.get("model_type") == "pix2struct":
@@ -290,9 +292,9 @@ class Pix2StructVisionConfig(PretrainedConfig):
         self.d_kv = d_kv
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def from_pretrained(cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
 
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from Pix2StructConfig
         if config_dict.get("model_type") == "pix2struct":

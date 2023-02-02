@@ -144,17 +144,17 @@ class Pix2StructVisionEmbeddings(nn.Module):
 class Pix2StructVisionAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.d_model = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.key_value_proj_dim = config.d_kv
         self.n_heads = config.num_attention_heads
         self.dropout = config.attention_dropout
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.query = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.key = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.value = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+        self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
+        self.key = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
+        self.value = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
+        self.o = nn.Linear(self.inner_dim, self.hidden_size, bias=False)
 
         self.gradient_checkpointing = False
 
@@ -569,8 +569,8 @@ class Pix2StructVisionModel(Pix2StructVisionPreTrainedModel):
 class Pix2StructTextDenseActDense(nn.Module):
     def __init__(self, config: Pix2StructTextConfig):
         super().__init__()
-        self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.wi = nn.Linear(config.hidden_size, config.d_ff, bias=False)
+        self.wo = nn.Linear(config.d_ff, config.hidden_size, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
@@ -587,9 +587,9 @@ class Pix2StructTextDenseActDense(nn.Module):
 class Pix2StructTextDenseGatedActDense(nn.Module):
     def __init__(self, config: Pix2StructTextConfig):
         super().__init__()
-        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.wi_0 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
+        self.wi_1 = nn.Linear(config.hidden_size, config.d_ff, bias=False)
+        self.wo = nn.Linear(config.d_ff, config.hidden_size, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
@@ -617,7 +617,7 @@ class Pix2StructTextLayerFF(nn.Module):
         else:
             self.DenseReluDense = Pix2StructTextDenseActDense(config)
 
-        self.layer_norm = Pix2StructLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
@@ -634,17 +634,17 @@ class Pix2StructTextAttention(nn.Module):
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
-        self.d_model = config.d_model
+        self.hidden_size = config.hidden_size
         self.key_value_proj_dim = config.d_kv
         self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.query = nn.Linear(self.d_model, self.d_model, bias=False)
-        self.key = nn.Linear(self.d_model, self.d_model, bias=False)
-        self.value = nn.Linear(self.d_model, self.d_model, bias=False)
-        self.o = nn.Linear(self.d_model, self.d_model, bias=False)
+        self.query = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.key = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.value = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.o = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -849,7 +849,7 @@ class Pix2StructTextLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.attention = Pix2StructTextAttention(config, has_relative_attention_bias=has_relative_attention_bias)
-        self.layer_norm = Pix2StructLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -881,7 +881,7 @@ class Pix2StructTextLayerCrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.attention = Pix2StructTextAttention(config, has_relative_attention_bias=False)
-        self.layer_norm = Pix2StructLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -1059,17 +1059,17 @@ class Pix2StructTextPreTrainedModel(PreTrainedModel):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
             # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
                 module.wi.bias.data.zero_()
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
         elif isinstance(module, Pix2StructTextDenseGatedActDense):
-            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
             if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
                 module.wi_0.bias.data.zero_()
-            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
             if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
                 module.wi_1.bias.data.zero_()
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
@@ -1078,15 +1078,15 @@ class Pix2StructTextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Pix2StructTextAttention):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
-            d_model = self.config.d_model
+            hidden_size = self.config.hidden_size
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.query.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.key.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.value.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.query.weight.data.normal_(mean=0.0, std=factor * ((hidden_size * key_value_proj_dim) ** -0.5))
+            module.key.weight.data.normal_(mean=0.0, std=factor * (hidden_size**-0.5))
+            module.value.weight.data.normal_(mean=0.0, std=factor * (hidden_size**-0.5))
             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((hidden_size) ** -0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (Pix2StructTextAttention, Pix2StructTextModel)):
@@ -1121,14 +1121,14 @@ class Pix2StructTextPreTrainedModel(PreTrainedModel):
 class Pix2StructTextModel(Pix2StructTextPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
 
         self.is_decoder = config.is_decoder
 
         self.layer = nn.ModuleList(
             [Pix2StructTextBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
         )
-        self.final_layer_norm = Pix2StructLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
