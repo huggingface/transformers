@@ -151,12 +151,6 @@ class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         self.assertTrue(np.allclose(mel_1, mel_2))
         self.assertEqual(dict_first, dict_second)
 
-    # def test_feat_extract_to_json_string(self):
-    #     feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
-    #     obj = json.loads(feat_extract.to_json_string())
-    #     for key, value in self.feat_extract_dict.items():
-    #         self.assertEqual(obj[key], value)
-
     def test_call(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
