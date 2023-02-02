@@ -546,12 +546,6 @@ def is_bitsandbytes_available():
     return importlib.util.find_spec("bitsandbytes") is not None
 
 
-def is_bitsandbytes_greater_0_37_0():
-    if not is_bitsandbytes_available():
-        return False
-    return version.parse(importlib_metadata.version("bitsandbytes")) >= version.parse("0.37.0")
-
-
 def is_torchdistx_available():
     return importlib.util.find_spec("torchdistx") is not None
 

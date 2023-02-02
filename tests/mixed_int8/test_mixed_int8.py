@@ -16,6 +16,8 @@ import gc
 import tempfile
 import unittest
 
+from packaging import version
+
 from transformers import (
     AutoModel,
     AutoModelForCausalLM,
@@ -28,12 +30,12 @@ from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
     require_bitsandbytes,
-    require_bitsandbytes_greater_0_37_0,
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
 )
+from transformers.utils.versions import importlib_metadata
 
 
 if is_torch_available():
@@ -357,13 +359,17 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         self.assertEqual(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
 
-@require_bitsandbytes_greater_0_37_0
 class MixedInt8TestTraining(BaseMixedInt8Test):
     def setUp(self):
         self.model_name = "facebook/opt-350m"
         super().setUp()
 
+    @unittest.skipIf(
+        version.parse(importlib_metadata.version("bitsandbytes")) < version.parse("0.37.0"),
+        reason="int8 training is not available in bitsandbytes < 0.37.0",
+    )
     def test_training(self):
+
         # Step 1: freeze all parameters
         model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
 

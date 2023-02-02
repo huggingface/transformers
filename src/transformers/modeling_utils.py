@@ -66,7 +66,6 @@ from .utils import (
     has_file,
     is_accelerate_available,
     is_bitsandbytes_available,
-    is_bitsandbytes_greater_0_37_0,
     is_offline_mode,
     is_remote_url,
     is_safetensors_available,
@@ -74,6 +73,7 @@ from .utils import (
     logging,
     replace_return_docstrings,
 )
+from .utils.import_utils import importlib_metadata
 from .utils.versions import require_version_core
 
 
@@ -2386,14 +2386,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             modules_to_not_convert.extend(keep_in_fp32_modules)
 
             model = replace_8bit_linear(
-                model,
-                threshold=load_in_8bit_threshold,
-                modules_to_not_convert=modules_to_not_convert,
+                model, threshold=load_in_8bit_threshold, modules_to_not_convert=modules_to_not_convert
             )
 
-            model._is_int8_training_enabled = (
-                is_bitsandbytes_greater_0_37_0()
-            )  # training in 8-bit is only available in 0.37.0+
+            model._is_int8_training_enabled = version.parse(
+                importlib_metadata.version("bitsandbytes")
+            ) < version.parse("0.37.0")
 
         if isinstance(device_map, str):
             if model._no_split_modules is None:
