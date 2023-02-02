@@ -95,6 +95,8 @@
       title: Training on many CPUs
     - local: perf_train_tpu
       title: Training on TPUs
+    - local: perf_train_tpu_tf
+      title: Training on TPU with TensorFlow
     - local: perf_train_special
       title: Training on Specialized Hardware
     - local: perf_infer_cpu
