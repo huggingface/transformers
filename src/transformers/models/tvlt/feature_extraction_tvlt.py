@@ -18,7 +18,6 @@ from math import ceil
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
 from numpy.fft import fft
 
 from transformers.feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
