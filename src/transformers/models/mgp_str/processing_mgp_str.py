@@ -83,11 +83,13 @@ class MGPSTRProcessor(ProcessorMixin):
     def __call__(self, *args, **kwargs):
         """
         When used in normal mode, this method forwards all its arguments to ViTImageProcessor's
-        [`~ViTImageProcessor.__call__`] and returns its output. Please refer to the doctsring of the above method for
-        more information.
+        [`~ViTImageProcessor.__call__`] and returns its output. This method also forwards the `text`
+        and `kwargs` arguments to MGPSTRTokenizer's [`~MGPSTRTokenizer.__call__`] if `text` is not `None` to encode
+        the text. Please refer to the doctsring of the above methods for more information.
         """
         images = kwargs.pop("images", None)
         text = kwargs.pop("text", None)
+
         if len(args) > 0:
             images = args[0]
             args = args[1:]
@@ -157,7 +159,7 @@ class MGPSTRProcessor(ProcessorMixin):
         Args:
             pred_logits (`torch.Tensor`):
                 List of model prediction logits.
-            type (`str`):
+            format (`Enum`):
                 Type of model prediction. Must be one of ['char', 'bpe', 'wp'].
         Returns:
             `tuple`:
