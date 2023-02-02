@@ -473,7 +473,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         norm: Optional[str] = None,
         mel_scale: str = "htk",
     ) -> np.array:
-        r"""Create a frequency bin conversion matrix used to obtain the Mel Frequency Cepstral Coefficient.
+        r"""
+        Create a frequency bin conversion matrix used to obtain the Mel Frequency Cepstral Coefficient.
         This is called a `mel filter bank`, and various implementation exist, which differ in the number of filters,
         the shape of the filters, the way the filters are spaced, the bandwidth of the filters, and the manner in which
         the spectrum is warped. The goal of these features is to approximate the non-linear human perception of the
@@ -495,14 +496,20 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
 
         Args:
-            n_freqs (int): Number of frequencies to highlight/apply
-            f_min (float): Minimum frequency (Hz)
-            f_max (float): Maximum frequency (Hz)
-            n_mels (int): Number of mel filterbanks
-            sample_rate (int): Sample rate of the audio waveform
-            norm (str or None, optional): If "slaney", divide the triangular mel weights by the width of the mel band
-                (area normalization). (Default: ``None``)
-            mel_scale (str, optional): Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
+            n_freqs (int):
+                Number of frequencies to highlight/apply
+            f_min (float):
+                Minimum frequency (Hz)
+            f_max (float): 
+                Maximum frequency (Hz)
+            n_mels (int): 
+                Number of mel filterbanks
+            sample_rate (int): 
+                Sample rate of the audio waveform
+            norm (str or None, optional): 
+                If "slaney", divide the triangular mel weights by the width of the mel band (area normalization). (Default: ``None``)
+            mel_scale (str, optional): 
+                Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
 
         Returns:
             Tensor: Triangular filter banks (fb matrix) of size (``n_freqs``, ``n_mels``) meaning number of frequencies
@@ -543,8 +550,17 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _stft(self, frames, window):
         """
-        Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
-        results as `torch.stft`.
+        Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the
+        same results as `torch.stft`.
+
+        Args:
+            frames (`np.array` of dimension `(num_frames, self.n_fft)`):
+                A framed audio signal obtained using `self._fram_wav`.
+            window (`np.array` of dimension `(self.n_freqs, self.n_mels)`:
+                A array reprensenting the function that will be used to reduces the amplitude of the
+                discontinuities at the boundaries of each frame when computing the FFT. Each frame will 
+                be multiplied by the window. For more information on this phenomena, called *Spectral leakage*, 
+                refer to [this tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
         """
         frame_size = frames.shape[1]
         fft_size = self.n_fft
@@ -565,30 +581,51 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 np.multiply(frame, window, out=fft_signal[:frame_size])
             else:
                 fft_signal[:frame_size] = frame
-            # TODO can we use fftn on the other dimensions?
             data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
         return data.T
 
-    def _fram_wave(self, waveform, center=True):
+    def _power_to_db(self, mel_spectrogram, a_min=1e-10, ref=1.0):
         """
-        Transform a raw waveform into a list of smaller waveforms. The window length defines how much of the signal is
-        contain in each frame (smalle waveform), while the hope length defines the step between the beginning of each
-        new frame.
+        Convert a mel spectrogram from power to db, this function is the numpy implementation of librosa.power_to_lb.
+        """
+        log_spec = 10 * np.log10(np.clip(mel_spectrogram, a_min=a_min, a_max=None))
+        log_spec -= 10.0 * np.log10(np.maximum(a_min, ref))
+        if self.top_db is not None:
+            if self.top_db < 0:
+                raise ValueError("top_db must be non-negative")
+            log_spec = np.clip(log_spec, min=np.maximum(log_spec) - self.top_db, max=np.inf)
+        return log_spec
 
-        Centering is done by reflecting the waveform which is first centered around `frame_idx * hop_length`.
+    def _fram_wave(self, waveform: np.array, center: bool = True):
         """
+        In order to compute the short time fourier transform, the waveform needs to be split in overlapping windowed
+        segments called `frames`.
+
+        The window length (self.window_length) defines how much of the signal is contained in each frame, while the hop
+        length defines the step between the beginning of each new frame.
+
+        **This method does not support batching yet as we are mainly focus on inference. If you want this to be added
+        feel free to open an issue and ping @arthurzucker on Github**
+
+        Args:
+            waveform (`np.array`) of shape (sample_length,):
+                The raw waveform which will be split into smaller chunks.
+            center (`bool`, defaults to `True`):
+                Whether or not to center each frame around the middle of the frame. Centering is done by reflecting the
+                waveform on the left and on the right.
+
+        Return:
+            framed_waveform (`np.array` of shape (waveform.shape // self.hop_length , self.n_fft)):
+                The framed waveforms that can be fed `np.fft`.
+        """
+
         frames = []
         for i in range(0, waveform.shape[0] + 1, self.hop_length):
             half_window = (self.n_fft - 1) // 2 + 1
             if center:
                 start = i - half_window if i > half_window else 0
                 end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
-
                 frame = waveform[start:end]
-
-                # TODO can all of this be automatically replaced with np.pad(audio,self.n_fft // 2, self.n_fft // 2), mode=self.pad_mode)
-                # as we have an array of frames
-
                 if start == 0:
                     padd_width = (-i + half_window, 0)
                     frame = np.pad(frame, pad_width=padd_width, mode="reflect")
@@ -606,4 +643,6 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                     )
 
             frames.append(frame)
-        return np.stack(frames, 0)
+        framed_waveform = np.stack(frames, 0)
+
+        return framed_waveform
