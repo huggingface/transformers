@@ -1302,7 +1302,7 @@ class TvltForQuestionAnswering(TvltPreTrainedModel):
 
         >>> num_frames = 8
         >>> images = list(np.random.randn(num_frames, 3, 224, 224))
-        >>> audio = list(np.random.randn(10000)) # Audio/speech-based question
+        >>> audio = list(np.random.randn(10000))  # Audio/speech-based question
         >>> processor = TvltProcessor.from_pretrained("murgelab/tvlt-base")
         >>> model = TvltForQuestionAnswering.from_pretrained("murgelab/tvlt-base")
         >>> input_dict = processor(images, audio, sampling_rate=44100, return_tensors="pt")
