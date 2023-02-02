@@ -150,36 +150,6 @@ class TvltImageProcessorTest(ImageProcessingSavingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processor, "do_center_crop"))
         self.assertTrue(hasattr(image_processor, "size"))
 
-    def test_image_processor_from_and_save_pretrained(self):
-        image_processor_first = self.image_processing_class(**self.image_processor_dict)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            saved_file = image_processor_first.save_pretrained(tmpdirname)[0]
-            check_json_file_has_correct_format(saved_file)
-            image_processor_second = self.image_processing_class.from_pretrained(tmpdirname)
-
-        dict_first = image_processor_first.to_dict()
-        dict_second = image_processor_second.to_dict()
-        self.assertEqual(dict_first, dict_second)
-
-    def test_image_processor_to_json_file(self):
-        image_processor_first = self.image_processing_class(**self.image_processor_dict)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            json_file_path = os.path.join(tmpdirname, "image_processor.json")
-            image_processor_first.to_json_file(json_file_path)
-            image_processor_second = self.image_processing_class.from_json_file(json_file_path)
-
-        dict_first = image_processor_first.to_dict()
-        dict_second = image_processor_second.to_dict()
-        self.assertEqual(dict_first, dict_second)
-
-    def test_image_processor_to_json_string(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-        obj = json.loads(image_processor.to_json_string())
-        for key, value in self.image_processor_dict.items():
-            self.assertEqual(obj[key], value)
-
     def test_call_pil(self):
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)

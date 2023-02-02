@@ -39,10 +39,10 @@ class TvltProcessorTest(unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_image_processor(self, **kwargs):
-        return TvltImageProcessor.from_pretrained(self.checkpoint, random_generator=None, **kwargs)
+        return TvltImageProcessor.from_pretrained(self.checkpoint, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return TvltFeatureExtractor.from_pretrained(self.checkpoint, random_generator=None, **kwargs)
+        return TvltFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -52,7 +52,7 @@ class TvltProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
 
         processor = TvltProcessor(image_processor=image_processor, feature_extractor=feature_extractor)
-        processor.save_pretrained(self.tmpdirname, init_mask_generator=False)
+        processor.save_pretrained(self.tmpdirname)
         processor = TvltProcessor.from_pretrained(self.tmpdirname)
 
         self.assertIsInstance(processor.feature_extractor, TvltFeatureExtractor)
@@ -97,7 +97,7 @@ class TvltProcessorTest(unittest.TestCase):
 
         inputs = processor(audio=audio, images=images)
 
-        self.assertListEqual(list(inputs.keys()), ["audio_values", "audio_masks", "pixel_values", "pixel_masks"])
+        self.assertListEqual(list(inputs.keys()), ["audio_values", "audio_mask", "pixel_values", "pixel_mask"])
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
