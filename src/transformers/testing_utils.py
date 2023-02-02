@@ -50,6 +50,7 @@ from .utils import (
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
+    is_bitsandbytes_greater_0_37_0,
     is_bs4_available,
     is_cython_available,
     is_decord_available,
@@ -664,6 +665,16 @@ def require_bitsandbytes(test_case):
     Decorator for bits and bytes (bnb) dependency
     """
     return unittest.skipUnless(is_bitsandbytes_available(), "test requires bnb")(test_case)
+
+
+def require_bitsandbytes_greater_0_37_0(test_case):
+    """
+    Decorator for bitsandbytes (bnb) dependency for training support.
+    """
+    return unittest.skipUnless(
+        is_bitsandbytes_available() and is_bitsandbytes_greater_0_37_0(),
+        "test requires bnb >= 0.37.0",
+    )(test_case)
 
 
 def require_phonemizer(test_case):
