@@ -11,23 +11,23 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 
 # Training on TPU with TensorFlow
 
-### ****************************What is a TPU?****************************
+### What is a TPU?
 
-A TPU is a *******************Tensor Processing Unit.******************* They are hardware designed by Google, which are used to greatly speed up the tensor computations within neural networks, much like GPUs. They can be used for both network training and inference. They are generally accessed through Google’s cloud services, but small TPUs can also be accessed directly for free through Google Colab and Kaggle Kernels.
+A TPU is a **Tensor Processing Unit.** They are hardware designed by Google, which are used to greatly speed up the tensor computations within neural networks, much like GPUs. They can be used for both network training and inference. They are generally accessed through Google’s cloud services, but small TPUs can also be accessed directly for free through Google Colab and Kaggle Kernels.
 
 Because [all TensorFlow models in 🤗Transformers are Keras models](https://huggingface.co/blog/tensorflow-philosophy), most of the methods in this document are generally applicable to TPU training for any Keras model! However, there are a few points that are specific to the HuggingFace ecosystem (hug-o-system?) of Transformers and Datasets, and we’ll make sure to flag them up when we get to them.
 
-### ****************************************************************What kinds of TPU are available?****************************************************************
+### What kinds of TPU are available?
 
-New users are often very confused by the range of TPUs, and the different ways to access them. The first key distinction to understand is the difference between ******************TPU Nodes****************** and ****************TPU VMs.****************
+New users are often very confused by the range of TPUs, and the different ways to access them. The first key distinction to understand is the difference between **TPU Nodes** and **TPU VMs.**
 
-When you use a ****************TPU Node****************, you are effectively indirectly accessing a remote TPU. You will need a separate VM, which will initialize your network and data pipeline and then forward them to the remote node. When you use a TPU on Google Colab, you are accessing it in the **TPU Node** style.
+When you use a **TPU Node**, you are effectively indirectly accessing a remote TPU. You will need a separate VM, which will initialize your network and data pipeline and then forward them to the remote node. When you use a TPU on Google Colab, you are accessing it in the **TPU Node** style.
 
 Using TPU Nodes can have some quite unexpected behaviour for people who aren’t used to them! In particular, because the TPU is located on a physically different system to the machine you’re running your Python code on, your data cannot be local to your machine - any data pipeline that loads from your machine’s internal storage will totally fail! Instead, data must be stored in Google Cloud Storage where your data pipeline can still access it, even when the pipeline is running on the remote TPU node.
 
 ---
 
-**********Tip:********** If you can fit all your data in memory as `np.ndarray` or `tf.Tensor`, then you can `fit()` on that data even when using Colab or a TPU Node, without needing to upload it to Google Cloud Storage.
+**Tip:** If you can fit all your data in memory as `np.ndarray` or `tf.Tensor`, then you can `fit()` on that data even when using Colab or a TPU Node, without needing to upload it to Google Cloud Storage.
 
 ---
 
@@ -37,13 +37,13 @@ Using TPU Nodes can have some quite unexpected behaviour for people who aren’t
 
 ---
 
-The second way to access a TPU is via a **************TPU VM.************** When using a TPU VM, you connect directly to the machine that the TPU is attached to, much like training on a GPU VM. TPU VMs are generally easier to work with, particularly when it comes to your data pipeline. All of the above warnings do not apply to TPU VMs!
+The second way to access a TPU is via a **TPU VM.** When using a TPU VM, you connect directly to the machine that the TPU is attached to, much like training on a GPU VM. TPU VMs are generally easier to work with, particularly when it comes to your data pipeline. All of the above warnings do not apply to TPU VMs!
 
 This is an opinionated document, so here’s our opinion: **Avoid using TPU Node if possible.** It is more confusing and more difficult to debug than TPU VMs. It is also likely to be unsupported in future - Google’s latest TPU, TPUv4, can only be accessed as a TPU VM, which suggests that TPU Nodes are increasingly going to become a “legacy” access method. However, we understand that the only free TPU access is on Colab and Kaggle Kernels, which uses TPU Node - so we’ll try to explain how to handle it if you have to!
 
 ### What sizes of TPU are available?
 
-A single TPU (a v2-8/v3-8/v4-8) runs 8 replicas. TPUs exist in ********pods******** that can run hundreds or thousands of replicas simultaneously. When you use more than a single TPU but less than a whole pod (for example, a v3-32), your TPU fleet is referred to as a ********************pod slice.********************
+A single TPU (a v2-8/v3-8/v4-8) runs 8 replicas. TPUs exist in **pods** that can run hundreds or thousands of replicas simultaneously. When you use more than a single TPU but less than a whole pod (for example, a v3-32), your TPU fleet is referred to as a **pod slice.**
 
 When you access a free TPU via Colab, you generally get a single v2-8 TPU.
 
@@ -55,7 +55,7 @@ Debugging on TPU is generally a bit harder than on CPU/GPU, so we recommend gett
 
 ---
 
-**********Tip:********** XLA compiled code is usually faster - so even if you’re not planning to run on TPU, adding `jit_compile=True` can improve your performance. Be sure to note the caveats below about XLA compatibility, though!
+**Tip:** XLA compiled code is usually faster - so even if you’re not planning to run on TPU, adding `jit_compile=True` can improve your performance. Be sure to note the caveats below about XLA compatibility, though!
 
 ---
 
@@ -97,7 +97,7 @@ This code has exactly the same effect as the code above, but by avoiding a condi
 
 What this means is that the shape of all of the `tf.Tensor` objects in your code cannot depend on their values. For example, the function `tf.unique` cannot be compiled with XLA, because it returns a `tensor` containing one instance of each unique value in the input. The shape of this output will obviously be different depending on how repetitive the input `Tensor` was, and so XLA refuses to handle it!
 
-In general, most neural network code obeys rule #2 by default. However, there are a few common cases where it becomes a problem. One very common one is when you use **************************label masking**************************, setting your labels to a negative value to indicate that those positions should be ignored when computing the loss. If you look at NumPy or PyTorch loss functions that support label masking, you will often see code like this that uses [boolean indexing](https://numpy.org/doc/stable/user/basics.indexing.html#boolean-array-indexing):
+In general, most neural network code obeys rule #2 by default. However, there are a few common cases where it becomes a problem. One very common one is when you use **label masking**, setting your labels to a negative value to indicate that those positions should be ignored when computing the loss. If you look at NumPy or PyTorch loss functions that support label masking, you will often see code like this that uses [boolean indexing](https://numpy.org/doc/stable/user/basics.indexing.html#boolean-array-indexing):
 
 ```python
 label_mask = labels >= 0
@@ -107,7 +107,7 @@ loss = compute_loss(masked_outputs, masked_labels)
 mean_loss = torch.mean(loss)
 ```
 
-This code is totally fine in NumPy or PyTorch, but it breaks in XLA! Why? Because the shape of `masked_outputs` and `masked_labels` depends on how many positions are masked - that makes it a ******************************************data-dependent shape.****************************************** However, just like for rule #1, we can often rewrite this code to yield exactly the same output without any data-dependent shapes.
+This code is totally fine in NumPy or PyTorch, but it breaks in XLA! Why? Because the shape of `masked_outputs` and `masked_labels` depends on how many positions are masked - that makes it a **data-dependent shape.** However, just like for rule #1, we can often rewrite this code to yield exactly the same output without any data-dependent shapes.
 
 ```python
 label_mask = tf.cast(labels >= 0, tf.float32)
@@ -122,9 +122,9 @@ Here, we avoid data-dependent shapes by computing the loss for every position, b
 
 This is the big one. What this means is that if your input shapes are very variable, XLA will have to recompile your model over and over, which will create huge performance problems. This commonly arises in NLP models, where input texts have variable lengths after tokenization. In other modalities, static shapes are more common and this rule is much less of a problem.
 
-How can you get around rule #3? The key is **************padding************** - if you pad all your inputs to the same length, and then use an `attention_mask`, you can get the same results as you’d get from variable shapes, but without any XLA issues. However, excessive padding can cause severe slowdown too - if you pad all your samples to the maximum length in the whole dataset, you might end up with batches consisting endless padding tokens, which will waste a lot of compute and memory!
+How can you get around rule #3? The key is **padding** - if you pad all your inputs to the same length, and then use an `attention_mask`, you can get the same results as you’d get from variable shapes, but without any XLA issues. However, excessive padding can cause severe slowdown too - if you pad all your samples to the maximum length in the whole dataset, you might end up with batches consisting endless padding tokens, which will waste a lot of compute and memory!
 
-There isn’t a perfect solution to this problem. However, you can try some tricks. One very useful trick is to **************************************************************pad batches of samples up to a multiple of a number like 32 or 64 tokens.************************************************************** This often only increases the number of tokens by a small amount, but it hugely reduces the number of unique input shapes, because every input shape now has to be a multiple of 32 or 64. Fewer unique input shapes means fewer XLA compilations!
+There isn’t a perfect solution to this problem. However, you can try some tricks. One very useful trick is to **pad batches of samples up to a multiple of a number like 32 or 64 tokens.** This often only increases the number of tokens by a small amount, but it hugely reduces the number of unique input shapes, because every input shape now has to be a multiple of 32 or 64. Fewer unique input shapes means fewer XLA compilations!
 
 ---
 
