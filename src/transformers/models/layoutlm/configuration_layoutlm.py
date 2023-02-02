@@ -111,7 +111,6 @@ class LayoutLMConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         use_cache=True,
-        classifier_dropout=None,
         max_2d_position_embeddings=1024,
         **kwargs
     ):
@@ -130,7 +129,6 @@ class LayoutLMConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
         self.max_2d_position_embeddings = max_2d_position_embeddings
 
 
