@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Salesforce/blip2-opt-2.7b"
 
-BLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
+BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Salesforce/blip2-opt-2.7b",
     # See all BLIP-2 models at https://huggingface.co/models?filter=blip
 ]

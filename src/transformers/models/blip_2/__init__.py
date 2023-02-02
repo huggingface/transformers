@@ -24,9 +24,10 @@ _import_structure = {
     "configuration_blip_2": [
         "BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Blip2Config",
-        "Blip2TextConfig",
+        "Blip2QFormerConfig",
         "Blip2VisionConfig",
     ],
+    "processing_blip_2": ["Blip2Processor"],
 }
 
 try:
@@ -38,21 +39,21 @@ else:
     _import_structure["modeling_blip_2"] = [
         "BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Blip2Model",
+        "Blip2QFormerModel",
         "Blip2PreTrainedModel",
         "Blip2ForConditionalGeneration",
-        "Blip2ForQuestionAnswering",
         "Blip2VisionModel",
         "Blip2TextModel",
-        "Blip2ForImageTextRetrieval",
     ]
 
 if TYPE_CHECKING:
     from .configuration_blip_2 import (
         BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Blip2Config,
-        Blip2TextConfig,
+        Blip2QFormerConfig,
         Blip2VisionConfig,
     )
+    from .processing_blip_2 import Blip2Processor
 
     try:
         if not is_torch_available():
@@ -63,11 +64,9 @@ if TYPE_CHECKING:
         from .modeling_blip_2 import (
             BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Blip2ForConditionalGeneration,
-            Blip2ForImageTextRetrieval,
-            Blip2ForQuestionAnswering,
             Blip2Model,
             Blip2PreTrainedModel,
-            Blip2TextModel,
+            Blip2QFormerModel,
             Blip2VisionModel,
         )
 
