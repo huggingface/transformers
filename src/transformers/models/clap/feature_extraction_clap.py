@@ -240,19 +240,13 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             if waveform.shape[0] < max_length and padding == "repeatpad":  # do nothing if equal
                 n_repeat = int(max_length / len(waveform))
                 waveform = waveform.repeat(n_repeat)
-            
-            waveform = self.pad(
-                waveform,
-                padding=padding,
-                max_length=max_length if max_length else self.n_samples,
-                truncation=truncation,
-                pad_to_multiple_of=pad_to_multiple_of,
-            )
+
+            max_length=max_length if max_length else self.n_samples,
+            waveform = np.pad(waveform,max_length - waveform.shape[0])
+            input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
             if truncation == "fusion":
-                mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
-                input_mel = np.stack([mel, mel, mel, mel], axis=0)
-            else:
-                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
+                input_mel = np.stack([input_mel, input_mel, input_mel, input_mel], axis=0)
+                
         return input_mel, longer
 
     def __call__(
