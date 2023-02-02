@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # LayoutLM
 
-<a id="Overview"></a>
+<a id='Overview'></a>
 
 ## Overview
 
@@ -31,7 +31,7 @@ on several downstream tasks:
 
 The abstract from the paper is the following:
 
-_Pre-training techniques have been verified successfully in a variety of NLP tasks in recent years. Despite the
+*Pre-training techniques have been verified successfully in a variety of NLP tasks in recent years. Despite the
 widespread use of pretraining models for NLP applications, they almost exclusively focus on text-level manipulation,
 while neglecting layout and style information that is vital for document image understanding. In this paper, we propose
 the LayoutLM to jointly model interactions between text and layout information across scanned document images, which is
@@ -40,11 +40,11 @@ scanned documents. Furthermore, we also leverage image features to incorporate w
 To the best of our knowledge, this is the first time that text and layout are jointly learned in a single framework for
 document-level pretraining. It achieves new state-of-the-art results in several downstream tasks, including form
 understanding (from 70.72 to 79.27), receipt understanding (from 94.02 to 95.24) and document image classification
-(from 93.07 to 94.42)._
+(from 93.07 to 94.42).*
 
 Tips:
 
-- In addition to _input_ids_, [`~transformers.LayoutLMModel.forward`] also expects the input `bbox`, which are
+- In addition to *input_ids*, [`~transformers.LayoutLMModel.forward`] also expects the input `bbox`, which are
   the bounding boxes (i.e. 2D-positions) of the input tokens. These can be obtained using an external OCR engine such
   as Google's [Tesseract](https://github.com/tesseract-ocr/tesseract) (there's a [Python wrapper](https://pypi.org/project/pytesseract/) available). Each bounding box should be in (x0, y0, x1, y1) format, where
   (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1, y1) represents the
@@ -77,23 +77,22 @@ width, height = image.size
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LayoutLM. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
-<PipelineTag pipeline="token-classification" />
 
-<PipelineTag pipeline="document-question-answering"/>
+<PipelineTag pipeline="document-question-answering" />
 
 - A blog post on [fine-tuning
-LayoutLM for document-understanding using Keras & Hugging Face
-Transformers](https://www.philschmid.de/fine-tuning-layoutlm-keras).
+  LayoutLM for document-understanding using Keras & Hugging Face
+  Transformers](https://www.philschmid.de/fine-tuning-layoutlm-keras).
 
 - A blog post on how to [fine-tune LayoutLM for document-understanding using only Hugging Face Transformers](https://www.philschmid.de/fine-tuning-layoutlm).
 
 - A notebook on how to [fine-tune LayoutLM on the FUNSD dataset with image embeddings](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Add_image_embeddings_to_LayoutLM.ipynb).
 
-<PipelineTag pipeline="text-classification"/>
+<PipelineTag pipeline="text-classification" />
 
 - A notebook on how to [fine-tune LayoutLM for sequence classification on the RVL-CDIP dataset](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForSequenceClassification_on_RVL_CDIP.ipynb).
 
-<PipelineTag pipeline="token-classification"/>
+<PipelineTag pipeline="token-classification" />
 
 - A notebook on how to [ fine-tune LayoutLM for token classification on the FUNSD dataset](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForTokenClassification_on_FUNSD.ipynb).
 
