@@ -2391,7 +2391,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             model._is_int8_training_enabled = version.parse(
                 importlib_metadata.version("bitsandbytes")
-            ) < version.parse("0.37.0")
+            ) >= version.parse("0.37.0")
 
         if isinstance(device_map, str):
             if model._no_split_modules is None:
