@@ -1399,7 +1399,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         language_model_attention_mask = torch.ones(
             language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
         )
-        inputs_embeds = self.language_model.model.decoder.embed_tokens(input_ids)
+        inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
         inputs_embeds = torch.cat([language_model_inputs, inputs_embeds], dim=1)
 
         if attention_mask is None:
@@ -1478,7 +1478,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             num_beams = 1
             query_embeds = language_model_inputs.repeat_interleave(num_beams, dim=0)
 
-            inputs_embeds = self.language_model.model.decoder.embed_tokens(input_ids)
+            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             inputs_embeds = torch.cat([query_embeds, inputs_embeds], dim=1)
 
             print("Shape of inputs_embeds:", inputs_embeds.shape)
@@ -1517,7 +1517,7 @@ def prepare_inputs_for_generation(input_ids, past=None, inputs_embeds=None, **kw
         model_inputs = {"inputs_embeds": inputs_embeds}
     else:
         model_inputs = {"input_ids": input_ids}
-    
+
     model_inputs.update(
         {
             "past_key_values": past,
