@@ -474,12 +474,12 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         mel_scale: str = "htk",
     ) -> np.array:
         r"""
-        Create a frequency bin conversion matrix used to obtain the Mel Frequency Cepstral Coefficient.
-        This is called a `mel filter bank`, and various implementation exist, which differ in the number of filters,
-        the shape of the filters, the way the filters are spaced, the bandwidth of the filters, and the manner in which
-        the spectrum is warped. The goal of these features is to approximate the non-linear human perception of the
-        variation in pitch with respect to the frequency. This code is heavily inspired from the `torchaudio`
-        implementation, refer to XXX for more details.
+        Create a frequency bin conversion matrix used to obtain the Mel Frequency Cepstral Coefficient. This is called
+        a `mel filter bank`, and various implementation exist, which differ in the number of filters, the shape of the
+        filters, the way the filters are spaced, the bandwidth of the filters, and the manner in which the spectrum is
+        warped. The goal of these features is to approximate the non-linear human perception of the variation in pitch
+        with respect to the frequency. This code is heavily inspired from the `torchaudio` implementation, refer to XXX
+        for more details.
 
 
         Note:
@@ -507,7 +507,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             sample_rate (int):
                 Sample rate of the audio waveform
             norm (str or None, optional):
-                If "slaney", divide the triangular mel weights by the width of the mel band (area normalization). (Default: ``None``)
+                If "slaney", divide the triangular mel weights by the width of the mel band (area normalization).
+                (Default: ``None``)
             mel_scale (str, optional):
                 Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
 
@@ -550,17 +551,17 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _stft(self, frames, window):
         """
-        Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the
-        same results as `torch.stft`.
+        Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
+        results as `torch.stft`.
 
         Args:
             frames (`np.array` of dimension `(num_frames, self.n_fft)`):
                 A framed audio signal obtained using `self._fram_wav`.
             window (`np.array` of dimension `(self.n_freqs, self.n_mels)`:
-                A array reprensenting the function that will be used to reduces the amplitude of the
-                discontinuities at the boundaries of each frame when computing the FFT. Each frame will
-                be multiplied by the window. For more information on this phenomena, called *Spectral leakage*,
-                refer to [this tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
+                A array reprensenting the function that will be used to reduces the amplitude of the discontinuities at
+                the boundaries of each frame when computing the FFT. Each frame will be multiplied by the window. For
+                more information on this phenomena, called *Spectral leakage*, refer to [this
+                tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
         """
         frame_size = frames.shape[1]
         fft_size = self.n_fft
