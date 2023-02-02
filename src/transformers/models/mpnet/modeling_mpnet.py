@@ -544,7 +544,7 @@ class MPNetEncoder(nn.Module):
         context_position = torch.arange(qlen, dtype=torch.long)[:, None]
         memory_position = torch.arange(klen, dtype=torch.long)[None, :]
 
-        relative_position = memory_position - context_position
+        relative_position = context_position - memory_position
         
         rp_bucket = self.relative_position_bucket(relative_position, num_buckets=num_buckets)
         rp_bucket = rp_bucket.to(hidden_states.device)
