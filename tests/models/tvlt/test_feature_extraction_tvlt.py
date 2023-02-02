@@ -15,7 +15,6 @@
 """ Testing suite for the TVLT feature extraction. """
 
 import itertools
-import json
 import os
 import random
 import tempfile
