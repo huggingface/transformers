@@ -14,7 +14,6 @@
 # limitations under the License.
 """Feature extractor class for CLAP."""
 
-from typing import List, Optional, Union
 
 import numpy as np
 import torchvision
@@ -23,7 +22,9 @@ from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
 
-
+from ... import __version__
+from typing import Any, Dict, List, Optional, Union
+import copy 
 logger = logging.get_logger(__name__)
 
 
@@ -58,8 +59,8 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
     def __init__(
         self,
         feature_size=80,
-        sampling_rate=16000,
-        hop_length=160,
+        sampling_rate=48_000,
+        hop_length=480,
         chunk_length=30,
         n_fft=400,
         padding_value=0.0,
@@ -68,7 +69,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         f_min: float = 0,
         f_max: float = 14000,
         top_db: int = None,
-        max_length: int = 48000,
+        max_length: int = 480_000,
         truncation: str = "fusion",
         padding: str = "repeatpad",
         **kwargs
@@ -110,6 +111,22 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         )
         self.top_db = top_db
 
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["feature_extractor_type"] = self.__class__.__name__
+        if "mel_filters" in output:
+            del output["mel_filters"]
+        if "mel_filters_slaney" in output:
+            del output["mel_filters_slaney"]
+        return output
+    
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
@@ -170,10 +187,10 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         mel_chunk_back = mel[idx_back : idx_back + chunk_frames, :]
 
         # shrink the mel TODO add this as a numpy function, also no hard codes `64`
-        mel_shrink = np.resize(mel, [chunk_frames, 64])  # current flags are probalby wrong
+        mel_shrink = np.resize(mel, [chunk_frames, self.feature_size])  # current flags are probalby wrong
         import torch
 
-        mel_shrink = torchvision.transforms.Resize(size=[chunk_frames, 64])(torch.tensor(mel[None]))[0]
+        mel_shrink = torchvision.transforms.Resize(size=[chunk_frames, self.feature_size])(torch.tensor(mel[None]))[0]
         # logging.info(f"mel_shrink.shape: {mel_shrink.shape}")
 
         # stack
@@ -189,11 +206,18 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             - wave < max_length
                 - repeat
                 - fusion
+                
+                TODO the max length should be 10x the sampling rate of the provided audio.
 
         """
         if waveform.shape[0] > max_length:
             if truncation == "rand_trunc":
                 longer = True
+                # random crop to max_length (for compatibility) -> this should be handled by self.pad
+                overflow = len(waveform) - max_length
+                idx = np.random.randint(0, overflow + 1)
+                waveform = waveform[idx : idx + max_length]
+                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
             elif truncation == "fusion":
                 mel = self._np_extract_fbank_features(waveform, self.mel_filters)
                 chunk_frames = max_length // self.hop_length + 1  # the +1 related to how the spectrogram is computed
@@ -201,18 +225,14 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
                 if chunk_frames == total_frames:
                     # there is a corner case where the audio length is larger than max_length but smaller than max_length+hop_length.
                     # In this case, we just use the whole audio.
-                    input_mel = np.stack([mel, mel, mel, mel], dim=0)
+                    input_mel = np.stack([mel, mel, mel, mel], axis=0)
                     longer = False
                 else:
                     input_mel = self._random_mel_fusion(mel, total_frames, chunk_frames)
                     longer = True
-
             else:
                 raise NotImplementedError(f"data_truncating {truncation} not implemented")
-            # random crop to max_length (for compatibility) -> this should be handled by self.pad
-            overflow = len(waveform) - max_length
-            idx = np.random.randint(0, overflow + 1)
-            waveform = waveform[idx : idx + max_length]
+
         else:
             longer = False
             # only use repeat as a new possible value for padding. you repeat the audio before applying the usual max_length padding
@@ -229,7 +249,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
                 )
             if truncation == "fusion":
                 mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
-                input_mel = np.stack([mel, mel, mel, mel], dim=0)
+                input_mel = np.stack([mel, mel, mel, mel], axis=0)
             else:
                 input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
         return input_mel, longer
