@@ -27,8 +27,8 @@ import torch.utils.checkpoint as checkpoint
 from torch import nn
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
-from torchlibrosa.stft import Spectrogram, LogmelFilterBank
 from torchlibrosa.augmentation import SpecAugmentation
+from torchlibrosa.stft import LogmelFilterBank, Spectrogram
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -1755,8 +1755,7 @@ class CLAPModel(CLAPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
-        r"""
-        """
+        r""" """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2118,33 +2117,33 @@ class CLAPSwinTransformer(nn.Module):
         self.head = nn.Linear(self.num_classes, self.num_classes)
 
         self.spectrogram_extractor = Spectrogram(
-            n_fft=config.spectrogram_window_size, 
-            hop_length=config.hop_size, 
-            win_length=config.spectrogram_window_size, 
-            window=config.spectrogram_window, 
-            center=config.spectrogram_center, 
-            pad_mode=config.spectrogram_pad_mode, 
-            freeze_parameters=config.spectrogram_freeze_parameters
+            n_fft=config.spectrogram_window_size,
+            hop_length=config.hop_size,
+            win_length=config.spectrogram_window_size,
+            window=config.spectrogram_window,
+            center=config.spectrogram_center,
+            pad_mode=config.spectrogram_pad_mode,
+            freeze_parameters=config.spectrogram_freeze_parameters,
         )
         # Logmel feature extractor
         self.logmel_extractor = LogmelFilterBank(
-            sr=config.sample_rate, 
-            n_fft=config.spectrogram_window_size, 
-            n_mels=config.mel_bins, 
-            fmin=config.fmin, 
-            fmax=config.fmax, 
-            ref=config.spectrogram_ref, 
-            amin=config.spectrogram_amin, 
-            top_db=config.spectrogram_top_db, 
+            sr=config.sample_rate,
+            n_fft=config.spectrogram_window_size,
+            n_mels=config.mel_bins,
+            fmin=config.fmin,
+            fmax=config.fmax,
+            ref=config.spectrogram_ref,
+            amin=config.spectrogram_amin,
+            top_db=config.spectrogram_top_db,
             freeze_parameters=config.spectrogram_freeze_parameters,
         )
         # Spec augmenter
         self.spec_augmenter = SpecAugmentation(
-            time_drop_width=config.spectrogram_time_drop_width, 
-            time_stripes_num=config.spectrogram_time_stripes_num, 
-            freq_drop_width=config.spectrogram_freq_drop_width, 
+            time_drop_width=config.spectrogram_time_drop_width,
+            time_stripes_num=config.spectrogram_time_stripes_num,
+            freq_drop_width=config.spectrogram_freq_drop_width,
             freq_stripes_num=config.spectrogram_freq_stripes_num,
-        ) 
+        )
 
     def _init_weights(self, m):
         pass
@@ -2235,12 +2234,7 @@ class CLAPSwinTransformer(nn.Module):
         return x
 
     def forward(
-        self, 
-        mel_fusion=None,
-        longer=None,
-        waveform=None,
-        mixup_lambda=None, 
-        device=None
+        self, mel_fusion=None, longer=None, waveform=None, mixup_lambda=None, device=None
     ):  # out_feat_keys: List[str] = None):
 
         if self.enable_fusion and longer.sum() == 0:
@@ -2269,7 +2263,6 @@ class CLAPSwinTransformer(nn.Module):
             x = self.bn0(x)
             x = x.transpose(1, 3)
             longer_list_idx = torch.where(longer_list)[0]
-
 
             if self.training:
                 x = self.spec_augmenter(x)
