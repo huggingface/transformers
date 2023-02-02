@@ -43,6 +43,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallModel"),
         ("blip", "BlipModel"),
         ("bloom", "BloomModel"),
+        ("bridgetower", "BridgeTowerModel"),
         ("camembert", "CamembertModel"),
         ("canine", "CanineModel"),
         ("chinese_clip", "ChineseCLIPModel"),
@@ -63,6 +64,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
         ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
+        ("deta", "DetaModel"),
         ("detr", "DetrModel"),
         ("dinat", "DinatModel"),
         ("distilbert", "DistilBertModel"),
@@ -537,6 +539,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         # Model for Object Detection mapping
         ("conditional_detr", "ConditionalDetrForObjectDetection"),
         ("deformable_detr", "DeformableDetrForObjectDetection"),
+        ("deta", "DetaForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),

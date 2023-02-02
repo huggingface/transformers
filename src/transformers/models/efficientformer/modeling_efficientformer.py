@@ -40,10 +40,9 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "EfficientFormerConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "EfficientFormerImageProcessor"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "efficientformer-l1-300"
+_CHECKPOINT_FOR_DOC = "snap-research/efficientformer-l1-300"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
@@ -52,7 +51,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
 EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/efficientformer-l1-300",
+    "snap-research/efficientformer-l1-300",
     # See all EfficientFormer models at https://huggingface.co/models?filter=efficientformer
 ]
 
@@ -134,6 +133,10 @@ class EfficientFormerSelfAttention(nn.Module):
         key_layer = key_layer.permute(0, 2, 1, 3)
         value_layer = value_layer.permute(0, 2, 1, 3)
 
+        # set `model.to(torch_device)` won't change `self.ab.device`, if there is no follow-up `train` or `eval` call.
+        # Let's do it manually here, so users won't have to do this everytime.
+        if not self.training:
+            self.ab = self.ab.to(self.attention_biases.device)
         attention_probs = (torch.matmul(query_layer, key_layer.transpose(-2, -1))) * self.scale + (
             self.attention_biases[:, self.attention_bias_idxs] if self.training else self.ab
         )
@@ -554,7 +557,6 @@ class EfficientFormerModel(EfficientFormerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(EFFICIENTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -620,7 +622,6 @@ class EfficientFormerForImageClassification(EfficientFormerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(EFFICIENTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -753,7 +754,6 @@ class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrained
 
     @add_start_docstrings_to_model_forward(EFFICIENTFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=EfficientFormerForImageClassificationWithTeacherOutput,
         config_class=_CONFIG_FOR_DOC,

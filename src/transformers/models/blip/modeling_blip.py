@@ -374,9 +374,9 @@ class BlipEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = BlipAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = BlipMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -483,7 +483,7 @@ BLIP_TEXT_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BlipProcessor`]. See [`BlipProcessor.__call__`] for details.
+            Indices can be obtained using [`AutoProcessor`]. See [`BlipProcessor.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -529,7 +529,7 @@ BLIP_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BlipProcessor`]. See [`BlipProcessor.__call__`] for details.
+            Indices can be obtained using [`AutoProcessor`]. See [`BlipProcessor.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -665,7 +665,7 @@ class BlipVisionModel(BlipPreTrainedModel):
 
         self.embeddings = BlipVisionEmbeddings(config)
         self.encoder = BlipEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         self.post_init()
 
@@ -772,10 +772,10 @@ class BlipModel(BlipPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import BlipProcessor, BlipModel
+        >>> from transformers import AutoProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -810,10 +810,10 @@ class BlipModel(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import BlipProcessor, BlipModel
+        >>> from transformers import AutoProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -855,10 +855,10 @@ class BlipModel(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import BlipProcessor, BlipModel
+        >>> from transformers import AutoProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -978,9 +978,9 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import BlipProcessor, BlipForConditionalGeneration
+        >>> from transformers import AutoProcessor, BlipForConditionalGeneration
 
-        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
         >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1054,10 +1054,10 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import BlipProcessor, BlipForConditionalGeneration
+        >>> from transformers import AutoProcessor, BlipForConditionalGeneration
 
         >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1169,24 +1169,37 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import BlipProcessor, BlipForQuestionAnswering
+        >>> from transformers import AutoProcessor, BlipForQuestionAnswering
 
         >>> model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
-        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> # training
         >>> text = "How many cats are in the picture?"
-
+        >>> label = "2"
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
+        >>> labels = processor(text=label, return_tensors="pt").input_ids
 
+        >>> inputs["labels"] = labels
         >>> outputs = model(**inputs)
+        >>> loss = outputs.loss
+        >>> loss.backward()
+
+        >>> # inference
+        >>> text = "How many cats are in the picture?"
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
+        >>> outputs = model.generate(**inputs)
+        >>> print(processor.decode(outputs[0], skip_special_tokens=True))
+        2
         ```"""
         if labels is None and decoder_input_ids is None:
             raise ValueError(
                 "Either `decoder_input_ids` or `labels` should be passed when calling `forward` with"
                 " `BlipForQuestionAnswering`. if you are training the model make sure that `labels` is passed, if you"
-                " are using the model for inference make sure that `decoder_input_ids` is passed."
+                " are using the model for inference make sure that `decoder_input_ids` is passed or call `generate`"
             )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1271,10 +1284,10 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import BlipProcessor, BlipForQuestionAnswering
+        >>> from transformers import AutoProcessor, BlipForQuestionAnswering
 
         >>> model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
-        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-vqa-base")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1390,10 +1403,10 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import BlipProcessor, BlipForImageTextRetrieval
+        >>> from transformers import AutoProcessor, BlipForImageTextRetrieval
 
-        >>> model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base")
-        >>> processor = BlipProcessor.from_pretrained("Salesforce/blip-itm-base")
+        >>> model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-itm-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)

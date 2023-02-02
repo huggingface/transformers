@@ -30,7 +30,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -119,11 +119,20 @@ class SegformerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_reduce_labels = do_reduce_labels
 
+    @property
+    def reduce_labels(self):
+        warnings.warn(
+            "The `reduce_labels` property is deprecated and will be removed in a v4.27. Please use "
+            "`do_reduce_labels` instead.",
+            FutureWarning,
+        )
+        return self.do_reduce_labels
+
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
-        Overrides the `from_dict` method from the base class to make sure `reduce_labels` is updated if image processor
-        is created using from_dict and kwargs e.g. `SegformerImageProcessor.from_pretrained(checkpoint,
+        Overrides the `from_dict` method from the base class to make sure `do_reduce_labels` is updated if image
+        processor is created using from_dict and kwargs e.g. `SegformerImageProcessor.from_pretrained(checkpoint,
         reduce_labels=True)`
         """
         image_processor_dict = image_processor_dict.copy()
@@ -376,9 +385,9 @@ class SegformerImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        if not is_batched(images):
-            images = [images]
-            segmentation_maps = [segmentation_maps] if segmentation_maps is not None else None
+        images = make_list_of_images(images)
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if not valid_images(images):
             raise ValueError(

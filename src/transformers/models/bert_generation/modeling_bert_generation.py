@@ -40,7 +40,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/bert_for_seq_generation_L-24_bbc_encoder"
 _CONFIG_FOR_DOC = "BertGenerationConfig"
-_TOKENIZER_FOR_DOC = "BertGenerationTokenizer"
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->BertGeneration
@@ -633,7 +632,7 @@ BERT_GENERATION_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertGenerationTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -717,7 +716,6 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BERT_GENERATION_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -929,10 +927,10 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BertGenerationTokenizer, BertGenerationDecoder, BertGenerationConfig
+        >>> from transformers import AutoTokenizer, BertGenerationDecoder, BertGenerationConfig
         >>> import torch
 
-        >>> tokenizer = BertGenerationTokenizer.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
         >>> config = BertGenerationConfig.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
         >>> config.is_decoder = True
         >>> model = BertGenerationDecoder.from_pretrained(
