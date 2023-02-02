@@ -114,7 +114,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         model_inputs = self.tokenizer(
             inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
         )
-        image_features = self.feature_extractor(images=image, return_tensors=self.framework)
+        image_features = self.image_processor(images=image, return_tensors=self.framework)
         model_inputs.update(image_features)
         return model_inputs
 

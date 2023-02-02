@@ -102,7 +102,7 @@ class VideoClassificationPipeline(Pipeline):
         video = videoreader.get_batch(indices).asnumpy()
         video = list(video)
 
-        model_inputs = self.feature_extractor(video, return_tensors=self.framework)
+        model_inputs = self.image_processor(video, return_tensors=self.framework)
         return model_inputs
 
     def _forward(self, model_inputs):

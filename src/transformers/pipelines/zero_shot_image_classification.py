@@ -110,7 +110,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
         n = len(candidate_labels)
         for i, candidate_label in enumerate(candidate_labels):
             image = load_image(image)
-            images = self.feature_extractor(images=[image], return_tensors=self.framework)
+            images = self.image_processor(images=[image], return_tensors=self.framework)
             sequence = hypothesis_template.format(candidate_label)
             inputs = self.tokenizer(sequence, return_tensors=self.framework)
             inputs["pixel_values"] = images.pixel_values

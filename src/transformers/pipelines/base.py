@@ -77,7 +77,7 @@ def _pad(items, key, padding_value, padding_side):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
         dim = len(shape)
-        if key == "pixel_values":
+        if key in ["pixel_values", "image"]:
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
@@ -791,6 +791,13 @@ class Pipeline(_ScikitCompat):
         self._batch_size = kwargs.pop("batch_size", None)
         self._num_workers = kwargs.pop("num_workers", None)
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
+
+        if self.image_processor is None and self.feature_extractor is not None:
+            if isinstance(self.feature_extractor, BaseImageProcessor):
+                # Backward compatible change, if users called
+                # ImageSegmentationPipeline(.., feature_extractor=MyFeatureExtractor())
+                # then we should keep working
+                self.image_processor = self.feature_extractor
 
     def save_pretrained(self, save_directory: str):
         """

@@ -100,7 +100,7 @@ class ImageToTextPipeline(Pipeline):
 
     def preprocess(self, image):
         image = load_image(image)
-        model_inputs = self.feature_extractor(images=image, return_tensors=self.framework)
+        model_inputs = self.image_processor(images=image, return_tensors=self.framework)
         return model_inputs
 
     def _forward(self, model_inputs, generate_kwargs=None):

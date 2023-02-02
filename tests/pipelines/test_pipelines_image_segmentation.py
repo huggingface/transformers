@@ -25,7 +25,6 @@ from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
     MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
     MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
-    AutoFeatureExtractor,
     AutoImageProcessor,
     AutoModelForImageSegmentation,
     AutoModelForInstanceSegmentation,
@@ -555,9 +554,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         model_id = "facebook/maskformer-swin-base-ade"
 
         model = AutoModelForInstanceSegmentation.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
 
-        image_segmenter = pipeline("image-segmentation", model=model, feature_extractor=feature_extractor)
+        image_segmenter = pipeline("image-segmentation", model=model, image_processor=image_processor)
 
         image = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
         file = image[0]["file"]

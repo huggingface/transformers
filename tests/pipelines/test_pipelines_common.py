@@ -179,6 +179,18 @@ def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer
             #       fails this test case. Skip for now - a fix for this along with the initial changes in PR #20426 is
             #       too much. Let `ydshieh` to fix it ASAP once #20426 is merged.
             to_skip = True
+        elif config_class.__name__ == "LayoutLMv2Config" and test_casse_name in [
+            "QAPipelineTests",
+            "TextClassificationPipelineTests",
+            "TokenClassificationPipelineTests",
+            "ZeroShotClassificationPipelineTests",
+        ]:
+            # `LayoutLMv2Config` was never used in pipeline tests (`test_pt_LayoutLMv2Config_XXX`) due to lack of tiny
+            # config. With new tiny model creation, it is available, but we need to fix the failed tests.
+            to_skip = True
+        elif test_casse_name == "DocumentQuestionAnsweringPipelineTests" and not tokenizer_name.endswith("Fast"):
+            # This pipeline uses `sequence_ids()` which is only available for fast tokenizers.
+            to_skip = True
 
     return to_skip
 
