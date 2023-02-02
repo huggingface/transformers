@@ -2389,6 +2389,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 model, threshold=load_in_8bit_threshold, modules_to_not_convert=modules_to_not_convert
             )
 
+            # training in 8-bit is only available in 0.37.0+
             model._is_int8_training_enabled = version.parse(
                 importlib_metadata.version("bitsandbytes")
             ) >= version.parse("0.37.0")
