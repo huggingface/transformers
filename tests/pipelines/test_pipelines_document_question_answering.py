@@ -94,7 +94,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
                     {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
                 ]
             ]
-            * 4,
+            * 3,
         )
 
     @require_torch
