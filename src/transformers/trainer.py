@@ -596,7 +596,7 @@ class Trainer:
                 self.use_cuda_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
                 #  bf16 does not need grad scaling
-                self.do_grad_scaling = args.fp16
+                self.do_grad_scaling = self.amp_dtype == torch.float16
                 if self.sharded_ddp is not None:
                     self.scaler = ShardedGradScaler()
                 elif self.fsdp is not None:
