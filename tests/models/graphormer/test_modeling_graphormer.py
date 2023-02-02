@@ -460,7 +460,7 @@ class GraphormerModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = GraphormerForGraphClassification.from_pretrained(model_name)
+            model = GraphormerForGraphClassification.from_pretrained(model_name, num_classes=1)
             self.assertIsNotNone(model)
 
 
@@ -468,7 +468,7 @@ class GraphormerModelTest(ModelTesterMixin, unittest.TestCase):
 class GraphormerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_graph_classification(self):
-        model = GraphormerForGraphClassification.from_pretrained("clefourrier/graphormer-base-pcqm4mv2")
+        model = GraphormerForGraphClassification.from_pretrained("clefourrier/graphormer-base-pcqm4mv2", num_classes=1)
 
         # Actual real graph data from the MUTAG dataset
         # fmt: off
@@ -614,7 +614,7 @@ class GraphormerModelIntegrationTest(unittest.TestCase):
                     [3, 3, 4, 3, 3, 3, 3, 4, 4, 3, 4, 2, 2, 0, 0, 0, 0],
                 ]
             ),
-            "x": tensor(
+            "input_nodes": tensor(
                 [
                     [[3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3]],
                     [[3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [3], [0], [0], [0], [0]],
@@ -1279,15 +1279,11 @@ class GraphormerModelIntegrationTest(unittest.TestCase):
 
         output = model(**model_input)["logits"]
 
-        print(output.shape)
-        print(output)
-
-        expected_shape = torch.Size(())
+        expected_shape = torch.Size((2, 1))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+        expected_logs = torch.tensor(
+            [[7.6060], [7.4126]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output, expected_logs, atol=1e-4))
