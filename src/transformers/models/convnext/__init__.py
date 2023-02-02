@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_flax_available,
     is_tf_available,
     is_torch_available,
     is_vision_available,
@@ -66,6 +67,18 @@ else:
         "TFConvNextPreTrainedModel",
     ]
 
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_flax_convnext"] = [
+        "FlaxConvNextForImageClassification",
+        "FlaxConvNextModel",
+        "FlaxConvNextPreTrainedModel",
+    ]
+
 if TYPE_CHECKING:
     from .configuration_convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig, ConvNextOnnxConfig
 
@@ -99,6 +112,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_convnext import TFConvNextForImageClassification, TFConvNextModel, TFConvNextPreTrainedModel
+
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_flax_convnext import FlaxConvNextForImageClassification, FlaxConvNextModel, FlaxConvNextPreTrainedModel
 
 
 else:

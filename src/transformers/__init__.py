@@ -3368,6 +3368,9 @@ else:
             "FlaxCLIPVisionPreTrainedModel",
         ]
     )
+    _import_structure["models.convnext"].extend(
+        ["FlaxConvNextForImageClassification", "FlaxConvNextModel", "FlaxConvNextPreTrainedModel"]
+    )
     _import_structure["models.distilbert"].extend(
         [
             "FlaxDistilBertForMaskedLM",
@@ -6259,6 +6262,7 @@ if TYPE_CHECKING:
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
         )
+        from .models.convnext import FlaxConvNextForImageClassification, FlaxConvNextModel, FlaxConvNextPreTrainedModel
         from .models.distilbert import (
             FlaxDistilBertForMaskedLM,
             FlaxDistilBertForMultipleChoice,
