@@ -225,11 +225,12 @@ class CLAPAudioConfig(PretrainedConfig):
         mel_bins=64,
         clip_samples=480000,
         spec_size=256,
-        hidden_act="relu",
+        hidden_act="gelu",
         patch_size=4,
         patch_stride=(4, 4),
         num_classes=527,
         hidden_size=96,
+        embed_dim=96,
         projection_hidden_size=768,
         depths=[2, 2, 6, 2],
         num_heads=[4, 8, 16, 32],
@@ -242,12 +243,12 @@ class CLAPAudioConfig(PretrainedConfig):
         flatten_patch_embeds=True,
         patch_embeds_hidden_size=96,
         enable_patch_layer_norm=True,
-        swin_drop_rate=0.0,
+        drop_path_rate=0.0,
         attention_probs_dropout_prob=0.0,
         swin_drop_path_rate=0.1,
         qkv_bias=True,
         swin_norm_before_mlp="ln",
-        swin_mlp_ratio=4.0,
+        mlp_ratio=4.0,
         swin_use_checkpoint=False,
         swin_absolute_positional_embedding=False,
         swin_hidden_act="gelu",
@@ -262,6 +263,7 @@ class CLAPAudioConfig(PretrainedConfig):
         spectrogram_time_stripes_num=2,
         spectrogram_freq_drop_width=8,
         spectrogram_freq_stripes_num=2,
+        layer_norm_eps=1e-5,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -278,6 +280,7 @@ class CLAPAudioConfig(PretrainedConfig):
         self.patch_stride = patch_stride
         self.num_classes = num_classes
         self.hidden_size = hidden_size
+        self.embed_dim = embed_dim
         self.depths = depths
         self.num_heads = num_heads
         self.window_size = window_size
@@ -291,12 +294,12 @@ class CLAPAudioConfig(PretrainedConfig):
         self.flatten_patch_embeds = flatten_patch_embeds
         self.patch_embeds_hidden_size = patch_embeds_hidden_size
         self.enable_patch_layer_norm = enable_patch_layer_norm
-        self.swin_drop_rate = swin_drop_rate
+        self.drop_path_rate = drop_path_rate
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.swin_drop_path_rate = swin_drop_path_rate
         self.qkv_bias = qkv_bias
         self.swin_norm_before_mlp = swin_norm_before_mlp
-        self.swin_mlp_ratio = swin_mlp_ratio
+        self.mlp_ratio = mlp_ratio
         self.swin_use_checkpoint = swin_use_checkpoint
         self.swin_absolute_positional_embedding = swin_absolute_positional_embedding
         self.patch_embed_input_channels = patch_embed_input_channels
@@ -315,6 +318,7 @@ class CLAPAudioConfig(PretrainedConfig):
         self.spectrogram_time_stripes_num = spectrogram_time_stripes_num
         self.spectrogram_freq_drop_width = spectrogram_freq_drop_width
         self.spectrogram_freq_stripes_num = spectrogram_freq_stripes_num
+        self.layer_norm_eps = layer_norm_eps
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
