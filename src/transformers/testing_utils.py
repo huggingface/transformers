@@ -50,7 +50,6 @@ from .utils import (
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
-    is_bitsandbytes_greater_0_37_0,
     is_bs4_available,
     is_cython_available,
     is_decord_available,
