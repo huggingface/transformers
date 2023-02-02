@@ -234,7 +234,13 @@ class MPNetSelfAttention(nn.Module):
 
         # Apply relative position embedding (precomputed in MPNetEncoder) if provided.
         if position_bias is not None:
-            attention_scores += position_bias
+            try :
+                attention_scores += position_bias
+            except RuntimeError:
+                print(is_cross_attention, past_key_value is not None)
+                print(attention_scores.shape)
+                print(position_bias.shape)
+                print(k.shape)
 
         if attention_mask is not None:
             attention_scores = attention_scores + attention_mask
