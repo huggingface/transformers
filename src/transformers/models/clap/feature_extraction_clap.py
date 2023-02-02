@@ -15,16 +15,18 @@
 """Feature extractor class for CLAP."""
 
 
+import copy
+from typing import Any, Dict, List, Optional, Union
+
 import numpy as np
 import torchvision
 
+from ... import __version__
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
 
-from ... import __version__
-from typing import Any, Dict, List, Optional, Union
-import copy 
+
 logger = logging.get_logger(__name__)
 
 
@@ -111,7 +113,6 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         )
         self.top_db = top_db
 
-
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
@@ -126,7 +127,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         if "mel_filters_slaney" in output:
             del output["mel_filters_slaney"]
         return output
-    
+
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
         Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
@@ -206,7 +207,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             - wave < max_length
                 - repeat
                 - fusion
-                
+
                 TODO the max length should be 10x the sampling rate of the provided audio.
 
         """
@@ -239,14 +240,14 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             if waveform.shape[0] < max_length and padding == "repeatpad":  # do nothing if equal
                 n_repeat = int(max_length / len(waveform))
                 waveform = waveform.repeat(n_repeat)
-            else:
-                waveform = self.pad(
-                    waveform,
-                    padding=padding,
-                    max_length=max_length if max_length else self.n_samples,
-                    truncation=truncation,
-                    pad_to_multiple_of=pad_to_multiple_of,
-                )
+            
+            waveform = self.pad(
+                waveform,
+                padding=padding,
+                max_length=max_length if max_length else self.n_samples,
+                truncation=truncation,
+                pad_to_multiple_of=pad_to_multiple_of,
+            )
             if truncation == "fusion":
                 mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
                 input_mel = np.stack([mel, mel, mel, mel], axis=0)
