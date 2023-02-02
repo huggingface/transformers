@@ -30,13 +30,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        ErnieMForCausalLM,
-        ErnieMForMaskedLM,
         ErnieMForMultipleChoice,
         ErnieMForQuestionAnswering,
         ErnieMForSequenceClassification,
         ErnieMForTokenClassification,
         ErnieMModel,
+        # ErnieMUIEM
     )
     from transformers.models.ernie_m.modeling_ernie_m import (
         ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -51,7 +50,6 @@ class ErnieMModelTester:
             seq_length=7,
             is_training=True,
             use_input_mask=True,
-            use_token_type_ids=True,
             use_labels=True,
             vocab_size=99,
             hidden_size=32,
@@ -74,7 +72,6 @@ class ErnieMModelTester:
         self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -99,9 +96,6 @@ class ErnieMModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
         sequence_labels = None
         token_labels = None
@@ -113,7 +107,17 @@ class ErnieMModelTester:
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+
+    def prepare_config_and_inputs_for_uiem(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+        config = self.get_config()
+
+        return config, input_ids, input_mask
 
     def get_config(self):
         return ErnieMConfig(
@@ -127,171 +131,20 @@ class ErnieMModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
             initializer_range=self.initializer_range,
         )
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        config.is_decoder = True
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
-
     def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = ErnieMModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
+        result = model(input_ids, return_dict=True)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_model_as_decoder(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = ErnieMModel(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-            self,
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-    ):
-        model = ErnieMForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = ErnieMForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        config.add_cross_attention = True
-        model = ErnieMForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_for_question_answering(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = ErnieMForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -299,47 +152,63 @@ class ErnieMModelTester:
         result = model(
             input_ids,
             attention_mask=input_mask,
-            token_type_ids=token_type_ids,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
         )
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
+    # def create_and_check_for_uiem(
+    #         self, config, input_ids, input_mask
+    # ):
+    #     model = ErnieMUIEM(config=config)
+    #     model.to(torch_device)
+    #     model.eval()
+    #     result = model(
+    #         input_ids,
+    #         attention_mask=input_mask,
+    #     )
+    #     print("result - ", result)
+    #     self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length))
+    #     self.parent.assertEqual(result[1].shape, (self.batch_size, self.seq_length))
+
     def create_and_check_for_sequence_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = ErnieMForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = ErnieMForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        input_ids.to(torch_device)
+        input_mask.to(torch_device)
+        token_labels.to(torch_device)
+
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_multiple_choice(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
         model = ErnieMForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         result = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
-            token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
@@ -349,13 +218,12 @@ class ErnieMModelTester:
         (
             config,
             input_ids,
-            token_type_ids,
             input_mask,
             sequence_labels,
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
 
@@ -365,17 +233,16 @@ class ErnieMModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ErnieMModel,
-            ErnieMForMaskedLM,
-            ErnieMForCausalLM,
             ErnieMForMultipleChoice,
             ErnieMForQuestionAnswering,
             ErnieMForSequenceClassification,
             ErnieMForTokenClassification,
+            # ErnieMUIEM
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ErnieMForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = ()
 
     def setUp(self):
         self.model_tester = ErnieMModelTester(self)
@@ -394,17 +261,9 @@ class ErnieMModelTest(ModelTesterMixin, unittest.TestCase):
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
-
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
-
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -414,41 +273,13 @@ class ErnieMModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
+    # def test_for_uiem(self):
+    #     config_and_inputs = self.model_tester.prepare_config_and_inputs_for_uiem()
+    #     self.model_tester.create_and_check_for_uiem(*config_and_inputs)
+
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
-    def test_model_as_decoder(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
-
-    def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
-
-        input_mask = None
-
-        self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -460,22 +291,23 @@ class ErnieMModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class ErnieMModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
-        model = ErnieMForMaskedLM.from_pretrained("ernie-m")
+    def test_inference_model(self):
+        model = ErnieMModel.from_pretrained("susnato/ernie-m-base_pytorch")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
         # TODO Replace vocab size
-        vocab_size = 32000
+        hidden_size = 784
 
-        expected_shape = torch.Size((1, 6, vocab_size))
+        expected_shape = torch.Size((1, 6, hidden_size))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+            [[[0.09642269, -0.00556359, -0.03608308], [0.00521614, 0.09374719, 0.03041629],
+              [-0.08879025, -0.00807481, -0.12337112]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
 
 

@@ -118,7 +118,6 @@ class ErnieMEmbeddings(nn.Module):
                 past_key_values_length=0):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-
         if position_ids is None:
             input_shape = inputs_embeds.size()[:-1]
             ones = torch.ones(input_shape, dtype=torch.int64)
@@ -127,8 +126,8 @@ class ErnieMEmbeddings(nn.Module):
 
             if past_key_values_length > 0:
                 position_ids = position_ids + past_key_values_length
-
         position_ids += 2
+        position_ids = position_ids.to(next(self.position_embeddings.parameters()).device)
         position_embeddings = self.position_embeddings(position_ids)
         embeddings = inputs_embeds + position_embeddings
         embeddings = self.layer_norm(embeddings)
@@ -145,22 +144,33 @@ class ErnieMEncoder(nn.Module):
                                      for _ in range(config.num_hidden_layers)])
     def forward(self,
                 input_embeds,
-                attn_mask=None,
+                attention_mask=None,
+                head_mask=None,
+                past_key_values=None,
                 output_attentions=False,
                 output_hidden_states=False,
-                return_dict=False):
+                return_dict=True):
+
         hidden_states = () if output_hidden_states else None
         attentions = () if output_attentions else None
 
         output = input_embeds
         if output_hidden_states:
-            hidden_states = hidden_states + (output, )
-        for layer in self.layers:
-            output, opt_attn_weights = layer(embeds=output, attn_mask=attn_mask)
+            hidden_states = hidden_states + (output,)
+        for i, layer in enumerate(self.layers):
+            layer_head_mask = head_mask[i] if head_mask is not None else None
+            past_key_value = past_key_values[i] if past_key_values is not None else None
+
+            output, opt_attn_weights = layer(hidden_states=output,
+                                             attention_mask=attention_mask,
+                                             head_mask=layer_head_mask,
+                                             past_key_value=past_key_value,
+                                             output_attentions=True)
+
             if output_hidden_states:
-                hidden_states = hidden_states + (output, )
+                hidden_states = hidden_states + (output,)
             if output_attentions:
-                attentions = attentions + (opt_attn_weights, )
+                attentions = attentions + (opt_attn_weights,)
 
         last_hidden_state = output
         if not return_dict:
@@ -173,6 +183,38 @@ class ErnieMEncoder(nn.Module):
             attentions=attentions
         )
 
+        #
+        #
+        # for i, layer in enumerate(self.layers):
+        #
+        #     if output_attentions:
+        #         output, opt_attn_weights = layer(hidden_states=output,
+        #                                          attention_mask=attention_mask,
+        #                                          head_mask=layer_head_mask,
+        #                                          past_key_value=past_key_value,
+        #                                          output_attentions=output_attentions)
+        #         attentions = attentions + (opt_attn_weights,)
+        #
+        #     if not output_attentions:
+        #         output = layer(hidden_states=output,
+        #                        attention_mask=attention_mask,
+        #                        head_mask=layer_head_mask,
+        #                        past_key_value=past_key_value,
+        #                        output_attentions=output_attentions)
+        #     if output_hidden_states:
+        #         hidden_states = hidden_states + (output, )
+        # last_hidden_state = output
+        # if not return_dict:
+        #     return tuple(v for v in [last_hidden_state, hidden_states, attentions] \
+        #                  if v is not None)
+        #
+        # return BaseModelOutputWithPastAndCrossAttentions(
+        #     last_hidden_state=last_hidden_state,
+        #     hidden_states=hidden_states,
+        #     attentions=attentions
+        # )
+
+
 class ErnieMEncoderLayer(nn.Module):
     def __init__(self, config, act_dropout=0):
         super().__init__()
@@ -182,11 +224,8 @@ class ErnieMEncoderLayer(nn.Module):
             else config.attention_probs_dropout_prob
         act_dropout = config.hidden_dropout_prob if act_dropout is None \
             else act_dropout
-        self.self_attn = nn.MultiheadAttention(embed_dim=config.hidden_size,
-                                               num_heads=config.num_attention_heads,
-                                               dropout=attn_dropout,
-                                               bias=True,
-                                               batch_first=True)
+
+        self.self_attn = ErnieMAttention(config)
         self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size)
         self.dropout = nn.Dropout(act_dropout)
         self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -196,20 +235,94 @@ class ErnieMEncoderLayer(nn.Module):
         self.dropout2 = nn.Dropout(dropout)
         self.activation = nn.GELU()
 
-    def forward(self, embeds, attn_mask):
-        residual = embeds
-        embeds, attention_opt_weights = self.self_attn(query=embeds, key=embeds, value=embeds,
-                              key_padding_mask=attn_mask
-                              )
-        embeds = residual + self.dropout1(embeds)
-        embeds = self.norm1(embeds)
+    def forward(self,
+                hidden_states,
+                attention_mask=None,
+                head_mask=None,
+                past_key_value=None,
+                output_attentions=None):
+        residual = hidden_states
+        if output_attentions:
+            hidden_states, attention_opt_weights = self.self_attn(hidden_states=hidden_states,
+                                                                  attention_mask=attention_mask,
+                                                                  head_mask=head_mask,
+                                                                  past_key_value=past_key_value,
+                                                                  output_attentions=output_attentions
+                                                                    )
 
-        residual = embeds
-        embeds = self.linear2(self.dropout(self.activation(self.linear1(embeds))))
-        embeds = residual + self.dropout2(embeds)
-        embeds = self.norm2(embeds)
+        else:
+            hidden_states = self.self_attn(hidden_states=hidden_states,
+                                          attention_mask=attention_mask,
+                                          head_mask=head_mask,
+                                          past_key_value=past_key_value,
+                                          output_attentions=output_attentions
+                                            )
+        hidden_states = residual + self.dropout1(hidden_states)
+        hidden_states = self.norm1(hidden_states)
+        residual = hidden_states
+        hidden_states = self.linear2(self.dropout(self.activation(self.linear1(hidden_states))))
+        hidden_states = residual + self.dropout2(hidden_states)
+        hidden_states = self.norm2(hidden_states)
 
-        return embeds, attention_opt_weights
+        if output_attentions:
+            return hidden_states, attention_opt_weights
+        else:
+            return hidden_states
+
+class ErnieMAttention(nn.Module):
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__()
+        self.self_attn = ErnieMSelfOutput(
+            config, position_embedding_type=position_embedding_type)
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.pruned_heads = set()
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.self_attn.num_attention_heads, self.self_attn.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.self_attn.q_proj = prune_linear_layer(self.self_attn.q_proj, index)
+        self.self_attn.k_proj = prune_linear_layer(self.self_attn.k_proj, index)
+        self.self_attn.v_proj = prune_linear_layer(self.self_attn.v_proj, index)
+        self.out_proj = prune_linear_layer(self.out_proj, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.self_attn.num_attention_heads = self.self_attn.num_attention_heads - len(heads)
+        self.self_attn.all_head_size = self.self_attn.attention_head_size * \
+                                       self.self_attn.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        self_outputs = self.self_attn(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            past_key_value,
+            output_attentions,
+        )
+        attention_output = self.out_proj(self_outputs[0])
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
+
+        # if output_attentions:
+        #     return attention_output, self_outputs[1:]
+        # else:
+        #     return attention_output
 
 class ErnieMPooler(nn.Module):
     def __init__(self, config):
@@ -294,6 +407,20 @@ class ErnieMModel(ErnieMPreTrainedModel):
         self.pooler = ErnieMPooler(config)
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layers[layer].self_attn.prune_heads(heads)
+
     @add_start_docstrings_to_model_forward(ERNIE_M_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
@@ -305,22 +432,29 @@ class ErnieMModel(ErnieMPreTrainedModel):
                 input_ids: Optional[tensor] = None,
                 position_ids: Optional[tensor] = None,
                 attention_mask: Optional[tensor] = None,
+                head_mask: Optional[tensor] = None,
                 inputs_embeds: Optional[tensor] = None,
                 past_key_values: Optional[Tuple[Tuple[tensor]]] = None,
                 use_cache: Optional[bool] = None,
                 output_hidden_states: Optional[bool] = None,
                 output_attentions: Optional[bool] = None,
-                return_dict: Optional[bool] = None,):
+                return_dict: Optional[bool] = None):
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time.")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
 
         # init the default bool value
-        output_attentions = output_attentions if output_attentions is not None else False
-        output_hidden_states = output_hidden_states if output_hidden_states is not None\
-            else False
-        return_dict = return_dict if return_dict is not None else False
-        use_cache = use_cache if use_cache is not None else False
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         past_key_values_length = 0
         if past_key_values is not None:
@@ -337,6 +471,9 @@ class ErnieMModel(ErnieMPreTrainedModel):
             attention_mask = attention_mask.to(torch.float32)
             attention_mask = (1.0 - attention_mask) * -1e4
 
+        # extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
+
         embedding_output = self.embeddings(
                                         input_ids=input_ids,
                                         position_ids=position_ids,
@@ -345,11 +482,14 @@ class ErnieMModel(ErnieMPreTrainedModel):
                                             )
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
         if type(encoder_outputs)==tuple:
             sequence_output = encoder_outputs[0]
             pooler_output = self.pooler(sequence_output)
@@ -363,7 +503,7 @@ class ErnieMModel(ErnieMPreTrainedModel):
             attentions = None if not output_attentions else\
                 encoder_outputs["attentions"]
 
-            return BaseModelOutputWithPoolingAndCrossAttentions(
+        return BaseModelOutputWithPoolingAndCrossAttentions(
                 last_hidden_state=sequence_output,
                 pooler_output=pooler_output,
                 hidden_states=hidden_states,
@@ -402,11 +542,14 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
             input_ids=None,
             attention_mask=None,
             position_ids=None,
+            head_mask=None,
             inputs_embeds=None,
-            labels=None,
+            past_key_values=None,
+            use_cache=None,
+            output_hidden_states = None,
             output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+            return_dict=True,
+            labels=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -421,14 +564,18 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
+            past_key_values=past_key_values,
             output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[1]
-        logits = self.classifier(sequence_output)
+        pooled_output = outputs[1]
+
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
@@ -453,7 +600,7 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
@@ -493,14 +640,16 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            input_ids=None,
+            attention_mask=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            past_key_values=None,
+            output_hidden_states=None,
+            output_attentions=None,
+            return_dict=True,
+            labels=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -513,7 +662,9 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -571,12 +722,13 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
         input_ids=None,
         attention_mask=None,
         position_ids=None,
+        head_mask=None,
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict=None,
+        return_dict=True,
     ):
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -594,6 +746,7 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -669,11 +822,12 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
             input_ids=None,
             attention_mask=None,
             position_ids=None,
+            head_mask=None,
             inputs_embeds=None,
             labels=None,
             output_attentions=None,
             output_hidden_states=None,
-            return_dict=None,
+            return_dict=True,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -697,6 +851,7 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -749,14 +904,13 @@ class ErnieMUIEM(ErnieMPreTrainedModel):
         self.sigmoid = nn.Sigmoid()
         self.post_init()
 
-    def forward(self, input_ids, position_ids=None, attention_mask=None):
-        r"""
+    r"""
         Args:
             input_ids (Tensor):
                 See :class:`ErnieMModel`.
-            position_ids (Tensor, optional):
-                See :class:`ErnieMModel`.
             attention_mask (Tensor, optional):
+                See :class:`ErnieMModel`.
+            position_ids (Tensor, optional):
                 See :class:`ErnieMModel`.
         Example:
             .. code-block::
@@ -770,11 +924,28 @@ class ErnieMUIEM(ErnieMPreTrainedModel):
                 inputs = tokenizer("Welcome to use Huggingface!", return_tensors="pt")
                 start_prob, end_prob = model(**inputs)
         """
-        sequence_output, _ = self.ernie_m(
+    def forward(self,
+                input_ids,
+                attention_mask=None,
+                position_ids=None,
+                head_mask=None,
+                output_attentions=None,
+                output_hidden_states=None,
+                return_dict=True,
+                ):
+
+        result = self.ernie_m(
             input_ids=input_ids,
-            position_ids=position_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict
         )
+        if type(result) == BaseModelOutputWithPoolingAndCrossAttentions:
+            sequence_output = result.last_hidden_state
+
         start_logits = self.linear_start(sequence_output)
         start_logits = start_logits.squeeze(-1)
         start_prob = self.sigmoid(start_logits)
@@ -783,3 +954,140 @@ class ErnieMUIEM(ErnieMPreTrainedModel):
         end_prob = self.sigmoid(end_logits)
 
         return start_prob, end_prob
+
+
+
+class ErnieMSelfOutput(nn.Module):
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.q_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.k_proj = nn.Linear(config.hidden_size, self.all_head_size)
+        self.v_proj = nn.Linear(config.hidden_size, self.all_head_size)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.position_embedding_type = position_embedding_type or getattr(
+            config, "position_embedding_type", "absolute"
+        )
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            self.max_position_embeddings = config.max_position_embeddings
+            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+
+        self.is_decoder = config.is_decoder
+
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        mixed_query_layer = self.q_proj(hidden_states)
+
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        if is_cross_attention and past_key_value is not None:
+            # reuse k,v, cross_attentions
+            key_layer = past_key_value[0]
+            value_layer = past_key_value[1]
+            attention_mask = encoder_attention_mask
+        elif is_cross_attention:
+            key_layer = self.transpose_for_scores(self.k_proj(encoder_hidden_states))
+            value_layer = self.transpose_for_scores(self.v_proj(encoder_hidden_states))
+            attention_mask = encoder_attention_mask
+        elif past_key_value is not None:
+            key_layer = self.transpose_for_scores(self.k_proj(hidden_states))
+            value_layer = self.transpose_for_scores(self.v_proj(hidden_states))
+            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+        else:
+            key_layer = self.transpose_for_scores(self.k_proj(hidden_states))
+            value_layer = self.transpose_for_scores(self.v_proj(hidden_states))
+
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        use_cache = past_key_value is not None
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_layer, value_layer)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            query_length, key_length = query_layer.shape[2], key_layer.shape[2]
+            if use_cache:
+                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
+                    -1, 1
+                )
+            else:
+                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            distance = position_ids_l - position_ids_r
+
+            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+
+            if self.position_embedding_type == "relative_key":
+                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                attention_scores = attention_scores + relative_position_scores
+            elif self.position_embedding_type == "relative_key_query":
+                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
+        return outputs
+

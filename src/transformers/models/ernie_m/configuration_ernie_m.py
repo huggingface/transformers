@@ -167,6 +167,10 @@ class ErnieMConfig(PretrainedConfig):
         pad_token_id: int = 1,
         layer_norm_eps: float =  1e-05,
         classifier_dropout=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+        is_decoder=False,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -183,3 +187,8 @@ class ErnieMConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout = classifier_dropout
+        self.output_hidden_states = output_hidden_states
+        self.output_attentions = output_attentions
+        self.return_dict = return_dict
+        self.is_decoder = is_decoder
+
