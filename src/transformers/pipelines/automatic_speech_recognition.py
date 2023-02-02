@@ -518,6 +518,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 return_timestamps=return_timestamps,
                 return_language=return_language,
                 time_precision=time_precision,
+                sampling_rate=self.feature_extractor.sampling_rate,
             )
         else:
             items = np.concatenate(final_items, axis=1)

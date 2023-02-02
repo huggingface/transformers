@@ -704,7 +704,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_tokens)]
         return forced_decoder_ids
 
-    def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time_precision):
+    def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time_precision, sampling_rate):
         """
         Internal method meant to only be used by asr pipeline.
         Handles all the little quirks specific to whisper to handle the various options not allowed
@@ -716,9 +716,27 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         chunks = []
         chunk = new_chunk()
+        time_offset = 0.0
+        right_stride_start = None
         timestamp_begin = self.convert_tokens_to_ids("<|notimestamps|>") + 1
-        for output in model_outputs:
-            for token in output["tokens"][0].tolist():
+        previous_tokens = []
+        skip = False
+
+        for chunk_id, output in enumerate(model_outputs):
+            token_ids = output["tokens"][0].tolist()
+            if "stride" in output:
+                chunk_len, stride_left, stride_right = output["stride"]
+                # Go back in seconds
+                chunk_len /= sampling_rate
+                stride_left /= sampling_rate
+                stride_right /= sampling_rate
+
+                time_offset -= stride_left
+                right_stride_start = time_offset + (chunk_len - stride_right)
+
+            current_tokens = []
+
+            for i, token in enumerate(token_ids):
                 # 4 possible states for each token
                 # - Language code
                 # - Timestamp
@@ -735,17 +753,40 @@ class WhisperTokenizer(PreTrainedTokenizer):
                         chunk["language"] = language
                 elif token >= timestamp_begin:
                     # Timestamp token
-                    time = (token - timestamp_begin) * time_precision
+                    time = (token - timestamp_begin) * time_precision + time_offset
+                    time = round(time, 2)
+                    if right_stride_start and time > right_stride_start:
+                        # Whisper outputted a timestamp token, but it falls within
+                        # our stride, so we're going to skip it for the time being
+                        # and resolve this later
+                        skip = True
+                        continue
                     if chunk["timestamp"][0] is None:
                         chunk["timestamp"][0] = time
+                    elif skip:
+                        skip = False
                     else:
                         chunk["timestamp"][1] = time
                         # This is the end of the timestamp chunk
+                        previous_tokens.append(current_tokens)
+                        resolved_tokens = _find_longest_common_sequence(previous_tokens)
+                        resolved_text = self.decode(resolved_tokens)
+                        chunk["text"] = resolved_text
+                        current_tokens = []
+                        previous_tokens = []
+
                         chunks.append(chunk)
+                        current_tokens = []
                         chunk = new_chunk()
                 else:
                     # Regular token
-                    chunk["text"] += self.decode([token])
+                    current_tokens.append(token)
+
+            if "stride" in output:
+                time_offset += chunk_len - stride_right
+                # Leftover tokens
+                previous_tokens.append(current_tokens)
+
         if chunk["text"]:
             # There is some leftover text we don't want to miss
             chunks.append(chunk)
@@ -762,6 +803,32 @@ class WhisperTokenizer(PreTrainedTokenizer):
         else:
             optional = {}
         return full_text, optional
+
+
+def _find_longest_common_sequence(sequences):
+    # TODO  Use a faster algorithm this can probably be done in O(n)
+    # using suffix array.
+    # It might be tedious to do because of fault tolerance.
+    # We actually have a really good property which is that the total sequence
+    # MUST be those subsequences in order.
+    # Also the algorithm should be more tolerant to errors.
+    sequence = sequences[0]
+    prev_sequence_length = len(sequence)
+    for new_sequence in sequences[1:]:
+        index = 0
+        max_ = 0.0
+        for i in range(1, max(len(new_sequence), prev_sequence_length) + 1):
+            # epsilon to favor long perfect matches
+            eps = i / 10000.0
+            matches = np.sum(np.array(sequence[-i:]) == np.array(new_sequence[:i]))
+            matching = matches / i + eps
+            if matches > 1 and matching > max_:
+                index = i
+                max_ = matching
+        prev_sequence_length = len(new_sequence)
+        sequence = sequence[: -index - 1]
+        sequence.extend(new_sequence)
+    return np.array(sequence)
 
 
 def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source_positions):
