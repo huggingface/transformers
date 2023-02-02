@@ -39,8 +39,8 @@ class GraphormerConfig(PretrainedConfig):
 
 
     Args:
-        num_classes (`int`, *optional*, defaults to 2):
-            Number of target classes or labels, set to 1 if the task is a regression task.
+        num_classes (`int`, *optional*, defaults to 1):
+            Number of target classes or labels, set to n for binary classification of n tasks.
         num_atoms (`int`, *optional*, defaults to 512*9):
             Number of node types in the graphs.
         num_edges (`int`, *optional*, defaults to 512*3):
@@ -134,7 +134,7 @@ class GraphormerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_classes: int = 2,
+        num_classes: int = 1,
         num_atoms: int = 512 * 9,
         num_edges: int = 512 * 3,
         num_in_degree: int = 512,
