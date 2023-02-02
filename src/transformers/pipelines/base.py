@@ -793,10 +793,11 @@ class Pipeline(_ScikitCompat):
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
 
         if self.image_processor is None and self.feature_extractor is not None:
-            # Backward compatible change, if users called
-            # ImageSegmentationPipeline(.., feature_extractor=MyFeatureExtractor())
-            # then we should keep working
-            self.image_processor = self.feature_extractor
+            if isinstance(self.feature_extractor, BaseImageProcessor):
+                # Backward compatible change, if users called
+                # ImageSegmentationPipeline(.., feature_extractor=MyFeatureExtractor())
+                # then we should keep working
+                self.image_processor = self.feature_extractor
 
     def save_pretrained(self, save_directory: str):
         """
