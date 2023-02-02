@@ -1529,7 +1529,7 @@ def prepare_inputs_for_generation(input_ids, past=None, inputs_embeds=None, **kw
             "past_key_values": past,
             # "use_cache": kwargs.get("use_cache"),
             # "position_ids": position_ids,
-            # "attention_mask": attention_mask,
+            "attention_mask": attention_mask,
             # "token_type_ids": token_type_ids,
         }
     )

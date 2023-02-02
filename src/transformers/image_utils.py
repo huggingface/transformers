@@ -35,6 +35,8 @@ from .utils.constants import (  # noqa: F401
     IMAGENET_DEFAULT_STD,
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
 )
 
 

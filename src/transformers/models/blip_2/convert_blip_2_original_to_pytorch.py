@@ -22,7 +22,8 @@ import requests
 
 # pip3 install salesforce-lavis
 from lavis.models import load_model_and_preprocess
-from transformers import AutoTokenizer, Blip2Config, Blip2ForConditionalGeneration, OPTConfig
+from transformers import AutoTokenizer, Blip2Config, Blip2ForConditionalGeneration, OPTConfig, BlipImageProcessor, Blip2Processor
+from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
 def load_demo_image():
@@ -134,15 +135,21 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     image = load_demo_image()
-    pixel_values = vis_processors["eval"](image).unsqueeze(0).to(device)
+    original_pixel_values = vis_processors["eval"](image).unsqueeze(0).to(device)
     tokenizer = AutoTokenizer.from_pretrained("facebook/opt-2.7b")
     input_ids = tokenizer(["" + "\n"], return_tensors="pt").input_ids.to(device)
 
-    print("Input ids:", input_ids)
+    # create processor
+    image_processor = BlipImageProcessor(size={"height":224, "width":224}, image_mean=OPENAI_CLIP_MEAN, image_std=OPENAI_CLIP_STD)
+    processor = Blip2Processor(image_processor=image_processor, tokenizer=tokenizer)
+    pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(device)
+
+    # make sure processor creates exact same pixel values
+    assert torch.allclose(pixel_values, original_pixel_values)
 
     hf_model.to(device)
     with torch.no_grad():
-        outputs = hf_model(pixel_values, input_ids)
+        outputs = hf_model(original_pixel_values, input_ids)
         print("Shape of decoder logits:", outputs.decoder_logits.shape)
         print("First values of decoder logits:", outputs.decoder_logits[0, :3, :3])
 
@@ -158,9 +165,11 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     print(tokenizer.batch_decode(outputs[0], skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:
+        processor.save_pretrained(pytorch_dump_folder_path)
         hf_model.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
+        processor.push_to_hub(f"nielsr/{model_name}")
         hf_model.push_to_hub(f"nielsr/{model_name}")
 
 
