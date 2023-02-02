@@ -4202,6 +4202,23 @@ class MegatronBertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MGPSTRModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MGPSTRPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MMBTForClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
