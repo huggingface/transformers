@@ -513,12 +513,22 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             items = _find_longest_common_sequence(final_items, self.tokenizer)
         elif self.type == "seq2seq_whisper":
             time_precision = self.feature_extractor.chunk_length / self.model.config.max_source_positions
+            # Send the chunking back to seconds, it's easier to handle in whisper
+            sampling_rate = self.feature_extractor.sampling_rate
+            for output in model_outputs:
+                if "stride" in output:
+                    chunk_len, stride_left, stride_right = output["stride"]
+                    # Go back in seconds
+                    chunk_len /= sampling_rate
+                    stride_left /= sampling_rate
+                    stride_right /= sampling_rate
+                    output["stride"] = chunk_len, stride_left, stride_right
+
             text, optional = self.tokenizer._decode_asr(
                 model_outputs,
                 return_timestamps=return_timestamps,
                 return_language=return_language,
                 time_precision=time_precision,
-                sampling_rate=self.feature_extractor.sampling_rate,
             )
         else:
             items = np.concatenate(final_items, axis=1)

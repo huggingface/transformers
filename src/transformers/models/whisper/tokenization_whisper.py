@@ -704,15 +704,26 @@ class WhisperTokenizer(PreTrainedTokenizer):
         forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_tokens)]
         return forced_decoder_ids
 
-    def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time_precision, sampling_rate):
+    def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time_precision):
         """
         Internal method meant to only be used by asr pipeline.
         Handles all the little quirks specific to whisper to handle the various options not allowed
         in other seq2seq models
         """
 
+        # =========== Overview ============
+        # We're going to iterate over all chunks of decoded audio
+        # For each audio, we're going to keep track of language, and timestamps
+        # (timestamp tokens might be missing, we'll just have chunks based on language)
+        # Each time we encounter a final timestamp token, we decide wether this is
+        # the end of a token or the end of a chunk, in which case we're not
+        # going to stop the timestamp right there but wait for the next chunk
+        # Before merging our found tokens into a final text.
+
+        last_language = None
+
         def new_chunk():
-            return {"language": None, "timestamp": [None, None], "text": ""}
+            return {"language": last_language, "timestamp": [None, None], "text": ""}
 
         chunks = []
         chunk = new_chunk()
@@ -726,10 +737,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             token_ids = output["tokens"][0].tolist()
             if "stride" in output:
                 chunk_len, stride_left, stride_right = output["stride"]
-                # Go back in seconds
-                chunk_len /= sampling_rate
-                stride_left /= sampling_rate
-                stride_right /= sampling_rate
 
                 time_offset -= stride_left
                 right_stride_start = time_offset + (chunk_len - stride_right)
@@ -738,10 +745,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
             for i, token in enumerate(token_ids):
                 # 4 possible states for each token
-                # - Language code
-                # - Timestamp
-                # - Regular text
-                # - all other special tokens
+                # - 1/ Language code
+                # - 2/ all other special tokens (which we ignore)
+                # - 3/ Timestamp
+                # - 4/ Regular text
                 if token in self.all_special_ids:
                     # Either language code or other
                     text = self.decode([token])
@@ -749,16 +756,24 @@ class WhisperTokenizer(PreTrainedTokenizer):
                     text = text[2:-2]
                     language = LANGUAGES.get(text, None)
                     if language is not None:
-                        # Indeed some language
+                        # 1/ Indeed some language
+                        # TODO Handle when language is different from the previous
+                        # one, and we cannot use timestamped tokens to create chunks
+                        last_language = language
                         chunk["language"] = language
+                    else:
+                        # 2/ This is a regular special token, ignoring it
+                        pass
                 elif token >= timestamp_begin:
-                    # Timestamp token
+                    # 3/ Timestamp token
                     time = (token - timestamp_begin) * time_precision + time_offset
                     time = round(time, 2)
                     if right_stride_start and time > right_stride_start:
                         # Whisper outputted a timestamp token, but it falls within
                         # our stride, so we're going to skip it for the time being
                         # and resolve this later
+                        # Skip is necessary because timestamp tokens always come
+                        # by pair, so we need to skip the next one too.
                         skip = True
                         continue
                     if chunk["timestamp"][0] is None:
@@ -766,20 +781,28 @@ class WhisperTokenizer(PreTrainedTokenizer):
                     elif skip:
                         skip = False
                     else:
-                        chunk["timestamp"][1] = time
                         # This is the end of the timestamp chunk
+                        chunk["timestamp"][1] = time
                         previous_tokens.append(current_tokens)
+                        # XXX: Handling merges. We always give priority to the tokens
+                        # from the LAST chunk (whisper seems to perform better this way)
+                        # There is only a merge to handle when there is more than one
+                        # sequence here. That happens only when the last timestamp
+                        # happened in the stride of the audio
                         resolved_tokens = _find_longest_common_sequence(previous_tokens)
                         resolved_text = self.decode(resolved_tokens)
                         chunk["text"] = resolved_text
+                        chunks.append(chunk)
+
+                        # Flush all our temporary context
                         current_tokens = []
                         previous_tokens = []
-
-                        chunks.append(chunk)
                         current_tokens = []
                         chunk = new_chunk()
                 else:
-                    # Regular token
+                    # 4/ Regular token
+                    # We just append to the list of all tokens so we can handle
+                    # merges later and decode into text.
                     current_tokens.append(token)
 
             if "stride" in output:
@@ -787,9 +810,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 # Leftover tokens
                 previous_tokens.append(current_tokens)
 
-        if chunk["text"]:
-            # There is some leftover text we don't want to miss
-            chunks.append(chunk)
+        if previous_tokens:
+            raise ValueError("Temporary value error")
+
         full_text = "".join(chunk["text"] for chunk in chunks)
         if return_timestamps or return_language:
             for chunk in chunks:
