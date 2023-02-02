@@ -14,14 +14,11 @@
 # limitations under the License.
 """ Testing suite for the TVLT image processor. """
 
-import json
-import os
-import tempfile
 import unittest
 
 import numpy as np
 
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingSavingTestMixin
