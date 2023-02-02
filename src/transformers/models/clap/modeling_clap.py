@@ -1732,7 +1732,7 @@ class CLAPModel(CLAPPreTrainedModel):
     @add_start_docstrings_to_model_forward(CLAP_VISION_INPUTS_DOCSTRING)
     def get_audio_features(
         self,
-        mel_fusion: Optional[torch.Tensor] = None,
+        input_features: Optional[torch.Tensor] = None,
         longer: Optional[torch.Tensor] = None,
         waveform: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
@@ -1748,7 +1748,7 @@ class CLAPModel(CLAPPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         audio_outputs = self.audio_model(
-            mel_fusion=mel_fusion,
+            input_features=input_features,
             longer=longer,
             waveform=waveform,
             return_dict=return_dict,
@@ -2180,9 +2180,9 @@ class CLAPSwinTransformer(nn.Module):
 
         return (framewise_output, torch.sigmoid(hidden_states), fine_grained_latent_output, latent_output)
 
-    def crop_wav(self, x, crop_size, spe_pos=None):
-        time_steps = x.shape[2]
-        tx = torch.zeros(x.shape[0], x.shape[1], crop_size, x.shape[3]).to(x.device)
+    def crop_wav(self, hidden_states, crop_size, spe_pos=None):
+        time_steps = hidden_states.shape[2]
+        tx = torch.zeros(hidden_states.shape[0], hidden_states.shape[1], crop_size, hidden_states.shape[3]).to(hidden_states.device)
         for i in range(len(x)):
             if spe_pos is None:
                 crop_pos = random.randint(0, time_steps - crop_size - 1)
@@ -2192,50 +2192,51 @@ class CLAPSwinTransformer(nn.Module):
         return tx
 
     # Reshape the wavform to a img size, if you want to use the pretrained swin transformer model
-    def reshape_wav2img(self, x):
-        _, _, T, F = x.shape
+    def reshape_wav2img(self, hidden_states):
+        _, _, time_steps, freq_steps = hidden_states.shape
+
         target_T = int(self.spec_size * self.freq_ratio)
         target_F = self.spec_size // self.freq_ratio
-        assert T <= target_T and F <= target_F, "the wav size should less than or equal to the swin input size"
+        
+        if time_steps > target_T or freq_steps > target_F:
+            raise ValueError(
+                "the wav size should less than or equal to the swin input size"
+            )
+        
         # to avoid bicubic zero error
-        if T < target_T:
-            x = nn.functional.interpolate(x, (target_T, x.shape[3]), mode="bicubic", align_corners=True)
-        if F < target_F:
-            x = nn.functional.interpolate(x, (x.shape[2], target_F), mode="bicubic", align_corners=True)
-        x = x.permute(0, 1, 3, 2).contiguous()
-        x = x.reshape(x.shape[0], x.shape[1], x.shape[2], self.freq_ratio, x.shape[3] // self.freq_ratio)
-        # print(x.shape)
-        x = x.permute(0, 1, 3, 2, 4).contiguous()
-        x = x.reshape(x.shape[0], x.shape[1], x.shape[2] * x.shape[3], x.shape[4])
-        return x
+        if time_steps < target_T:
+            hidden_states = nn.functional.interpolate(hidden_states, (target_T, hidden_states.shape[3]), mode="bicubic", align_corners=True)
+        if freq_steps < target_F:
+            hidden_states = nn.functional.interpolate(hidden_states, (hidden_states.shape[2], target_F), mode="bicubic", align_corners=True)
+    
+        # hidden_states = hidden_states.contiguous().view(hidden_states.shape[0], hidden_states.shape[1], hidden_states.shape[-1] * self.freq_ratio, hidden_states.shape[2] // self.freq_ratio)
+
+        hidden_states = hidden_states.permute(0, 1, 3, 2).contiguous()
+        hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], hidden_states.shape[2], self.freq_ratio, hidden_states.shape[3] // self.freq_ratio)
+        
+        hidden_states = hidden_states.permute(0, 1, 3, 2, 4).contiguous()
+        hidden_states = hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], hidden_states.shape[2] * hidden_states.shape[3], hidden_states.shape[4])
+        
+        return hidden_states
 
     def forward(
         self,
-        mel_fusion=None,
+        input_features=None,
         longer=None,
         waveform=None,
-        mixup_lambda=None,
-        device=None,
         return_dict=False,
     ):
-        # TODO: remove this
-        mel_fusion = mel_fusion[None, :].to(0)
-        waveform = waveform[None, :].to(0)
-
         if self.enable_fusion and longer.sum() == 0:
             # if no audio is longer than 10s, then randomly select one audio to be longer
             longer[torch.randint(0, longer.shape[0], (1,))] = True
 
-        # TODO: remove .to(device)
-        mel_fusion = mel_fusion.to(device=device, non_blocking=True)
-
-        mel_fusion = mel_fusion.transpose(1, 3)
-        hidden_states = self.bn0(mel_fusion)
+        input_features = input_features.transpose(1, 3)
+        hidden_states = self.bn0(input_features)
         hidden_states = hidden_states.transpose(1, 3)
 
         longer_list_idx = None
         if self.enable_fusion:
-            longer_list = longer.to(device=device, non_blocking=True)
+            longer_list = longer.to(input_features.device)
             longer_list_idx = torch.where(longer_list)[0]
 
         if self.training:
