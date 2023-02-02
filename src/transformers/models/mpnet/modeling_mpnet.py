@@ -458,7 +458,7 @@ class MPNetEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
-            position_bias = self.compute_position_bias(hidden_states, encoder_hidden_states)
+            position_bias = self.compute_position_bias(hidden_states, encoder_hidden_states, past_key_value)
 
             if self.gradient_checkpointing and self.training:
 
@@ -527,11 +527,17 @@ class MPNetEncoder(nn.Module):
             cross_attentions=all_cross_attentions,
         )
 
-    def compute_position_bias(self, hidden_states, encoder_hidden_states=None, num_buckets=32):
-        if encoder_hidden_states is None:
+    def compute_position_bias(self, hidden_states, encoder_hidden_states=None, past_key_value=None, num_buckets=32):
+        is_cross_attention = encoder_hidden_states is not None
+
+        if is_cross_attention and past_key_value is not None:
             bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), hidden_states.size(1)
-        else:
+        elif is_cross_attention:
             bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), encoder_hidden_states.size(1)
+        elif past_key_value is not None:
+            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), hidden_states.size(1) + encoder_hidden_states.size(1)
+        else:
+            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), hidden_states.size(1)
 
         context_position = torch.arange(qlen, dtype=torch.long)[:, None]
         memory_position = torch.arange(klen, dtype=torch.long)[None, :]
