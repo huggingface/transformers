@@ -601,16 +601,11 @@ class Trainer:
                     if self.sharded_ddp is not None:
                         self.scaler = ShardedGradScaler()
                     elif self.fsdp is not None:
-                        if self.amp_dtype == torch.float16:
-                            from torch.distributed.fsdp.sharded_grad_scaler import (
-                                ShardedGradScaler as FSDPShardedGradScaler,
-                            )
+                        from torch.distributed.fsdp.sharded_grad_scaler import (
+                            ShardedGradScaler as FSDPShardedGradScaler,
+                        )
 
-                            self.scaler = FSDPShardedGradScaler()
-                        else:
-                            self.do_grad_scaling = False
-                            self.use_cuda_amp = False
-                            self.amp_dtype = None
+                        self.scaler = FSDPShardedGradScaler()
 
                     elif is_torch_tpu_available():
                         from torch_xla.amp import GradScaler
