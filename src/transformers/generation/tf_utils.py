@@ -1844,7 +1844,7 @@ class TFGenerationMixin:
                 values: `True`, where the generation stops as soon as there are `num_beams` complete candidates;
                 `False`, where an heuristic is applied and the generation stops when is it very unlikely to find better
                 candidates; `"never"`, where the beam search procedure only stops when there cannot be better
-                candidates.
+                candidates (canonical beam search algorithm).
             logits_processor (`[TFLogitsProcessorList]`, *optional*):
                 An instance of [`TFLogitsProcessorList`]. List of instances of class derived from [`TFLogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
@@ -2014,7 +2014,9 @@ class TFGenerationMixin:
             not_max_length_yet = cur_len < max_length
 
             # 2. can the new beams still improve?
-            # early_stopping == False -> apply heuristic = always get the best score from `cur_len`
+            # early_stopping == False -> apply heuristic = always get the best score from `cur_len`. See the discussion
+            # below for more details.
+            # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
             # early_stopping == "never" -> compute the best score from max_length or cur_len, depending on the sign of
             #   length_penalty. Positive length_penalty favors longer sequences, thus we use max_length there.
             if early_stopping == "never" and length_penalty > 0.0:

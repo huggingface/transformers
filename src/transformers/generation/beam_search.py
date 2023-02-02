@@ -143,7 +143,8 @@ class BeamSearchScorer(BeamScorer):
             Controls the stopping condition for beam-based methods, like beam-search. It accepts the following values:
             `True`, where the generation stops as soon as there are `num_beams` complete candidates; `False`, where an
             heuristic is applied and the generation stops when is it very unlikely to find better candidates;
-            `"never"`, where the beam search procedure only stops when there cannot be better candidates.
+            `"never"`, where the beam search procedure only stops when there cannot be better candidates (canonical
+            beam search algorithm).
         num_beam_hyps_to_keep (`int`, *optional*, defaults to 1):
             The number of beam hypotheses that shall be returned upon calling
             [`~transformer.BeamSearchScorer.finalize`].
@@ -415,7 +416,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             Controls the stopping condition for beam-based methods, like beam-search. It accepts the following values:
             `True`, where the generation stops as soon as there are `num_beams` complete candidates; `False`, where an
             heuristic is applied and the generation stops when is it very unlikely to find better candidates;
-            `"never"`, where the beam search procedure only stops when there cannot be better candidates.
+            `"never"`, where the beam search procedure only stops when there cannot be better candidates (canonical
+            beam search algorithm).
         num_beam_hyps_to_keep (`int`, *optional*, defaults to 1):
             The number of beam hypotheses that shall be returned upon calling
             [`~transformer.BeamSearchScorer.finalize`].
@@ -908,6 +910,8 @@ class BeamHypotheses:
         if self.early_stopping is True:
             return True
         # `False`: heuristic -- compute best possible score from `cur_len`, even though it is not entirely accurate
+        #  when `length_penalty` is positive. See the discussion below for more details.
+        # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
         elif self.early_stopping is False:
             highest_attainable_score = best_sum_logprobs / cur_len**self.length_penalty
             ret = self.worst_score >= highest_attainable_score

@@ -75,7 +75,8 @@ class GenerationConfig(PushToHubMixin):
             Controls the stopping condition for beam-based methods, like beam-search. It accepts the following values:
             `True`, where the generation stops as soon as there are `num_beams` complete candidates; `False`, where an
             heuristic is applied and the generation stops when is it very unlikely to find better candidates;
-            `"never"`, where the beam search procedure only stops when there cannot be better candidates.
+            `"never"`, where the beam search procedure only stops when there cannot be better candidates (canonical
+            beam search algorithm).
         max_time(`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
