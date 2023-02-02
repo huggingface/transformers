@@ -29,9 +29,10 @@ from transformers import (
     Wav2Vec2ForCTC,
     WhisperForConditionalGeneration,
 )
+from transformers.models.whisper.tokenization_whisper import _find_timestamp_sequence
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter
-from transformers.pipelines.automatic_speech_recognition import _find_timestamp_sequence, chunk_iter
+from transformers.pipelines.automatic_speech_recognition import chunk_iter
 from transformers.testing_utils import (
     is_torch_available,
     nested_simplify,
