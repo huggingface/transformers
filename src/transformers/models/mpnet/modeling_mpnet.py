@@ -528,7 +528,7 @@ class MPNetEncoder(nn.Module):
         )
 
     def compute_position_bias(self, hidden_states, encoder_hidden_states=None, past_key_value=None, num_buckets=32):
-        bsz, qlen = hidden_states.size(0)
+        bsz, qlen = hidden_states.size(0), hidden_states.size(1)
         
         is_cross_attention = encoder_hidden_states is not None
 
