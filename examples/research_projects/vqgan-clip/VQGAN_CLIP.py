@@ -37,7 +37,6 @@ class ProcessorGradientFlow:
         return images
 
     def __call__(self, text=None, images=None, **kwargs):
-        # processed_inputs = self.processor(text=text, images=None, **kwargs)
         encoding = self.tokenizer(text=text, **kwargs)
         encoding["pixel_values"] = self.preprocess_img(images)
         encoding = {key: value.to(self.device) for (key, value) in encoding.items()}
