@@ -358,18 +358,19 @@ class Trainer:
             self.is_model_parallel = False
 
         # At this stage the model is already loaded
-        if getattr(model, "is_loaded_in_8bit", False) and not getattr(model, "_is_int8_training_enabled", False):
-            raise ValueError(
-                "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit model,"
-                " please make sure that you have installed `bitsandbytes>=0.37.0`. "
-            )
-
-        if getattr(model, "_is_int8_training_enabled", False):
-            logger.info(
-                "The model is loaded in 8-bit precision. To train this model you need to add additional modules",
-                " inside the model such as adapters using `peft` library and freeze the model weights. Please check ",
-                " the examples in https://github.com/huggingface/peft for more details.",
-            )
+        if getattr(model, "is_loaded_in_8bit", False):
+            if getattr(model, "_is_int8_training_enabled", False):
+                logger.info(
+                    "The model is loaded in 8-bit precision. To train this model you need to add additional modules",
+                    " inside the model such as adapters using `peft` library and freeze the model weights. Please"
+                    " check ",
+                    " the examples in https://github.com/huggingface/peft for more details.",
+                )
+            else:
+                raise ValueError(
+                    "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
+                    " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
+                )
 
         # Setup Sharded DDP training
         self.sharded_ddp = None
