@@ -136,6 +136,13 @@ class DeiTImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class DetaImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class DetrFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 

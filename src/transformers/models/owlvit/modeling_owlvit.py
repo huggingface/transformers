@@ -476,9 +476,9 @@ class OwlViTEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = OwlViTAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = OwlViTMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -790,7 +790,7 @@ class OwlViTTextTransformer(nn.Module):
         embed_dim = config.hidden_size
         self.embeddings = OwlViTTextEmbeddings(config)
         self.encoder = OwlViTEncoder(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim)
+        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(OWLVIT_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTTextConfig)
@@ -922,9 +922,9 @@ class OwlViTVisionTransformer(nn.Module):
         self.config = config
 
         self.embeddings = OwlViTVisionEmbeddings(config)
-        self.pre_layernorm = nn.LayerNorm(config.hidden_size)
+        self.pre_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.encoder = OwlViTEncoder(config)
-        self.post_layernorm = nn.LayerNorm(config.hidden_size)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(OWLVIT_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=OwlViTVisionConfig)
@@ -1318,7 +1318,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         self.class_head = OwlViTClassPredictionHead(config)
         self.box_head = OwlViTBoxPredictionHead(config)
 
-        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.vision_config.layer_norm_eps)
         self.sigmoid = nn.Sigmoid()
 
     def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
