@@ -528,16 +528,18 @@ class MPNetEncoder(nn.Module):
         )
 
     def compute_position_bias(self, hidden_states, encoder_hidden_states=None, past_key_value=None, num_buckets=32):
+        bsz, qlen = hidden_states.size(0)
+        
         is_cross_attention = encoder_hidden_states is not None
 
         if is_cross_attention and past_key_value is not None:
-            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), hidden_states.size(1)
+            klen = past_key_value[0].shape[2]
         elif is_cross_attention:
-            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), encoder_hidden_states.size(1)
+            klen = encoder_hidden_states.size(1)
         elif past_key_value is not None:
-            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), hidden_states.size(1) + encoder_hidden_states.size(1)
+            klen = past_key_value[0].shape[2] + hidden_states.size(1)
         else:
-            bsz, qlen, klen = hidden_states.size(0), hidden_states.size(1), hidden_states.size(1)
+            klen = hidden_states.size(1)
 
         context_position = torch.arange(qlen, dtype=torch.long)[:, None]
         memory_position = torch.arange(klen, dtype=torch.long)[None, :]
