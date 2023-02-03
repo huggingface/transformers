@@ -398,8 +398,6 @@ class OPTPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
     def _init_weights(self, module):
-        if module._is_hf_initialized:
-            return
         std = self.config.init_std
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -409,7 +407,6 @@ class OPTPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        module._is_hf_initialized = True
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (OPTDecoder)):

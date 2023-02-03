@@ -1189,6 +1189,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         raise NotImplementedError(f"Make sure `_init_weights` is implemented for {self.__class__}")
 
+    def _initialize_weights(self, module):
+        """
+        Initialize the weights if they are not already initialized.
+        """
+        if getattr(module, "_is_hf_initialized", False):
+            return
+        self._init_weights(module)
+        module._is_hf_initialized = True
+
     def tie_weights(self):
         """
         Tie the weights between the input embeddings and the output embeddings.

@@ -2790,8 +2790,6 @@ class OneFormerPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
 
     def _init_weights(self, module: nn.Module):
-        if getattr(module, "_is_hf_initialized", False):
-            return
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
         if isinstance(module, OneFormerTransformerModule):
@@ -2899,7 +2897,6 @@ class OneFormerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        module._is_hf_initialized = True
 
 
 @add_start_docstrings(

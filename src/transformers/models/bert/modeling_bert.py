@@ -745,8 +745,6 @@ class BertPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if getattr(module, "_is_hf_initialized", False):
-            return
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -760,7 +758,6 @@ class BertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        module._is_hf_initialized = True
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BertEncoder):
