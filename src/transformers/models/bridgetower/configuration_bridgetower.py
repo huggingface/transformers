@@ -260,8 +260,6 @@ class BridgeTowerConfig(PretrainedConfig):
     Args:
         share_cross_modal_transformer_layers (`bool`, *optional*, defaults to `True`):
             Whether cross modal transformer layers are shared.
-        head_hidden_scale (`int`, *optional*, defaults to 2):
-            Scale of hidden layers head.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
         hidden_size (`int`, *optional*, defaults to 768):
@@ -307,7 +305,6 @@ class BridgeTowerConfig(PretrainedConfig):
     def __init__(
         self,
         share_cross_modal_transformer_layers=True,
-        head_hidden_scale=2,
         hidden_act="gelu",
         hidden_size=768,
         initializer_factor=1,
@@ -324,7 +321,6 @@ class BridgeTowerConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers
-        self.head_hidden_scale = head_hidden_scale
         self.hidden_act = hidden_act
         self.hidden_size = hidden_size
         self.initializer_factor = initializer_factor
