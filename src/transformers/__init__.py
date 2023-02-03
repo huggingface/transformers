@@ -433,6 +433,13 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
+    "models.transformer_transducer": [
+        "TRANSFORMER_TRANSDUCER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TransformerTransducerConfig",
+        "TransformerTransducerFeatureExtractor",
+        "TransformerTransducerProcessor",
+        "TransformerTransducerTokenizer",
+    ],
     "models.trocr": [
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrOCRConfig",
@@ -947,6 +954,7 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2327,6 +2335,14 @@ else:
             "TransfoXLModel",
             "TransfoXLPreTrainedModel",
             "load_tf_weights_in_transfo_xl",
+        ]
+    )
+    _import_structure["models.transformer_transducer"].extend(
+        [
+            "TRANSFORMER_TRANSDUCER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TransformerTransducerForRNNT",
+            "TransformerTransducerModel",
+            "TransformerTransducerPreTrainedModel",
         ]
     )
     _import_structure["models.trocr"].extend(
@@ -3893,6 +3909,13 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.transformer_transducer import (
+        TRANSFORMER_TRANSDUCER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TransformerTransducerConfig,
+        TransformerTransducerFeatureExtractor,
+        TransformerTransducerProcessor,
+        TransformerTransducerTokenizer,
+    )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
@@ -4326,8 +4349,6 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
-
-        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -5455,6 +5476,14 @@ if TYPE_CHECKING:
             TransfoXLModel,
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
+        )
+
+        # PyTorch model imports
+        from .models.transformer_transducer import (
+            TRANSFORMER_TRANSDUCER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TransformerTransducerForRNNT,
+            TransformerTransducerModel,
+            TransformerTransducerPreTrainedModel,
         )
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.unispeech import (
