@@ -28,6 +28,7 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 from jax.random import PRNGKey
 
+from ...generation.flax_logits_process import FlaxWhisperTimeStampLogitsProcessor
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
@@ -1340,6 +1341,71 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
             outputs = outputs[:1] + (unfreeze(past["cache"]),) + outputs[1:]
 
         return outputs
+
+    def generate(
+        self,
+        input_features,
+        generation_config=None,
+        logits_processor=None,
+        return_timestamps=None,
+        task=None,
+        language=None,
+        is_multilingual=None,
+        **kwargs
+    ):
+        if generation_config is None:
+            generation_config = self.generation_config
+
+        if return_timestamps is not None:
+            generation_config.return_timestamps = return_timestamps
+
+        if task is not None:
+            generation_config.task = task
+
+        if is_multilingual is not None:
+            generation_config.is_multilingual = is_multilingual
+
+        if language is not None:
+            generation_config.language = language
+
+        if kwargs is not None and "decoder_input_ids" in kwargs:
+            decoder_input_length = len(kwargs["decoder_input_ids"])
+        else:
+            decoder_input_length = 1
+
+        forced_decoder_ids = []
+
+        if hasattr(generation_config, "is_multilingual") and generation_config.is_multilingual:
+            if hasattr(generation_config, "language"):
+                forced_decoder_ids.append((1, generation_config.lang_to_id[generation_config.language]))
+            else:
+                forced_decoder_ids.append((1, None))
+
+            if hasattr(generation_config, "task"):
+                forced_decoder_ids.append((2, generation_config.task_to_id[generation_config.task]))
+            else:
+                forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))
+
+        if (
+            hasattr(generation_config, "return_timestamps") and generation_config.return_timestamps
+        ) or return_timestamps:
+            logits_processor = [
+                FlaxWhisperTimeStampLogitsProcessor(generation_config, self.config, decoder_input_length)
+            ]
+        else:
+            if forced_decoder_ids and forced_decoder_ids[-1][0] != generation_config.no_timestamps_token_id:
+                idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
+                forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
+
+        if len(forced_decoder_ids) > 0:
+            generation_config.forced_decoder_ids = forced_decoder_ids
+
+        return super().generate(
+            input_features,
+            generation_config,
+            logits_processor=logits_processor,
+            **kwargs,
+        )
 
     def prepare_inputs_for_generation(
         self,
