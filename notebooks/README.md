@@ -126,8 +126,8 @@ You can open any page of the documentation as a notebook in Colab (there is a bu
 
 #### Utility notebooks[[tensorflow-utility]]
 
-| Notebook                                                                                                                              | Description                                             |   |   |
-|:--------------------------------------------------------------------------------------------------------------------------------------|:--------------------------------------------------------|:-------------|------:|
+| Notebook     |      Description      |   |   |
+|:----------|:-------------|:-------------|------:|
 | [How to train TF/Keras models on TPU](https://github.com/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) | See how to train at high speed on Google's TPU hardware | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) | [![Open in AWS Studio](https://studiolab.sagemaker.aws/studiolab.svg)](https://studiolab.sagemaker.aws/import/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb.ipynb) |
 
 ### Optimum notebooks
