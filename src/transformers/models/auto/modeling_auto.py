@@ -162,6 +162,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("timesformer", "TimesformerModel"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
+        ("transformer_transducer", "TransformerTransducerModel"),
         ("unispeech", "UniSpeechModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
         ("van", "VanModel"),
@@ -870,6 +871,13 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2ForCTC"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForCTC"),
         ("wavlm", "WavLMForCTC"),
+    ]
+)
+
+MODEL_FOR_RNNT_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Recurrent Neural Network-Transducer (RNNT) mapping
+        ("transformer_transducer", "TransformerTransducerForRNNT"),
     ]
 )
 
