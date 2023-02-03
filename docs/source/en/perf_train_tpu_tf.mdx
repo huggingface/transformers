@@ -13,7 +13,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 
 <Tip>
 
-If you don't need long explanations and just want TPU code samples to get started with, check out [our TPU tutorial notebook!](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb)
+If you don't need long explanations and just want TPU code samples to get started with, check out [our TPU example notebook!](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb)
 
 </Tip>
 
@@ -45,7 +45,7 @@ If you can fit all your data in memory as `np.ndarray` or `tf.Tensor`, then you 
 
 The second way to access a TPU is via a **TPU VM.** When using a TPU VM, you connect directly to the machine that the TPU is attached to, much like training on a GPU VM. TPU VMs are generally easier to work with, particularly when it comes to your data pipeline. All of the above warnings do not apply to TPU VMs!
 
-This is an opinionated document, so here’s our opinion: **Avoid using TPU Node if possible.** It is more confusing and more difficult to debug than TPU VMs. It is also likely to be unsupported in future - Google’s latest TPU, TPUv4, can only be accessed as a TPU VM, which suggests that TPU Nodes are increasingly going to become a “legacy” access method. However, we understand that the only free TPU access is on Colab and Kaggle Kernels, which uses TPU Node - so we’ll try to explain how to handle it if you have to! Check the [TPU example notebook]((https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) for code samples that explain this in more detail.
+This is an opinionated document, so here’s our opinion: **Avoid using TPU Node if possible.** It is more confusing and more difficult to debug than TPU VMs. It is also likely to be unsupported in future - Google’s latest TPU, TPUv4, can only be accessed as a TPU VM, which suggests that TPU Nodes are increasingly going to become a “legacy” access method. However, we understand that the only free TPU access is on Colab and Kaggle Kernels, which uses TPU Node - so we’ll try to explain how to handle it if you have to! Check the [TPU example notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) for code samples that explain this in more detail.
 
 ### What sizes of TPU are available?
 
@@ -148,10 +148,10 @@ There was a lot in here, so let’s summarize with a quick checklist you can fol
 
 - Make sure your code follows the three rules of XLA
 - Compile your model with `jit_compile=True` on CPU/GPU and confirm that you can train it with XLA
-- Either load your dataset into memory or use a TPU-compatible dataset loading approach (see [notebook]((https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
+- Either load your dataset into memory or use a TPU-compatible dataset loading approach (see [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
 - Migrate your code either to Colab (with accelerator set to “TPU”) or a TPU VM on Google Cloud
-- Add TPU initializer code (see [notebook]((https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
-- Create your `TPUStrategy` and make sure dataset loading and model creation are inside the `strategy.scope()` (see [notebook]((https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
+- Add TPU initializer code (see [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
+- Create your `TPUStrategy` and make sure dataset loading and model creation are inside the `strategy.scope()` (see [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
 - Don’t forget to take `jit_compile=True` out again when you move to TPU!
 - 🙏🙏🙏🥺🥺🥺
 - Call model.fit()
