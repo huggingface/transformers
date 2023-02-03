@@ -52,7 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openai/whisper-tiny"
 _CONFIG_FOR_DOC = "WhisperConfig"
-_TOKENIZER_FOR_DOC = "WhisperTokenizer"
 
 
 WHISPER_START_DOCSTRING = r"""
@@ -266,8 +265,8 @@ class FlaxWhisperAttention(nn.Module):
             # attention mask in the form of attention bias
             attention_bias = lax.select(
                 attention_mask > 0,
-                jnp.full(attention_mask.shape, 0.0),
-                jnp.full(attention_mask.shape, -1e4),
+                jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -1132,9 +1131,7 @@ class FlaxWhisperModel(FlaxWhisperPreTrainedModel):
     module_class = FlaxWhisperModule
 
 
-append_call_sample_docstring(
-    FlaxWhisperModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxWhisperModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxWhisperForConditionalGenerationModule(nn.Module):
