@@ -397,7 +397,7 @@ class Blip2ForConditionalGenerationModelTester:
 
         expected_seq_length = self.num_query_tokens + self.text_model_tester.seq_length
         self.parent.assertEqual(
-            result.decoder_logits.shape,
+            result.logits.shape,
             (self.vision_model_tester.batch_size, expected_seq_length, self.text_model_tester.vocab_size),
         )
 
