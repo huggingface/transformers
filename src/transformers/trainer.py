@@ -60,7 +60,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from huggingface_hub import Repository
+from huggingface_hub import Repository, create_repo
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -138,6 +138,7 @@ from .utils import (
     can_return_loss,
     find_labels,
     get_full_repo_name,
+    is_accelerate_available,
     is_apex_available,
     is_datasets_available,
     is_in_notebook,
@@ -193,6 +194,14 @@ else:
     IS_SAGEMAKER_MP_POST_1_10 = False
 
 
+skip_first_batches = None
+if is_accelerate_available():
+    from accelerate import __version__ as accelerate_version
+
+    if version.parse(accelerate_version) >= version.parse("0.16"):
+        from accelerate import skip_first_batches
+
+
 if TYPE_CHECKING:
     import optuna
 
@@ -244,7 +253,7 @@ class Trainer:
              `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
              dataset prepending the dictionary key to the metric name.
         tokenizer ([`PreTrainedTokenizerBase`], *optional*):
-            The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
+            The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs to the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
             interrupted training or reuse the fine-tuned model.
         model_init (`Callable[[], PreTrainedModel]`, *optional*):
@@ -359,10 +368,18 @@ class Trainer:
 
         # At this stage the model is already loaded
         if getattr(model, "is_loaded_in_8bit", False):
-            raise ValueError(
-                "The model you want to train is loaded in 8-bit precision. "
-                "Training an 8-bit model is not supported yet. "
-            )
+            if getattr(model, "_is_int8_training_enabled", False):
+                logger.info(
+                    "The model is loaded in 8-bit precision. To train this model you need to add additional modules"
+                    " inside the model such as adapters using `peft` library and freeze the model weights. Please"
+                    " check "
+                    " the examples in https://github.com/huggingface/peft for more details."
+                )
+            else:
+                raise ValueError(
+                    "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
+                    " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
+                )
 
         # Setup Sharded DDP training
         self.sharded_ddp = None
@@ -408,7 +425,7 @@ class Trainer:
             if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.12.0"):
                 raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
-            from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
+            from torch.distributed.fsdp.fully_sharded_data_parallel import BackwardPrefetch, ShardingStrategy
 
             if FSDPOption.FULL_SHARD in args.fsdp:
                 self.fsdp = ShardingStrategy.FULL_SHARD
@@ -416,6 +433,14 @@ class Trainer:
                 self.fsdp = ShardingStrategy.SHARD_GRAD_OP
             elif FSDPOption.NO_SHARD in args.fsdp:
                 self.fsdp = ShardingStrategy.NO_SHARD
+
+            self.backward_prefetch = BackwardPrefetch.BACKWARD_PRE
+            if "backward_prefetch" in self.args.fsdp_config and "backward_pos" not in self.backward_prefetch:
+                self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
+
+            self.forword_prefetch = False
+            if "forword_prefetch" in self.args.fsdp_config and self.backward_prefetch:
+                self.forword_prefetch = True
 
         # one place to sort out whether to place the model on device or not
         # postpone switching model to cuda when:
@@ -441,7 +466,7 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        if self.place_model_on_device:
+        if self.place_model_on_device and not getattr(model, "is_loaded_in_8bit", False):
             self._move_model_to_device(model, args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
@@ -1020,11 +1045,15 @@ class Trainer:
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
-                    "params": [p for n, p in opt_model.named_parameters() if n in decay_parameters],
+                    "params": [
+                        p for n, p in opt_model.named_parameters() if (n in decay_parameters and p.requires_grad)
+                    ],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
-                    "params": [p for n, p in opt_model.named_parameters() if n not in decay_parameters],
+                    "params": [
+                        p for n, p in opt_model.named_parameters() if (n not in decay_parameters and p.requires_grad)
+                    ],
                     "weight_decay": 0.0,
                 },
             ]
@@ -1044,10 +1073,14 @@ class Trainer:
 
                     manager = bitsandbytes.optim.GlobalOptimManager.get_instance()
 
+                    skipped = 0
                     for module in opt_model.modules():
                         if isinstance(module, nn.Embedding):
+                            skipped += sum(dict((p.data_ptr(), p.numel()) for p in module.parameters()).values())
+                            print(f"skipped {module}: {skipped/2**20}M params")
                             manager.register_module_override(module, "weight", {"optim_bits": 32})
                             logger.debug(f"bitsandbytes: will optimize {module} in fp32")
+                    print(f"skipped: {skipped/2**20}M params")
 
         if is_sagemaker_mp_enabled():
             self.optimizer = smp.DistributedOptimizer(self.optimizer)
@@ -1309,8 +1342,9 @@ class Trainer:
 
         if not training:
             model.eval()
+            dtype = torch.bfloat16 if not self.is_in_train and self.args.bf16_full_eval else dtype
             # conv_bn_folding is disabled as it fails in symbolic tracing, resulting in ipex warnings
-            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False)
+            model = ipex.optimize(model, dtype=dtype, level="O1", conv_bn_folding=False, inplace=not self.is_in_train)
         else:
             if not model.training:
                 model.train()
@@ -1392,10 +1426,11 @@ class Trainer:
                 cpu_offload = CPUOffload(offload_params=False)
 
             auto_wrap_policy = None
+
             if FSDPOption.AUTO_WRAP in self.args.fsdp:
-                if self.args.fsdp_min_num_params > 0:
+                if self.args.fsdp_config["fsdp_min_num_params"] > 0:
                     auto_wrap_policy = functools.partial(
-                        size_based_auto_wrap_policy, min_num_params=self.args.fsdp_min_num_params
+                        size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
                     )
                 elif self.args.fsdp_transformer_layer_cls_to_wrap is not None:
                     transformer_cls_to_wrap = get_module_class_from_name(
@@ -1425,6 +1460,8 @@ class Trainer:
                     auto_wrap_policy=auto_wrap_policy,
                     mixed_precision=mixed_precision_policy,
                     device_id=self.args.device,
+                    backward_prefetch=self.backward_prefetch,
+                    forward_prefetch=self.forword_prefetch,
                 )
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
@@ -1671,12 +1708,20 @@ class Trainer:
             logger.info(f"  Continuing training from epoch {epochs_trained}")
             logger.info(f"  Continuing training from global step {self.state.global_step}")
             if not args.ignore_data_skip:
-                logger.info(
-                    f"  Will skip the first {epochs_trained} epochs then the first {steps_trained_in_current_epoch} "
-                    "batches in the first epoch. If this takes a lot of time, you can add the `--ignore_data_skip` "
-                    "flag to your launch command, but you will resume the training on data already seen by your model."
-                )
-                if self.is_local_process_zero() and not args.disable_tqdm:
+                if skip_first_batches is None:
+                    logger.info(
+                        f"  Will skip the first {epochs_trained} epochs then the first"
+                        f" {steps_trained_in_current_epoch} batches in the first epoch. If this takes a lot of time,"
+                        " you can install the latest version of Accelerate with `pip install -U accelerate`.You can"
+                        " also add the `--ignore_data_skip` flag to your launch command, but you will resume the"
+                        " training on data already seen by your model."
+                    )
+                else:
+                    logger.info(
+                        f"  Will skip the first {epochs_trained} epochs then the first"
+                        f" {steps_trained_in_current_epoch} batches in the first epoch."
+                    )
+                if self.is_local_process_zero() and not args.disable_tqdm and skip_first_batches is None:
                     steps_trained_progress_bar = tqdm(total=steps_trained_in_current_epoch)
                     steps_trained_progress_bar.set_description("Skipping the first batches")
 
@@ -1752,8 +1797,17 @@ class Trainer:
             if epoch == epochs_trained and resume_from_checkpoint is not None and steps_trained_in_current_epoch == 0:
                 self._load_rng_state(resume_from_checkpoint)
 
+            rng_to_sync = False
+            if skip_first_batches is not None and steps_trained_in_current_epoch > 0:
+                epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
+                steps_trained_in_current_epoch = 0
+                rng_to_sync = True
+
             step = -1
             for step, inputs in enumerate(epoch_iterator):
+                if rng_to_sync:
+                    self._load_rng_state(resume_from_checkpoint)
+                    rng_to_sync = False
 
                 # Skip past any already trained steps if resuming training
                 if steps_trained_in_current_epoch > 0:
@@ -1919,8 +1973,8 @@ class Trainer:
         run_dir = self._get_output_dir(trial)
         checkpoints_sorted = self._sorted_checkpoints(use_mtime=False, output_dir=run_dir)
 
-        # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint.
-        if self.state.best_model_checkpoint is not None and self.args.save_total_limit == 1:
+        # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint and process allowed to save.
+        if self.args.should_save and self.state.best_model_checkpoint is not None and self.args.save_total_limit == 1:
             for checkpoint in checkpoints_sorted:
                 if checkpoint != self.state.best_model_checkpoint:
                     logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
@@ -2776,7 +2830,7 @@ class Trainer:
         checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
         for checkpoint in checkpoints_to_be_deleted:
             logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
-            shutil.rmtree(checkpoint)
+            shutil.rmtree(checkpoint, ignore_errors=True)
 
     def evaluate(
         self,
@@ -3310,7 +3364,6 @@ class Trainer:
         """
         if not self.is_world_process_zero():
             return
-        use_auth_token = True if self.args.hub_token is None else self.args.hub_token
         if self.args.hub_model_id is None:
             repo_name = Path(self.args.output_dir).absolute().name
         else:
@@ -3318,22 +3371,15 @@ class Trainer:
         if "/" not in repo_name:
             repo_name = get_full_repo_name(repo_name, token=self.args.hub_token)
 
+        # Make sure the repo exists.
+        create_repo(repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
         try:
-            self.repo = Repository(
-                self.args.output_dir,
-                clone_from=repo_name,
-                use_auth_token=use_auth_token,
-                private=self.args.hub_private_repo,
-            )
+            self.repo = Repository(self.args.output_dir, clone_from=repo_name, token=self.args.hub_token)
         except EnvironmentError:
             if self.args.overwrite_output_dir and at_init:
                 # Try again after wiping output_dir
                 shutil.rmtree(self.args.output_dir)
-                self.repo = Repository(
-                    self.args.output_dir,
-                    clone_from=repo_name,
-                    use_auth_token=use_auth_token,
-                )
+                self.repo = Repository(self.args.output_dir, clone_from=repo_name, token=self.args.hub_token)
             else:
                 raise
 

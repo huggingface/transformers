@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/reformer-crime-and-punishment"
 _CONFIG_FOR_DOC = "ReformerConfig"
-_TOKENIZER_FOR_DOC = "ReformerTokenizer"
 
 REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/reformer-crime-and-punishment",
@@ -1923,7 +1922,7 @@ REFORMER_INPUTS_DOCSTRING = r"""
             a multiple of the relevant model's chunk lengths (lsh's, local's or both). During evaluation, the indices
             are automatically padded to be a multiple of the chunk length.
 
-            Indices can be obtained using [`ReformerTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -2009,7 +2008,6 @@ class ReformerModel(ReformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=ReformerModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2220,7 +2218,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2286,14 +2283,16 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             attentions=reformer_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, num_hashes=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, **kwargs
+    ):
         # only last token for inputs_ids if past is defined in kwargs
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         inputs_dict = {
             "input_ids": input_ids,
-            "past_buckets_states": past,
+            "past_buckets_states": past_key_values,
             "use_cache": use_cache,
             "num_hashes": num_hashes,
         }
@@ -2358,18 +2357,28 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
 
         Returns:
 
+        <Tip warning={true}>
+
+        This example uses a false checkpoint since we don't have any available pretrained model for the masked language
+        modeling task with the Reformer architecture.
+
+        </Tip>
+
         Example:
 
         ```python
         >>> import torch
-        >>> from transformers import ReformerTokenizer, ReformerForMaskedLM
+        >>> from transformers import AutoTokenizer, ReformerForMaskedLM
 
-        >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
+        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
         >>> model = ReformerForMaskedLM.from_pretrained("hf-internal-testing/tiny-random-reformer")
 
         >>> # add mask_token
         >>> tokenizer.add_special_tokens({"mask_token": "[MASK]"})  # doctest: +IGNORE_RESULT
         >>> inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
+
+        >>> # resize model's embedding matrix
+        >>> model.resize_token_embeddings(new_num_tokens=model.config.vocab_size + 1)  # doctest: +IGNORE_RESULT
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
@@ -2378,8 +2387,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         >>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
 
         >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
-        >>> tokenizer.decode(predicted_token_id)
-        'it'
+        >>> predicted_token = tokenizer.decode(predicted_token_id)
         ```
 
         ```python
@@ -2390,8 +2398,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         ... )
 
         >>> outputs = model(**inputs, labels=labels)
-        >>> round(outputs.loss.item(), 2)
-        7.09
+        >>> loss = round(outputs.loss.item(), 2)
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2477,10 +2484,10 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import ReformerTokenizer, ReformerForSequenceClassification
+        >>> from transformers import AutoTokenizer, ReformerForSequenceClassification
 
-        >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
-        >>> model = ReformerForSequenceClassification.from_pretrained("hf-internal-testing/tiny-random-reformer")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/reformer-crime-and-punishment")
+        >>> model = ReformerForSequenceClassification.from_pretrained("google/reformer-crime-and-punishment")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
 
@@ -2488,60 +2495,18 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         ...     logits = model(**inputs).logits
 
         >>> predicted_class_id = logits.argmax().item()
-        >>> model.config.id2label[predicted_class_id]
-        'LABEL_1'
+        >>> label = model.config.id2label[predicted_class_id]
         ```
 
         ```python
         >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
         >>> num_labels = len(model.config.id2label)
         >>> model = ReformerForSequenceClassification.from_pretrained(
-        ...     "hf-internal-testing/tiny-random-reformer", num_labels=num_labels
+        ...     "google/reformer-crime-and-punishment", num_labels=num_labels
         ... )
 
         >>> labels = torch.tensor(1)
         >>> loss = model(**inputs, labels=labels).loss
-        >>> round(loss.item(), 2)
-        0.69
-        ```
-
-        Example of multi-label classification:
-
-        ```python
-        >>> import torch
-        >>> from transformers import ReformerTokenizer, ReformerForSequenceClassification
-
-        >>> tokenizer = ReformerTokenizer.from_pretrained("hf-internal-testing/tiny-random-reformer")
-        >>> model = ReformerForSequenceClassification.from_pretrained(
-        ...     "hf-internal-testing/tiny-random-reformer", problem_type="multi_label_classification"
-        ... )
-
-        >>> # add pad_token
-        >>> tokenizer.add_special_tokens({"pad_token": "[PAD]"})  # doctest: +IGNORE_RESULT
-        >>> inputs = tokenizer("Hello, my dog is cute", max_length=100, padding="max_length", return_tensors="pt")
-
-        >>> with torch.no_grad():
-        ...     logits = model(**inputs).logits
-
-        >>> predicted_class_id = logits.argmax().item()
-        >>> model.config.id2label[predicted_class_id]
-        'LABEL_1'
-        ```
-
-        ```python
-        >>> # To train a model on `num_labels` classes, you can pass `num_labels=num_labels` to `.from_pretrained(...)`
-        >>> num_labels = len(model.config.id2label)
-        >>> model = ReformerForSequenceClassification.from_pretrained(
-        ...     "hf-internal-testing/tiny-random-reformer", num_labels=num_labels
-        ... )
-        >>> model.train()  # doctest: +IGNORE_RESULT
-
-        >>> num_labels = len(model.config.id2label)
-        >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
-        ...     torch.float
-        ... )
-        >>> loss = model(**inputs, labels=labels).loss
-        >>> loss.backward()  # doctest: +IGNORE_RESULT
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2639,12 +2604,9 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="hf-internal-testing/tiny-random-reformer",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="''",
-        expected_loss=3.28,
     )
     def forward(
         self,

@@ -41,7 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "openai/imagegpt-small"
 _CONFIG_FOR_DOC = "ImageGPTConfig"
-_TOKENIZER_FOR_DOC = "ImageGPTTokenizer"
 
 IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openai/imagegpt-small",
@@ -556,8 +555,7 @@ IMAGEGPT_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, only `input_ids` that do not have their past calculated should be passed as
             `input_ids`.
 
-            Indices can be obtained using [`ImageGPTImageProcessor`]. See [`ImageGPTImageProcessor.__call__`] for
-            details.
+            Indices can be obtained using [`AutoImageProcessor`]. See [`ImageGPTImageProcessor.__call__`] for details.
 
         past_key_values (`Tuple[Tuple[torch.Tensor]]` of length `config.n_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
@@ -679,14 +677,14 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ImageGPTImageProcessor, ImageGPTModel
+        >>> from transformers import AutoImageProcessor, ImageGPTModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small")
+        >>> image_processor = AutoImageProcessor.from_pretrained("openai/imagegpt-small")
         >>> model = ImageGPTModel.from_pretrained("openai/imagegpt-small")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
@@ -914,10 +912,10 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids: torch.Tensor, past: Optional[bool] = None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids: torch.Tensor, past_key_values: Optional[bool] = None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
@@ -929,13 +927,13 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past:
+            if past_key_values:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
         return {
             "input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
@@ -973,12 +971,12 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ImageGPTImageProcessor, ImageGPTForCausalImageModeling
+        >>> from transformers import AutoImageProcessor, ImageGPTForCausalImageModeling
         >>> import torch
         >>> import matplotlib.pyplot as plt
         >>> import numpy as np
 
-        >>> image_processor = ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small")
+        >>> image_processor = AutoImageProcessor.from_pretrained("openai/imagegpt-small")
         >>> model = ImageGPTForCausalImageModeling.from_pretrained("openai/imagegpt-small")
         >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         >>> model.to(device)
@@ -1124,14 +1122,14 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ImageGPTImageProcessor, ImageGPTForImageClassification
+        >>> from transformers import AutoImageProcessor, ImageGPTForImageClassification
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small")
+        >>> image_processor = AutoImageProcessor.from_pretrained("openai/imagegpt-small")
         >>> model = ImageGPTForImageClassification.from_pretrained("openai/imagegpt-small")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")

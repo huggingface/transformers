@@ -31,6 +31,7 @@ from packaging import version
 
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
+from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
@@ -76,7 +77,7 @@ def _pad(items, key, padding_value, padding_side):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
         dim = len(shape)
-        if key == "pixel_values":
+        if key in ["pixel_values", "image"]:
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
@@ -743,11 +744,13 @@ class Pipeline(_ScikitCompat):
         model: Union["PreTrainedModel", "TFPreTrainedModel"],
         tokenizer: Optional[PreTrainedTokenizer] = None,
         feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
+        image_processor: Optional[BaseImageProcessor] = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
         device: Union[int, str, "torch.device"] = -1,
+        torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
     ):
@@ -758,6 +761,7 @@ class Pipeline(_ScikitCompat):
         self.model = model
         self.tokenizer = tokenizer
         self.feature_extractor = feature_extractor
+        self.image_processor = image_processor
         self.modelcard = modelcard
         self.framework = framework
         if is_torch_available() and self.framework == "pt":
@@ -771,6 +775,7 @@ class Pipeline(_ScikitCompat):
                 self.device = torch.device(f"cuda:{device}")
         else:
             self.device = device
+        self.torch_dtype = torch_dtype
         self.binary_output = binary_output
 
         # Special handling
@@ -786,6 +791,13 @@ class Pipeline(_ScikitCompat):
         self._batch_size = kwargs.pop("batch_size", None)
         self._num_workers = kwargs.pop("num_workers", None)
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
+
+        if self.image_processor is None and self.feature_extractor is not None:
+            if isinstance(self.feature_extractor, BaseImageProcessor):
+                # Backward compatible change, if users called
+                # ImageSegmentationPipeline(.., feature_extractor=MyFeatureExtractor())
+                # then we should keep working
+                self.image_processor = self.feature_extractor
 
     def save_pretrained(self, save_directory: str):
         """
@@ -943,7 +955,7 @@ class Pipeline(_ScikitCompat):
     @abstractmethod
     def preprocess(self, input_: Any, **preprocess_parameters: Dict) -> Dict[str, GenericTensor]:
         """
-        Preprocess will take the `input_` of a specific pipeline and return a dictionnary of everything necessary for
+        Preprocess will take the `input_` of a specific pipeline and return a dictionary of everything necessary for
         `_forward` to run properly. It should contain at least one tensor, but might have arbitrary other items.
         """
         raise NotImplementedError("preprocess not implemented")
@@ -951,7 +963,7 @@ class Pipeline(_ScikitCompat):
     @abstractmethod
     def _forward(self, input_tensors: Dict[str, GenericTensor], **forward_parameters: Dict) -> ModelOutput:
         """
-        _forward will receive the prepared dictionnary from `preprocess` and run it on the model. This method might
+        _forward will receive the prepared dictionary from `preprocess` and run it on the model. This method might
         involve the GPU or the CPU and should be agnostic to it. Isolating this function is the reason for `preprocess`
         and `postprocess` to exist, so that the hot path, this method generally can run as fast as possible.
 
@@ -1010,7 +1022,9 @@ class Pipeline(_ScikitCompat):
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
-        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, self.feature_extractor)
+        # TODO hack by collating feature_extractor and image_processor
+        feature_extractor = self.feature_extractor if self.feature_extractor is not None else self.image_processor
+        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
         model_iterator = PipelineIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
@@ -1070,6 +1084,14 @@ class Pipeline(_ScikitCompat):
             )
         elif is_iterable:
             return self.iterate(inputs, preprocess_params, forward_params, postprocess_params)
+        elif self.framework == "pt" and isinstance(self, ChunkPipeline):
+            return next(
+                iter(
+                    self.get_iterator(
+                        [inputs], num_workers, batch_size, preprocess_params, forward_params, postprocess_params
+                    )
+                )
+            )
         else:
             return self.run_single(inputs, preprocess_params, forward_params, postprocess_params)
 
@@ -1111,7 +1133,10 @@ class ChunkPipeline(Pipeline):
             )
             num_workers = 1
         dataset = PipelineChunkIterator(inputs, self.preprocess, preprocess_params)
-        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, self.feature_extractor)
+
+        # TODO hack by collating feature_extractor and image_processor
+        feature_extractor = self.feature_extractor if self.feature_extractor is not None else self.image_processor
+        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
         model_iterator = PipelinePackIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)

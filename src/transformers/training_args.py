@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import contextlib
+import io
 import json
 import math
 import os
@@ -46,6 +47,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_neuroncore_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
@@ -59,6 +61,17 @@ if is_torch_available():
 
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
+
+if is_torch_neuroncore_available(check_device=False):
+    # torchrun support
+    # https://github.com/pytorch/xla/pull/3609
+    if os.environ.get("TORCHELASTIC_RUN_ID"):
+        import torch_xla.distributed.xla_backend as xbn
+
+        if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+            torch.distributed.init_process_group(backend="xla")
+            if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+                raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
 
 if is_sagemaker_mp_enabled():
@@ -340,8 +353,9 @@ class TrainingArguments:
         label_names (`List[str]`, *optional*):
             The list of keys in your dictionary of inputs that correspond to the labels.
 
-            Will eventually default to `["labels"]` except if the model used is one of the `XxxForQuestionAnswering` in
-            which case it will default to `["start_positions", "end_positions"]`.
+            Will eventually default to the list of argument names accepted by the model that contain the word "label",
+            except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
+            `["start_positions", "end_positions"]` keys.
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
             Whether or not to load the best model found during training at the end of training.
 
@@ -394,8 +408,30 @@ class TrainingArguments:
             - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and
               `"shard_grad_op"`).
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
-        fsdp_min_num_params (`int`, *optional*, defaults to `0`):
-            FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is passed).
+        fsdp_config (`str` or `dict`, *optional*):
+            Config to be used with fsdp (Pytorch Distributed Parallel Training). The value is either a location of
+            deepspeed json config file (e.g., `ds_config.json`) or an already loaded json file as `dict`.
+
+            A List of config and its options:
+                - fsdp_min_num_params (`int`, *optional*, defaults to `0`):
+                    FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
+                    passed).
+                - fsdp_backward_prefetch (`str`, *optional*)
+                    FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when
+                    `fsdp` field is passed).
+
+                    A list of options along the following:
+
+                    - `"backward_pre"` : Prefetches the next set of parameters before the current set of parameter's
+                      gradient
+                        computation.
+                    - `"backward_pos"` : This prefetches the next set of parameters after the current set of
+                      parameter’s
+                        gradient computation.
+                - fsdp_forward_prefetch (`bool`, *optional*, defaults to `False`)
+                    FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
+                     If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the
+                     forward pass.
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
@@ -858,8 +894,17 @@ class TrainingArguments:
         default=0,
         metadata={
             "help": (
-                "FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is"
-                " passed)."
+                "This parameter is deprecatetd. FSDP's minimum number of parameters for Default Auto Wrapping. (useful"
+                " only when `fsdp` field is passed)."
+            )
+        },
+    )
+    fsdp_config: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The  value is either a"
+                "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded  json file as `dict`."
             )
         },
     )
@@ -1047,7 +1092,7 @@ class TrainingArguments:
 
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
-        #  see https://github.com/huggingface/transformers/issues/10628
+        # see https://github.com/huggingface/transformers/issues/10628
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
         if self.logging_dir is None and self.output_dir is not None:
@@ -1265,13 +1310,31 @@ class TrainingArguments:
         elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.fsdp:
             raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
 
-        if len(self.fsdp) == 0 and self.fsdp_min_num_params > 0:
+        if self.fsdp_config is None:
+            self.fsdp_config = {}
+
+        if isinstance(self.fsdp_config, str):
+            with io.open(self.fsdp_config, "r", encoding="utf-8") as f:
+                self.fsdp_config = json.load(f)
+
+        if self.fsdp_min_num_params > 0:
+            warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
+
+        self.fsdp_config["fsdp_min_num_params"] = max(
+            getattr(self.fsdp_config, "fsdp_min_num_params", 0), self.fsdp_min_num_params
+        )
+
+        if len(self.fsdp) == 0 and self.fsdp_config["fsdp_min_num_params"] > 0:
             warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
 
         if len(self.fsdp) == 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
             warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
 
-        if len(self.fsdp) > 0 and self.fsdp_min_num_params > 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+        if (
+            len(self.fsdp) > 0
+            and self.fsdp_config["fsdp_min_num_params"] > 0
+            and self.fsdp_transformer_layer_cls_to_wrap is not None
+        ):
             raise ValueError(
                 "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
             )

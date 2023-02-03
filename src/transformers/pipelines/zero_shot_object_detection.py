@@ -148,7 +148,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         target_size = torch.tensor([[image.height, image.width]], dtype=torch.int32)
         for i, candidate_label in enumerate(candidate_labels):
             text_inputs = self.tokenizer(candidate_label, return_tensors=self.framework)
-            image_features = self.feature_extractor(image, return_tensors=self.framework)
+            image_features = self.image_processor(image, return_tensors=self.framework)
             yield {
                 "is_last": i == len(candidate_labels) - 1,
                 "target_size": target_size,
@@ -173,12 +173,11 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         for model_output in model_outputs:
             label = model_output["candidate_label"]
             model_output = BaseModelOutput(model_output)
-            outputs = self.feature_extractor.post_process(
-                outputs=model_output, target_sizes=model_output["target_size"]
+            outputs = self.image_processor.post_process_object_detection(
+                outputs=model_output, threshold=threshold, target_sizes=model_output["target_size"]
             )[0]
-            keep = outputs["scores"] >= threshold
 
-            for index in keep.nonzero():
+            for index in outputs["scores"].nonzero():
                 score = outputs["scores"][index].item()
                 box = self._get_bounding_box(outputs["boxes"][index][0])
 

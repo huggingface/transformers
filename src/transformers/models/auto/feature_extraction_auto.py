@@ -340,6 +340,7 @@ class AutoFeatureExtractor:
                 feature_extractor_class = get_class_from_dynamic_module(
                     pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
                 )
+                feature_extractor_class.register_for_auto_class()
             else:
                 feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
 

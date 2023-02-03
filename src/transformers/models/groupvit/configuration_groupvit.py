@@ -100,7 +100,7 @@ class GroupViTTextConfig(PretrainedConfig):
         num_attention_heads=4,
         max_position_embeddings=77,
         hidden_act="quick_gelu",
-        layer_norm_eps=0.00001,
+        layer_norm_eps=1e-5,
         dropout=0.0,
         attention_dropout=0.0,
         initializer_range=0.02,
@@ -221,7 +221,6 @@ class GroupViTVisionConfig(PretrainedConfig):
         initializer_factor=1.0,
         assign_eps=1.0,
         assign_mlp_ratio=[0.5, 4],
-        qkv_bias=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -249,7 +248,6 @@ class GroupViTVisionConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.assign_eps = assign_eps
         self.assign_mlp_ratio = assign_mlp_ratio
-        self.qkv_bias = qkv_bias
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
