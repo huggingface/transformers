@@ -1566,6 +1566,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
+                max_length=generation_config.max_length,
             )
             return self.beam_search(
                 input_ids,

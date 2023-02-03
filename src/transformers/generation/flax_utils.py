@@ -19,7 +19,7 @@ import copy
 import inspect
 import warnings
 from functools import partial
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 
@@ -275,6 +275,7 @@ class FlaxGenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # set init values
@@ -633,7 +634,7 @@ class FlaxGenerationMixin:
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         length_penalty: Optional[float] = None,
-        early_stopping: Optional[bool] = None,
+        early_stopping: Optional[Union[bool, str]] = None,
         logits_processor: Optional[FlaxLogitsProcessorList] = None,
         trace: bool = True,
         params: Optional[Dict[str, jnp.ndarray]] = None,
@@ -733,14 +734,22 @@ class FlaxGenerationMixin:
             not_max_length_yet = state.cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = state.running_scores[:, -1:] / (max_length**length_penalty)
+            # early_stopping == False -> apply heuristic = always get the best score from `cur_len`. See the discussion
+            # below for more details.
+            # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+            # early_stopping == "never" -> compute the best score from max_length or cur_len, depending on the sign of
+            #   length_penalty. Positive length_penalty favors longer sequences, thus we use max_length there.
+            if early_stopping == "never" and length_penalty > 0.0:
+                best_running_score = state.running_scores[:, :1] / (max_length**length_penalty)
+            else:
+                best_running_score = state.running_scores[:, :1] / (state.cur_len**length_penalty)
             worst_finished_score = jnp.where(
                 state.is_sent_finished, jnp.min(state.scores, axis=1, keepdims=True), np.array(-1.0e7)
             )
-            improvement_still_possible = jnp.all(worst_finished_score < best_running_score)
+            improvement_still_possible = jnp.any(best_running_score > worst_finished_score)
 
             # 3. is there still a beam that has not finished?
-            still_open_beam = ~(jnp.all(state.is_sent_finished) & early_stopping)
+            still_open_beam = ~(jnp.all(state.is_sent_finished) & (early_stopping is True))
 
             return not_max_length_yet & still_open_beam & improvement_still_possible
 
@@ -813,7 +822,7 @@ class FlaxGenerationMixin:
             # 5. Get running sequences scores for next
             # Determine the top k beam indices (from top 2*k beams) from log probs
             # and gather top k beams (from top 2*k beams).
-            next_topk_indices = jnp.flip(lax.top_k(running_topk_log_probs, k=num_beams)[1], axis=1)
+            next_topk_indices = lax.top_k(running_topk_log_probs, k=num_beams)[1]
             next_running_sequences, next_running_scores = gather_beams(
                 [topk_sequences, running_topk_log_probs], next_topk_indices, batch_size, num_beams
             )
@@ -824,10 +833,9 @@ class FlaxGenerationMixin:
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
             topk_log_probs = topk_log_probs / (state.cur_len**length_penalty)
-            beams_in_batch_are_full = (
-                jnp.broadcast_to(state.is_sent_finished.all(axis=-1, keepdims=True), did_topk_just_finished.shape)
-                & early_stopping
-            )
+            beams_in_batch_are_full = jnp.broadcast_to(
+                state.is_sent_finished.all(axis=-1, keepdims=True), did_topk_just_finished.shape
+            ) & (early_stopping is True)
             add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
             topk_log_probs += add_penalty * np.array(-1.0e7)
 
@@ -838,7 +846,7 @@ class FlaxGenerationMixin:
             merged_sequences = jnp.concatenate([state.sequences, topk_sequences], axis=1)
             merged_scores = jnp.concatenate([state.scores, topk_log_probs], axis=1)
             merged_is_sent_finished = jnp.concatenate([state.is_sent_finished, did_topk_just_finished], axis=1)
-            topk_merged_indices = jnp.flip(lax.top_k(merged_scores, k=num_beams)[1], axis=1)
+            topk_merged_indices = lax.top_k(merged_scores, k=num_beams)[1]
             next_sequences, next_scores, next_is_sent_finished = gather_beams(
                 [merged_sequences, merged_scores, merged_is_sent_finished], topk_merged_indices, batch_size, num_beams
             )
@@ -877,7 +885,7 @@ class FlaxGenerationMixin:
         scores = jnp.where(none_finished[:, None], state.scores, state.running_scores)
 
         # take best beam for each batch
-        sequences = sequences[:, -1]
-        scores = scores[:, -1]
+        sequences = sequences[:, 0]
+        scores = scores[:, 0]
 
         return FlaxBeamSearchOutput(sequences=sequences, scores=scores)
