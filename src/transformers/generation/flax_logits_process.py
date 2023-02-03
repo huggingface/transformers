@@ -449,7 +449,7 @@ class FlaxWhisperTimeStampLogitsProcessor(FlaxLogitsProcessor):
             return scores.at[:, last_allowed + 1 :].set(-float("inf"))
 
         scores = jnp.where(
-            apply_max_initial_timestamp == True,
+            apply_max_initial_timestamp,
             if_true(),
             scores,
         )
