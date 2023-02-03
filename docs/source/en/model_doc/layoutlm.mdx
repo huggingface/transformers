@@ -73,12 +73,32 @@ image = Image.open(name_of_your_document).convert("RGB")
 width, height = image.size
 ```
 
-- For a demo which shows how to fine-tune [`LayoutLMForTokenClassification`] on the [FUNSD dataset](https://guillaumejaume.github.io/FUNSD/) (a collection of annotated forms), see [this notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForTokenClassification_on_FUNSD.ipynb).
-  It includes an inference part, which shows how to use Google's Tesseract on a new document.
+## Resources
 
-This model was contributed by [liminghao1630](https://huggingface.co/liminghao1630). The original code can be found
-[here](https://github.com/microsoft/unilm/tree/master/layoutlm).
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LayoutLM. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
+
+<PipelineTag pipeline="document-question-answering" />
+
+- A blog post on [fine-tuning
+  LayoutLM for document-understanding using Keras & Hugging Face
+  Transformers](https://www.philschmid.de/fine-tuning-layoutlm-keras).
+
+- A blog post on how to [fine-tune LayoutLM for document-understanding using only Hugging Face Transformers](https://www.philschmid.de/fine-tuning-layoutlm).
+
+- A notebook on how to [fine-tune LayoutLM on the FUNSD dataset with image embeddings](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Add_image_embeddings_to_LayoutLM.ipynb).
+
+<PipelineTag pipeline="text-classification" />
+
+- A notebook on how to [fine-tune LayoutLM for sequence classification on the RVL-CDIP dataset](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForSequenceClassification_on_RVL_CDIP.ipynb).
+
+<PipelineTag pipeline="token-classification" />
+
+- A notebook on how to [ fine-tune LayoutLM for token classification on the FUNSD dataset](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForTokenClassification_on_FUNSD.ipynb).
+
+🚀 Deploy
+
+- A blog post on how to [Deploy LayoutLM with Hugging Face Inference Endpoints](https://www.philschmid.de/inference-endpoints-layoutlm).
 
 ## LayoutLMConfig
 
