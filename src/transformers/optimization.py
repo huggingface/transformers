@@ -72,9 +72,9 @@ def get_constant_schedule_with_warmup(optimizer: Optimizer, num_warmup_steps: in
     return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
 
 
-def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, last_epoch=-1):
+def get_linear_schedule_with_warmup(optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, lr_end: float = 0., last_epoch: int = -1):
     """
-    Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to 0, after
+    Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to lr_end, after
     a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
 
     Args:
@@ -84,25 +84,32 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
             The number of steps for the warmup phase.
         num_training_steps (`int`):
             The total number of training steps.
+        lr_end (`float`, *optional*, defaults to 0.):
+            The end LR.
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
     Return:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
+    lr_init = optimizer.defaults["lr"]
+    if not (lr_init > lr_end):
+        raise ValueError(f"lr_end ({lr_end}) must be be smaller than initial lr ({lr_init})")
 
     def lr_lambda(current_step: int):
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
-        return max(
-            0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps))
-        )
+        
+        lr_range = lr_init - lr_end
+        lr_new = lr_end + lr_range * float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps))
+        lr_new /= lr_init # as LambdaLR multiplies by lr_init
+        return max(0.0, lr_new)
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
 def get_cosine_schedule_with_warmup(
-    optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: float = 0.5, last_epoch: int = -1
+    optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: float = 0.5, lr_end: float = 0., last_epoch: int = -1
 ):
     """
     Create a schedule with a learning rate that decreases following the values of the cosine function between the
@@ -119,24 +126,32 @@ def get_cosine_schedule_with_warmup(
         num_cycles (`float`, *optional*, defaults to 0.5):
             The number of waves in the cosine schedule (the defaults is to just decrease from the max value to 0
             following a half-cosine).
+        lr_end (`float`, *optional*, defaults to 0.):
+            The end LR.
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
     Return:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
+    lr_init = optimizer.defaults["lr"]
+    if not (lr_init > lr_end):
+        raise ValueError(f"lr_end ({lr_end}) must be be smaller than initial lr ({lr_init})")
 
     def lr_lambda(current_step):
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
+        lr_range = lr_init - lr_end
         progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
-        return max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
+        lr_new = lr_end + lr_range * 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+        lr_new /= lr_init # as LambdaLR multiplies by lr_init
+        return max(0.0, lr_new)
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
 def get_cosine_with_hard_restarts_schedule_with_warmup(
-    optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: int = 1, last_epoch: int = -1
+    optimizer: Optimizer, num_warmup_steps: int, num_training_steps: int, num_cycles: int = 1, lr_end: float = 0., last_epoch: int = -1
 ):
     """
     Create a schedule with a learning rate that decreases following the values of the cosine function between the
@@ -152,20 +167,28 @@ def get_cosine_with_hard_restarts_schedule_with_warmup(
             The total number of training steps.
         num_cycles (`int`, *optional*, defaults to 1):
             The number of hard restarts to use.
+        lr_end (`float`, *optional*, defaults to 0.):
+            The end LR.
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
     Return:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
+    lr_init = optimizer.defaults["lr"]
+    if not (lr_init > lr_end):
+        raise ValueError(f"lr_end ({lr_end}) must be be smaller than initial lr ({lr_init})")
 
     def lr_lambda(current_step):
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
+        lr_range = lr_init - lr_end
         progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
         if progress >= 1.0:
             return 0.0
-        return max(0.0, 0.5 * (1.0 + math.cos(math.pi * ((float(num_cycles) * progress) % 1.0))))
+        lr_new = lr_end + lr_range * 0.5 * (1.0 + math.cos(math.pi * ((float(num_cycles) * progress) % 1.0)))
+        lr_new /= lr_init # as LambdaLR multiplies by lr_init
+        return max(0.0, lr_new)
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
