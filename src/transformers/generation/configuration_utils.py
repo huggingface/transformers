@@ -71,8 +71,12 @@ class GenerationConfig(PushToHubMixin):
             `min_new_tokens`. Its effect is overridden by `min_new_tokens`, if also set.
         min_new_tokens (`int`, *optional*):
             The minimum numbers of tokens to generate, ignoring the number of tokens in the prompt.
-        early_stopping (`bool`, *optional*, defaults to `False`):
-            Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
+        early_stopping (`bool` or `str`, *optional*, defaults to `False`):
+            Controls the stopping condition for beam-based methods, like beam-search. It accepts the following values:
+            `True`, where the generation stops as soon as there are `num_beams` complete candidates; `False`, where an
+            heuristic is applied and the generation stops when is it very unlikely to find better candidates;
+            `"never"`, where the beam search procedure only stops when there cannot be better candidates (canonical
+            beam search algorithm).
         max_time(`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
@@ -290,6 +294,9 @@ class GenerationConfig(PushToHubMixin):
                     logger.error(f"Can't set {key} with value {value} for {self}")
                     raise err
 
+        # Validate the values of the attributes
+        self.validate()
+
     def __eq__(self, other):
         self_dict = self.__dict__.copy()
         other_dict = other.__dict__.copy()
@@ -301,6 +308,14 @@ class GenerationConfig(PushToHubMixin):
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    def validate(self):
+        """
+        Validates the values of the attributes of the GenerationConfig instance, and raises a `ValueError` if any of
+        the values are invalid.
+        """
+        if self.early_stopping not in {True, False, "never"}:
+            raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
 
     def save_pretrained(
         self,
