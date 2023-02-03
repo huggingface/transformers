@@ -12,6 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Convert BLIP-2 checkpoints from the original repository.
+
+URL: https://github.com/salesforce/LAVIS/tree/main/projects/blip2
+"""
 
 import argparse
 
@@ -111,11 +116,13 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     name, type = model_name_to_original[model_name]
 
     # load original model
+    print("Loading original model...")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     original_model, vis_processors, _ = load_model_and_preprocess(
         name=name, model_type=type, is_eval=True, device=device
     )
     original_model.eval()
+    print("Done!")
 
     # update state dict keys
     state_dict = original_model.state_dict()

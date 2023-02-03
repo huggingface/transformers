@@ -42,7 +42,6 @@ else:
         "Blip2PreTrainedModel",
         "Blip2ForConditionalGeneration",
         "Blip2VisionModel",
-        "Blip2TextModel",
     ]
 
 if TYPE_CHECKING:
