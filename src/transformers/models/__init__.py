@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from . import (
-    ernie_m,
     albert,
     altclip,
     audio_spectrogram_transformer,
@@ -69,6 +68,7 @@ from . import (
     electra,
     encoder_decoder,
     ernie,
+    ernie_m,
     esm,
     flaubert,
     flava,

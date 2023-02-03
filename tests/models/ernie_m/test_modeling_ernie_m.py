@@ -17,13 +17,11 @@
 
 import unittest
 
-from ...test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import ErnieMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from transformers import ErnieMConfig
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -35,37 +33,35 @@ if is_torch_available():
         ErnieMForSequenceClassification,
         ErnieMForTokenClassification,
         ErnieMModel,
-        ErnieMUIEM
+        ErnieMUIEM,
     )
-    from transformers.models.ernie_m.modeling_ernie_m import (
-        ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers.models.ernie_m.modeling_ernie_m import ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ErnieMModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -133,9 +129,7 @@ class ErnieMModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(
-            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
+    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
         model = ErnieMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -143,7 +137,7 @@ class ErnieMModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_question_answering(
-            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = ErnieMForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -157,9 +151,7 @@ class ErnieMModelTester:
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
-    def create_and_check_for_uiem(
-            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
+    def create_and_check_for_uiem(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
         model = ErnieMUIEM(config=config)
         model.to(torch_device)
         model.eval()
@@ -174,7 +166,7 @@ class ErnieMModelTester:
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_for_sequence_classification(
-            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = ErnieMForSequenceClassification(config)
@@ -184,7 +176,7 @@ class ErnieMModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = ErnieMForTokenClassification(config=config)
@@ -199,7 +191,7 @@ class ErnieMModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_multiple_choice(
-            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
         model = ErnieMForMultipleChoice(config=config)
@@ -303,11 +295,13 @@ class ErnieMModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[0.09642269, -0.00556359, -0.03608308], [0.00521614, 0.09374719, 0.03041629],
-              [-0.08879025, -0.00807481, -0.12337112]]]
+            [
+                [
+                    [0.09642269, -0.00556359, -0.03608308],
+                    [0.00521614, 0.09374719, 0.03041629],
+                    [-0.08879025, -0.00807481, -0.12337112],
+                ]
+            ]
         )
 
-
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
-
-

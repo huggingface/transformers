@@ -18,10 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
-from ...utils import is_torch_available
-
-
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -51,10 +48,8 @@ else:
         "ErnieMForTokenClassification",
         "ErnieMModel",
         "ErnieMPreTrainedModel",
-        "ErnieMUIEM"
+        "ErnieMUIEM",
     ]
-
-
 
 
 if TYPE_CHECKING:
@@ -85,7 +80,6 @@ if TYPE_CHECKING:
             ErnieMPreTrainedModel,
             ErnieMUIEM,
         )
-
 
 
 else:
