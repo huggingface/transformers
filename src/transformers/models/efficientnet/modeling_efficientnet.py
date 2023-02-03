@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Google Research, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -133,6 +133,31 @@ class EfficientNetDropPath(nn.Module):
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
+
+
+class EfficientNetEmbeddings(nn.Module):
+    def __init__(self, config: EfficientNetConfig, out_channels: int):
+        super().__init__()
+
+        self.padding = nn.ZeroPad2d(padding=3)
+        self.convolution = nn.Conv2d(
+            config.num_channels, 
+            round_filters(config, 32), 
+            kernel_size=3,
+            stride=2, 
+            padding="valid", 
+            bias=False
+        )
+        self.batchnorm = nn.BatchNorm2d(out_channels)
+        self.activation = ACT2FN[config.hidden_act]
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        features = self.padding(pixel_values)
+        features = self.convolution(features)
+        features = self.batchnorm(features)
+        features = self.activation(features)
+
+        return features
 
 
 class DepthwiseConv2d(nn.Conv2d):
@@ -287,7 +312,7 @@ class EfficientNetFinalLayer(nn.Module):
         stride (`int`): Stride size.
         drop_rate (`float`): Dropout rate to be used.
     """
-    def __init__(self, config, in_dim, out_dim, stride):
+    def __init__(self, config: EfficientNetConfig, in_dim: int, out_dim: int, stride: int, drop_rate: float):
         super().__init__()
         self.apply_dropout = (stride == 1 and in_dim == out_dim)
         self.project_conv = nn.Conv2d(
@@ -327,6 +352,7 @@ class EfficientNetBlock(nn.Module):
         stride: int, 
         expand_ratio: int, 
         kernel_size: int,
+        drop_rate: float,
     ):
         super().__init__()
         out_dim = in_dim * expand_ratio
@@ -344,6 +370,7 @@ class EfficientNetBlock(nn.Module):
             in_dim=in_dim,
             out_dim=out_dim
             stride=stride, 
+            drop_rate=drop_rate,
         )
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
@@ -359,166 +386,66 @@ class EfficientNetBlock(nn.Module):
         return hidden_states
 
 
-class EfficientNetEmbeddings(nn.Module):
-    def __init__(self, config: EfficientNetConfig, out_channels: int):
-        super().__init__()
-
-        self.padding = nn.ZeroPad2d(padding=3)
-        self.convolution = nn.Conv2d(
-            config.num_channels, 
-            round_filters(config, 32), 
-            kernel_size=3,
-            stride=2, 
-            padding="valid", 
-            bias=False
-        )
-        self.batchnorm = nn.BatchNorm2d(out_channels)
-        self.activation = ACT2FN[config.hidden_act]
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        features = self.padding(pixel_values)
-        features = self.convolution(features)
-        features = self.batchnorm(features)
-        features = self.activation(features)
-
-        return features
-
-
-def EfficientNet(
-    width_coefficient,
-    depth_coefficient,
-    default_size,
-    dropout_rate=0.2,
-    drop_connect_rate=0.2,
-    depth_divisor=8,
-    activation='swish',
-    blocks_args='default',
-    model_name='efficientnet',
-    include_top=True,
-    weights='imagenet',
-    input_tensor=None,
-    input_shape=None,
-    pooling=None,
-    classes=1000,
-    classifier_activation='softmax'
-):
-    """Instantiates the EfficientNet architecture using given scaling coefficients.
-
-    Arguments:
-        width_coefficient: float, scaling coefficient for network width.
-        depth_coefficient: float, scaling coefficient for network depth.
-        default_size: integer, default input image size.
-        dropout_rate: float, dropout rate before final classifier layer.
-        drop_connect_rate: float, dropout rate at skip connections.
-        depth_divisor: integer, a unit of network width.
-        activation: activation function.
-        blocks_args: list of dicts, parameters to construct block modules.
-        model_name: string, model name.
-        include_top: whether to include the fully-connected
-            layer at the top of the network.
-        weights: one of `None` (random initialization),
-            'imagenet' (pre-training on ImageNet),
-            or the path to the weights file to be loaded.
-        input_tensor: optional Keras tensor
-            (i.e. output of `layers.Input()`)
-            to use as image input for the model.
-        input_shape: optional shape tuple, only to be specified
-            if `include_top` is False.
-            It should have exactly 3 inputs channels.
-        pooling: optional pooling mode for feature extraction
-            when `include_top` is `False`.
-            - `None` means that the output of the model will be
-                the 4D tensor output of the
-                last convolutional layer.
-            - `avg` means that global average pooling
-                will be applied to the output of the
-                last convolutional layer, and thus
-                the output of the model will be a 2D tensor.
-            - `max` means that global max pooling will
-                be applied.
-        classes: optional number of classes to classify images
-            into, only to be specified if `include_top` is True, and
-            if no `weights` argument is specified.
-        classifier_activation: A `str` or callable. The activation function to use
-            on the "top" layer. Ignored unless `include_top=True`. Set
-            `classifier_activation=None` to return the logits of the "top" layer.
+class EfficientNetEncoder(nn.Module):
     """
+    Forward propogates the embeddings through each EfficientNet block.
 
-    blocks_args = DEFAULT_BLOCKS_ARGS
+    Args:
+        config ([`EfficientNetConfig`]): Model configuration class.
+    """
+    def __init__(
+        self, 
+        config: EfficientNetConfig
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = False,
+    ):
+        super().__init__()
+        self.config = config
+        self.depth_coefficient = config.depth_coefficient
+        self.blocks = []
 
-    bn_axis = 3 if backend.image_data_format() == 'channels_last' else 1
+        num_base_blocks = len(config.in_channels)
+        num_blocks = sum(self.round_repeats(n) for n in config.num_block_repeats)
 
+        curr_block_num = 0
+        blocks = []
+        for i in range(num_base_blocks):
+            in_dim = round_filters(config, config.in_channels[i])
+            out_dim = round_filters(config, config.out_channels[i])
+            stride = config.strides[i]
+            kernel_size = config.kernel_sizes[i]
+            expand_ratio = config.expand_ratios[i]
 
-    def round_repeats(repeats):
-        """Round number of repeats based on depth multiplier."""
-        return int(math.ceil(depth_coefficient * repeats))
+            for j in range(round_repeats(config.num_block_repeats[i])):
+                stride = 1 if j > 0 else stride
+                in_dim = out_dim if j > 0 else in_dim
+                drop_rate = config.drop_connect_rate * curr_block_num / num_blocks
 
-    # Build stem
-    x = layers.ZeroPadding2D(
-        padding=imagenet_utils.correct_pad(x, 3),
-        name='stem_conv_pad')(x)
-    x = layers.Conv2D(
-        round_filters(32),
-        3,
-        strides=2,
-        padding='valid',
-        use_bias=False,
-        kernel_initializer=CONV_KERNEL_INITIALIZER,
-        name='stem_conv')(x)
-    x = get_norm()(axis=bn_axis, name='stem_bn')(x)
-    x = layers.Activation(activation, name='stem_activation')(x)
+                block = EfficientFormerBlock(
+                    config=config, 
+                    in_dim=in_dim, 
+                    stride=stride,
+                    kernel_size=kernel_size,
+                    expand_ratio=expand_ratio,
+                    drop_rate=drop_rate,
+                )
+                blocks.append(block)
+                curr_block_num += 1
 
-    # Blocks
-    blocks_args = copy.deepcopy(blocks_args)
+        self.blocks.append(block)
 
-    b = 0
-    blocks = float(sum(round_repeats(args['repeats']) for args in blocks_args))
-    for (i, args) in enumerate(blocks_args):
-        assert args['repeats'] > 0
-        # Update block input and output filters based on depth multiplier.
-        args['filters_in'] = round_filters(args['filters_in'])
-        args['filters_out'] = round_filters(args['filters_out'])
+    def round_repeats(self, repeats):
+        """
+        Round number of block repeats based on depth multiplier.
+        """
+        num_repeats = int(math.ceil(self.depth_coefficient * repeats))
+        return num_repeats
 
-        for j in range(round_repeats(args.pop('repeats'))):
-        # The first block needs to take care of stride and filter size increase.
-        if j > 0:
-            args['strides'] = 1
-            args['filters_in'] = args['filters_out']
-        x = block(
-            x,
-            activation,
-            drop_connect_rate * b / blocks,
-            name='block{}{}_'.format(i + 1, chr(j + 97)),
-            **args)
-        b += 1
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
+        for block in self.blocks:
+            hidden_states = block(hidden_states)
 
-    # Image classification head
-    if include_top:
-        x = layers.GlobalAveragePooling2D(name='avg_pool')(x)
-        if dropout_rate > 0:
-            x = layers.Dropout(dropout_rate, name='top_dropout')(x)
-        imagenet_utils.validate_activation(classifier_activation, weights)
-        x = layers.Dense(
-            classes,
-            activation=classifier_activation,
-            kernel_initializer=DENSE_KERNEL_INITIALIZER,
-            name='predictions')(x)
-    else:
-        if pooling == 'avg':
-            x = layers.GlobalAveragePooling2D(name='avg_pool')(x)
-        elif pooling == 'max':
-            x = layers.GlobalMaxPooling2D(name='max_pool')(x)
-
-    # Ensure that the model takes into account
-    # any potential predecessors of `input_tensor`.
-    if input_tensor is not None:
-        inputs = layer_utils.get_source_inputs(input_tensor)
-    else:
-        inputs = img_input
-
-    # Create model.
-    model = training.Model(inputs, x, name=model_name)
-    return model
+        return hidden_states
 
 
 class EfficientNetPreTrainedModel(PreTrainedModel):
@@ -558,13 +485,12 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-
         self.embeddings = EfficientNetEmbeddings(config)
         self.encoder = EfficientNetEncoder(config)
-
-        # final layernorm layer
+        
+        # Final layernorm layer  
         self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
-
+        self.dropout = nn.Dropout(p=config.drop_rate)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -600,9 +526,10 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
 
         last_hidden_state = encoder_outputs[0]
 
-        # global average pooling, (N, C, H, W) -> (N, C)
+        # Global average pooling, (N, C, H, W) -> (N, C)
         pooled_output = self.layernorm(last_hidden_state.mean([-2, -1]))
-
+        pooled_output = self.dropout(pooled_output)
+        
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
@@ -623,14 +550,11 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
 class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        num_labels = config.num_labels
 
-        self.num_labels = config.num_labels
         self.efficientnet = EfficientNetModel(config)
-
         # Classifier head
-        self.classifier = (
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
-        )
+        self.classifier = (nn.Linear(config.hidden_sizes[-1], num_labels) if num_labels > 0 else nn.Identity())
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -660,7 +584,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         outputs = self.efficientnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
+        
         logits = self.classifier(pooled_output)
 
         loss = None
