@@ -28,7 +28,6 @@ GIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-# Copied from transformers.models.clip.configuration_clip.CLIPVisionConfig with CLIPVision->GitVision, CLIP->GIT, clip->git, openai/git-vit-base-patch32->microsoft/git-base, 32->16
 class GitVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GitVisionModel`]. It is used to instantiate a GIT
@@ -61,9 +60,6 @@ class GitVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
 
     Example:
 
@@ -86,7 +82,6 @@ class GitVisionConfig(PretrainedConfig):
         self,
         hidden_size=768,
         intermediate_size=3072,
-        projection_dim=512,
         num_hidden_layers=12,
         num_attention_heads=12,
         num_channels=3,
@@ -96,21 +91,18 @@ class GitVisionConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
-        initializer_factor=1.0,
         **kwargs
     ):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act

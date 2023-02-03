@@ -79,8 +79,6 @@ class GraphormerConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the attention weights.
-        activation_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability after activation in the FFN.
         layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
@@ -152,7 +150,6 @@ class GraphormerConfig(PretrainedConfig):
         num_attention_heads: int = 32,
         dropout: float = 0.1,
         attention_dropout: float = 0.1,
-        activation_dropout: float = 0.1,
         layerdrop: float = 0.0,
         encoder_normalize_before: bool = False,
         pre_layernorm: bool = False,
@@ -191,7 +188,6 @@ class GraphormerConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.dropout = dropout
         self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
         self.layerdrop = layerdrop
         self.encoder_normalize_before = encoder_normalize_before
         self.pre_layernorm = pre_layernorm

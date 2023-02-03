@@ -21,8 +21,6 @@ class NezhaConfig(PretrainedConfig):
         vocab_size (`int`, optional, defaults to 21128):
             Vocabulary size of the NEZHA model. Defines the different tokens that can be represented by the
             *inputs_ids* passed to the forward method of [`NezhaModel`].
-        embedding_size (`int`, optional, defaults to 128):
-            Dimensionality of vocabulary embeddings.
         hidden_size (`int`, optional, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, optional, defaults to 12):
@@ -71,7 +69,6 @@ class NezhaConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=21128,
-        embedding_size=128,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -94,7 +91,6 @@ class NezhaConfig(PretrainedConfig):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
-        self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
