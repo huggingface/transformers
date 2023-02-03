@@ -361,6 +361,7 @@ class FlaxWhisperTimeStampLogitsProcessor(FlaxLogitsProcessor):
     r"""
     Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
     probs to `inf` so that they are sampled at their corresponding index.
+
     Args:
         generate_config (`GenerateConfig`):
             The generate config used to generate the output. The following parameters are required:
