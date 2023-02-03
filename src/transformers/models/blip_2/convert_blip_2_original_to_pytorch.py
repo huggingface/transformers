@@ -166,7 +166,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     image = load_demo_image()
     original_pixel_values = vis_processors["eval"](image).unsqueeze(0).to(device)
     tokenizer = AutoTokenizer.from_pretrained("facebook/opt-2.7b") if "opt" in model_name else AutoTokenizer.from_pretrained("google/flan-t5-xl")
-    input_ids = tokenizer(["" + "\n"], return_tensors="pt").input_ids.to(device)
+    input_ids = tokenizer(["\n"], return_tensors="pt").input_ids.to(device)
 
     # create processor
     image_processor = BlipImageProcessor(
@@ -185,15 +185,18 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
             original_logits = original_model({"image": original_pixel_values, "text_input": [""]}).logits
             logits = hf_model(original_pixel_values, input_ids).logits
         else:
-            original_logits = original_model({"image": original_pixel_values, "text_input": [""], "text_output": [""]}).logits
-            logits = hf_model(original_pixel_values, input_ids, decoder_input_ids=input_ids).logits
+            original_logits = original_model({"image": original_pixel_values, "text_input": ["\n"], "text_output": ["\n"]}).logits
+            labels = input_ids.masked_fill(input_ids == tokenizer.pad_token_id, -100)
+            logits = hf_model(original_pixel_values, input_ids, labels=input_ids).logits
     
     assert original_logits.shape == logits.shape
     print("First values of original logits:", original_logits[0,:3,:3])
     print("First values of HF logits:", logits[0, :3, :3])
 
     # assert values
-    assert torch.allclose(original_logits, logits, atol=1e-2)
+    # cast to same type 
+    target_dtype = logits.dtype
+    assert torch.allclose(original_logits.to(target_dtype), logits, atol=1e-2)
     print("Looks ok!")
 
     print("Generating a caption...")

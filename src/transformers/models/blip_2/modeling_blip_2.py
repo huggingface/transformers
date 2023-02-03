@@ -1367,9 +1367,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         )
         image_embeds = vision_outputs[0]
 
-        print("Shape of image embeds:", image_embeds.shape)
-        print("First values of image embeds:", image_embeds[0,:3,:3])
-
         # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
@@ -1401,7 +1398,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
                 return_dict=return_dict,
             )
             loss = None
-            # we compute the loss here since we need to take into account the query embeds
+            # we compute the loss here since we need to take into account the sequence length of the query embeds
             if labels is not None:
                 logits = outputs.logits if return_dict else outputs[0]
                 
