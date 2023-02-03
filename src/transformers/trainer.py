@@ -868,7 +868,7 @@ class Trainer:
 
             return DataLoader(
                 train_dataset,
-                batch_size=self.args.per_device_train_batch_size,
+                batch_size=self._train_batch_size,
                 collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
