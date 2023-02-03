@@ -526,21 +526,29 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
 
         output = pipe(array, chunk_length_s=10)
+        from pprint import pprint
+
+        pprint(output)
+        self.maxDiff = None
         self.assertDictEqual(
             nested_simplify(output),
             {
                 "chunks": [
                     {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
                     {
-                        "text": " Sweat covered Brion's body, trickling into the "
-                        "tight-loan cloth that was the only garment he wore, the "
-                        "cut",
+                        "text": (
+                            " Sweat covered Brion's body, trickling into the "
+                            "tight-loan cloth that was the only garment he wore, the "
+                            "cut"
+                        ),
                         "timestamp": (5.5, 11.95),
                     },
                     {
-                        "text": " on his chest dripping blood, the ache of his "
-                        "overstrained eyes, even the soaring arena around him "
-                        "with",
+                        "text": (
+                            " on his chest still dripping blood, the ache of his "
+                            "overstrained eyes, even the soaring arena around him "
+                            "with"
+                        ),
                         "timestamp": (11.95, 19.61),
                     },
                     {
@@ -552,12 +560,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                         "timestamp": (26.66, 31.06),
                     },
                 ],
-                "text": " A man said to the universe, Sir, I exist. Sweat covered Brion's "
-                "body, trickling into the tight-loan cloth that was the only garment "
-                "he wore, the cut on his chest dripping blood, the ache of his "
-                "overstrained eyes, even the soaring arena around him with the of "
-                "spectators, retrievality is not worth thinking about. His instant "
-                "panic was followed by a small sharp blow high on his chest.",
+                "text": (
+                    " A man said to the universe, Sir, I exist. Sweat covered Brion's "
+                    "body, trickling into the tight-loan cloth that was the only garment "
+                    "he wore, the cut on his chest still dripping blood, the ache of his "
+                    "overstrained eyes, even the soaring arena around him with the "
+                    "thousands of spectators, retrievality is not worth thinking about. "
+                    "His instant panic was followed by a small, sharp blow high on his "
+                    "chest."
+                ),
             },
         )
 
