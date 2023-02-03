@@ -1201,7 +1201,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 
         query_length = query_embeds.shape[1] if query_embeds is not None else 0
 
-        # TODO maybe support input_ids here as well
         embedding_output = self.layernorm(query_embeds)
         embedding_output = self.dropout(embedding_output)
 
@@ -1269,7 +1268,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
             query_length=query_length,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = None  # TODO remove
+        pooled_output = sequence_output[:,0,:]
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -1455,46 +1454,44 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         Returns:
             captions (list): A list of strings of length batch_size * num_captions.
         """
-        # TODO perhaps remove autocast?
-        with torch.cuda.amp.autocast(enabled=(self.device != torch.device("cpu"))):
-            image_embeds = self.vision_model(pixel_values, return_dict=True).last_hidden_state
-            image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+        image_embeds = self.vision_model(pixel_values, return_dict=True).last_hidden_state
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
-            query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-            query_outputs = self.qformer(
-                query_embeds=query_tokens,
-                encoder_hidden_states=image_embeds,
-                encoder_attention_mask=image_attention_mask,
-                return_dict=True,
-            )
-            query_output = query_outputs.last_hidden_state
+        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+        query_outputs = self.qformer(
+            query_embeds=query_tokens,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_attention_mask,
+            return_dict=True,
+        )
+        query_output = query_outputs.last_hidden_state
 
-            language_model_inputs = self.language_projection(query_output)
-            language_attention_mask = torch.ones(
-                language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
-            )
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
-            attention_mask = torch.cat([language_attention_mask, attention_mask], dim=1)
+        language_model_inputs = self.language_projection(query_output)
+        language_attention_mask = torch.ones(
+            language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
+        )
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+        attention_mask = torch.cat([language_attention_mask, attention_mask], dim=1)
 
-            # TODO support nucleus sampling and beam search
-            # if use_nucleus_sampling:
-            #     query_embeds = language_model_inputs.repeat_interleave(num_captions, dim=0)
-            #     num_beams = 1
-            # else:
-            num_beams = 1
-            query_embeds = language_model_inputs.repeat_interleave(num_beams, dim=0)
+        # TODO support nucleus sampling and beam search
+        # if use_nucleus_sampling:
+        #     query_embeds = language_model_inputs.repeat_interleave(num_captions, dim=0)
+        #     num_beams = 1
+        # else:
+        num_beams = 1
+        query_embeds = language_model_inputs.repeat_interleave(num_beams, dim=0)
 
-            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-            inputs_embeds = torch.cat([query_embeds, inputs_embeds], dim=1)
+        inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+        inputs_embeds = torch.cat([query_embeds, inputs_embeds], dim=1)
 
-            outputs = self.language_model.generate(
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                **generate_kwargs,
-            )
+        outputs = self.language_model.generate(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            **generate_kwargs,
+        )
 
-            return outputs
+        return outputs
 
 
 # this is copied from GPT-2's prepare_inputs_for_generation, just removed token_type_ids and position_ids
