@@ -170,6 +170,7 @@ from . import (
     timesformer,
     trajectory_transformer,
     transfo_xl,
+    transformer_transducer,
     trocr,
     unispeech,
     unispeech_sat,

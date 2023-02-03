@@ -1,0 +1,173 @@
+# coding=utf-8
+# Copyright 2022 jp and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" TransformerTransducer model configuration"""
+
+from ...configuration_utils import PretrainedConfig
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
+
+TRANSFORMER_TRANSDUCER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "jp42maru/transformer-transducer-960h": (
+        "https://huggingface.co/jp42maru/transformer-transducer-960h/tree/main/config.json"
+    ),
+    # See all TransformerTransducer models at https://huggingface.co/models?filter=transformer_transducer
+}
+
+
+class TransformerTransducerConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`~TransformerTransducerModel`]. It is used to
+    instantiate an TransformerTransducer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    TransformerTransducer [transformer-transducer-960h](https://huggingface.co/transformer-transducer-960h)
+    architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 50265):
+            Vocabulary size of the TransformerTransducer model. Defines the number of different tokens that can be
+            represented by the `inputs_ids` passed when calling [`~TransformerTransducerModel`] or
+            [`~TFTransformerTransducerModel`].
+        d_model (`int`, *optional*, defaults to 1024):
+            Dimension of the layers and the pooler layer.
+        encoder_layers (`int`, *optional*, defaults to 12):
+            Number of encoder layers.
+        decoder_layers (`int`, *optional*, defaults to 12):
+            Number of decoder layers.
+        encoder_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        decoder_ffn_dim (`int`, *optional*, defaults to 4096):
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+        encoder_ffn_dim (`int`, *optional*, defaults to 4096):
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
+        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        classifier_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for classifier.
+        max_position_embeddings (`int`, *optional*, defaults to 1024):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
+        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
+        Example:
+
+    ```python
+    >>> from transformers import TransformerTransducerModel, TransformerTransducerConfig
+
+    >>> # Initializing a TransformerTransducer transformer-transducer-960h style configuration
+    >>> configuration = TransformerTransducerConfig()
+
+    >>> # Initializing a model from the transformer-transducer-960h style configuration
+    >>> model = TransformerTransducerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+    model_type = "transformer_transducer"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+
+    def __init__(
+        self,
+        vocab_size=111,
+        initializer_range=0.02,
+        encoder_layers=18,
+        encoder_layerdrop=0.0,
+        decoder_layers=2,
+        decoder_layerdrop=0.0,
+        hidden_size=512,
+        hidden_dropout=0.1,
+        hidden_act="gelu",
+        layer_norm_eps=0.00001,
+        max_position_embeddings=512,
+        position_embedding_type="relative_key",
+        intermediate_size=2048,
+        activation_dropout=0.1,
+        attention_dropout=0.1,
+        num_attention_heads=8,
+        attention_type="original_full",
+        score_dropout=0.07,
+        loss_reduction="mean",
+        clamp=-1,
+        freq_mask_size=50,
+        time_mask_size=30,
+        freq_apply_num=2,
+        time_apply_num=10,
+        blk_token_id=0,
+        generate_repeat_max=10,
+        **kwargs
+    ) -> None:
+        self.encoder_layers = encoder_layers
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layers = decoder_layers
+        self.decoder_layerdrop = decoder_layerdrop
+
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.activation_dropout = activation_dropout
+        self.hidden_dropout = hidden_dropout
+        self.hidden_act = hidden_act
+
+        self.attention_dropout = attention_dropout
+        self.score_dropout = score_dropout
+        self.num_attention_heads = num_attention_heads
+
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_dropout = hidden_dropout
+
+        self.max_position_embeddings = max_position_embeddings
+        self.position_embedding_type = position_embedding_type
+        self.vocab_size = vocab_size
+
+        self.loss_reduction = loss_reduction
+        self.clamp = clamp
+        self.initializer_range = initializer_range
+
+        self.blk_token_id = blk_token_id
+
+        # spec-augment
+        self.freq_mask_size = freq_mask_size
+        self.time_mask_size = time_mask_size
+        self.freq_apply_num = freq_apply_num
+        self.time_apply_num = time_apply_num
+
+        # for generate
+        self.attention_type = attention_type
+        self.generate_repeat_max = generate_repeat_max
+
+        super().__init__(**kwargs)
