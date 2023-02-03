@@ -17,7 +17,6 @@
 # Some of the code is Copied from original paddlenlp repository.(https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/tokenizer.py)
 # and Albert directory.(https://github.com/huggingface/transformers/blob/main/src/transformers/models/albert/tokenization_albert.py)
 import io
-import os
 import unicodedata
 from typing import List, Optional
 
@@ -222,13 +221,14 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         r"""
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. An ERNIE-M sequence has the following format:
-        - single sequence: ``[CLS] X [SEP]``
-        - pair of sequences: ``[CLS] A [SEP] [SEP] B [SEP]``
+        - single sequence: `[CLS] X [SEP]`
+        - pair of sequences: `[CLS] A [SEP] [SEP] B [SEP]`
+
         Args:
             token_ids_0 (List[int]):
                 List of IDs to which the special tokens will be added.
             token_ids_1 (List[int], optional):
-                Optional second list of IDs for sequence pairs. Defaults to `None`.
+                Optional second list of IDs for sequence pairs. Defaults to *None*.
         Returns:
             List[int]: List of input_id with the appropriate special tokens.
         """
@@ -242,13 +242,14 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         r"""
         Build offset map from a pair of offset map by concatenating and adding offsets of special tokens. An ERNIE-M
         offset_mapping has the following format:
-        - single sequence: ``(0,0) X (0,0)``
-        - pair of sequences: ``(0,0) A (0,0) (0,0) B (0,0)``
+        - single sequence: `(0,0) X (0,0)`
+        - pair of sequences: `(0,0) A (0,0) (0,0) B (0,0)`
+
         Args:
             offset_mapping_ids_0 (List[tuple]):
                 List of char offsets to which the special tokens will be added.
             offset_mapping_ids_1 (List[tuple], optional):
-                Optional second list of wordpiece offsets for offset mapping pairs. Defaults to `None`.
+                Optional second list of wordpiece offsets for offset mapping pairs. Defaults to *None*.
         Returns:
             List[tuple]: List of wordpiece offsets with the appropriate offsets of special tokens.
         """
@@ -261,14 +262,14 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         r"""
         Args:
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``encode`` methods.
+        special tokens using the tokenizer `encode` methods.
             token_ids_0 (List[int]):
                 List of ids of the first sequence.
             token_ids_1 (List[int], optinal):
-                Optional second list of IDs for sequence pairs. Defaults to `None`.
+                Optional second list of IDs for sequence pairs. Defaults to *None*.
             already_has_special_tokens (str, optional):
                 Whether or not the token list is already formatted with special tokens for the model. Defaults to
-                `False`.
+                *False*.
         Returns:
             List[int]:
                 The list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -292,10 +293,10 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         """
         Args:
         Create the token type IDs corresponding to the sequences passed. [What are token type
-        IDs?](../glossary#token-type-ids) Should be overridden in a subclass if the model has a special way of building
+        IDs?](../glossary#token-type-ids) Should be overridden in a subclass if the model has a special way of building:
         those.
-            token_ids_0 (`List[int]`): The first tokenized sequence.
-            token_ids_1 (`List[int]`, *optional*): The second tokenized sequence.
+            token_ids_0 (`List[int]`): The first tokenized sequence. token_ids_1 (`List[int]`, *optional*): The second
+            tokenized sequence.
         Returns:
             `List[int]`: The token type ids.
         """
