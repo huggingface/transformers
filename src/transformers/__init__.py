@@ -402,6 +402,12 @@ _import_structure = {
         "Speech2Text2Processor",
         "Speech2Text2Tokenizer",
     ],
+    "models.speecht5": [
+        "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP",
+        "SpeechT5Config",
+        "SpeechT5HifiGanConfig",
+    ],
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
@@ -632,6 +638,7 @@ else:
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
+    _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
@@ -734,6 +741,7 @@ else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+    _import_structure["models.speecht5"].append("SpeechT5FeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -772,6 +780,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
+    _import_structure["models.speecht5"].append("SpeechT5Processor")
 
 # Vision-specific objects
 try:
@@ -2193,6 +2202,17 @@ else:
         ]
     )
     _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
+    _import_structure["models.speecht5"].extend(
+        [
+            "SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SpeechT5ForSpeechToSpeech",
+            "SpeechT5ForSpeechToText",
+            "SpeechT5ForTextToSpeech",
+            "SpeechT5HifiGan",
+            "SpeechT5Model",
+            "SpeechT5PreTrainedModel",
+        ]
+    )
     _import_structure["models.splinter"].extend(
         [
             "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3842,6 +3862,12 @@ if TYPE_CHECKING:
         Speech2Text2Processor,
         Speech2Text2Tokenizer,
     )
+    from .models.speecht5 import (
+        SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP,
+        SpeechT5Config,
+        SpeechT5HifiGanConfig,
+    )
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
@@ -4054,6 +4080,7 @@ if TYPE_CHECKING:
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
+        from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
@@ -4139,6 +4166,7 @@ if TYPE_CHECKING:
         from .models.audio_spectrogram_transformer import ASTFeatureExtractor
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
+        from .models.speecht5 import SpeechT5FeatureExtractor
 
     try:
         if not is_tensorflow_text_available():
@@ -4163,6 +4191,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_and_speech_objects import *
     else:
         from .models.speech_to_text import Speech2TextProcessor
+        from .models.speecht5 import SpeechT5Processor
 
     try:
         if not is_vision_available():
@@ -5326,6 +5355,15 @@ if TYPE_CHECKING:
             Speech2TextPreTrainedModel,
         )
         from .models.speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2PreTrainedModel
+        from .models.speecht5 import (
+            SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SpeechT5ForSpeechToSpeech,
+            SpeechT5ForSpeechToText,
+            SpeechT5ForTextToSpeech,
+            SpeechT5HifiGan,
+            SpeechT5Model,
+            SpeechT5PreTrainedModel,
+        )
         from .models.splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SplinterForPreTraining,
