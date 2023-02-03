@@ -166,7 +166,7 @@ class InformerConfig(PretrainedConfig):
         use_cache=True,
         # Informer arguments
         attn: str = "prob",
-        factor: int = 5,
+        factor: int = 2,
         distil: bool = True,
         **kwargs
     ):
