@@ -461,8 +461,15 @@ class MPNetEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            encoder_position_bias = self.compute_position_bias(hidden_states, past_key_value=past_key_value)
-            decoder_position_bias = self.compute_position_bias(hidden_states, encoder_hidden_states, past_key_value)
+            encoder_position_bias = self.compute_position_bias(
+                hidden_states,
+                past_key_value=past_key_value
+            )
+            decoder_position_bias = self.compute_position_bias(
+                hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
+                past_key_value=past_key_value,
+            )
 
             if self.gradient_checkpointing and self.training:
 
@@ -533,7 +540,13 @@ class MPNetEncoder(nn.Module):
             cross_attentions=all_cross_attentions,
         )
 
-    def compute_position_bias(self, hidden_states, encoder_hidden_states=None, past_key_value=None, num_buckets=32):
+    def compute_position_bias(
+        self, 
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[torch.FloatTensor] = None,
+        num_buckets=32,
+    ):
         bsz, qlen = hidden_states.size(0), hidden_states.size(1)
         
         is_cross_attention = encoder_hidden_states is not None
@@ -550,7 +563,7 @@ class MPNetEncoder(nn.Module):
         context_position = torch.arange(qlen, dtype=torch.long)[:, None]
         memory_position = torch.arange(klen, dtype=torch.long)[None, :]
 
-        relative_position = context_position - memory_position
+        relative_position = memory_position - context_position
         
         rp_bucket = self.relative_position_bucket(relative_position, num_buckets=num_buckets)
         rp_bucket = rp_bucket.to(hidden_states.device)
@@ -765,7 +778,7 @@ class MPNetModel(MPNetPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = pastposition_ids_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -1086,6 +1099,14 @@ class MPNetLMHead(nn.Module):
         x = self.decoder(x)
 
         return x
+
+    def _tie_weights(self):
+        # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            self.bias = self.decoder.bias
 
 
 @add_start_docstrings(

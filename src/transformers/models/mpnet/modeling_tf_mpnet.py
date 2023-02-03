@@ -782,7 +782,7 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
 @add_start_docstrings("""MPNet Model with a `language modeling` head on top.""", MPNET_START_DOCSTRING)
 class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
 
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    _keys_to_ignore_on_load_missing =  [r"pooler", r"lm_head.decoder.weight"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
