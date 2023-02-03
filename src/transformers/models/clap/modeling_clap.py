@@ -128,7 +128,6 @@ class CLAPTextModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-
 @dataclass
 class SwinEncoderOutput(ModelOutput):
     """
@@ -156,7 +155,6 @@ class SwinEncoderOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
 
 
 @dataclass
@@ -452,7 +450,7 @@ def window_reverse(windows, window_size, H, W):
     return x
 
 
-# Copied from transformers.models.swin_transformer.modeling_swin_transformer.SwinTransformerLayer with Swin->CLAPAudio
+# Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->CLAPAudio
 class CLAPAudioSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
@@ -524,7 +522,7 @@ class CLAPAudioSelfAttention(nn.Module):
         attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in SwinModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in CLAPAudioModel forward() function)
             mask_shape = attention_mask.shape[0]
             attention_scores = attention_scores.view(
                 batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim
@@ -635,7 +633,7 @@ class CLAPAudioOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinLayer with Swin->CLAPAudio
+# Copied from transformers.models.swin.modeling_swin.SwinLayer with Swin->CLAPAudio, SwinDropPath->CLAPDropPath
 class CLAPAudioSwinLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
@@ -1195,6 +1193,24 @@ class CLAPTextAttention(nn.Module):
         self.output = CLAPTextSelfOutput(config)
         self.pruned_heads = set()
 
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.self.query = prune_linear_layer(self.self.query, index)
+        self.self.key = prune_linear_layer(self.self.key, index)
+        self.self.value = prune_linear_layer(self.self.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
+        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1661,7 +1677,6 @@ class CLAPTextModel(CLAPTextPreTrainedModel):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->CLAP,clip->clap
 class CLAPPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1981,10 +1996,10 @@ class CLAPAudioLayer(nn.Module):
                     input_resolution=input_resolution,
                     num_heads=num_heads,
                     shift_size=0 if (i % 2 == 0) else config.window_size // 2,
-                )
+)
                 for i in range(depth)
-            ]
-        )
+]
+    )
 
         # patch merging layer
         if downsample is not None:
@@ -2111,7 +2126,7 @@ class CLAPAudioEncoder(nn.Module):
                     num_heads=config.num_heads[i_layer],
                     drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
                     downsample=CLAPAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
-                )
+            )
                 for i_layer in range(self.num_layers)
             ]
         )
@@ -2196,7 +2211,7 @@ class CLAPAudioEncoder(nn.Module):
 
         _, _, frames_num, _ = hidden_states.shape
 
-        
+
         hidden_states = self.patch_embed(hidden_states, longer_list_idx)
 
         all_hidden_states = () if output_hidden_states else None
@@ -2259,7 +2274,7 @@ class CLAPAudioEncoder(nn.Module):
 
             if output_attentions:
                 all_self_attentions += layer_outputs[3:]
-        
+
         hidden_states = self.norm(hidden_states)
 
         batch_size, _, n_channels = hidden_states.shape
@@ -2269,7 +2284,7 @@ class CLAPAudioEncoder(nn.Module):
 
         hidden_states = (
             hidden_states.permute(0, 2, 1).contiguous().reshape(batch_size, n_channels, freq_shape, temporal_shape)
-        )
+)
 
         batch_size, n_channels, n_frequencies, n_temp = hidden_states.shape
         # group 2D CNN
@@ -2277,7 +2292,7 @@ class CLAPAudioEncoder(nn.Module):
         hidden_states = hidden_states.reshape(batch_size, n_channels, n_frequencies // c_freq_bin, c_freq_bin, n_temp)
         hidden_states = (
             hidden_states.permute(0, 1, 3, 2, 4).contiguous().reshape(batch_size, n_channels, c_freq_bin, -1)
-        )
+    )
         # get latent_output
         fine_grained_latent_output = torch.mean(hidden_states, dim=2)
         fine_grained_latent_output = interpolate(
