@@ -60,14 +60,12 @@ ERNIE_M_PRETRAINED_RESOURCE_FILES_MAP = {
         "ernie-m-large_pytorch": "https://huggingface.co/susnato/ernie-m-large_pytorch/blob/main/pytorch_model.bin",
     }
 }
-
+ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "susnato/ernie-m-base_pytorch": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/config.json",
+    "susnato/ernie-m-large_pytorch": "https://huggingface.co/susnato/ernie-m-large_pytorch/blob/main/config.json",
+}
 
 class ErnieMConfig(PretrainedConfig):
-    ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-        "susnato/ernie-m-base_pytorch": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/config.json",
-        "susnato/ernie-m-large_pytorch": "https://huggingface.co/susnato/ernie-m-large_pytorch/blob/main/config.json",
-    }
-
     r"""
     This is the configuration class to store the configuration of a [*ErnieModel*]. It is used to instantiate a ERNIE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
