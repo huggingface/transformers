@@ -34,6 +34,7 @@ from transformers import (
     Blip2Processor,
     BlipImageProcessor,
     OPTConfig,
+    T5Config,
 )
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
@@ -87,9 +88,15 @@ def rename_key(dct, old, new):
 
 
 def get_blip2_config(model_name):
+    # TODO support objects right away instead of dicts
     if "opt-2.7b" in model_name:
-        # TODO support objects right away instead of dicts
         text_config = OPTConfig.from_pretrained("facebook/opt-2.7b").to_dict()
+    elif "opt-6.7b" in model_name:
+        text_config = OPTConfig.from_pretrained("facebook/opt-6.7b").to_dict()
+    elif "t5-xl" in model_name:
+        text_config = T5Config.from_pretrained("google/flan-t5-xl").to_dict()
+    elif "t5-xxl" in model_name:
+        text_config = T5Config.from_pretrained("google/flan-t5-xxl").to_dict()
 
     return Blip2Config(text_config=text_config)
 
@@ -139,8 +146,12 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
             key = key.replace("self", "attention")
         if "opt_proj" in key:
             key = key.replace("opt_proj", "language_projection")
+        if "t5_proj" in key:
+            key = key.replace("t5_proj", "language_projection")
         if key.startswith("opt"):
             key = key.replace("opt", "language")
+        if key.startswith("t5"):
+            key = key.replace("t5", "language")
         state_dict[key] = val
 
     missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=False)

@@ -40,6 +40,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModelForCausalLM
+from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
 
@@ -1322,11 +1323,13 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
-        # TODO add support for AutoModelForSeq2SeqLM here as well
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
-        language_model = AutoModelForCausalLM.from_config(config.text_config)
-        # TODO remove this hack
-        language_model.prepare_inputs_for_generation = prepare_inputs_for_generation
+        if config.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES:
+            language_model = AutoModelForCausalLM.from_config(config.text_config)
+            # TODO remove this hack
+            language_model.prepare_inputs_for_generation = prepare_inputs_for_generation
+        else:
+            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
         self.language_model = language_model
 
         # Initialize weights and apply final processing
