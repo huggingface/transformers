@@ -63,18 +63,20 @@ class GenerationConfig(PushToHubMixin):
 
         max_length (`int`, *optional*, defaults to 20):
             The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
-            `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in the
-            prompt.
+            `max_new_tokens`. Its effect is overridden by `max_new_tokens`, if also set.
         max_new_tokens (`int`, *optional*):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
         min_length (`int`, *optional*, defaults to 0):
             The minimum length of the sequence to be generated. Corresponds to the length of the input prompt +
-            `min_new_tokens`. In general, prefer the use of `min_new_tokens`, which ignores the number of tokens in the
-            prompt.
+            `min_new_tokens`. Its effect is overridden by `min_new_tokens`, if also set.
         min_new_tokens (`int`, *optional*):
             The minimum numbers of tokens to generate, ignoring the number of tokens in the prompt.
-        early_stopping (`bool`, *optional*, defaults to `False`):
-            Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
+        early_stopping (`bool` or `str`, *optional*, defaults to `False`):
+            Controls the stopping condition for beam-based methods, like beam-search. It accepts the following values:
+            `True`, where the generation stops as soon as there are `num_beams` complete candidates; `False`, where an
+            heuristic is applied and the generation stops when is it very unlikely to find better candidates;
+            `"never"`, where the beam search procedure only stops when there cannot be better candidates (canonical
+            beam search algorithm).
         max_time(`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
@@ -127,6 +129,9 @@ class GenerationConfig(PushToHubMixin):
         repetition_penalty (`float`, *optional*, defaults to 1.0):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
+        encoder_repetition_penalty (`float`, *optional*, defaults to 1.0):
+            The paramater for encoder_repetition_penalty. An exponential penalty on sequences that are not in the
+            original input. 1.0 means no penalty.
         length_penalty (`float`, *optional*, defaults to 1.0):
             Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
             the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
@@ -239,6 +244,7 @@ class GenerationConfig(PushToHubMixin):
         self.eta_cutoff = kwargs.pop("eta_cutoff", 0.0)
         self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
+        self.encoder_repetition_penalty = kwargs.pop("encoder_repetition_penalty", 1.0)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
@@ -278,6 +284,19 @@ class GenerationConfig(PushToHubMixin):
         self._commit_hash = kwargs.pop("_commit_hash", None)
         self.transformers_version = kwargs.pop("transformers_version", __version__)
 
+        # Additional attributes without default values
+        if not self._from_model_config:
+            # we don't want to copy values from the model config if we're initializing a `GenerationConfig` from a model's default configuration file
+            for key, value in kwargs.items():
+                try:
+                    setattr(self, key, value)
+                except AttributeError as err:
+                    logger.error(f"Can't set {key} with value {value} for {self}")
+                    raise err
+
+        # Validate the values of the attributes
+        self.validate()
+
     def __eq__(self, other):
         self_dict = self.__dict__.copy()
         other_dict = other.__dict__.copy()
@@ -289,6 +308,14 @@ class GenerationConfig(PushToHubMixin):
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    def validate(self):
+        """
+        Validates the values of the attributes of the GenerationConfig instance, and raises a `ValueError` if any of
+        the values are invalid.
+        """
+        if self.early_stopping not in {True, False, "never"}:
+            raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
 
     def save_pretrained(
         self,
@@ -323,7 +350,7 @@ class GenerationConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
+            repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
         output_config_file = os.path.join(save_directory, config_file_name)
@@ -333,7 +360,11 @@ class GenerationConfig(PushToHubMixin):
 
         if push_to_hub:
             self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=kwargs.get("use_auth_token"),
             )
 
     @classmethod
@@ -533,7 +564,9 @@ class GenerationConfig(PushToHubMixin):
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
-        config = cls(**config_dict)
+        # remove all the arguments that are in the config_dict
+
+        config = cls(**config_dict, **kwargs)
         unused_kwargs = config.update(**kwargs)
 
         logger.info(f"Generate config {config}")
@@ -541,6 +574,18 @@ class GenerationConfig(PushToHubMixin):
             return config, unused_kwargs
         else:
             return config
+
+    def dict_torch_dtype_to_str(self, d: Dict[str, Any]) -> None:
+        """
+        Checks whether the passed dictionary and its nested dicts have a *torch_dtype* key and if it's not None,
+        converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
+        string, which can then be stored in the json format.
+        """
+        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
+            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        for value in d.values():
+            if isinstance(value, dict):
+                self.dict_torch_dtype_to_str(value)
 
     def to_diff_dict(self) -> Dict[str, Any]:
         """
@@ -562,6 +607,7 @@ class GenerationConfig(PushToHubMixin):
             if key not in default_config_dict or key == "transformers_version" or value != default_config_dict[key]:
                 serializable_config_dict[key] = value
 
+        self.dict_torch_dtype_to_str(serializable_config_dict)
         return serializable_config_dict
 
     def to_dict(self) -> Dict[str, Any]:
@@ -578,6 +624,7 @@ class GenerationConfig(PushToHubMixin):
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
 
+        self.dict_torch_dtype_to_str(output)
         return output
 
     def to_json_string(self, use_diff: bool = True) -> str:
@@ -626,7 +673,8 @@ class GenerationConfig(PushToHubMixin):
             [`GenerationConfig`]: The configuration object instantiated from those parameters.
         """
         config_dict = model_config.to_dict()
-        config = cls.from_dict(config_dict, return_unused_kwargs=False)
+        config_dict.pop("_from_model_config", None)
+        config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
 
         # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
         # generation config.
@@ -638,7 +686,6 @@ class GenerationConfig(PushToHubMixin):
                     if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
                         setattr(config, attr, decoder_config[attr])
 
-        config._from_model_config = True
         return config
 
     def update(self, **kwargs):

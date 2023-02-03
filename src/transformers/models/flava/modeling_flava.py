@@ -51,11 +51,9 @@ _CHECKPOINT_FOR_DOC = "facebook/flava-full"
 
 # Codebook docstring
 _CHECKPOINT_FOR_CODEBOOK_DOC = "facebook/flava-image-codebook"
-_FEAT_EXTRACTOR_FOR_DOC = "FlavaFeatureExtractor"
 _CONFIG_CLASS_FOR_IMAGE_MODEL_DOC = "FlavaImageConfig"
 _CONFIG_CLASS_FOR_TEXT_MODEL_DOC = "FlavaTextConfig"
 _CONFIG_CLASS_FOR_MULTIMODAL_MODEL_DOC = "FlavaMultimodalConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
 _EXPECTED_IMAGE_OUTPUT_SHAPE = [1, 197, 768]
 
 FLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -750,8 +748,8 @@ FLAVA_INPUTS_DOCSTRING_COMMON = r"""
 FLAVA_IMAGE_INPUTS_DOCSTRING_BASE = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`FlavaFeatureExtractor`]. See
-            [`FlavaFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`FlavaImageProcessor.__call__`] for details.
 
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -765,7 +763,7 @@ FLAVA_IMAGE_INPUTS_DOCSTRING = FLAVA_IMAGE_INPUTS_DOCSTRING_BASE + FLAVA_INPUTS_
 FLAVA_TEXT_INPUTS_DOCSTRING_BASE = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`BertTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
 
@@ -807,7 +805,7 @@ FLAVA_PRETRAINING_INPUTS_DOCSTRING = (
     Args:
         input_ids_masked (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary. These ones are the masked version of the original task
-            to be used with MLM. Indices can be obtained using [`BertTokenizer`] along with
+            to be used with MLM. Indices can be obtained using [`AutoTokenizer`] along with
             [`DataCollatorForMaskedLanguageModeling`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
 
@@ -926,7 +924,6 @@ class FlavaImageModel(FlavaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FLAVA_IMAGE_INPUTS_DOCSTRING.format("batch_size, image_num_patches"))
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_CLASS_FOR_IMAGE_MODEL_DOC,
@@ -1024,7 +1021,6 @@ class FlavaTextModel(FlavaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FLAVA_TEXT_INPUTS_DOCSTRING.format("batch_size, text_seq_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_CLASS_FOR_TEXT_MODEL_DOC,
@@ -1129,7 +1125,6 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
         FLAVA_MULTIMODAL_INPUTS_DOCSTRING.format("batch_size, image_num_patches + text_seq_len")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_CLASS_FOR_MULTIMODAL_MODEL_DOC,
@@ -1261,10 +1256,10 @@ class FlavaModel(FlavaPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import FlavaProcessor, FlavaModel
+        >>> from transformers import AutoProcessor, FlavaModel
 
         >>> model = FlavaModel.from_pretrained("{0}")
-        >>> processor = FlavaProcessor.from_pretrained("{0}")
+        >>> processor = AutoProcessor.from_pretrained("{0}")
 
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], max_length=77, padding="max_length", return_tensors="pt"
@@ -1310,10 +1305,10 @@ class FlavaModel(FlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import FlavaProcessor, FlavaModel
+        >>> from transformers import AutoProcessor, FlavaModel
 
         >>> model = FlavaModel.from_pretrained("{0}")
-        >>> processor = FlavaProcessor.from_pretrained("{0}")
+        >>> processor = AutoProcessor.from_pretrained("{0}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1366,10 +1361,10 @@ class FlavaModel(FlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import FlavaProcessor, FlavaModel
+        >>> from transformers import AutoProcessor, FlavaModel
 
         >>> model = FlavaModel.from_pretrained("facebook/flava-full")
-        >>> processor = FlavaProcessor.from_pretrained("facebook/flava-full")
+        >>> processor = AutoProcessor.from_pretrained("facebook/flava-full")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1568,22 +1563,22 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-                Pixel values. Codebook pixel values can be obtained using [`FlavaFeatureExtractor`] by passing
-                `return_codebook_pixels=True`. See [`FlavaFeatureExtractor.__call__`] for details.
+                Pixel values. Codebook pixel values can be obtained using [`AutoImageProcessor`] by passing
+                `return_codebook_pixels=True`. See [`FlavaImageProcessor.__call__`] for details.
 
         Examples:
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import FlavaFeatureExtractor, FlavaImageCodebook
+        >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{0}")
-        >>> feature_extractor = FlavaFeatureExtractor.from_pretrained("{0}")
+        >>> image_processor = AutoImageProcessor.from_pretrained("{0}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = feature_extractor([image], return_codebook_pixels=True, return_tensors="pt")
+        >>> inputs = image_processor([image], return_codebook_pixels=True, return_tensors="pt")
         >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
 
         >>> outputs = model.get_codebook_indices(**inputs)
@@ -1602,23 +1597,23 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-                Pixel values. Codebook pixel values can be obtained using [`FlavaFeatureExtractor`] by passing
-                `return_codebook_pixels=True`. See [`FlavaFeatureExtractor.__call__`] for details.
+                Pixel values. Codebook pixel values can be obtained using [`AutoImageProcessor`] by passing
+                `return_codebook_pixels=True`. See [`FlavaImageProcessor.__call__`] for details.
 
         Examples:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import FlavaFeatureExtractor, FlavaImageCodebook
+        >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{0}")
-        >>> feature_extractor = FlavaFeatureExtractor.from_pretrained("{0}")
+        >>> image_processor = AutoImageProcessor.from_pretrained("{0}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = feature_extractor([image], return_codebook_pixels=True, return_tensors="pt")
+        >>> inputs = image_processor([image], return_codebook_pixels=True, return_tensors="pt")
         >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
 
         >>> outputs = model(**inputs)
@@ -1801,13 +1796,13 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import FlavaForPreTraining, FlavaProcessor
+        >>> from transformers import FlavaForPreTraining, AutoProcessor
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> model = FlavaForPreTraining.from_pretrained("facebook/flava-full")
-        >>> processor = FlavaProcessor.from_pretrained("facebook/flava-full")
+        >>> processor = AutoProcessor.from_pretrained("facebook/flava-full")
 
         >>> text = ["a photo of a cat"]
 
@@ -1897,7 +1892,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
                 if codebook_pixel_values is None:
                     raise ValueError(
                         "`codebook_pixel_value` are required to generate `mim_labels` if loss is expected. "
-                        "Call `FlavaProcessor` with `return_codebook_pixels` set to True"
+                        "Call `AutoProcessor` with `return_codebook_pixels` set to True"
                     )
                 mim_labels = self.image_codebook.get_codebook_indices(codebook_pixel_values)
         # Unimodal MIM Loss

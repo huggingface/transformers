@@ -2079,7 +2079,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 time.sleep(0.5)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-epoch", use_auth_token=self._token)
+            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-epoch", token=self._token)
             commits = self.get_commit_history(tmp_dir)
             self.assertIn("initial commit", commits)
             # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if
@@ -2106,7 +2106,7 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 time.sleep(0.5)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-step", use_auth_token=self._token)
+            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-step", token=self._token)
             commits = self.get_commit_history(tmp_dir)
             self.assertIn("initial commit", commits)
             # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if

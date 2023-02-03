@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "junnyu/roformer_chinese_base"
 _CONFIG_FOR_DOC = "RoFormerConfig"
-_TOKENIZER_FOR_DOC = "RoFormerTokenizer"
 
 FLAX_ROFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "junnyu/roformer_chinese_small",
@@ -95,7 +94,7 @@ ROFORMER_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`RoFormerTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -240,7 +239,7 @@ class FlaxRoFormerSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -750,9 +749,7 @@ class FlaxRoFormerModel(FlaxRoFormerPreTrainedModel):
     module_class = FlaxRoFormerModule
 
 
-append_call_sample_docstring(
-    FlaxRoFormerModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxRoFormerModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxRoFormerForMaskedLMModule(nn.Module):
@@ -812,7 +809,6 @@ class FlaxRoFormerForMaskedLM(FlaxRoFormerPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxRoFormerForMaskedLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMaskedLMOutput,
     _CONFIG_FOR_DOC,
@@ -877,7 +873,6 @@ class FlaxRoFormerForSequenceClassification(FlaxRoFormerPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxRoFormerForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -956,7 +951,6 @@ overwrite_call_docstring(
 )
 append_call_sample_docstring(
     FlaxRoFormerForMultipleChoice,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMultipleChoiceModelOutput,
     _CONFIG_FOR_DOC,
@@ -1022,7 +1016,6 @@ class FlaxRoFormerForTokenClassification(FlaxRoFormerPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxRoFormerForTokenClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxTokenClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1091,7 +1084,6 @@ class FlaxRoFormerForQuestionAnswering(FlaxRoFormerPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxRoFormerForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,

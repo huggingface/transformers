@@ -46,7 +46,6 @@ from .configuration_m2m_100 import M2M100Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "M2M100Config"
-_TOKENIZER_FOR_DOC = "M2M100Tokenizer"
 _CHECKPOINT_FOR_DOC = "facebook/m2m100_418M"
 
 
@@ -173,7 +172,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
-        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds, past_key_values_length):
         """
@@ -577,10 +576,10 @@ M2M_100_GENERATION_EXAMPLE = r"""
     Translation example:
 
     ```python
-    >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
+    >>> from transformers import AutoTokenizer, M2M100ForConditionalGeneration
 
     >>> model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
-    >>> tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/m2m100_418M")
 
     >>> text_to_translate = "Life is like a box of chocolates"
     >>> model_inputs = tokenizer(text_to_translate, return_tensors="pt")
@@ -597,7 +596,7 @@ M2M_100_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -611,7 +610,7 @@ M2M_100_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -734,7 +733,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -915,7 +914,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1172,7 +1171,6 @@ class M2M100Model(M2M100PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(M2M_100_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
