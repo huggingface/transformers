@@ -467,8 +467,8 @@ class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
     ):
         r"""
         Returns:
-            `List[torch.FloatTensor]`: The list of logits output of char, bpe, wp.
-            `List[torch.FloatTensor]`: The list of attention output of char, bpe, wp.
+            `List[torch.FloatTensor]`: The list of logits output of char, bpe, wp. `List[torch.FloatTensor]`: The list
+            of attention output of char, bpe, wp.
 
         Example:
 
