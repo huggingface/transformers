@@ -31,12 +31,11 @@ EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class EfficientNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EfficientNetModel`]. It is used to instantiate an
-    EfficientNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the EfficientNet
+    EfficientNet model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the EfficientNet
     [google/efficientnet-b7](https://huggingface.co/google/efficientnet-b7) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -124,8 +123,7 @@ class EfficientNetConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.num_channels = num_channels
-               self.image_size = image_size
-        self.num_stages = num_stages
+        self.image_size = image_size
         self.width_coefficient = width_coefficient
         self.depth_coefficient = depth_coefficient
         self.depth_divisor = depth_divisor

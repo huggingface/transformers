@@ -26,7 +26,7 @@ from PIL import Image
 
 import requests
 from huggingface_hub import hf_hub_download
-from transformers import EfficientNetConfig, ConvNextFeatureExtractor, EfficientNetForImageClassification
+from transformers import ConvNextFeatureExtractor, EfficientNetConfig, EfficientNetForImageClassification
 from transformers.utils import logging
 
 
