@@ -26,7 +26,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BackboneOutput,
-    BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
@@ -269,7 +268,7 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
         dim (`int`): Number of input channels.
     """
 
-    def __init__(self, config, dim):
+    def __init__(self, config, dim, kernel_size):
         super().__init__()
         self.dim_se = max(1, int(dim * config.squeeze_expansion_ratio))
 
@@ -367,7 +366,7 @@ class EfficientNetBlock(nn.Module):
             stride=stride,
             kernel_size=kernel_size,
         )
-        self.squeeze_excite = EfficientNetSqueezeExciteLayer(config=config, in_dim=in_dim)
+        self.squeeze_excite = EfficientNetSqueezeExciteLayer(config=config, in_dim=in_dim, kernel_size=kernel_size)
         self.projection = EfficientNetFinalLayer(
             config=config,
             in_dim=in_dim,
