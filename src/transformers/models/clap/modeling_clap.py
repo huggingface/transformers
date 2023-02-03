@@ -332,7 +332,7 @@ class CLAPAudioPatchEmbed(nn.Module):
                 padding=padding,
             )
 
-    def forward(self, x, longer_idx=None):
+    def forward(self, x, is_longer_idx=None):
         if self.enable_fusion:
             global_x = x[:, 0:1, :, :]
 
@@ -343,9 +343,9 @@ class CLAPAudioPatchEmbed(nn.Module):
             ), f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
             global_x = self.proj(global_x)
             TW = global_x.size(-1)
-            if len(longer_idx) > 0:
+            if len(is_longer_idx) > 0:
                 # local processing
-                local_x = x[longer_idx, 1:, :, :].contiguous()
+                local_x = x[is_longer_idx, 1:, :, :].contiguous()
                 B, C, H, W = local_x.shape
                 local_x = local_x.view(B * C, 1, H, W)
                 local_x = self.mel_conv2d(local_x)
@@ -359,7 +359,7 @@ class CLAPAudioPatchEmbed(nn.Module):
                 else:
                     local_x = local_x[:, :, :, :TW]
 
-                global_x[longer_idx] = self.fusion_model(global_x[longer_idx], local_x)
+                global_x[is_longer_idx] = self.fusion_model(global_x[is_longer_idx], local_x)
             x = global_x
         else:
             B, C, H, W = x.shape
@@ -1784,7 +1784,7 @@ class CLAPModel(CLAPPreTrainedModel):
     def get_audio_features(
         self,
         input_features: Optional[torch.Tensor] = None,
-        longer: Optional[torch.Tensor] = None,
+        is_longer: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1799,7 +1799,7 @@ class CLAPModel(CLAPPreTrainedModel):
 
         audio_outputs = self.audio_model(
             input_features=input_features,
-            longer=longer,
+            is_longer=is_longer,
             return_dict=return_dict,
         )
 
@@ -2190,7 +2190,7 @@ class CLAPAudioEncoder(nn.Module):
         self,
         input_features,
         head_mask: Optional[torch.FloatTensor] = None,
-        longer: Optional[torch.FloatTensor]=None,
+        is_longer: Optional[torch.FloatTensor]=None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         output_hidden_states_before_downsampling: Optional[bool] = False,
@@ -2202,17 +2202,17 @@ class CLAPAudioEncoder(nn.Module):
         hidden_states = self.bn0(input_features)
         hidden_states = hidden_states.transpose(1, 3)
 
-        longer_list_idx = None
+        is_longer_list_idx = None
         if self.enable_fusion:
-            longer_list = longer.to(input_features.device)
-            longer_list_idx = torch.where(longer_list == 0)[0]
+            is_longer_list = is_longer.to(input_features.device)
+            is_longer_list_idx = torch.where(is_longer_list == 0)[0]
 
         hidden_states = self.reshape_wav2img(hidden_states)
 
         _, _, frames_num, _ = hidden_states.shape
 
 
-        hidden_states = self.patch_embed(hidden_states, longer_list_idx)
+        hidden_states = self.patch_embed(hidden_states, is_longer_list_idx)
 
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
@@ -2284,7 +2284,7 @@ class CLAPAudioEncoder(nn.Module):
 
         hidden_states = (
             hidden_states.permute(0, 2, 1).contiguous().reshape(batch_size, n_channels, freq_shape, temporal_shape)
-)
+        )
 
         batch_size, n_channels, n_frequencies, n_temp = hidden_states.shape
         # group 2D CNN
