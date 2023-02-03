@@ -15,26 +15,31 @@
 
 from typing import Optional, Tuple, Union
 
-import jax
-from jax import random
-import jax.numpy as jnp
 import numpy as np
+
 import flax.linen as nn
+import jax
+import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.traverse_util import flatten_dict, unflatten_dict
+from jax import random
 
 from ...modeling_flax_outputs import (
     FlaxBaseModelOutputWithNoAttention,
     FlaxBaseModelOutputWithPoolingAndNoAttention,
-    FlaxImageClassifierOutputWithNoAttention
-    )
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_replace_return_docstrings, overwrite_call_docstring
-from ...utils import (
-    add_start_docstrings,
+    FlaxImageClassifierOutputWithNoAttention,
 )
+from ...modeling_flax_utils import (
+    ACT2FN,
+    FlaxPreTrainedModel,
+    append_replace_return_docstrings,
+    overwrite_call_docstring,
+)
+from ...utils import add_start_docstrings
 from .configuration_convnext import ConvNextConfig
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->ConvNext
+
+# Flax compitable code initially copied from transformers.models.beit.modeling_beit.BeitDropPath
 class FlaxConvNextDropPath(nn.Module):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -47,18 +52,17 @@ class FlaxConvNextDropPath(nn.Module):
     """
 
     drop_prob: Optional[float] = None
-    dtype : jnp.dtype = jnp.float32
+    dtype: jnp.dtype = jnp.float32
 
     @nn.compact
-    def __call__(self, hidden_states: jnp.ndarray, train : bool = False) -> jnp.ndarray:
-
+    def __call__(self, hidden_states: jnp.ndarray, train: bool = False) -> jnp.ndarray:
         if self.drop_prob == 0.0 or not train:
-            return hidden_states 
+            return hidden_states
         keep_prob = 1 - self.drop_prob
         shape = (hidden_states.shape[0],) + (1,) * (
             hidden_states.ndim - 1
         )  # work with diff dim tensors, not just 2D ConvNets
-        random_tensor = keep_prob + random.uniform(random.PRNGKey(0), shape, dtype=self.dtype) # NOTE: Adding seed param
+        random_tensor = keep_prob + random.uniform(random.PRNGKey(0), shape, dtype=self.dtype)
         random_tensor = jnp.floor(random_tensor)  # binarize
         output = jnp.divide(hidden_states, keep_prob) * random_tensor
         return output
@@ -70,19 +74,18 @@ class FlaxConvNextEmbeddings(nn.Module):
     """
 
     config: ConvNextConfig
-    dtype : jnp.dtype = jnp.float32
-    
+    dtype: jnp.dtype = jnp.float32
+
     def setup(self):
         self.patch_embeddings = nn.Conv(
             self.config.hidden_sizes[0],
             kernel_size=(self.config.patch_size, self.config.patch_size),
             strides=(self.config.patch_size, self.config.patch_size),
-            dtype=self.dtype
+            dtype=self.dtype,
         )
         self.layernorm = nn.LayerNorm(epsilon=1e-6, dtype=self.dtype)
 
     def __call__(self, pixel_values: jnp.ndarray) -> jnp.ndarray:
-        # print(pixel_values.shape)
         num_channels = pixel_values.shape[-1]
         if num_channels != self.config.num_channels:
             raise ValueError(
@@ -106,21 +109,20 @@ class FlaxConvNextLayer(nn.Module):
         config ([`ConvNextConfig`]): Model configuration class.
         dim (`int`): Number of input channels.
         drop_path (`float`): Stochastic depth rate. Default: 0.0.
+        dtype (`jax.numpy.dtype`): Data type of the computation. Default: jax.numpy.float32
     """
 
     config: ConvNextConfig
     dim: int
     drop_path: int = 0
-    dtype : jnp.dtype = jnp.float32
+    dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         self.dwconv = nn.Conv(
             self.dim, kernel_size=(7, 7), padding=((3, 3), (3, 3)), feature_group_count=self.dim, dtype=self.dtype
         )  # depthwise conv
         self.layernorm = nn.LayerNorm(epsilon=1e-6, dtype=self.dtype)
-        self.pwconv1 = nn.Dense(
-            4 * self.dim, dtype=self.dtype
-        )  # pointwise/1x1 convs, implemented with linear layers
+        self.pwconv1 = nn.Dense(4 * self.dim, dtype=self.dtype)  # pointwise/1x1 convs, implemented with linear layers
         self.act = ACT2FN[self.config.hidden_act]
         self.pwconv2 = nn.Dense(self.dim, dtype=self.dtype)
 
@@ -155,6 +157,7 @@ class FlaxConvNextStage(nn.Module):
         out_channels (`int`): Number of output channels.
         depth (`int`): Number of residual blocks.
         drop_path_rates(`List[float]`): Stochastic depth rates for each layer.
+        dtype (`jax.numpy.dtype`): Data type of the computation. Default: jax.numpy.float32
     """
 
     config: ConvNextConfig
@@ -164,27 +167,27 @@ class FlaxConvNextStage(nn.Module):
     stride: int = 2
     depth: int = 2
     drop_path_rates: list = None
-    dtype : jnp.dtype = jnp.float32
+    dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         if self.in_channels != self.out_channels or self.stride > 1:
-            self.downsampling_layer = nn.Sequential([
-                nn.LayerNorm(epsilon=1e-6, dtype=self.dtype),
-                nn.Conv(
-                    self.out_channels, kernel_size=[self.kernel_size, self.kernel_size], strides=[self.stride, self.stride], dtype=self.dtype
-                )]
+            self.downsampling_layer = nn.Sequential(
+                [
+                    nn.LayerNorm(epsilon=1e-6, dtype=self.dtype),
+                    nn.Conv(
+                        self.out_channels,
+                        kernel_size=[self.kernel_size, self.kernel_size],
+                        strides=[self.stride, self.stride],
+                        dtype=self.dtype,
+                    ),
+                ]
             )
         else:
             self.downsampling_layer = None
         drop_path_rates = self.drop_path_rates or [0.0] * self.depth
         self.layers = nn.Sequential(
             [
-                FlaxConvNextLayer(
-                    self.config,
-                    dim=self.out_channels,
-                    drop_path=drop_path_rates[j],
-                    dtype=self.dtype
-                )
+                FlaxConvNextLayer(self.config, dim=self.out_channels, drop_path=drop_path_rates[j], dtype=self.dtype)
                 for j in range(self.depth)
             ]
         )
@@ -198,10 +201,9 @@ class FlaxConvNextStage(nn.Module):
 
 class FlaxConvNextEncoder(nn.Module):
     config: ConvNextConfig
-    dtype : jnp.dtype = jnp.float32
+    dtype: jnp.dtype = jnp.float32
 
     def setup_drop_path_rates(self):
-        
         # NOTE: Using Jax causes error, still investigating, Abstract tracer value encountered where concrete value is expected
         sections = (np.cumsum(np.array(self.config.depths)) - np.array(self.config.depths))[1:]
 
@@ -209,15 +211,15 @@ class FlaxConvNextEncoder(nn.Module):
             x.tolist()
             for x in np.split(
                 np.linspace(0, self.config.drop_path_rate, sum(self.config.depths), dtype=self.dtype),
-                sections, # NOTE: numpy split has a subtle difference compared to torch split
-            ) # NOTE: Need to really validate the result
+                sections,
+            )
         ]
-            
+
         return drop_path_rates
 
     def setup(self):
         stages = []
-        
+
         drop_path_rates = self.setup_drop_path_rates()
 
         prev_chs = self.config.hidden_sizes[0]
@@ -230,7 +232,7 @@ class FlaxConvNextEncoder(nn.Module):
                 stride=2 if i > 0 else 1,
                 depth=self.config.depths[i],
                 drop_path_rates=drop_path_rates[i],
-                dtype=self.dtype
+                dtype=self.dtype,
             )
             stages.append(stage)
             prev_chs = out_chs
@@ -242,7 +244,7 @@ class FlaxConvNextEncoder(nn.Module):
         hidden_states: jnp.ndarray,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    )  -> Union[Tuple, FlaxBaseModelOutputWithNoAttention]:
+    ) -> Union[Tuple, FlaxBaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.stages):
@@ -258,8 +260,8 @@ class FlaxConvNextEncoder(nn.Module):
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
         return FlaxBaseModelOutputWithNoAttention(
-        last_hidden_state=hidden_states,
-        hidden_states=all_hidden_states,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
         )
 
 
@@ -295,28 +297,13 @@ class FlaxConvNextPreTrainedModel(FlaxPreTrainedModel):
             _do_init=_do_init,
         )
 
-    def init_weights(
-        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
-    ) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
 
         rngs = {"params": rng}
 
-        random_params = self.module.init(rngs, pixel_values, return_dict=False)[
-            "params"
-        ]
-
-        # print("flattened", flatten_dict(unfreeze(random_params)).keys())
-        # print("=--=-="*100)
-        # import json
-        # random_params = json.load(open("/home/fury/Documents/test_transformers/convnext_models/updated_flax.json"))
-        # random_params = flatten_dict(random_params)
-        # print("here", random_params.keys())
-        # random_params = {k:jnp.array(v) for k, v in random_params.items()}
-        # random_params = freeze(unflatten_dict(random_params))
-        # print("random_params, keys", random_params.keys())
-        # print("done")
+        random_params = self.module.init(rngs, pixel_values, return_dict=False)["params"]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -328,13 +315,6 @@ class FlaxConvNextPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
-
-    # def num_params(self, params=None):
-    #     if params is None:
-    #         params = self.params
-    #     num_params = jax.tree_util.tree_map(lambda param: param.size, flatten_dict(unfreeze(params))).values()
-    #     return sum(list(num_params))
-
     def __call__(
         self,
         pixel_values,
@@ -344,19 +324,11 @@ class FlaxConvNextPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
@@ -408,7 +380,7 @@ CONVNEXT_START_DOCSTRING = r"""
 
 CONVNEXT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`jax.numpy.float32` of shape `(batch_size, height, width, num_channels)`):
+        pixel_values (`jax.numpy.float32` of shape `(batch_size, num_channels, height, width`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`AutoImageProcessor.__call__`] for details.
 
@@ -434,18 +406,14 @@ class FlaxConvNextModule(nn.Module):
     def __call__(
         self,
         pixel_values: jnp.ndarray = None,
-        train : bool = False,
+        train: bool = False,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FlaxBaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -463,15 +431,15 @@ class FlaxConvNextModule(nn.Module):
         # global average pooling, (N, C, H, W) -> (N, C)
         pooled_output = self.layernorm(last_hidden_state.mean([-3, -2]))
 
-        last_hidden_state = last_hidden_state.transpose(0, 3, 1, 2) # NOTE: transpose ?
-    
+        last_hidden_state = last_hidden_state.transpose(0, 3, 1, 2)
+
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
         return FlaxBaseModelOutputWithPoolingAndNoAttention(
-           last_hidden_state=last_hidden_state,
-           pooler_output=pooled_output,
-           hidden_states=encoder_outputs.hidden_states,
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -507,31 +475,30 @@ append_replace_return_docstrings(
     FlaxConvNextModel, output_type=FlaxBaseModelOutputWithPoolingAndNoAttention, config_class=ConvNextConfig
 )
 
+
 class FlaxConvNextForImageClassificationModule(nn.Module):
     config: ConvNextConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-
         self.convnext = FlaxConvNextModule(config=self.config, dtype=self.dtype)
 
         # Classifier head
         if self.config.num_labels > 0:
             self.classifier = nn.Dense(
-            self.config.num_labels,
-            dtype=self.dtype,
-        )
+                self.config.num_labels,
+                dtype=self.dtype,
+            )
         else:
-            self.classifier = None 
-
+            self.classifier = None
 
     def __call__(
         self,
-         pixel_values=None,
-         train: bool = False,
-         output_hidden_states=None,
-         return_dict=None,
-     ):
+        pixel_values=None,
+        train: bool = False,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.convnext(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
@@ -551,6 +518,7 @@ class FlaxConvNextForImageClassificationModule(nn.Module):
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
 
 @add_start_docstrings(
     """
@@ -588,5 +556,7 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
 
 overwrite_call_docstring(FlaxConvNextForImageClassification, FLAX_VISION_CLASSIF_DOCSTRING)
 append_replace_return_docstrings(
-    FlaxConvNextForImageClassification, output_type=FlaxImageClassifierOutputWithNoAttention, config_class=ConvNextConfig
+    FlaxConvNextForImageClassification,
+    output_type=FlaxImageClassifierOutputWithNoAttention,
+    config_class=ConvNextConfig,
 )

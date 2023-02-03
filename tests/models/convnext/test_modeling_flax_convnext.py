@@ -27,10 +27,11 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
-    from transformers import FlaxConvNextModel, FlaxConvNextForImageClassification
+    from transformers import FlaxConvNextForImageClassification, FlaxConvNextModel
 
 if is_vision_available():
     from PIL import Image
+
     from transformers import AutoFeatureExtractor
 
 
