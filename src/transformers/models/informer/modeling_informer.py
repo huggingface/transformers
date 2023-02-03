@@ -824,6 +824,10 @@ class ProbSparseAttention(nn.Module):
         Q_reduce = torch.gather(
             input=query_states, dim=0, index=torch.tile(M_top[:, :, None], (1, 1, query_states.shape[2]))
         )
+        # Eli: might be more nice
+        # dim_for_slice = torch.arange(query_states.size(0)).unsqueeze(-1)
+        # Q_reduce = query_states[dim_for_slice, M_top]
+
         attn_weights = torch.bmm(Q_reduce, key_states.transpose(1, 2))
 
         src_len = key_states.size(1)
@@ -884,9 +888,6 @@ class ProbSparseAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Eli: TriangularCausalMask, ProbMask, FullAttention, ProbAttention and AttentionLayer
-# are from the original Informer repository (see the exact source below)
-
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/utils/masking.py
 class ProbMask:
@@ -899,44 +900,6 @@ class ProbMask:
     @property
     def mask(self):
         return self._mask
-
-
-# source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/attn.py
-class FullAttention(nn.Module):
-    def __init__(
-        self,
-        mask_flag=True,
-        factor=5,
-        scale=None,
-        attention_dropout=0.1,
-        output_attention=False,
-    ):
-        super(FullAttention, self).__init__()
-        self.scale = scale
-        self.mask_flag = mask_flag
-        self.output_attention = output_attention
-        self.dropout = nn.Dropout(attention_dropout)
-
-    def forward(self, queries, keys, values, attn_mask):
-        B, L, H, E = queries.shape
-        _, S, _, D = values.shape
-        scale = self.scale or 1.0 / sqrt(E)
-
-        scores = torch.einsum("blhe,bshe->bhls", queries, keys)
-        if self.mask_flag:
-            if attn_mask is None:
-                attn_mask = TriangularCausalMask(B, L, device=queries.device)
-
-            scores.masked_fill_(attn_mask.mask, -np.inf)
-
-        A = self.dropout(torch.softmax(scale * scores, dim=-1))
-        V = torch.einsum("bhls,bshd->blhd", A, values)
-
-        if self.output_attention:
-            return (V.contiguous(), A)
-        else:
-            return (V.contiguous(), None)
-
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/attn.py
 class ProbAttention(nn.Module):
