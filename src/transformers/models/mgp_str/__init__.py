@@ -40,6 +40,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MGPSTRConfig
+    from .processing_mgp_str.py import MGPSTRProcessor
     from .tokenization_mgp_str import MGPSTRTokenizer
 
     try:

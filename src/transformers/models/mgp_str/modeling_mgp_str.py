@@ -23,7 +23,6 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging
 from .configuration_mgp_str import MGPSTRConfig
@@ -201,7 +200,6 @@ class MGPSTRA3Module(nn.Module):
         self.norm = nn.LayerNorm(input_embed_dim)
 
     def forward(self, x):
-        B = x.shape[0]
         x = self.token_norm(x)
         x = x.transpose(1, 2).unsqueeze(-1)
         selected = self.tokenLearner(x)

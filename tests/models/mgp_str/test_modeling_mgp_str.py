@@ -174,11 +174,11 @@ class MGPSTRModelTest(ModelTesterMixin, unittest.TestCase):
     # not implemented currently
     def test_save_load_fast_init_from_base(self):
         pass
-    
+
     # not implemented currently
     def test_save_load_fast_init_to_base(self):
         pass
-    
+
     # not implemented currently
     def test_tied_model_weights_key_ignore(self):
         pass
