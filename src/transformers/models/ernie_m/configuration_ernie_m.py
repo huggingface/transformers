@@ -65,6 +65,7 @@ ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "susnato/ernie-m-large_pytorch": "https://huggingface.co/susnato/ernie-m-large_pytorch/blob/main/config.json",
 }
 
+
 class ErnieMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [*ErnieModel*]. It is used to instantiate a ERNIE
@@ -115,7 +116,7 @@ class ErnieMConfig(PretrainedConfig):
                 pad_token_id(int, optional):
                     The index of padding token in the token vocabulary. Defaults to *1*.
             Examples:
-        """
+    """
     model_type = "ernie_m"
     attribute_map: Dict[str, str] = {"dropout": "classifier_dropout", "num_classes": "num_labels"}
     # pretrained_init_configuration = ERNIE_M_PRETRAINED_INIT_CONFIGURATION

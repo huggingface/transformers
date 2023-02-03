@@ -57,6 +57,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "DetaEncoder",  # Building part of bigger (tested) model.
     "DetaDecoder",  # Building part of bigger (tested) model.
     "ErnieMUIEM",
+    "DetaEncoder",  # Building part of bigger (tested) model.
+    "DetaDecoder",  # Building part of bigger (tested) model.
     "GraphormerEncoder",  # Building part of bigger (tested) model.
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "CLIPSegDecoder",  # Building part of bigger (tested) model.
