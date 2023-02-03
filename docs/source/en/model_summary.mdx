@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # The Transformer model family
 
-Since its introduction in 2017, the [original Transformer](https://arxiv.org/abs/1706.03762) model has inspired many new and exciting models that extend beyond natural language processing (NLP) tasks. There are models for [predicting the folded structure of proteins](https://huggingface.co/blog/deep-learning-with-proteins), [training a cheetah to run](https://huggingface.co/blog/train-decision-transformers), and [time series forecasting](https://huggingface.co/blog/time-series-transformers). It can be easy to miss the forest for the trees with all the different Transformer models out there! But what all these models have in common is that they are based on the original Transformer architecture. Some models only use one of the Transformer architecture components - the encoder or decoder - while others use both, just like the original Transformer. This provides a useful framework to categorize and examine the high-level differences and broader trends within the Transformer family.
+Since its introduction in 2017, the [original Transformer](https://arxiv.org/abs/1706.03762) model has inspired many new and exciting models that extend beyond natural language processing (NLP) tasks. There are models for [predicting the folded structure of proteins](https://huggingface.co/blog/deep-learning-with-proteins), [training a cheetah to run](https://huggingface.co/blog/train-decision-transformers), and [time series forecasting](https://huggingface.co/blog/time-series-transformers). It can be easy to miss the bigger picture with all the Transformer models out there, but what all these models have in common is that they are based on the original Transformer architecture. Some models only use one of the Transformer architecture components - the encoder or decoder - while others use both, just like the original Transformer. This provides a useful framework to categorize and examine the high-level differences and broader trends within the Transformer family.
 
 If you aren't familiar with the original Transformer model or need a refresher, check out the [How do Transformers work](https://huggingface.co/course/chapter1/4?fw=pt) chapter from the Hugging Face course.
 
@@ -22,34 +22,60 @@ If you aren't familiar with the original Transformer model or need a refresher, 
     picture-in-picture" allowfullscreen></iframe>
 </div>
 
-## Encoder
+## Computer vision
 
-<Tip>
+<iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="1000" height="450" src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2FacQBpeFBVvrDUlzFlkejoz%2FModelscape-timeline%3Fnode-id%3D0%253A1%26t%3Dm0zJ7m2BQ9oe0WtO-1" allowfullscreen></iframe> 
 
-Take a look at the [Encoder models](https://huggingface.co/course/chapter1/5?fw=pt) chapter of the Hugging Face course for a friendly introduction to encoders!
+### Encoder[[cv-encoder]]
 
-</Tip>
-
-<iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="1000" height="350" src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2FacQBpeFBVvrDUlzFlkejoz%2FModelscape-timeline%3Fnode-id%3D0%253A1%26t%3DseEKm6Q03CR3tpoQ-1" allowfullscreen></iframe>
-
-[BERT](model_doc/bert) is the first encoder-only Transformer to work around the constraints of a left-to-right or unidirectional language model like [GPT](model_doc/gpt) by randomly masking certain tokens in the input, and the pretraining objective is to predict the masked token based on the context. This allowed BERT to fully use the left and right contexts to help it learn a deeper and richer representation of the inputs. However, some meat was still left on the bones in terms of pretraining BERT. [RoBERTa](model_doc/roberta) aimed to optimize this by introducing a new pretraining recipe that includes training for longer and on larger batches, randomly masking tokens at each epoch instead of just once during preprocessing, and removing the next-sentence prediction objective. 
-
-The dominant strategy is to increase the model size to achieve even better performance. But training large models is computationally expensive. One way to reduce computational costs is simply using a smaller model like [DistilBERT](model_doc/distilbert). DistilBERT uses [knowledge distillation](https://arxiv.org/abs/1503.02531) - a compression technique - to create a smaller version of BERT while keeping nearly all of its language understanding capabilities. 
-
-Except for DistilBERT, most Transformer models continued to trend towards more parameters, leading to new models focused on improving training efficiency. [ALBERT](model_doc/albert) reduces memory-consumption by lowering the number of parameters in two ways: separating the larger vocabulary embedding into two smaller matrices and allowing layers to share parameters. [DeBERTa](model_doc/deberta) added a disentangled attention mechanism where the word and its position are separately encoded in two vectors. The attention is computed from these instead of a single vector containing the word and position embeddings. [Longformer](model_doc/longformer) also focused on making attention more efficient, especially for processing documents with longer sequence lengths. It uses a combination of local windowed attention (attention only calculated from fixed window-size around each token) and global attention (only for certain task tokens like `[CLS]` for classification) to create a sparse attention matrix instead of a full attention matrix. 
-
-In the same year, [Wav2Vec2](model_doc/wav2vec2) was introduced for speech and audio processing, and it used a Transformer encoder to learn speech representations from raw audio waveforms. It was improved upon by [HuBERT](model_doc/hubert), which created target labels by assigning segments of similar audio to a cluster that becomes a target label (or hidden unit). The hidden unit is mapped to an embedding used to make predictions.
-
-Shortly after Wav2Vec2, [Vision Transformer (ViT)](model_doc/vit) was released, which opened the possibility of performing computer vision tasks without convolutions. ViT uses a standard Transformer encoder, but its main breakthrough was splitting an image into fixed-size patches and using these to create an embedding just like how a sentence is split into tokens. ViT was soon followed by models that could also handle dense vision tasks like segmentation in addition to classification. 
+The [Vision Transformer (ViT)](model_doc/vit) explored the possibility of performing computer vision tasks without convolutions. ViT uses a standard Transformer encoder, but its main breakthrough was splitting an image into fixed-size patches and using these to create an embedding just like how a sentence is split into tokens. ViT was soon followed by models that could also handle dense vision tasks like segmentation in addition to classification.
 
 [Swin](model_doc/swin) constructed hierarchical feature maps (not unlike convnets 👀) from smaller-sized patches and merged them with neighboring patches in deeper layers. Attention is only computed within a local window, and in between attention layers, the window is shifted to introduce cross-window attention to provide connections and help the model learn better. The [SegFormer](model_doc/segformer) also uses a Transformer encoder to generate a hierarchical feature map, but it adds a multilayer perceptron (MLP) decoder on top to combine all the feature maps and make a prediction.
 
-Meanwhile, BeIT and ViTMAE focus on the pretraining objective instead of generating hierarchical features. [BeIT](model_doc/beit) is pretrained by *masked image modeling (MIM)* in which image patches are randomly masked, and the image is also tokenized into visual tokens. BeIT has to predict the image's visual tokens that correspond to the masked patches. The [ViTMAE](model_doc/vitmae) pretraining objective slightly differs in that it must predict the pixels (instead of visual tokens) where 75% of the image patches are masked. The mask tokens are introduced after the encoder and combined with the encoded patches, which are fed to a decoder to reconstruct the pixels. After pretraining, the decoder is thrown away, and the encoder is used for downstream tasks.
+Meanwhile, BeIT and ViTMAE focus on the pretraining objective instead of generating hierarchical features. [BeIT](model_doc/beit) is pretrained by *masked image modeling (MIM)* in which image patches are randomly masked, and the image is also tokenized into visual tokens. BeIT has to predict the image's visual tokens that correspond to the masked patches. The [ViTMAE](model_doc/vitmae) pretraining objective slightly differs in that it must predict the pixels (instead of visual tokens) and 75% of the image patches are masked. The mask tokens are introduced after the encoder and combined with the encoded patches, which are fed to a decoder to reconstruct the pixels. After pretraining, the decoder is thrown away, and the encoder is used for downstream tasks.
 
-Lastly, let's go back to 2019 when [VisualBERT](model_doc/visual_bert), a multimodal model for vision-language tasks was released. It combines BERT and a pretrained object detection system to extract image features into visual embeddings, which are passed alongside text embeddings to BERT. To pretrain, VisualBERT has to predict the masked text based on the unmasked text and the visual embeddings, and it also has to predict whether the text is aligned with the image. But when ViT was released, [ViLT](model_doc/vilt) adopted it because it was simpler to use ViT to get the image embeddings and process them jointly with the text embeddings. From there, ViLT is pretrained by image text matching, masked language modeling, and whole word masking.
+### Convolutional network
+
+### Decoder[[cv-decoder]]
+
+### Encoder-decoder[[cv-encoder-decoder]]
+
+## Natural language processing
+
+<iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="1000" height="450" src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2FUhbQAZDlpYW5XEpdFy6GoG%2Fnlp-model-timeline%3Fnode-id%3D0%253A1%26t%3D4mZMr4r1vDEYGJ50-1" allowfullscreen></iframe>
+
+### Encoder[[nlp-encoder]]
+
+[BERT](model_doc/bert) is a encoder-only Transformer that randomly masks certain tokens in the input to avoid seeing other tokens which would allow it to "cheat". The pretraining objective is to predict the masked token based on the context. This allows BERT to fully use the left and right contexts to help it learn a deeper and richer representation of the inputs. However, there was still room for improvement in BERT's pretraining strategy. [RoBERTa](model_doc/roberta) improved upon this by introducing a new pretraining recipe that includes training for longer and on larger batches, randomly masking tokens at each epoch instead of just once during preprocessing, and removing the next-sentence prediction objective. 
+
+The dominant strategy is to increase the model size to achieve even better performance. But training large models is computationally expensive. One way to reduce computational costs is simply using a smaller model like [DistilBERT](model_doc/distilbert). DistilBERT uses [knowledge distillation](https://arxiv.org/abs/1503.02531) - a compression technique - to create a smaller version of BERT while keeping nearly all of its language understanding capabilities. 
+
+Except for DistilBERT, most Transformer models continued to trend towards more parameters, leading to new models focused on improving training efficiency. [ALBERT](model_doc/albert) reduces memory-consumption by lowering the number of parameters in two ways: separating the larger vocabulary embedding into two smaller matrices and allowing layers to share parameters. [DeBERTa](model_doc/deberta) added a disentangled attention mechanism where the word and its position are separately encoded in two vectors. The attention is computed from these instead of a single vector containing the word and position embeddings. [Longformer](model_doc/longformer) also focused on making attention more efficient, especially for processing documents with longer sequence lengths. It uses a combination of local windowed attention (attention only calculated from fixed window-size around each token) and global attention (only for certain task tokens like `[CLS]` for classification) to create a sparse attention matrix instead of a full attention matrix.
+
+### Decoder[[nlp-decoder]]
+
+### Encoder-decoder[[nlp-encoder-decoder]]
+
+## Audio
+
+<iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="1000" height="450" src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2Fvrchl8jDV9YwNVPWu2W0kK%2Fspeech-and-audio-model-timeline%3Fnode-id%3D0%253A1%26t%3DmM4H8pPMuK23rClL-1" allowfullscreen></iframe>
+
+### Encoder[[audio-encoder]]
+
+In the same year, [Wav2Vec2](model_doc/wav2vec2) was introduced for speech and audio processing, and it used a Transformer encoder to learn speech representations from raw audio waveforms. It was improved upon by [HuBERT](model_doc/hubert), which created target labels by assigning segments of similar audio to a cluster that becomes a target label (or hidden unit). The hidden unit is mapped to an embedding used to make predictions.
+
+### Encoder-decoder[[audio-encoder-decoder]]
+
+## Multimodal
+
+### Encoder[[mm-encoder]]
+
+[VisualBERT](model_doc/visual_bert) is a multimodal model for vision-language tasks that was released shortly after BERT. It combines BERT and a pretrained object detection system to extract image features into visual embeddings, which are passed alongside text embeddings to BERT. To pretrain, VisualBERT has to predict the masked text based on the unmasked text and the visual embeddings, and it also has to predict whether the text is aligned with the image. But when ViT was released, [ViLT](model_doc/vilt) adopted it because it was simpler to use ViT to get the image embeddings and process them jointly with the text embeddings. From there, ViLT is pretrained by image text matching, masked language modeling, and whole word masking.
 
 [CLIP](model_doc/clip) takes a different approach and makes a pair prediction of (`image`, `text`) . An image encoder (ViT) and a text encoder (Transformer) are jointly trained on a 400 million (`image`, `text`) pair dataset to maximize the similarity between the image and text embeddings of the (`image`, `text`) pairs. After pretraining, you can use natural language to instruct CLIP to predict the text given an image or vice versa. [OWL-ViT](model_doc/owlvit) builds on top of CLIP by using it as its backbone for zero-shot object detection. After pretraining, an object detection head is added on top to make a set prediction over the (`class`, `bounding box`) pairs.
 
-## Decoder
+### Encoder-decoder[[mm-encoder-decoder]]
 
-## Encoder-decoder (sequence-to-sequence)
+## Reinforcement learning
+
+### Encoder-decoder[[rl-encoder-decoder]]
