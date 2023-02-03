@@ -27,13 +27,7 @@ from .test_framework_agnostic import GenerationIntegrationTestsMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import (
-        TFAutoModelForCausalLM,
-        TFAutoModelForSeq2SeqLM,
-        TFLogitsProcessorList,
-        TFMinLengthLogitsProcessor,
-        tf_top_k_top_p_filtering,
-    )
+    from transformers import AutoTokenizer, TFAutoModelForCausalLM, TFAutoModelForSeq2SeqLM, tf_top_k_top_p_filtering
 
 
 @require_tf
