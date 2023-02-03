@@ -5969,6 +5969,30 @@ def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_backends(load_tf_weights_in_transfo_xl, ["torch"])
 
 
+TRANSFORMER_TRANSDUCER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TransformerTransducerForRNNT(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TransformerTransducerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TransformerTransducerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
