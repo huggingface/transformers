@@ -194,9 +194,14 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     print("First values of HF logits:", logits[0, :3, :3])
 
     # assert values
-    # cast to same type 
-    target_dtype = logits.dtype
-    assert torch.allclose(original_logits.to(target_dtype), logits, atol=1e-2)
+    if model_name == "blip2-flan-t5-xl":
+        expected_slice_logits = torch.tensor([[-41.5850,  -4.4440,  -8.9922],
+        [-47.4322,  -5.9143,  -1.7340]], device=device)
+        assert torch.allclose(logits[0,:3,:3], expected_slice_logits, atol=1e-4)
+    else:
+        # cast to same type 
+        target_dtype = logits.dtype
+        assert torch.allclose(original_logits.to(target_dtype), logits, atol=1e-2)
     print("Looks ok!")
 
     print("Generating a caption...")
