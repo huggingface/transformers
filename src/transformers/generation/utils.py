@@ -3063,14 +3063,17 @@ class GenerationMixin:
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
 
-            next_token_scores = logits_processor(input_ids, next_token_scores)
+            next_token_scores_processed = logits_processor(input_ids, next_token_scores)
+            next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
+            # Note: logits warpers are intentionally applied after adding running beam scores. On some logits warpers
+            # (like top_p) this is indiferent, but on others (like temperature) it is not. For reference, see
+            # https://github.com/huggingface/transformers/pull/5420#discussion_r449779867
             next_token_scores = logits_warper(input_ids, next_token_scores)
-            next_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    scores += (next_token_scores,)
+                    scores += (logits_warper(input_ids, next_token_scores_processed),)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -3086,15 +3089,15 @@ class GenerationMixin:
                     )
 
             # reshape for beam search
-            vocab_size = next_scores.shape[-1]
-            next_scores = next_scores.view(batch_size, num_beams * vocab_size)
+            vocab_size = next_token_scores.shape[-1]
+            next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
-            probs = nn.functional.softmax(next_scores, dim=-1)
+            probs = nn.functional.softmax(next_token_scores, dim=-1)
 
             next_tokens = torch.multinomial(probs, num_samples=2 * num_beams)
-            next_scores = torch.gather(next_scores, -1, next_tokens)
+            next_token_scores = torch.gather(next_token_scores, -1, next_tokens)
 
-            next_scores, _indices = torch.sort(next_scores, descending=True, dim=1)
+            next_token_scores, _indices = torch.sort(next_token_scores, descending=True, dim=1)
             next_tokens = torch.gather(next_tokens, -1, _indices)
 
             next_indices = torch_int_div(next_tokens, vocab_size)
@@ -3103,7 +3106,7 @@ class GenerationMixin:
             # stateless
             beam_outputs = beam_scorer.process(
                 input_ids,
-                next_scores,
+                next_token_scores,
                 next_tokens,
                 next_indices,
                 pad_token_id=pad_token_id,

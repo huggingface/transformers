@@ -2313,24 +2313,25 @@ class TFGenerationMixin:
             # 2. Compute log probs
             # get log probabilities from logits, process logits with processors (*e.g.* min_length, ...), and
             # add new logprobs to existing running logprobs scores.
-            token_log_probs = tf.nn.log_softmax(logits)
-            token_log_probs = logits_processor(
-                flatten_beam_dim(running_sequences), flatten_beam_dim(token_log_probs), cur_len
-            )
-            token_log_probs = unflatten_beam_dim(token_log_probs, num_beams)
+            log_probs = tf.nn.log_softmax(logits)
+            log_probs = logits_processor(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
+            log_probs = unflatten_beam_dim(log_probs, num_beams)
+            log_probs_processed = log_probs
+            log_probs = log_probs + tf.expand_dims(running_scores, axis=2)
             if do_sample:
-                token_log_probs = logits_warper(
-                    flatten_beam_dim(running_sequences), flatten_beam_dim(token_log_probs), cur_len
-                )
-                token_log_probs = unflatten_beam_dim(token_log_probs, num_beams)
-            log_probs = token_log_probs + tf.expand_dims(running_scores, axis=2)
+                # Note: logits warpers are intentionally applied after adding running beam scores. On some logits
+                # warpers (like top_p) this is indiferent, but on others (like temperature) it is not. For reference,
+                # see https://github.com/huggingface/transformers/pull/5420#discussion_r449779867
+                log_probs = logits_warper(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
+                log_probs = unflatten_beam_dim(log_probs, num_beams)
+                log_probs_processed = log_probs
             vocab_size = log_probs.shape[2]
             log_probs = tf.reshape(log_probs, (batch_size, num_beams * vocab_size))
 
             # Store scores, attentions and hidden_states when required
             if not use_xla and return_dict_in_generate:
                 if output_scores:
-                    all_scores.append(token_log_probs)
+                    all_scores.append(log_probs_processed)
                 if output_attentions and self.config.is_encoder_decoder:
                     decoder_attentions.append(model_outputs.decoder_attentions)
                 elif output_attentions and not self.config.is_encoder_decoder:
