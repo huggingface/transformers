@@ -11,6 +11,12 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 
 # Training on TPU with TensorFlow
 
+<Tip>
+
+If you don't need long explanations and just want TPU code samples to get started with, check out [our TPU tutorial notebook!](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb)
+
+</Tip>
+
 ### What is a TPU?
 
 A TPU is a **Tensor Processing Unit.** They are hardware designed by Google, which are used to greatly speed up the tensor computations within neural networks, much like GPUs. They can be used for both network training and inference. They are generally accessed through Google’s cloud services, but small TPUs can also be accessed directly for free through Google Colab and Kaggle Kernels.
@@ -134,7 +140,7 @@ There isn’t a perfect solution to this problem. However, you can try some tric
 
 ### How do I actually train my model on TPU?
 
-Once your training is XLA-compatible and (if you’re using TPU Node / Colab) your dataset has been prepared appropriately, running on TPU is surprisingly easy! All you really need to change in your code is to add a few lines to initialize your TPU, and to ensure that your model and dataset are created inside a `TPUStrategy` scope. Take a look at our example notebook to see this in action! **[Add link here once the notebook is available]**
+Once your training is XLA-compatible and (if you’re using TPU Node / Colab) your dataset has been prepared appropriately, running on TPU is surprisingly easy! All you really need to change in your code is to add a few lines to initialize your TPU, and to ensure that your model and dataset are created inside a `TPUStrategy` scope. Take a look at [our TPU example notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) to see this in action!
 
 ### Summary
 
