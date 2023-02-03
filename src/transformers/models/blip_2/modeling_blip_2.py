@@ -1098,14 +1098,14 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         """
         Arguments:
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
-            attention_mask (:obj:`torch.Tensor`):
+            attention_mask (`torch.Tensor`):
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
-            input_shape (:obj:`Tuple[int]`):
+            input_shape (`Tuple[int]`):
                 The shape of the input to the model.
-            device: (:obj:`torch.device`):
+            device: (`torch.device`):
                 The device of the input to the model.
         Returns:
-            :obj:`torch.Tensor` The extended attention mask, with a the same dtype as :obj:`attention_mask.dtype`.
+            `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
         """
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -1185,24 +1185,24 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (:
-            obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`): Sequence
-            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model
-            is configured as a decoder.
-        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            obj:`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`): Sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
+            configured as a decoder.
+        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
         past_key_values (:
-            obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of
-            shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key
-            and value hidden states of the attention blocks. Can be used to speed up decoding. If
-            :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`).
+            obj:`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape
+            `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key and value
+            hidden states of the attention blocks. Can be used to speed up decoding. If `past_key_values` are used, the
+            user can optionally input only the last `decoder_input_ids` (those that don't have their past key value
+            states given to this model) of shape `(batch_size, 1)` instead of all `decoder_input_ids` of shape
+            `(batch_size, sequence_length)`.
+        use_cache (`bool`, `optional`):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
