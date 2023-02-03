@@ -32,7 +32,7 @@ jobs:
             - checkout
             - run: pip install --upgrade pip
             - run: pip install GitPython
-            - run: pip install .
+            - run: pip install torchaudio
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - store_artifacts:
@@ -91,7 +91,7 @@ jobs:
             - checkout
             - run: pip install --upgrade pip
             - run: pip install GitPython
-            - run: pip install .
+            - run: pip install torchaudio
             - run: |
                   mkdir test_preparation
                   echo -n "tests" > test_preparation/test_list.txt
