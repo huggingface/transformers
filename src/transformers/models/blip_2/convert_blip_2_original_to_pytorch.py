@@ -94,11 +94,13 @@ def get_blip2_config(model_name):
     elif "opt-6.7b" in model_name:
         text_config = OPTConfig.from_pretrained("facebook/opt-6.7b").to_dict()
     elif "t5-xl" in model_name:
-        text_config = T5Config.from_pretrained("google/flan-t5-xl").to_dict()
+        text_config = T5Config.from_pretrained("google/flan-t5-xl", dense_act_fn="gelu").to_dict()
     elif "t5-xxl" in model_name:
-        text_config = T5Config.from_pretrained("google/flan-t5-xxl").to_dict()
+        text_config = T5Config.from_pretrained("google/flan-t5-xxl", dense_act_fn="gelu").to_dict()
 
-    return Blip2Config(text_config=text_config)
+    config = Blip2Config(text_config=text_config)
+
+    return config
 
 
 @torch.no_grad()
@@ -124,7 +126,8 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     # load original model
     print("Loading original model...")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cpu"
     original_model, vis_processors, _ = load_model_and_preprocess(
         name=name, model_type=type, is_eval=True, device=device
     )
@@ -161,7 +164,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     device = "cuda" if torch.cuda.is_available() else "cpu"
     image = load_demo_image()
     original_pixel_values = vis_processors["eval"](image).unsqueeze(0).to(device)
-    tokenizer = AutoTokenizer.from_pretrained("facebook/opt-2.7b")
+    tokenizer = AutoTokenizer.from_pretrained("facebook/opt-2.7b") if "opt" in model_name else AutoTokenizer.from_pretrained("google/flan-t5-xl")
     input_ids = tokenizer(["" + "\n"], return_tensors="pt").input_ids.to(device)
 
     # create processor
@@ -176,22 +179,30 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     hf_model.to(device)
     with torch.no_grad():
-        outputs = hf_model(original_pixel_values, input_ids)
-        print("Shape of decoder logits:", outputs.decoder_logits.shape)
-        print("First values of decoder logits:", outputs.decoder_logits[0, :3, :3])
+        if "opt" in model_name:
+            outputs = hf_model(original_pixel_values, input_ids)
+        else:
+            outputs = hf_model(original_pixel_values, input_ids, decoder_input_ids=input_ids)
+    print("Shape of decoder logits:", outputs.decoder_logits.shape)
+    print("First values of decoder logits:", outputs.decoder_logits[0, :3, :3])
 
     # assert values
-    expected_slice_logits = torch.tensor(
-        [[1.9322, 1.9379, 7.4008], [-1.4743, -1.1191, 8.6590], [-1.4212, -1.2489, 6.1976]], device=device
-    )
+    if model_name == "blip2-opt-2.7b":
+        expected_slice_logits = torch.tensor(
+            [[1.9322, 1.9379, 7.4008], [-1.4743, -1.1191, 8.6590], [-1.4212, -1.2489, 6.1976]], device=device
+        )
+    elif model_name == "blip2-flan-t5-xl":
+        expected_slice_logits = torch.tensor(
+            [[-60.0500,  -4.8690,  -0.0820],
+        [-54.0716,  -1.8958,  -6.0069]], device=device
+        )
     assert torch.allclose(outputs.decoder_logits[0, :3, :3], expected_slice_logits, atol=1e-4)
     print("Looks ok!")
 
     print("Generating a caption...")
     prompt = ""
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
-    outputs = hf_model.generate(pixel_values, input_ids, max_length=10,
-    )
+    outputs = hf_model.generate(pixel_values, input_ids, max_length=10)
     print("Outputs:", outputs)
     print(processor.batch_decode(outputs, skip_special_tokens=True))
 
@@ -206,8 +217,16 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    choices = ["blip2-opt-2.7b",
+        "blip2-opt-6.7b",
+        "blip2-opt-2.7b-coco",
+        "blip2-opt-6.7b-coco",
+        "blip2-flan-t5-xl",
+        "blip2-flan-t5-xl-coco",
+        "blip2-flan-t5-xxl",
+    ]
     parser.add_argument(
-        "--model_name", default="blip2-opt-2.7b", type=str, help="Path to hf config.json of model to convert"
+        "--model_name", default="blip2-opt-2.7b", choices=choices, type=str, help="Path to hf config.json of model to convert"
     )
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument(

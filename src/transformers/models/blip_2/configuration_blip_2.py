@@ -21,6 +21,7 @@ from typing import Union
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING
+from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
 
 logger = logging.get_logger(__name__)
@@ -340,10 +341,12 @@ class Blip2Config(PretrainedConfig):
 
         self.vision_config = Blip2VisionConfig(**vision_config)
         self.qformer_config = Blip2QFormerConfig(**qformer_config)
-        self.text_config = CONFIG_MAPPING["opt"](**text_config)
+        text_model_type = text_config["model_type"]
+        self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         self.num_query_tokens = num_query_tokens
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
+        self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
 

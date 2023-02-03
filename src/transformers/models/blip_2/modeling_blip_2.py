@@ -39,8 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..auto import AutoModelForCausalLM
-from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
 
@@ -1324,7 +1323,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
-        if config.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES:
+        if config.use_decoder_only_language_model:
             language_model = AutoModelForCausalLM.from_config(config.text_config)
             # TODO remove this hack
             language_model.prepare_inputs_for_generation = prepare_inputs_for_generation
@@ -1345,6 +1344,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1409,24 +1410,35 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             attention_mask = torch.ones_like(input_ids)
         attention_mask = torch.cat([language_model_attention_mask, attention_mask], dim=1)
 
-        outputs = self.language_model(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            return_dict=return_dict,
-        )
+        if self.config.use_decoder_only_language_model:
+            outputs = self.language_model(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                return_dict=return_dict,
+            )
+            loss = None
+            # we compute the loss here since we need to take into account the query embeds
+            if labels is not None:
+                logits = outputs.logits if return_dict else outputs[0]
+                
+                logits = logits[:, -labels.size(1) :, :]
+                # Shift so that tokens < n predict n
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous()
 
-        loss = None
-        if labels is not None:
-            logits = outputs.logits if return_dict else outputs[0]
-            # TODO important: 3 code lines below are only for decoder-only language models like OPT
-            logits = logits[:, -labels.size(1) :, :]
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss(reduction="mean")
-            loss = loss_fct(shift_logits.view(-1, self.config.text_config.vocab_size), shift_labels.view(-1))
+                # Flatten the tokens
+                loss_fct = CrossEntropyLoss(reduction="mean")
+                loss = loss_fct(shift_logits.view(-1, self.config.text_config.vocab_size), shift_labels.view(-1))
+        else:
+            outputs = self.language_model(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                return_dict=return_dict,
+                labels=labels,
+            )
+            loss = outputs.loss
 
         if not return_dict:
             outputs = (loss, outputs[1], image_embeds, vision_outputs[0]) + vision_outputs[2:]
