@@ -35,7 +35,7 @@ if is_torch_available():
         ErnieMForSequenceClassification,
         ErnieMForTokenClassification,
         ErnieMModel,
-        # ErnieMUIEM
+        ErnieMUIEM
     )
     from transformers.models.ernie_m.modeling_ernie_m import (
         ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -95,7 +95,6 @@ class ErnieMModelTester:
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
 
         sequence_labels = None
         token_labels = None
@@ -158,19 +157,21 @@ class ErnieMModelTester:
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
-    # def create_and_check_for_uiem(
-    #         self, config, input_ids, input_mask
-    # ):
-    #     model = ErnieMUIEM(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(
-    #         input_ids,
-    #         attention_mask=input_mask,
-    #     )
-    #     print("result - ", result)
-    #     self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length))
-    #     self.parent.assertEqual(result[1].shape, (self.batch_size, self.seq_length))
+    def create_and_check_for_uiem(
+            self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = ErnieMUIEM(config=config)
+        model.to(torch_device)
+        model.eval()
+        sequence_labels = torch.ones_like(input_ids, dtype=torch.float32)
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
+        )
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_for_sequence_classification(
             self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -237,7 +238,6 @@ class ErnieMModelTest(ModelTesterMixin, unittest.TestCase):
             ErnieMForQuestionAnswering,
             ErnieMForSequenceClassification,
             ErnieMForTokenClassification,
-            # ErnieMUIEM
         )
         if is_torch_available()
         else ()
@@ -273,9 +273,9 @@ class ErnieMModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    # def test_for_uiem(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs_for_uiem()
-    #     self.model_tester.create_and_check_for_uiem(*config_and_inputs)
+    def test_for_uiem(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_uiem(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
