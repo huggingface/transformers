@@ -189,7 +189,6 @@ class SEWDConfig(PretrainedConfig):
         attention_dropout=0.1,
         feat_proj_dropout=0.0,
         final_dropout=0.1,
-        layerdrop=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-7,
         feature_layer_norm_eps=1e-5,
@@ -244,7 +243,6 @@ class SEWDConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.feat_proj_dropout = feat_proj_dropout
         self.final_dropout = final_dropout
-        self.layerdrop = layerdrop
         self.layer_norm_eps = layer_norm_eps
         self.feature_layer_norm_eps = feature_layer_norm_eps
         self.initializer_range = initializer_range

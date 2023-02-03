@@ -16,6 +16,8 @@ import gc
 import tempfile
 import unittest
 
+from packaging import version
+
 from transformers import (
     AutoModel,
     AutoModelForCausalLM,
@@ -33,10 +35,30 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
+from transformers.utils.versions import importlib_metadata
 
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
+
+    class LoRALayer(nn.Module):
+        """Wraps a linear layer with LoRA-like adapter - Used for testing purposes only"""
+
+        def __init__(self, module: nn.Module, rank: int):
+            super().__init__()
+            self.module = module
+            self.adapter = nn.Sequential(
+                nn.Linear(module.in_features, rank, bias=False),
+                nn.Linear(rank, module.out_features, bias=False),
+            )
+            small_std = (2.0 / (5 * min(module.in_features, module.out_features))) ** 0.5
+            nn.init.normal_(self.adapter[0].weight, std=small_std)
+            nn.init.zeros_(self.adapter[1].weight)
+            self.adapter.to(module.weight.device)
+
+        def forward(self, input, *args, **kwargs):
+            return self.module(input, *args, **kwargs) + self.adapter(input)
 
 
 @require_bitsandbytes
@@ -335,3 +357,44 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         # Second real batch
         output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
         self.assertEqual(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+
+class MixedInt8TestTraining(BaseMixedInt8Test):
+    def setUp(self):
+        self.model_name = "facebook/opt-350m"
+        super().setUp()
+
+    def test_training(self):
+        if version.parse(importlib_metadata.version("bitsandbytes")) < version.parse("0.37.0"):
+            return
+
+        # Step 1: freeze all parameters
+        model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+
+        for param in model.parameters():
+            param.requires_grad = False  # freeze the model - train adapters later
+            if param.ndim == 1:
+                # cast the small parameters (e.g. layernorm) to fp32 for stability
+                param.data = param.data.to(torch.float32)
+
+        # Step 2: add adapters
+        for _, module in model.named_modules():
+            if "OPTAttention" in repr(type(module)):
+                module.q_proj = LoRALayer(module.q_proj, rank=16)
+                module.k_proj = LoRALayer(module.k_proj, rank=16)
+                module.v_proj = LoRALayer(module.v_proj, rank=16)
+
+        # Step 3: dummy batch
+        batch = self.tokenizer("Test batch ", return_tensors="pt").to(0)
+
+        # Step 4: Check if the gradient is not None
+        with torch.cuda.amp.autocast():
+            out = model.forward(**batch)
+            out.logits.norm().backward()
+
+        for module in model.modules():
+            if isinstance(module, LoRALayer):
+                self.assertTrue(module.adapter[1].weight.grad is not None)
+                self.assertTrue(module.adapter[1].weight.grad.norm().item() > 0)
+            elif isinstance(module, nn.Embedding):
+                self.assertTrue(module.weight.grad is None)

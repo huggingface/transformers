@@ -825,7 +825,7 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     reached.
 
     Args:
-        exponential_decay_length_penalty (`tuple(int, float)`, *optional*):
+        exponential_decay_length_penalty (`tuple(int, float)`):
             This tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates where penalty
             starts and `decay_factor` represents the factor of exponential decay
         eos_token_id (`Union[int, List[int]]`):
@@ -835,7 +835,10 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     """
 
     def __init__(
-        self, exponential_decay_length_penalty: Tuple, eos_token_id: Union[int, List[int]], input_ids_seq_length: int
+        self,
+        exponential_decay_length_penalty: Tuple[int, float],
+        eos_token_id: Union[int, List[int]],
+        input_ids_seq_length: int,
     ):
         self.regulation_start = exponential_decay_length_penalty[0] + input_ids_seq_length
         self.regulation_factor = exponential_decay_length_penalty[1]
@@ -933,18 +936,19 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
 
-        self.begin_index = len(generate_config.forced_decoder_ids) + 1
+        self.begin_index = len(generate_config.forced_decoder_ids) + 2
         if generate_config.forced_decoder_ids[-1][1] == self.no_timestamps_token_id:
             self.begin_index -= 1
-        if generate_config.is_multilingual:
-            self.begin_index += 1
         self.max_initial_timestamp_index = generate_config.max_initial_timestamp_index
 
     def __call__(self, input_ids, scores):
         # suppress <|notimestamps|> which is handled by without_timestamps
         scores[:, self.no_timestamps_token_id] = -float("inf")
-        if input_ids.shape[1] == self.begin_index:
+
+        if input_ids.shape[1] == self.begin_index - 1:
+            scores[:, :] = -float("inf")
             scores[:, self.timestamp_begin] = 0
+            return scores
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         for k in range(input_ids.shape[0]):

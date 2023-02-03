@@ -77,8 +77,6 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`TrajectoryTransformerModel`]
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -128,7 +126,6 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         resid_pdrop=0.1,
         learning_rate=0.0006,
         max_position_embeddings=512,
-        type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         kaiming_initializer_range=1,
@@ -155,7 +152,6 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.resid_pdrop = resid_pdrop
         self.initializer_range = initializer_range
-        self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.kaiming_initializer_range = kaiming_initializer_range
         self.use_cache = use_cache

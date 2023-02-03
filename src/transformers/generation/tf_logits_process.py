@@ -557,7 +557,8 @@ class TFForceTokensLogitsProcessor(TFLogitsProcessor):
         # Indexes without forced tokens will have an negative value.
         force_token_array = np.ones((max(force_token_map.keys()) + 1), dtype=np.int32) * -1
         for index, token in force_token_map.items():
-            force_token_array[index] = token
+            if token is not None:
+                force_token_array[index] = token
         self.force_token_array = tf.convert_to_tensor(force_token_array, dtype=tf.int32)
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:

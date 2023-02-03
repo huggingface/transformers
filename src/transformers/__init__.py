@@ -40,6 +40,7 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
+    is_torchvision_available,
     is_vision_available,
     logging,
 )
@@ -185,6 +186,13 @@ _import_structure = {
     ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
     "models.bort": [],
+    "models.bridgetower": [
+        "BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BridgeTowerConfig",
+        "BridgeTowerProcessor",
+        "BridgeTowerTextConfig",
+        "BridgeTowerVisionConfig",
+    ],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
@@ -229,6 +237,7 @@ _import_structure = {
     "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
     "models.deformable_detr": ["DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeformableDetrConfig"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
+    "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
     "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"],
@@ -392,6 +401,12 @@ _import_structure = {
         "Speech2Text2Config",
         "Speech2Text2Processor",
         "Speech2Text2Tokenizer",
+    ],
+    "models.speecht5": [
+        "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP",
+        "SpeechT5Config",
+        "SpeechT5HifiGanConfig",
     ],
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
@@ -582,6 +597,7 @@ _import_structure = {
         "is_torch_available",
         "is_torch_neuroncore_available",
         "is_torch_tpu_available",
+        "is_torchvision_available",
         "is_vision_available",
         "logging",
     ],
@@ -622,6 +638,7 @@ else:
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
+    _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
@@ -725,6 +742,7 @@ else:
     _import_structure["models.audio_spectrogram_transformer"].append("ASTFeatureExtractor")
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+    _import_structure["models.speecht5"].append("SpeechT5FeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -763,6 +781,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
+    _import_structure["models.speecht5"].append("SpeechT5Processor")
 
 # Vision-specific objects
 try:
@@ -780,6 +799,7 @@ else:
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
     _import_structure["models.blip"].extend(["BlipImageProcessor"])
+    _import_structure["models.bridgetower"].append("BridgeTowerImageProcessor")
     _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
     _import_structure["models.conditional_detr"].extend(
@@ -790,6 +810,7 @@ else:
         ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
     )
     _import_structure["models.deit"].extend(["DeiTFeatureExtractor", "DeiTImageProcessor"])
+    _import_structure["models.deta"].append("DetaImageProcessor")
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
@@ -1156,6 +1177,15 @@ else:
             "BloomPreTrainedModel",
         ]
     )
+    _import_structure["models.bridgetower"].extend(
+        [
+            "BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BridgeTowerForImageAndTextRetrieval",
+            "BridgeTowerForMaskedLM",
+            "BridgeTowerModel",
+            "BridgeTowerPreTrainedModel",
+        ]
+    )
     _import_structure["models.camembert"].extend(
         [
             "CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1325,6 +1355,14 @@ else:
             "DeiTForMaskedImageModeling",
             "DeiTModel",
             "DeiTPreTrainedModel",
+        ]
+    )
+    _import_structure["models.deta"].extend(
+        [
+            "DETA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DetaForObjectDetection",
+            "DetaModel",
+            "DetaPreTrainedModel",
         ]
     )
     _import_structure["models.dinat"].extend(
@@ -2165,6 +2203,17 @@ else:
         ]
     )
     _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
+    _import_structure["models.speecht5"].extend(
+        [
+            "SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SpeechT5ForSpeechToSpeech",
+            "SpeechT5ForSpeechToText",
+            "SpeechT5ForTextToSpeech",
+            "SpeechT5HifiGan",
+            "SpeechT5Model",
+            "SpeechT5PreTrainedModel",
+        ]
+    )
     _import_structure["models.splinter"].extend(
         [
             "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3612,6 +3661,13 @@ if TYPE_CHECKING:
         BlipVisionConfig,
     )
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
+    from .models.bridgetower import (
+        BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BridgeTowerConfig,
+        BridgeTowerProcessor,
+        BridgeTowerTextConfig,
+        BridgeTowerVisionConfig,
+    )
     from .models.byt5 import ByT5Tokenizer
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
@@ -3658,6 +3714,7 @@ if TYPE_CHECKING:
     )
     from .models.deformable_detr import DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DeformableDetrConfig
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
+    from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
@@ -3805,6 +3862,12 @@ if TYPE_CHECKING:
         Speech2Text2Config,
         Speech2Text2Processor,
         Speech2Text2Tokenizer,
+    )
+    from .models.speecht5 import (
+        SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP,
+        SpeechT5Config,
+        SpeechT5HifiGanConfig,
     )
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
@@ -3985,6 +4048,7 @@ if TYPE_CHECKING:
         is_torch_available,
         is_torch_neuroncore_available,
         is_torch_tpu_available,
+        is_torchvision_available,
         is_vision_available,
         logging,
     )
@@ -4017,6 +4081,7 @@ if TYPE_CHECKING:
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
+        from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
@@ -4103,6 +4168,7 @@ if TYPE_CHECKING:
         from .models.audio_spectrogram_transformer import ASTFeatureExtractor
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
+        from .models.speecht5 import SpeechT5FeatureExtractor
 
     try:
         if not is_tensorflow_text_available():
@@ -4127,6 +4193,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_and_speech_objects import *
     else:
         from .models.speech_to_text import Speech2TextProcessor
+        from .models.speecht5 import SpeechT5Processor
 
     try:
         if not is_vision_available():
@@ -4139,12 +4206,14 @@ if TYPE_CHECKING:
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
         from .models.bit import BitImageProcessor
         from .models.blip import BlipImageProcessor
+        from .models.bridgetower import BridgeTowerImageProcessor
         from .models.chinese_clip import ChineseCLIPFeatureExtractor, ChineseCLIPImageProcessor
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor, ConditionalDetrImageProcessor
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
         from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
+        from .models.deta import DetaImageProcessor
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
@@ -4458,6 +4527,13 @@ if TYPE_CHECKING:
             BloomModel,
             BloomPreTrainedModel,
         )
+        from .models.bridgetower import (
+            BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BridgeTowerForImageAndTextRetrieval,
+            BridgeTowerForMaskedLM,
+            BridgeTowerModel,
+            BridgeTowerPreTrainedModel,
+        )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             CamembertForCausalLM,
@@ -4598,6 +4674,12 @@ if TYPE_CHECKING:
             DeiTForMaskedImageModeling,
             DeiTModel,
             DeiTPreTrainedModel,
+        )
+        from .models.deta import (
+            DETA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DetaForObjectDetection,
+            DetaModel,
+            DetaPreTrainedModel,
         )
         from .models.dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5275,6 +5357,15 @@ if TYPE_CHECKING:
             Speech2TextPreTrainedModel,
         )
         from .models.speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2PreTrainedModel
+        from .models.speecht5 import (
+            SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SpeechT5ForSpeechToSpeech,
+            SpeechT5ForSpeechToText,
+            SpeechT5ForTextToSpeech,
+            SpeechT5HifiGan,
+            SpeechT5Model,
+            SpeechT5PreTrainedModel,
+        )
         from .models.splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SplinterForPreTraining,
