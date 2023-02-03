@@ -1,0 +1,82 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# TransformerTransducer
+
+## Overview
+
+The TransformerTransducer model was proposed in [Transformer Transducer: A Streamable Speech Recognition Model with Transformer Encoders and RNN-T Loss](https://arxiv.org/abs/2002.02562) 
+by Qian Zhang, Han Lu, Hasim Sak, Anshuman Tripathi, Erik McDermott, Stephen Koo, Shankar Kumar.
+Transformer-Transducer is a an End2End-based ASR streaming model that converts spoken speech into text in real time. model that implements RNN-T as Transformer and train using RNN-T loss.
+
+
+The abstract from the paper is the following:
+
+In this paper we present an end-to-end speech recognition model with Transformer encoders that can be used in a streaming speech recognition system. 
+Transformer computation blocks based on self-attention are used to encode both audio and label sequences independently. 
+The activations from both audio and label encoders are combined with a feed-forward layer to compute a probability distribution over 
+the label space for every combination of acoustic frame position and label history. 
+This is similar to the Recurrent Neural Network Transducer (RNN-T) model, 
+which uses RNNs for information encoding instead of Transformer encoders. 
+The model is trained with the RNN-T loss well-suited to streaming decoding. 
+We present results on the LibriSpeech dataset showing that limiting the left context for self-attention in the Transformer layers makes decoding computationally tractable for streaming, 
+with only a slight degradation in accuracy. 
+We also show that the full attention version of our model beats the-state-of-the art accuracy on the LibriSpeech benchmarks. 
+Our results also show that we can bridge the gap between full attention and limited attention versions of our model by attending to a limited number of future frames.
+
+Tips:
+this model doesn't work at DP.
+It does not work with DP because Collator cannot consider the max_length of data to send to each device.
+
+It takes a lot of computer resources to train the T-T model!
+
+This model was contributed by [jp1924](https://github.com/jp1924). The original code can be found [transformer-transducer](https://github.com/jp1924/transformer-transducer).
+
+## TransformerTransducerConfig
+
+[[autodoc]] TransformerTransducerConfig
+
+
+## TransformerTransducerTokenizer
+
+[[autodoc]] TransformerTransducerTokenizer
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
+
+## TransformerTransducerFeatureExtractor
+
+[[autodoc]] TransformerTransducerFeatureExtractor
+    - __call__
+
+## TransformerTransducerProcessor
+
+[[autodoc]] TransformerTransducerProcessor
+    - __call__
+
+
+
+## TransformerTransducerModel
+
+[[autodoc]] TransformerTransducerModel
+    - forward
+
+
+## TransformerTransducerForRNNT
+
+[[autodoc]] TransformerTransducerForRNNT
+    - forward
+
+
+
+
