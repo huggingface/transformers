@@ -3087,7 +3087,9 @@ class GenerationMixin:
             vocab_size = next_token_scores.shape[-1]
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
-            probs = nn.functional.softmax(next_token_scores, dim=-1)
+            broken_batch_indices = torch.where(torch.max(next_token_scores, dim=-1).values == -torch.inf)[0]
+            _next_token_scores = next_token_scores.index_fill(dim=0, index=broken_batch_indices, value=0.0)
+            probs = nn.functional.softmax(_next_token_scores, dim=-1)
 
             next_tokens = torch.multinomial(probs, num_samples=2 * num_beams)
             next_token_scores = torch.gather(next_token_scores, -1, next_tokens)
