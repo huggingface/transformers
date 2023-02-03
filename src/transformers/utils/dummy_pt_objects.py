@@ -1221,20 +1221,6 @@ class Blip2ForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Blip2ForImageTextRetrieval(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class Blip2ForQuestionAnswering(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class Blip2Model(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -1249,7 +1235,7 @@ class Blip2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Blip2TextModel(metaclass=DummyObject):
+class Blip2QFormerModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

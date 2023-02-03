@@ -232,9 +232,9 @@ class Blip2EncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = Blip2Attention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Blip2MLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -525,7 +525,7 @@ class Blip2VisionModel(Blip2PreTrainedModel):
 
         self.embeddings = Blip2VisionEmbeddings(config)
         self.encoder = Blip2Encoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         self.post_init()
 
@@ -552,9 +552,6 @@ class Blip2VisionModel(Blip2PreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values)
-
-        print("Shape of patch embeddings:", hidden_states.shape)
-        print("First values of patch embeddings:", hidden_states[0,:3,:3])
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
