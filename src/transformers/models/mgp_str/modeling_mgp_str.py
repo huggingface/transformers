@@ -294,6 +294,8 @@ class MGPSTRModel(MGPSTRPreTrainedModel):
                 Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
                 [`ViTImageProcessor.__call__`] for details.
         Returns:
+            `List[torch.FloatTensor]`: The list of logits output of char, bpe, wp.
+            `List[torch.FloatTensor]`: The list of attention output of char, bpe, wp.
 
         Example:
 

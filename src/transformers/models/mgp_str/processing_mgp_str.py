@@ -66,8 +66,7 @@ class MGPSTRProcessor(ProcessorMixin):
         Args:
             sequences (`torch.Tensor`):
                 List of tokenized input ids.
-        Returns:
-            `List[str]`: The list of decoded sentences.
+
         Returns:
             `Dict[str, any]`: Dictionary of all the outputs of the decoded results.
                 generated_text (`List[str]`): The final results after fusion of char, bpe, and wp. scores
