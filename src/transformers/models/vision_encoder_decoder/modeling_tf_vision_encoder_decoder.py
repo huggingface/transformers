@@ -19,8 +19,9 @@ import gc
 import os
 import tempfile
 import warnings
-from typing import Optional
+from typing import Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
