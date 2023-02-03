@@ -56,37 +56,21 @@ BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclass
 class Blip2ForConditionalGenerationModelOutput(ModelOutput):
     """
-    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
-    last hidden states. This class also adds the loss term from the text decoder.
+    Class defining the outputs of [`Blip2ForConditionalGeneration`].
 
     Args:
         loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             Languge modeling loss from the text decoder.
-        decoder_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
-            Prediction scores of the language modeling head of the text decoder model.
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
-            The image embeddings obtained after applying the Vision Transformer model to the input image.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
+            Prediction scores of the language modeling head of the text language model.
+        ...
     """
 
     loss: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_logits: Optional[Tuple[torch.FloatTensor]] = None
-    image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[Tuple[torch.FloatTensor]] = None
+    vision_outputs: Optional[torch.FloatTensor] = None
+    qformer_outputs: Optional[Tuple[torch.FloatTensor]] = None
+    language_model_outputs: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class Blip2VisionEmbeddings(nn.Module):
@@ -1446,11 +1430,10 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         return Blip2ForConditionalGenerationModelOutput(
             loss=loss,
-            decoder_logits=outputs.logits,
-            image_embeds=image_embeds,
-            last_hidden_state=vision_outputs.last_hidden_state,
-            hidden_states=vision_outputs.hidden_states,
-            attentions=vision_outputs.attentions,
+            logits=outputs.logits,
+            vision_outputs=vision_outputs,
+            qformer_outputs=query_outputs,
+            language_model_outputs=outputs,
         )
 
     @torch.no_grad()

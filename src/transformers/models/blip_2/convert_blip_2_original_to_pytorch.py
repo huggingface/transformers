@@ -26,6 +26,7 @@ from PIL import Image
 import requests
 
 # pip3 install salesforce-lavis
+# I'm actually installing a slightly modified version: pip3 install git+https://github.com/nielsrogge/LAVIS.git@fix_lavis
 from lavis.models import load_model_and_preprocess
 from transformers import (
     AutoTokenizer,
@@ -177,26 +178,22 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     # make sure processor creates exact same pixel values
     assert torch.allclose(pixel_values, original_pixel_values)
 
+    original_model.to(device)
     hf_model.to(device)
     with torch.no_grad():
         if "opt" in model_name:
-            outputs = hf_model(original_pixel_values, input_ids)
+            original_logits = original_model({"image": original_pixel_values, "text_input": [""]}).logits
+            logits = hf_model(original_pixel_values, input_ids).logits
         else:
-            outputs = hf_model(original_pixel_values, input_ids, decoder_input_ids=input_ids)
-    print("Shape of decoder logits:", outputs.decoder_logits.shape)
-    print("First values of decoder logits:", outputs.decoder_logits[0, :3, :3])
+            original_logits = original_model({"image": original_pixel_values, "text_input": [""], "text_output": [""]}).logits
+            logits = hf_model(original_pixel_values, input_ids, decoder_input_ids=input_ids).logits
+    
+    assert original_logits.shape == logits.shape
+    print("First values of original logits:", original_logits[0,:3,:3])
+    print("First values of HF logits:", logits[0, :3, :3])
 
     # assert values
-    if model_name == "blip2-opt-2.7b":
-        expected_slice_logits = torch.tensor(
-            [[1.9322, 1.9379, 7.4008], [-1.4743, -1.1191, 8.6590], [-1.4212, -1.2489, 6.1976]], device=device
-        )
-    elif model_name == "blip2-flan-t5-xl":
-        expected_slice_logits = torch.tensor(
-            [[-60.0500,  -4.8690,  -0.0820],
-        [-54.0716,  -1.8958,  -6.0069]], device=device
-        )
-    assert torch.allclose(outputs.decoder_logits[0, :3, :3], expected_slice_logits, atol=1e-4)
+    assert torch.allclose(original_logits, logits, atol=1e-2)
     print("Looks ok!")
 
     print("Generating a caption...")
