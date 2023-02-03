@@ -50,7 +50,7 @@ from transformers.utils import PaddingStrategy, check_min_version, send_example_
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.26.0.dev0")
+check_min_version("4.27.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ class DataCollatorForMultipleChoice:
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="tf",
+            return_tensors="np",
         )
 
         # Un-flatten
@@ -410,7 +410,7 @@ def main():
             )
 
     if data_args.pad_to_max_length:
-        data_collator = DefaultDataCollator(return_tensors="tf")
+        data_collator = DefaultDataCollator(return_tensors="np")
     else:
         # custom class defined above, as HF has no data collator for multiple choice
         data_collator = DataCollatorForMultipleChoice(tokenizer)

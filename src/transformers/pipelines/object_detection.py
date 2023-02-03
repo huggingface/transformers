@@ -97,7 +97,7 @@ class ObjectDetectionPipeline(Pipeline):
     def preprocess(self, image):
         image = load_image(image)
         target_size = torch.IntTensor([[image.height, image.width]])
-        inputs = self.feature_extractor(images=[image], return_tensors="pt")
+        inputs = self.image_processor(images=[image], return_tensors="pt")
         if self.tokenizer is not None:
             inputs = self.tokenizer(text=inputs["words"], boxes=inputs["boxes"], return_tensors="pt")
         inputs["target_size"] = target_size
@@ -137,9 +137,7 @@ class ObjectDetectionPipeline(Pipeline):
             annotation = [dict(zip(keys, vals)) for vals in zip(scores.tolist(), labels, boxes) if vals[0] > threshold]
         else:
             # This is a regular ForObjectDetectionModel
-            raw_annotations = self.feature_extractor.post_process_object_detection(
-                model_outputs, threshold, target_size
-            )
+            raw_annotations = self.image_processor.post_process_object_detection(model_outputs, threshold, target_size)
             raw_annotation = raw_annotations[0]
             scores = raw_annotation["scores"]
             labels = raw_annotation["labels"]
