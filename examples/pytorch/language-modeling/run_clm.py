@@ -210,10 +210,10 @@ class DataTrainingArguments:
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
+                # assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+                # assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
 def main():
@@ -308,6 +308,20 @@ def main():
                 streaming=data_args.streaming,
             )
     else:
+        from datasets import DatasetDict, load_from_disk
+
+        raw_datasets = DatasetDict(
+            dict(
+                train=load_from_disk(
+                    data_args.train_file,
+                ),
+                validation=load_from_disk(
+                    data_args.validation_file,
+                ),
+            )
+        )
+
+    if 0:
         data_files = {}
         dataset_args = {}
         if data_args.train_file is not None:
