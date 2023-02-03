@@ -89,8 +89,8 @@ class Blip2ForConditionalGenerationModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipVisionEmbeddings with Blip->Blip2
 class Blip2VisionEmbeddings(nn.Module):
+    # Copied from transformers.models.blip.modeling_blip.BlipVisionEmbeddings.__init__ with Blip->Blip2
     def __init__(self, config: Blip2VisionConfig):
         super().__init__()
         self.config = config
@@ -113,13 +113,15 @@ class Blip2VisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
-        target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
+        print("Shape of patch embeddings before CLS:", patch_embeds.shape)
+        print("First values of patch embeddings before CLS:", patch_embeds[0,:3,:3])
+
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding[:, : embeddings.size(1), :].to(target_dtype)
+        embeddings = embeddings + self.position_embedding[:, : embeddings.size(1), :]
         return embeddings
 
 
@@ -550,6 +552,9 @@ class Blip2VisionModel(Blip2PreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values)
+
+        print("Shape of patch embeddings:", hidden_states.shape)
+        print("First values of patch embeddings:", hidden_states[0,:3,:3])
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -1304,9 +1309,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
     language model.
 
     One can optionally pass `input_ids` to the model, which serve as a text prompt, to make the language model continue
-    the prompt. Otherwise, the language model starts generating text from the [BOS] (beginning-of-sequence) token. will
-    start generating the caption from the text input. If no text input is provided, the language model will start with
-    the [BOS] token only.
+    the prompt. Otherwise, the language model starts generating text from the [BOS] (beginning-of-sequence) token.
     """,
     BLIP_START_DOCSTRING,
 )
@@ -1378,6 +1381,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             return_dict=return_dict,
         )
         image_embeds = vision_outputs[0]
+
+        print("Shape of image embeds:", image_embeds.shape)
+        print("First values of image embeds:", image_embeds[0,:3,:3])
 
         # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)

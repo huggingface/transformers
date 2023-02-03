@@ -169,9 +169,17 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     assert torch.allclose(outputs.decoder_logits[0, :3, :3], expected_slice_logits, atol=1e-4)
     print("Looks ok!")
 
-    print("Generating a caption...")
-    outputs = hf_model.generate(pixel_values, input_ids, max_length=10)
-    print(tokenizer.batch_decode(outputs[0], skip_special_tokens=True))
+    # print("Generating a caption...")
+    # prompt = ""
+    # input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
+    # outputs = hf_model.generate(pixel_values, input_ids, num_beams=5, max_length=30, min_length=1,
+    #     top_p=0.9,
+    #     repetition_penalty=1.0,
+    #     length_penalty=1.0,
+    #     temperature=1,
+    # )
+    # print("Outputs:", outputs)
+    # print(processor.batch_decode(outputs, skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:
         processor.save_pretrained(pytorch_dump_folder_path)
