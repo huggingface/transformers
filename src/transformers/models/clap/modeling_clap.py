@@ -15,16 +15,13 @@
 """ PyTorch CLAP model."""
 import collections
 import math
-import random
 from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint as checkpoint
 from torch import nn
-from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (

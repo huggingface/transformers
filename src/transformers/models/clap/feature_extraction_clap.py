@@ -21,7 +21,6 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import torchvision
 
-from ... import __version__
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
