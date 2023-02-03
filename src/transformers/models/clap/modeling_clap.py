@@ -33,7 +33,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, meshgrid, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -577,7 +577,7 @@ class CLAPAudioAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
-    
+
 # Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->CLAPAudio
 class CLAPAudioIntermediate(nn.Module):
     def __init__(self, config, dim):
@@ -1940,7 +1940,6 @@ class CLAPTextModelWithProjection(CLAPPreTrainedModel):
         )
 
 
-
 # Copied from transformers.models.swin.modeling_swin with Swin->CLAPAudio
 class CLAPAudioLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
@@ -2111,22 +2110,20 @@ class CLAPSwinTransformer(nn.Module):
 
         self.pos_drop = nn.Dropout(p=self.drop_rate)
 
-        dpr = [
-            x.item() for x in torch.linspace(0, config.swin_drop_path_rate, sum(config.depths))
-        ]
+        dpr = [x.item() for x in torch.linspace(0, config.swin_drop_path_rate, sum(config.depths))]
 
         # build layers
         self.layers = nn.ModuleList()
         for i_layer in range(self.num_layers):
             layer = CLAPAudioLayer(
-                    config=config,
-                    dim=int(config.embed_dim * 2**i_layer),
-                    input_resolution=(patches_resolution[0] // (2**i_layer), patches_resolution[1] // (2**i_layer)),
-                    depth=config.depths[i_layer],
-                    num_heads=config.num_heads[i_layer],
-                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=CLAPAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
-                )
+                config=config,
+                dim=int(config.embed_dim * 2**i_layer),
+                input_resolution=(patches_resolution[0] // (2**i_layer), patches_resolution[1] // (2**i_layer)),
+                depth=config.depths[i_layer],
+                num_heads=config.num_heads[i_layer],
+                drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                downsample=CLAPAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
+            )
 
             self.layers.append(layer)
 
@@ -2222,7 +2219,6 @@ class CLAPSwinTransformer(nn.Module):
         hidden_states = torch.flatten(hidden_states, 1)
 
         return (framewise_output, torch.sigmoid(hidden_states), fine_grained_latent_output, latent_output)
-
 
     # Reshape the wavform to a img size, if you want to use the pretrained swin transformer model
     def reshape_wav2img(self, hidden_states):
