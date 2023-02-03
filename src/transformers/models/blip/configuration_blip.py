@@ -83,9 +83,6 @@ class BlipTextConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
         bos_token_id (`int`, *optional*, defaults to 30522):
             The id of the `beginning-of-sequence` token.
         eos_token_id (`int`, *optional*, defaults to 2):
@@ -130,7 +127,6 @@ class BlipTextConfig(PretrainedConfig):
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
-        initializer_factor=1.0,
         bos_token_id=30522,
         eos_token_id=2,
         pad_token_id=0,
@@ -159,7 +155,6 @@ class BlipTextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.is_decoder = is_decoder
         self.use_cache = use_cache
@@ -215,9 +210,6 @@ class BlipVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
 
     Example:
 
@@ -250,7 +242,6 @@ class BlipVisionConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=1e-10,
-        initializer_factor=1.0,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -264,7 +255,6 @@ class BlipVisionConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act

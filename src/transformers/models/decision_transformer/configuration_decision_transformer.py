@@ -57,8 +57,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         n_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_embd (`int`, *optional*, defaults to 768):
-            Dimensionality of the embeddings and hidden states.
         n_layer (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         n_head (`int`, *optional*, defaults to 12):
@@ -119,7 +117,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         action_tanh=True,
         vocab_size=1,
         n_positions=1024,
-        n_embd=768,
         n_layer=3,
         n_head=1,
         n_inner=None,
@@ -145,7 +142,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         self.action_tanh = action_tanh
         self.vocab_size = vocab_size
         self.n_positions = n_positions
-        self.n_embd = n_embd
         self.n_layer = n_layer
         self.n_head = n_head
         self.n_inner = n_inner
