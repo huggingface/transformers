@@ -15,7 +15,7 @@
 """Tokenization classes for MGT-STR CHAR."""
 
 import json
-from typing import List, Union
+from typing import List
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging, to_py_obj
@@ -95,11 +95,7 @@ class MGPSTRTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index)
 
     def batch_decode(
-        self,
-        sequences,
-        skip_special_tokens: bool = True,
-        clean_up_tokenization_spaces: bool = True,
-        **kwargs
+        self, sequences, skip_special_tokens: bool = True, clean_up_tokenization_spaces: bool = True, **kwargs
     ) -> List[str]:
         """
         This method forwards all its arguments to MGPSTRTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
