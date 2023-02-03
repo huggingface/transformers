@@ -128,6 +128,37 @@ class CLAPTextModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
+
+@dataclass
+class SwinEncoderOutput(ModelOutput):
+    """
+    Swin encoder's outputs, with potential hidden states and attentions.
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, hidden_size, height, width)`.
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+            include the spatial dimensions.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+
 @dataclass
 class CLAPAudioModelOutput(ModelOutput):
     """
@@ -1679,7 +1710,7 @@ class CLAPModel(CLAPPreTrainedModel):
         self.text_transform = CLAPFusionLayer(text_config)
         self.text_projection = CLAPProjectionLayer(text_config)
 
-        self.audio_model = CLAPSwinTransformer(config=audio_config)
+        self.audio_model = CLAPAudioEncoder(config=audio_config)
         self.audio_transform = CLAPFusionLayer(audio_config)
         self.audio_projection = CLAPProjectionLayer(audio_config)
 
@@ -1739,7 +1770,6 @@ class CLAPModel(CLAPPreTrainedModel):
         self,
         input_features: Optional[torch.Tensor] = None,
         longer: Optional[torch.Tensor] = None,
-        waveform: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1755,7 +1785,6 @@ class CLAPModel(CLAPPreTrainedModel):
         audio_outputs = self.audio_model(
             input_features=input_features,
             longer=longer,
-            waveform=waveform,
             return_dict=return_dict,
         )
 
@@ -2053,171 +2082,55 @@ class CLAPAudioPatchMerging(nn.Module):
         return input_feature
 
 
-# The Core of HTSAT
-class CLAPSwinTransformer(nn.Module):
-    def __init__(self, config: CLAPAudioConfig):
-        super(CLAPSwinTransformer, self).__init__()
+
+class CLAPAudioEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_layers = len(config.depths)
+
         self.config = config
-        self.spec_size = config.spec_size
-        self.patch_stride = config.patch_stride
-        self.window_size = config.window_size
-        self.hidden_size = config.hidden_size
-        self.depths = config.depths
-        self.use_absolute_pos_embedding = config.swin_absolute_positional_embedding
-        self.in_chans = config.input_channels
-        self.num_classes = config.num_classes
-        self.num_heads = config.num_heads
-        self.num_layers = len(self.depths)
-        self.num_features = int(self.hidden_size * 2 ** (self.num_layers - 1))
-
-        self.drop_rate = config.drop_path_rate
-        self.attn_drop_rate = config.attention_probs_dropout_prob
-        self.drop_path_rate = config.swin_drop_path_rate
-
-        self.qkv_bias = config.qkv_bias
-
-        self.patch_norm = nn.LayerNorm if config.enable_patch_layer_norm else None
-        self.norm_layer = nn.LayerNorm if self.patch_norm else None
-        self.norm_before_mlp = config.swin_norm_before_mlp
-        self.mlp_ratio = config.mlp_ratio
-
-        self.use_checkpoint = config.swin_use_checkpoint
-
-        self.enable_fusion = config.enable_fusion
-        self.fusion_type = config.fusion_type
-
-        #  process mel-spec ; used only once
-        self.freq_ratio = self.spec_size // self.config.mel_bins
-
-        self.interpolate_ratio = 32  # Downsampled ratio
-        # Spectrogram extractor
-        self.bn0 = nn.BatchNorm2d(self.config.mel_bins)
-
-        # split spctrogram into non-overlapping patches
         self.patch_embed = CLAPAudioPatchEmbed(config)
+        self.enable_fusion = config.enable_fusion
+        grid_size = self.patch_embed.grid_size
+        self.patch_stride = self.patch_embed.patch_stride
+        self.spec_size = config.spec_size
+        self.freq_ratio = self.spec_size // config.mel_bins
 
-        num_patches = self.patch_embed.num_patches
-        patches_resolution = self.patch_embed.grid_size
-        self.patches_resolution = patches_resolution
+        self.num_features = int(config.hidden_size * 2 ** (self.num_layers - 1))
+        self.freq_ratio = config.spec_size // config.mel_bins
 
-        # absolute position embedding
-        if self.use_absolute_pos_embedding:
-            self.absolute_pos_embed = nn.Parameter(torch.zeros(1, num_patches, self.hidden_size))
-            trunc_normal_(self.absolute_pos_embed, std=0.02)
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
 
-        self.pos_drop = nn.Dropout(p=self.drop_rate)
+        self.layers = nn.ModuleList(
+            [
+                CLAPAudioLayer(
+                    config=config,
+                    dim=int(config.embed_dim * 2**i_layer),
+                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+                    depth=config.depths[i_layer],
+                    num_heads=config.num_heads[i_layer],
+                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                    downsample=CLAPAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
+                )
+                for i_layer in range(self.num_layers)
+            ]
+        )
 
-        dpr = [x.item() for x in torch.linspace(0, config.swin_drop_path_rate, sum(config.depths))]
+        self.gradient_checkpointing = False
 
-        # build layers
-        self.layers = nn.ModuleList()
-        for i_layer in range(self.num_layers):
-            layer = CLAPAudioLayer(
-                config=config,
-                dim=int(config.embed_dim * 2**i_layer),
-                input_resolution=(patches_resolution[0] // (2**i_layer), patches_resolution[1] // (2**i_layer)),
-                depth=config.depths[i_layer],
-                num_heads=config.num_heads[i_layer],
-                drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                downsample=CLAPAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
-            )
+        self.bn0 = nn.BatchNorm2d(config.mel_bins)
+        self.norm = nn.LayerNorm(self.num_features)
+        self.depths = config.depths
 
-            self.layers.append(layer)
-
-        self.norm = self.norm_layer(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
-        self.maxpool = nn.AdaptiveMaxPool1d(1)
 
-        SF = self.spec_size // (2 ** (len(self.depths) - 1)) // self.patch_stride[0] // self.freq_ratio
+
+        SF = config.spec_size // (2 ** (len(config.depths) - 1)) // self.patch_embed.patch_stride[0] // self.freq_ratio
         self.tscam_conv = nn.Conv2d(
-            in_channels=self.num_features, out_channels=self.num_classes, kernel_size=(SF, 3), padding=(0, 1)
+            in_channels=self.num_features, out_channels=config.num_classes, kernel_size=(SF, 3), padding=(0, 1)
         )
-        self.head = nn.Linear(self.num_classes, self.num_classes)
+        self.head = nn.Linear(config.num_classes, config.num_classes)
 
-        # self.spectrogram_extractor = Spectrogram(
-        #     n_fft=config.spectrogram_window_size,
-        #     hop_length=config.hop_size,
-        #     win_length=config.spectrogram_window_size,
-        #     window=config.spectrogram_window,
-        #     center=config.spectrogram_center,
-        #     pad_mode=config.spectrogram_pad_mode,
-        #     freeze_parameters=config.spectrogram_freeze_parameters,
-        # )
-        # # Logmel feature extractor
-        # self.logmel_extractor = LogmelFilterBank(
-        #     sr=config.sample_rate,
-        #     n_fft=config.spectrogram_window_size,
-        #     n_mels=config.mel_bins,
-        #     fmin=config.fmin,
-        #     fmax=config.fmax,
-        #     ref=config.spectrogram_ref,
-        #     amin=config.spectrogram_amin,
-        #     top_db=config.spectrogram_top_db,
-        #     freeze_parameters=config.spectrogram_freeze_parameters,
-        # )
-        # # Spec augmenter
-        # self.spec_augmenter = SpecAugmentation(
-        #     time_drop_width=config.spectrogram_time_drop_width,
-        #     time_stripes_num=config.spectrogram_time_stripes_num,
-        #     freq_drop_width=config.spectrogram_freq_drop_width,
-        #     freq_stripes_num=config.spectrogram_freq_stripes_num,
-        # )
-
-    def _forward_features(self, hidden_states, longer_idx=None):
-        _, _, frames_num, _ = hidden_states.shape
-
-        hidden_states = self.patch_embed(hidden_states, longer_idx=longer_idx)
-
-        if self.use_absolute_pos_embedding:
-            hidden_states = hidden_states + self.absolute_pos_embed
-
-        hidden_states = self.pos_drop(hidden_states)
-
-        for i, layer in enumerate(self.layers):
-            hidden_states, _, _ = layer(hidden_states, layer.input_resolution)
-
-        hidden_states = self.norm(hidden_states)
-
-        batch_size, _, n_channels = hidden_states.shape
-
-        freq_shape = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[0]
-        temporal_shape = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[1]
-
-        hidden_states = (
-            hidden_states.permute(0, 2, 1).contiguous().reshape(batch_size, n_channels, freq_shape, temporal_shape)
-        )
-
-        batch_size, n_channels, n_frequencies, n_temp = hidden_states.shape
-        # group 2D CNN
-        c_freq_bin = n_frequencies // self.freq_ratio
-        hidden_states = hidden_states.reshape(batch_size, n_channels, n_frequencies // c_freq_bin, c_freq_bin, n_temp)
-        hidden_states = (
-            hidden_states.permute(0, 1, 3, 2, 4).contiguous().reshape(batch_size, n_channels, c_freq_bin, -1)
-        )
-        # get latent_output
-        fine_grained_latent_output = torch.mean(hidden_states, dim=2)
-        fine_grained_latent_output = interpolate(
-            fine_grained_latent_output.permute(0, 2, 1).contiguous(), 8 * self.patch_stride[1]
-        )
-
-        latent_output = self.avgpool(torch.flatten(hidden_states, 2))
-        latent_output = torch.flatten(latent_output, 1)
-
-        # display the attention map, if needed
-
-        hidden_states = self.tscam_conv(hidden_states)
-        hidden_states = torch.flatten(hidden_states, 2)  # B, C, T
-
-        framewise_output = interpolate(
-            torch.sigmoid(hidden_states).permute(0, 2, 1).contiguous(), 8 * self.patch_stride[1]
-        )
-
-        hidden_states = self.avgpool(hidden_states)
-        hidden_states = torch.flatten(hidden_states, 1)
-
-        return (framewise_output, torch.sigmoid(hidden_states), fine_grained_latent_output, latent_output)
-
-    # Reshape the wavform to a img size, if you want to use the pretrained swin transformer model
     def reshape_wav2img(self, hidden_states):
         _, _, time_steps, freq_steps = hidden_states.shape
 
@@ -2260,14 +2173,15 @@ class CLAPSwinTransformer(nn.Module):
 
     def forward(
         self,
-        input_features=None,
-        longer=None,
-        waveform=None,
-        return_dict=False,
-    ):
-        if self.enable_fusion and longer.sum() == 0:
-            # if no audio is longer than 10s, then randomly select one audio to be longer
-            longer[torch.randint(0, longer.shape[0], (1,))] = True
+        input_features,
+        head_mask: Optional[torch.FloatTensor] = None,
+        longer: Optional[torch.FloatTensor]=None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        output_hidden_states_before_downsampling: Optional[bool] = False,
+        always_partition: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
+    ) -> Union[Tuple, SwinEncoderOutput]:
 
         input_features = input_features.transpose(1, 3)
         hidden_states = self.bn0(input_features)
@@ -2276,28 +2190,121 @@ class CLAPSwinTransformer(nn.Module):
         longer_list_idx = None
         if self.enable_fusion:
             longer_list = longer.to(input_features.device)
-            longer_list_idx = torch.where(longer_list)[0]
-
-        if self.training:
-            raise ValueError(
-                "CLAP does not support training since we need to enable `SpectrogramAugmentation`",
-                " this will be addressed in a future release.",
-            )
-            # x = self.spec_augmenter(x)
-            # if mixup_lambda is not None:
-            #     x = do_mixup(x, mixup_lambda)
+            longer_list_idx = torch.where(longer_list == 0)[0]
 
         hidden_states = self.reshape_wav2img(hidden_states)
-        output = self._forward_features(hidden_states, longer_idx=longer_list_idx)
+
+        _, _, frames_num, _ = hidden_states.shape
+
+        
+        hidden_states = self.patch_embed(hidden_states, longer_list_idx)
+
+        all_hidden_states = () if output_hidden_states else None
+        all_reshaped_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
+        if output_hidden_states:
+            batch_size, _, hidden_size = hidden_states.shape
+            # rearrange b (h w) c -> b c h w
+            reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
+            reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
+            all_hidden_states += (hidden_states,)
+            all_reshaped_hidden_states += (reshaped_hidden_state,)
+
+        for i, layer_module in enumerate(self.layers):
+            layer_head_mask = head_mask[i] if head_mask is not None else None
+
+            input_dimensions = layer_module.input_resolution
+
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
+                )
+            else:
+                layer_outputs = layer_module(
+                    hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
+                )
+
+            hidden_states = layer_outputs[0]
+
+            hidden_states_before_downsampling = layer_outputs[1]
+            output_dimensions = layer_outputs[2]
+
+            input_dimensions = (output_dimensions[-2], output_dimensions[-1])
+
+            if output_hidden_states and output_hidden_states_before_downsampling:
+                batch_size, _, hidden_size = hidden_states_before_downsampling.shape
+                # rearrange b (h w) c -> b c h w
+                # here we use the original (not downsampled) height and width
+                reshaped_hidden_state = hidden_states_before_downsampling.view(
+                    batch_size, *(output_dimensions[0], output_dimensions[1]), hidden_size
+                )
+                reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
+                all_hidden_states += (hidden_states_before_downsampling,)
+                all_reshaped_hidden_states += (reshaped_hidden_state,)
+            elif output_hidden_states and not output_hidden_states_before_downsampling:
+                batch_size, _, hidden_size = hidden_states.shape
+                # rearrange b (h w) c -> b c h w
+                reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
+                reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
+                all_hidden_states += (hidden_states,)
+                all_reshaped_hidden_states += (reshaped_hidden_state,)
+
+            if output_attentions:
+                all_self_attentions += layer_outputs[3:]
+        
+        hidden_states = self.norm(hidden_states)
+
+        batch_size, _, n_channels = hidden_states.shape
+
+        freq_shape = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[0]
+        temporal_shape = frames_num // (2 ** (len(self.depths) - 1)) // self.patch_stride[1]
+
+        hidden_states = (
+            hidden_states.permute(0, 2, 1).contiguous().reshape(batch_size, n_channels, freq_shape, temporal_shape)
+        )
+
+        batch_size, n_channels, n_frequencies, n_temp = hidden_states.shape
+        # group 2D CNN
+        c_freq_bin = n_frequencies // self.freq_ratio
+        hidden_states = hidden_states.reshape(batch_size, n_channels, n_frequencies // c_freq_bin, c_freq_bin, n_temp)
+        hidden_states = (
+            hidden_states.permute(0, 1, 3, 2, 4).contiguous().reshape(batch_size, n_channels, c_freq_bin, -1)
+        )
+        # get latent_output
+        fine_grained_latent_output = torch.mean(hidden_states, dim=2)
+        fine_grained_latent_output = interpolate(
+            fine_grained_latent_output.permute(0, 2, 1).contiguous(), 8 * self.patch_stride[1]
+        )
+
+        latent_output = self.avgpool(torch.flatten(hidden_states, 2))
+        latent_output = torch.flatten(latent_output, 1)
+
+        # display the attention map, if needed
+
+        hidden_states = self.tscam_conv(hidden_states)
+        hidden_states = torch.flatten(hidden_states, 2)  # B, C, T
+
+        framewise_output = interpolate(
+            torch.sigmoid(hidden_states).permute(0, 2, 1).contiguous(), 8 * self.patch_stride[1]
+        )
+
+        hidden_states = self.avgpool(hidden_states)
+        hidden_states = torch.flatten(hidden_states, 1)
 
         if not return_dict:
-            return output
-
-        framewise_output, clipwise_output, fine_grained_embedding, output_embeddingss = output
+            return (framewise_output, torch.sigmoid(hidden_states), fine_grained_latent_output, latent_output)
 
         return CLAPAudioModelOutput(
             framewise_output=framewise_output,
-            clipwise_output=clipwise_output,
-            fine_grained_embedding=fine_grained_embedding,
-            embedding=output_embeddingss,
+            clipwise_output=torch.sigmoid(hidden_states),
+            fine_grained_embedding=fine_grained_latent_output,
+            embedding=latent_output,
         )
