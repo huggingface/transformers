@@ -202,9 +202,11 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     print("Generating a caption...")
     prompt = ""
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
-    outputs = hf_model.generate(pixel_values, input_ids, max_length=10)
-    print("Outputs:", outputs)
-    print(processor.batch_decode(outputs, skip_special_tokens=True))
+    
+    original_outputs = original_model.generate({"image": original_pixel_values}, num_beams=1)
+    outputs = hf_model.generate(original_pixel_values, input_ids, max_length=10)
+    print("Original generation:", original_outputs)
+    print("HF generation:", processor.batch_decode(outputs, skip_special_tokens=True))
 
     if pytorch_dump_folder_path is not None:
         processor.save_pretrained(pytorch_dump_folder_path)
