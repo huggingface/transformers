@@ -122,6 +122,7 @@ class FlaxConvNextModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     test_head_masking = False
     has_attentions = False
+    is_encoder_decoder = False
 
     def setUp(self) -> None:
         self.model_tester = FlaxConvNextModelTester(self)

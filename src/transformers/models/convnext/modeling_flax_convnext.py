@@ -18,6 +18,7 @@ from typing import Optional, Tuple, Union
 import jax
 from jax import random
 import jax.numpy as jnp
+import numpy as np
 import flax.linen as nn
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.traverse_util import flatten_dict, unflatten_dict
@@ -199,18 +200,25 @@ class FlaxConvNextEncoder(nn.Module):
     config: ConvNextConfig
     dtype : jnp.dtype = jnp.float32
 
-    def setup(self):
-        stages = []
+    def setup_drop_path_rates(self):
         
-        sections = (jnp.cumsum(jnp.array(self.config.depths)) - jnp.array(self.config.depths))[1:]
+        # NOTE: Using Jax causes error, still investigating, Abstract tracer value encountered where concrete value is expected
+        sections = (np.cumsum(np.array(self.config.depths)) - np.array(self.config.depths))[1:]
 
         drop_path_rates = [
             x.tolist()
-            for x in jnp.split(
-                jnp.linspace(0, self.config.drop_path_rate, sum(self.config.depths), dtype=self.dtype),
+            for x in np.split(
+                np.linspace(0, self.config.drop_path_rate, sum(self.config.depths), dtype=self.dtype),
                 sections, # NOTE: numpy split has a subtle difference compared to torch split
             ) # NOTE: Need to really validate the result
         ]
+            
+        return drop_path_rates
+
+    def setup(self):
+        stages = []
+        
+        drop_path_rates = self.setup_drop_path_rates()
 
         prev_chs = self.config.hidden_sizes[0]
         for i in range(self.config.num_stages):
@@ -577,3 +585,8 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
     >>> print("Predicted class:", model.config.id2label[predicted_class_idx.item()])
     ```
 """
+
+overwrite_call_docstring(FlaxConvNextForImageClassification, FLAX_VISION_CLASSIF_DOCSTRING)
+append_replace_return_docstrings(
+    FlaxConvNextForImageClassification, output_type=FlaxImageClassifierOutputWithNoAttention, config_class=ConvNextConfig
+)
