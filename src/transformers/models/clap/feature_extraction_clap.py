@@ -135,9 +135,6 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         """
         window = np.hanning(self.n_fft + 1)[:-1]
 
-        # TODO why don't we take the last value?
-        # window = np.hanning(self.n_fft + 1)[:-1]
-
         frames = self._fram_wave(waveform)
         stft = self._stft(frames, window=window)
 
@@ -237,15 +234,18 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         else:
             longer = False
             # only use repeat as a new possible value for padding. you repeat the audio before applying the usual max_length padding
-            if waveform.shape[0] < max_length and padding == "repeatpad":  # do nothing if equal
-                n_repeat = int(max_length / len(waveform))
-                waveform = waveform.repeat(n_repeat)
-
-            waveform = np.pad(waveform, (0, max_length - waveform.shape[0]), mode="constant", constant_values=0)
-            input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
+            if waveform.shape[0] < max_length:
+                if padding == "repeatpad":
+                    n_repeat = int(max_length / len(waveform))
+                    waveform = waveform.repeat(n_repeat)
+                waveform = np.pad(waveform, (0, max_length - waveform.shape[0]), mode="constant", constant_values=0)
+            
             if truncation == "fusion":
+                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters)
                 input_mel = np.stack([input_mel, input_mel, input_mel, input_mel], axis=0)
-
+            else:
+                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
+                
         return input_mel, longer
 
     def __call__(
