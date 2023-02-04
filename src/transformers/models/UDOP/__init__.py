@@ -87,19 +87,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_udop_uni import (
-            UdopUnimodelForConditionalGeneration,
-            # T5Model,
-            UDOPPreTrainedModel,
-        )
-
-        from .modeling_udop_dual import (
-            # T5_PRETRAINED_MODEL_ARCHIVE_LIST,
-            UDOPEncoderModel,
+        from .modeling_udop_dual import (  # T5_PRETRAINED_MODEL_ARCHIVE_LIST,; T5Model,
             UdopDualForConditionalGeneration,
-            # T5Model,
+            UDOPEncoderModel,
             UDOPPreTrainedModel,
         )
+        from .modeling_udop_uni import UDOPPreTrainedModel, UdopUnimodelForConditionalGeneration  # T5Model,
 
 else:
     import sys

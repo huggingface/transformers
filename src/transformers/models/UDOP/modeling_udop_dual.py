@@ -13,14 +13,6 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from .embedding.cell_embed import CellEmbeddings
-from .embedding.relative.relative import (
-    RelativePositionBias1D,
-    RelativePositionBiasAggregated,
-    RelativePositionBiasBase,
-    create_relative_bias,
-)
-from .mae.build import mae_model
 from transformers import PreTrainedModel, add_start_docstrings
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import BaseModelOutput, Seq2SeqModelOutput
@@ -33,7 +25,17 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
+
 from .configuration_udop import UdopConfig
+from .embedding.cell_embed import CellEmbeddings
+from .embedding.relative.relative import (
+    RelativePositionBias1D,
+    RelativePositionBiasAggregated,
+    RelativePositionBiasBase,
+    create_relative_bias,
+)
+from .mae.build import mae_model
+
 
 logger = logging.getLogger(__name__)
 
@@ -45,34 +47,30 @@ _TOKENIZER_FOR_DOC = "UDOPTokenizer"
 @dataclass
 class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
     """
-    Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
     Args:
+    Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
+            Sequence of hidden-states at the output of the last layer of the model. If `past_key_values` is used only
+            the last hidden-state of the sequences of shape `(batch_size, 1, hidden_size)` is output.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
             `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-            encoder_sequence_length, embed_size_per_head)`.
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-            input) to speed up sequential decoding.
+            encoder_sequence_length, embed_size_per_head)`. Contains pre-computed hidden-states (key and values in the
+            self-attention blocks and optionally if `config.is_encoder_decoder=True` in the cross-attention blocks)
+            that can be used (see `past_key_values` input) to speed up sequential decoding.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
+            the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
         cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -134,6 +132,7 @@ class UDOPDualDenseGatedActDense(nn.Module):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
+
 class UDOPDualLayerFF(nn.Module):
     def __init__(self, config: UdopConfig):
         super().__init__()
@@ -142,7 +141,7 @@ class UDOPDualLayerFF(nn.Module):
         else:
             self.DenseReluDense = UDOPDualDenseActDense(config)
 
-        self.layer_norm = UDOPLayerNorm (config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = UDOPLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
@@ -150,6 +149,7 @@ class UDOPDualLayerFF(nn.Module):
         forwarded_states = self.DenseReluDense(forwarded_states)
         hidden_states = hidden_states + self.dropout(forwarded_states)
         return hidden_states
+
 
 class UDOPDualAttention(nn.Module):
     def __init__(self, config: UdopConfig, has_relative_attention_bias=False):
@@ -618,6 +618,7 @@ DEPARALLELIZE_DOCSTRING = r"""
     ```
 """
 
+
 class UDOPLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -744,8 +745,8 @@ class UDOPPreTrainedModel(PreTrainedModel):
 
 class UDOPDualStack(UDOPPreTrainedModel):
     """
-    Almost exact copy of transformers UDOPDualStack with the modification
-    of passing `position_bias` in the forward method
+    Almost exact copy of transformers UDOPDualStack with the modification of passing `position_bias` in the forward
+    method
     """
 
     def __init__(self, config, embed_tokens=None):
@@ -778,7 +779,6 @@ class UDOPDualStack(UDOPPreTrainedModel):
         if not self.is_decoder:
             self.vision_encoder = mae_model(
                 config.mae_version,
-                os.path.join(config.data_dir, config.mae_checkpoint),
                 config.image_size,
                 config.vocab_size,
                 config.max_2d_position_embeddings,
@@ -842,6 +842,10 @@ class UDOPDualStack(UDOPPreTrainedModel):
             attention_mask = torch.zeros((4, 1024), device=input_ids.device, dtype=input_ids.dtype)
             seg_data["tokens"]["bboxes"] = torch.zeros((4, 1024, 4), device=input_ids.device, dtype=input_ids.dtype)
             input_shape = input_ids.size()
+            position_bias = torch.zeros_like(
+                self.get_extended_attention_mask(attention_mask, input_shape, attention_mask.device)
+            )
+            # encoder_attention_mask = attention_mask
             logger.warning("Empty batch")
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -871,6 +875,10 @@ class UDOPDualStack(UDOPPreTrainedModel):
             encoder_attention_mask = torch.ones(
                 batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
             )
+
+        # initialize past_key_values with `None` if past does not exist
+        if past_key_values is None:
+            past_key_values = [None] * len(self.block)
 
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
@@ -924,6 +932,11 @@ class UDOPDualStack(UDOPPreTrainedModel):
                 encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
 
             # append next layer key value states
+            if use_cache:
+                present_key_value_states = present_key_value_states + (present_key_value_state,)
+
+            # import pdb; pdb.set_trace()
+
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)  # We keep only self-attention weights for now
                 if self.is_decoder:
@@ -958,6 +971,7 @@ class UDOPDualStack(UDOPPreTrainedModel):
             cross_attentions=all_cross_attentions,
             vision_embeds=vision_embeds,
         )
+
 
 UDOPDual_START_DOCSTRING = r"""
 
@@ -1410,7 +1424,6 @@ class UDOPEncoderModel(UDOPPreTrainedModel):
 
 
 class UdopDualForConditionalGeneration(UDOPPreTrainedModel):
-
     def __init__(self, config):
         super(UdopDualForConditionalGeneration, self).__init__(config)
 
@@ -1508,66 +1521,53 @@ class UdopDualForConditionalGeneration(UDOPPreTrainedModel):
         if encoder_outputs is None:
             return None
 
-        if ids_restore is not None:
-            # print(char_ids.size(), char_seg_data.size(), input_ids.size())
-            image_output = self.encoder.vision_encoder.forward_decoder(
-                encoder_outputs.vision_embeds,
-                ids_restore,
-                context=encoder_outputs.last_hidden_state,
-                char_inputs=[char_ids, char_seg_data],
-            )
-            loss = self.encoder.vision_encoder.forward_loss(image, image_output, image_mask_label)
-            return VisSeq2SeqLMOutput(
-                loss=loss, image_output=image_output, image_target=image, image_mask_label=image_mask_label
-            )
-        else:
-            if masked_lm_labels is not None:
-                labels = masked_lm_labels
+        if masked_lm_labels is not None:
+            labels = masked_lm_labels
 
-            if decoder_input_ids is None and labels is not None:
-                decoder_input_ids = self._shift_right(labels)
+        if decoder_input_ids is None and labels is not None:
+            decoder_input_ids = self._shift_right(labels)
 
-            if encoder_outputs.vision_embeds is not None:
-                vision_embeds = self.decoder.vision_fc(encoder_outputs.vision_embeds)
-                vision_embeds = self.decoder.vision_norm(vision_embeds)
-                hidden_states = torch.cat([encoder_outputs.last_hidden_state, vision_embeds], 1)
-                encoder_outputs.last_hidden_state = hidden_states
-                encoder_outputs.vision_embeds = None
+        if encoder_outputs.vision_embeds is not None:
+            vision_embeds = self.decoder.vision_fc(encoder_outputs.vision_embeds)
+            vision_embeds = self.decoder.vision_norm(vision_embeds)
+            hidden_states = torch.cat([encoder_outputs.last_hidden_state, vision_embeds], 1)
+            encoder_outputs.last_hidden_state = hidden_states
+            encoder_outputs.vision_embeds = None
 
-            # ugly hack for model to work as an encoder
-            if decoder_input_ids is None and labels is None:
-                return encoder_outputs
+        # ugly hack for model to work as an encoder
+        if decoder_input_ids is None and labels is None:
+            return encoder_outputs
 
-            attention_mask = torch.cat(
-                [
-                    attention_mask,
-                    torch.ones_like(
-                        encoder_outputs.last_hidden_state[
-                            :, : encoder_outputs.last_hidden_state.size(1) - attention_mask.size(1), 0
-                        ]
-                    ),
-                ],
-                1,
-            )
+        attention_mask = torch.cat(
+            [
+                attention_mask,
+                torch.ones_like(
+                    encoder_outputs.last_hidden_state[
+                        :, : encoder_outputs.last_hidden_state.size(1) - attention_mask.size(1), 0
+                    ]
+                ),
+            ],
+            1,
+        )
 
-            outputs = super().forward(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                decoder_input_ids=decoder_input_ids,
-                decoder_attention_mask=decoder_attention_mask,
-                encoder_outputs=encoder_outputs,
-                past_key_values=past_key_values,
-                head_mask=head_mask,
-                inputs_embeds=inputs_embeds,
-                decoder_inputs_embeds=decoder_inputs_embeds,
-                labels=labels,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
+        outputs = super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            labels=labels,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
-            return outputs  # type: ignore
+        return outputs  # type: ignore
 
     def get_encoder(self):
         return self

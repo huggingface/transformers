@@ -2,11 +2,13 @@ import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
-from transformers import PreTrainedTokenizerFast, PreTrainedTokenizerBase, logger
+from transformers import PreTrainedTokenizerBase, PreTrainedTokenizerFast, logger
 from transformers.models.UDOP import UdopTokenizer
 from transformers.models.UDOP.tokenization_udop import convert_slow_udoptokenizer
 
+
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
+
 
 class UdopTokenizerFast(PreTrainedTokenizerFast):
 

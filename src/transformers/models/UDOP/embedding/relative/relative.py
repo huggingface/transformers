@@ -9,9 +9,10 @@ import torch
 from torch import Tensor
 from torch import nn as nn
 
-from ...configuration_udop import UdopConfig
 from transformers import T5Config
 from transformers.models.t5.modeling_t5 import T5Attention
+
+from ...configuration_udop import UdopConfig
 
 
 # get function for bucket computation
@@ -22,18 +23,18 @@ AUGMENTATION_RANGE = (0.80, 1.25)
 
 class RelativePositionBiasBase(nn.Module, ABC):
     """
-    Base class of relative biases
-    :param num_heads: number of heads in lm model, it will create embeddings of size `num_heads`,
+    Base class of relative biases :param num_heads: number of heads in lm model, it will create embeddings of size
+    `num_heads`,
         which will be added to scores per each token pair
     :param relative_attention_num_buckets: pair token metric
-        (distance in the sequence, distance in pixels etc.) will be bucketed,
-        parameter is defining number of such buckets
+        (distance in the sequence, distance in pixels etc.) will be bucketed, parameter is defining number of such
+        buckets
     :param bidirectional: defining if for pair of tokens distance should be bidirecional,
         if bidirectional=False, then distance(tok1, tok2) == distance(tok2, tok1)
-    :param scaling_factor: defining factor which will be used to scale relative distance
-    :param max_distance: all distances above this value will end up in the one/same bucket
-    :param augmentation: whether to multiple relative distances by random scalar
-    :param expand: used for re-using pretrained model with subsequent addition of prefix_bucket
+    :param scaling_factor: defining factor which will be used to scale relative distance :param max_distance: all
+    distances above this value will end up in the one/same bucket :param augmentation: whether to multiple relative
+    distances by random scalar :param expand: used for re-using pretrained model with subsequent addition of
+    prefix_bucket
     """
 
     def __init__(
@@ -125,8 +126,8 @@ class RelativePositionBiasBase(nn.Module, ABC):
 class RelativePositionBias1D(RelativePositionBiasBase):
     def __init__(self, scaling_factor=1, max_distance=128, **kwargs):
         """
-        Reimplementation of T5 relative position bias. Distance between given tokens is
-        their distance in the sequence. Parameters are the same as in base class
+        Reimplementation of T5 relative position bias. Distance between given tokens is their distance in the sequence.
+        Parameters are the same as in base class
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
@@ -165,8 +166,8 @@ def expand_feature(token_map, feature, special_tokens_value=0):
 class RelativePositionBiasHorizontal(RelativePositionBiasBase):
     def __init__(self, scaling_factor=100, max_distance=100, **kwargs):
         """
-        Represents in the bucket embeddings horizontal distance between two tokens.
-        Parameters are the same as in base class
+        Represents in the bucket embeddings horizontal distance between two tokens. Parameters are the same as in base
+        class
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
@@ -184,8 +185,8 @@ class RelativePositionBiasHorizontal(RelativePositionBiasBase):
 class RelativePositionBiasVertical(RelativePositionBiasBase):
     def __init__(self, scaling_factor=100, max_distance=100, **kwargs):
         """
-        Represents in the bucket embeddings vertical distance between two tokens.
-        Parameters are the same as in base class
+        Represents in the bucket embeddings vertical distance between two tokens. Parameters are the same as in base
+        class
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
@@ -203,8 +204,7 @@ class RelativePositionBiasVertical(RelativePositionBiasBase):
 class RelativePositionBiasAggregated(nn.Module):
     def __init__(self, modules: Sequence[RelativePositionBiasBase]):
         """
-        Class will sums up computed biases
-        :param modules: list of relative bias modules
+        Class will sums up computed biases :param modules: list of relative bias modules
         """
         super().__init__()
         self.biases = nn.ModuleList(modules)
@@ -232,8 +232,7 @@ def create_relative_bias(config: Union[UdopConfig, T5Config]) -> Sequence[Relati
     """
     Creates empty list or one/multiple relative biases.
 
-    :param config: Model's configuration
-    :return: Sequence with created bias modules.
+    :param config: Model's configuration :return: Sequence with created bias modules.
     """
     bias_list = []
     if hasattr(config, "relative_bias_args"):

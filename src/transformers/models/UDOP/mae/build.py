@@ -1,8 +1,4 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT license.
-
 import logging
-import os
 
 import torch
 
@@ -35,7 +31,6 @@ def on_load_checkpoint(model, checkpoint: dict) -> None:
 
 
 def mae_model(name, pretrained_weights, image_size, vocab_size, max_2d_position_embeddings, **kwargs):
-    cur_dir = os.path.dirname(os.path.abspath(__file__))
     mae_models = {
         "mae_vit_base_patch16": mae_vit_base_patch16,
         "mae_vit_large_patch16": mae_vit_large_patch16,
@@ -54,6 +49,12 @@ def mae_model(name, pretrained_weights, image_size, vocab_size, max_2d_position_
 
         on_load_checkpoint(model, weights["model"])
         model.load_state_dict(weights["model"], strict=False)
-    except Exception as e:
-        print("failed loaded mae")
+    except:
+        print(
+            "================\
+              Failed loaded mae\
+              Ignore this if you are finetuning the model\
+              ================\
+              "
+        )
     return model

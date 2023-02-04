@@ -1,16 +1,11 @@
-# Copyright (c) Microsoft Corporation.
-# Licensed under the MIT license.
 import os
 import re
 from shutil import copyfile
 
 import sentencepiece as spm
-from transformers import (
-    PreTrainedTokenizer,
-    PreTrainedTokenizerBase,
-    PreTrainedTokenizerFast,
-)
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.utils import logging
+
 
 # The special tokens of T5Tokenizer is hard-coded with <extra_id_{}>
 # Created another class UDOPTokenizer extending it to add special visual tokens like <loc_{}>
@@ -76,6 +71,7 @@ class UdopTokenizer(PreTrainedTokenizer):
     # pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     # max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
+
     def __init__(
         self,
         vocab_file,
@@ -85,12 +81,12 @@ class UdopTokenizer(PreTrainedTokenizer):
         extra_ids=100,
         loc_extra_ids=501,
         other_extra_ids=200,
-        additional_special_tokens=None,
+        additional_special_tokens=[],
         sp_model_kwargs=None,
         **kwargs
     ):
         # Add extra_ids to the special token list
-        if extra_ids > 0 and additional_special_tokens is None:
+        if extra_ids > 0 and not "<extra_id_0>" in additional_special_tokens:
             additional_special_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids)]
             additional_special_tokens.extend(["<extra_l_id_{}>".format(i) for i in range(extra_ids)])
             additional_special_tokens.extend(["</extra_l_id_{}>".format(i) for i in range(extra_ids)])
@@ -225,11 +221,12 @@ class UdopTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
+
 # Below are for Rust-based Fast Tokenizer
 
 from typing import List, Optional, Tuple
 
-from tokenizers import Tokenizer, processors
+from tokenizers import processors
 from transformers.convert_slow_tokenizer import SpmConverter
 
 
@@ -263,5 +260,3 @@ class UdopConverter(SpmConverter):
 
 def convert_slow_udoptokenizer(UdopTokenizer):
     return UdopConverter(UdopTokenizer).converted()
-
-
