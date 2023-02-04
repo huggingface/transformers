@@ -15,4 +15,6 @@ def test():
     # model = UdopUnimodelForConditionalGeneration.from_pretrained("/Users/eaxxkra/Downloads/udop-unimodel-large-224")
 
     print(model)
+
+
 # udopunimodel = UdopUnimodelForConditionalGeneration.from_pretrained("/Users/eaxxkra/Downloads/UdopUnimodel-Large-224/",local_files_only=True)
