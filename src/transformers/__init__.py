@@ -4190,6 +4190,7 @@ if TYPE_CHECKING:
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
         from .models.speecht5 import SpeechT5FeatureExtractor
+        from .models.transformer_transducer import TransformerTransducerFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():
