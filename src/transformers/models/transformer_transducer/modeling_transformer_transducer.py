@@ -53,7 +53,7 @@ from .configuration_transformer_transducer import TransformerTransducerConfig
 
 
 if is_torchaudio_available():
-    from torchaudio.transforms import FrequencyMasking, RNNTLoss, TimeMasking
+    from torchaudio.transforms import RNNTLoss
 
 logger = logging.get_logger(__name__)
 
