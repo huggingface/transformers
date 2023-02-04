@@ -878,6 +878,7 @@ class GenerationMixin:
                 SuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
             )
         if generation_config.forced_decoder_ids is not None:
+            forced_decoder_ids = [[input_ids_seq_length + i[0] - 1, i[1]] for i in forced_decoder_ids]
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present

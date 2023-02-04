@@ -101,9 +101,14 @@ class WhisperPositionalEmbedding(nn.Embedding):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__(num_positions, embedding_dim)
 
-    def forward(self, input_ids, past_key_values_length=0):
+    def forward(self, input_ids,  attention_mask, past_key_values_length=0):
+        if attention_mask is not None:
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids = position_ids[:, past_key_values_length:]
+        else:
+            position_ids = torch.arange(input_ids.shape[-1]).broadcast_to(input_ids.shape) + past_key_values_length
 
-        return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[-1]]
+        return self.weight[position_ids]
 
 
 class WhisperAttention(nn.Module):
@@ -868,7 +873,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         )
 
         # embed positions
-        positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+        positions = self.embed_positions(input_ids, attention_mask, past_key_values_length=past_key_values_length)
 
         hidden_states = inputs_embeds + positions
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1379,6 +1384,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
+        decoder_attention_mask=None,
         past_key_values=None,
         use_cache=None,
         encoder_outputs=None,
@@ -1394,7 +1400,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "use_cache": use_cache,
-            "decoder_attention_mask": None,
+            "decoder_attention_mask": decoder_attention_mask,
         }
 
     #
