@@ -1,7 +1,7 @@
 # from transformers.models.UDOP.modeling_udop_dual import UdopDualForConditionalGeneration
-from transformers.models.UDOP.modeling_udop_uni import UdopUnimodelForConditionalGeneration
-from transformers.models.UDOP.modeling_udop_dual import UdopDualForConditionalGeneration
 from transformers.models.UDOP.configuration_udop import UdopConfig
+from transformers.models.UDOP.modeling_udop_dual import UdopDualForConditionalGeneration
+from transformers.models.UDOP.modeling_udop_uni import UdopUnimodelForConditionalGeneration
 from transformers.models.UDOP.tokenization_udop import UdopTokenizer
 
 
