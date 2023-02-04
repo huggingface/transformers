@@ -2569,6 +2569,7 @@ class TFGenerationMixin:
         if not use_xla:
             # Cut for backward compatibility
             sequences = sequences[:, :cur_len]
+            beam_indices = beam_indices[:, :cur_len]
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
