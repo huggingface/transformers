@@ -1,6 +1,7 @@
 import os
 import re
 from shutil import copyfile
+from typing import List, Optional, Tuple
 
 import sentencepiece as spm
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast

@@ -12,6 +12,8 @@ UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 class UdopConfig(PretrainedConfig):
     pretrained_config_archive_map = UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP
 
+    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+
     def __init__(
         self,
         vocab_size=32128,
@@ -69,6 +71,9 @@ class UdopConfig(PretrainedConfig):
         self.mae_checkpoint = mae_checkpoint
         self.truncate_decoder_after_layer = truncate_decoder_after_layer
         self.truncate_encoder_after_layer = truncate_encoder_after_layer
+        self.is_encoder_decoder = is_encoder_decoder
+        self.pad_token_id = (pad_token_id,)
+        self.eos_token_id = eos_token_id
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -84,3 +89,10 @@ class UdopConfig(PretrainedConfig):
         # for backwards compatibility
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            **kwargs,
+        )

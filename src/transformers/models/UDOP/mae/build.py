@@ -51,10 +51,7 @@ def mae_model(name, pretrained_weights, image_size, vocab_size, max_2d_position_
         model.load_state_dict(weights["model"], strict=False)
     except:
         print(
-            "================\
-              Failed loaded mae\
-              Ignore this if you are finetuning the model\
-              ================\
-              "
+            "================              Failed loaded mae              Ignore this if you are finetuning the model "
+            "             ================              "
         )
     return model
