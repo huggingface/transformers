@@ -736,6 +736,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         skip = False
         right_stride_start = None
 
+        all_special_ids = set(self.all_special_ids)
+        all_special_ids.add(50256)
         for chunk_id, output in enumerate(model_outputs):
             # We can drop everything to Python list, it's going to make
             # our lives easier
@@ -779,7 +781,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 # - 2/ all other special tokens (which we ignore)
                 # - 3/ Timestamp
                 # - 4/ Regular text
-                if token in self.all_special_ids:
+                if token in all_special_ids:
                     # Either language code or other
                     text = self.decode([token])
                     # Removing outer shell <|XX|>
@@ -798,41 +800,46 @@ class WhisperTokenizer(PreTrainedTokenizer):
                     # 3/ Timestamp token
                     time = (token - timestamp_begin) * time_precision + time_offset
                     time = round(time, 2)
-                    # print(f"Timestamp {token}")
-                    # if last_timestamp and token >= last_timestamp or (skip and token < first_timestamp):
                     if last_timestamp and token >= last_timestamp:
                         # Whisper outputted a timestamp token, but it falls within
                         # our stride, so we're going to skip it for the time being
                         # and resolve this later
                         # Skip is necessary because timestamp tokens always come
                         # by pair, so we need to skip the next one too (which would mark the start of another chunk).
-                        # print(f"Skipping right stride")
                         skip = True
-                    elif skip or token < first_timestamp:
-                        # print(f"Skipping second")
+                    elif skip or (previous_tokens and token < first_timestamp):
                         skip = False
                     elif chunk["timestamp"][0] is None:
                         chunk["timestamp"][0] = time
-                        # print(f"Setting start")
                     else:
                         # This is the end of the timestamp chunk
-                        chunk["timestamp"][1] = time
-                        # Handling merges.
-                        previous_tokens.append(current_tokens)
-                        resolved_tokens = _find_longest_common_sequence(previous_tokens)
-                        resolved_text = self.decode(resolved_tokens)
-                        chunk["text"] = resolved_text
-                        chunks.append(chunk)
+                        if time == chunk["timestamp"][0]:
+                            # This is a bug in timestamp token output
+                            # where we're taking the duplicate token
+                            # as a stop where it should be a start.
+                            # This is an issue in the underlying model output
+                            # Let's just skip it so it becomes de-factor
+                            # a start agin
+                            pass
+                        else:
+                            chunk["timestamp"][1] = time
+                            # Handling merges.
+                            previous_tokens.append(current_tokens)
+                            resolved_tokens = _find_longest_common_sequence(previous_tokens)
+                            resolved_text = self.decode(resolved_tokens)
+                            chunk["text"] = resolved_text
+                            chunks.append(chunk)
 
-                        # Flush all our temporary context
-                        previous_tokens = []
-                        current_tokens = []
-                        chunk = new_chunk()
+                            # Flush all our temporary context
+                            previous_tokens = []
+                            current_tokens = []
+                            chunk = new_chunk()
                 else:
                     # 4/ Regular token
                     # We just append to the list of all tokens so we can handle
                     # merges later and decode into text.
                     current_tokens.append(token)
+
             if "stride" in output:
                 time_offset += chunk_len - stride_right
                 # Leftover tokens
@@ -844,10 +851,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
                     current_tokens = []
 
         if previous_tokens:
-            # if return_timestamps:
-            #     # Last token should always be timestamps, so there shouldn't be
-            #     # leftover
-            #     raise ValueError("There was an error while processing these timestamps")
+            if return_timestamps:
+                # Last token should always be timestamps, so there shouldn't be
+                # leftover
+                raise ValueError("There was an error while processing these timestamps")
             # Happens when we don't use timestamps
             resolved_tokens = _find_longest_common_sequence(previous_tokens)
             resolved_text = self.decode(resolved_tokens)
