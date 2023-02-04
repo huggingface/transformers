@@ -2324,14 +2324,17 @@ class TFGenerationMixin:
                 # see https://github.com/huggingface/transformers/pull/5420#discussion_r449779867
                 log_probs = logits_warper(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
                 log_probs = unflatten_beam_dim(log_probs, num_beams)
-                log_probs_processed = log_probs
             vocab_size = log_probs.shape[2]
             log_probs = tf.reshape(log_probs, (batch_size, num_beams * vocab_size))
 
             # Store scores, attentions and hidden_states when required
             if not use_xla and return_dict_in_generate:
                 if output_scores:
-                    all_scores.append(log_probs_processed)
+                    all_scores.append(
+                        logits_warper(
+                            flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs_processed), cur_len
+                        )
+                    )
                 if output_attentions and self.config.is_encoder_decoder:
                     decoder_attentions.append(model_outputs.decoder_attentions)
                 elif output_attentions and not self.config.is_encoder_decoder:

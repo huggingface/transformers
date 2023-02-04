@@ -16,8 +16,6 @@
 import tempfile
 import unittest
 
-import numpy as np
-
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf, slow
 
@@ -27,7 +25,7 @@ from .test_framework_agnostic import GenerationIntegrationTestsMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import AutoTokenizer, TFAutoModelForCausalLM, TFAutoModelForSeq2SeqLM, tf_top_k_top_p_filtering
+    from transformers import TFAutoModelForCausalLM, TFAutoModelForSeq2SeqLM, tf_top_k_top_p_filtering
 
 
 @require_tf
@@ -179,168 +177,3 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
                 tf_func_outputs = serving_func(**inputs)["sequences"]
                 tf_model_outputs = test_model.generate(**inputs, max_new_tokens=max_length)
                 tf.debugging.assert_equal(tf_func_outputs, tf_model_outputs)
-
-    def test_validate_generation_inputs(self):
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
-        model = TFAutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5")
-
-        encoder_input_str = "Hello world"
-        input_ids = tokenizer(encoder_input_str, return_tensors="tf").input_ids
-
-        # typos are quickly detected (the correct argument is `do_sample`)
-        with self.assertRaisesRegex(ValueError, "do_samples"):
-            model.generate(input_ids, do_samples=True)
-
-        # arbitrary arguments that will not be used anywhere are also not accepted
-        with self.assertRaisesRegex(ValueError, "foo"):
-            fake_model_kwargs = {"foo": "bar"}
-            model.generate(input_ids, **fake_model_kwargs)
-
-    def test_transition_scores_greedy_search(self):
-        articles = ["Justin Timberlake", "Michael Phelps"]
-        tokenizer = AutoTokenizer.from_pretrained("distilgpt2", padding_side="left")
-        tokenizer.pad_token = tokenizer.eos_token
-
-        model = TFAutoModelForCausalLM.from_pretrained("distilgpt2")
-
-        input_ids = tokenizer(articles, return_tensors="tf", padding=True).input_ids
-        outputs = model.generate(
-            input_ids=input_ids,
-            max_new_tokens=5,
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=None,
-            return_dict_in_generate=True,
-            output_scores=True,
-        )
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores)
-        expected_scores = np.array(
-            [
-                [-57.8844, -60.45698, -70.16364, -65.50791, -66.35648],
-                [-54.417572, -60.216614, -62.661243, -58.621933, -58.298683],
-            ]
-        )
-        self.assertTrue(np.allclose(transition_scores, expected_scores))
-
-    def test_transition_scores_greedy_search_normalized(self):
-        articles = ["Justin Timberlake", "Michael Phelps"]
-        tokenizer = AutoTokenizer.from_pretrained("distilgpt2", padding_side="left")
-        tokenizer.pad_token = tokenizer.eos_token
-
-        model = TFAutoModelForCausalLM.from_pretrained("distilgpt2")
-
-        input_ids = tokenizer(articles, return_tensors="tf", padding=True).input_ids
-        outputs = model.generate(
-            input_ids=input_ids,
-            max_new_tokens=5,
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=None,
-            return_dict_in_generate=True,
-            output_scores=True,
-        )
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True)
-        expected_scores = np.array(
-            [
-                [-2.538938, -2.2694316, -2.1580915, -1.572299, -2.6719835],
-                [-1.8826028, -2.2461371, -1.7556462, -2.9644494, -1.7996008],
-            ]
-        )
-        self.assertTrue(np.allclose(transition_scores, expected_scores))
-
-    def test_transition_scores_beam_search_encoder_decoder(self):
-        articles = [
-            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
-            "Michael Phelps is arguably the most decorated Olympian of all time.",
-        ]
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        model = TFAutoModelForSeq2SeqLM.from_pretrained(
-            "hf-internal-testing/tiny-random-bart",
-            max_length=10,
-            num_beams=4,
-            num_return_sequences=2,
-            eos_token_id=None,
-            return_dict_in_generate=True,
-            output_scores=True,
-            length_penalty=0.0,
-        )
-
-        input_ids = tokenizer(articles, return_tensors="tf", padding=True).input_ids
-        outputs = model.generate(input_ids=input_ids)
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-
-        self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
-
-    def test_transition_scores_beam_search_encoder_decoder_with_eos(self):
-        articles = [
-            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
-            "Michael Phelps is arguably the most decorated Olympian of all time.",
-        ]
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        model = TFAutoModelForSeq2SeqLM.from_pretrained(
-            "hf-internal-testing/tiny-random-bart",
-            max_length=10,
-            num_beams=4,
-            num_return_sequences=2,
-            return_dict_in_generate=True,
-            output_scores=True,
-            length_penalty=0.0,
-        )
-
-        input_ids = tokenizer(articles, return_tensors="tf", padding=True).input_ids
-        outputs = model.generate(input_ids=input_ids)
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-
-        self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
-
-    def test_transition_scores_beam_search_decoder_only(self):
-        articles = [
-            "Justin Timberlake",
-            "Michael Phelps",
-        ]
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer.pad_token = tokenizer.eos_token
-
-        model = TFAutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-gpt2",
-            max_length=10,
-            num_beams=4,
-            num_return_sequences=2,
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=None,
-            return_dict_in_generate=True,
-            output_scores=True,
-            length_penalty=0.0,
-        )
-
-        input_ids = tokenizer(articles, return_tensors="tf", padding=True).input_ids
-        outputs = model.generate(input_ids=input_ids)
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-        self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
-
-    def test_transition_scores_beam_sample_encoder_decoder(self):
-        articles = [
-            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
-            "Michael Phelps is arguably the most decorated Olympian of all time.",
-        ]
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        model = TFAutoModelForSeq2SeqLM.from_pretrained(
-            "hf-internal-testing/tiny-random-bart",
-            do_sample=True,
-            max_length=10,
-            num_beams=4,
-            num_return_sequences=2,
-            eos_token_id=None,
-            return_dict_in_generate=True,
-            output_scores=True,
-            length_penalty=0.0,
-        )
-
-        input_ids = tokenizer(articles, return_tensors="tf", padding=True).input_ids
-        outputs = model.generate(input_ids=input_ids)
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-        self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
