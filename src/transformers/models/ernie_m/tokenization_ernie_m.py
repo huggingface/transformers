@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun, Hao Tian, Hua Wu, Haifeng Wang and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun, Hao Tian, Hua Wu, Haifeng Wang and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -115,8 +115,6 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(sentencepiece_model_ckpt)
         self.vocab = self.load_vocab(filepath=vocab_file)
         self.reverse_vocab = dict((v, k) for k, v in self.vocab.items())
-
-        assert len(self.vocab) == len(self.reverse_vocab)
 
     def get_offset_mapping(self, text):
         if text is None:

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun, Hao Tian, Hua Wu, Haifeng Wang The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Xuan Ouyang, Shuohuan Wang, Chao Pang, Yu Sun, Hao Tian, Hua Wu, Haifeng Wang The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,13 +16,14 @@
 
 
 import math
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union, List
 
 import torch
 import torch.utils.checkpoint
 from torch import nn, tensor
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -94,7 +95,12 @@ class ErnieMEmbeddings(nn.Module):
         self.dropout = nn.Dropout(p=config.hidden_dropout_prob)
         self.padding_idx = config.pad_token_id
 
-    def forward(self, input_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0):
+    def forward(self, 
+                input_ids: Optional[torch.LongTensor] = None, 
+                position_ids: Optional[torch.LongTensor] = None, 
+                inputs_embeds: Optional[torch.LongTensor] = None, 
+                past_key_values_length: int  = 0
+                ) -> torch.Tensor:
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
         if position_ids is None:
@@ -105,6 +111,7 @@ class ErnieMEmbeddings(nn.Module):
 
             if past_key_values_length > 0:
                 position_ids = position_ids + past_key_values_length
+        # to mimic paddlenlp implementation
         position_ids += 2
         position_ids = position_ids.to(next(self.position_embeddings.parameters()).device)
         position_embeddings = self.position_embeddings(position_ids)
@@ -123,14 +130,14 @@ class ErnieMEncoder(nn.Module):
 
     def forward(
         self,
-        input_embeds,
-        attention_mask=None,
-        head_mask=None,
-        past_key_values=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        input_embeds: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
 
         hidden_states = () if output_hidden_states else None
         attentions = () if output_attentions else None
@@ -167,6 +174,7 @@ class ErnieMEncoder(nn.Module):
 class ErnieMEncoderLayer(nn.Module):
     def __init__(self, config, act_dropout=0):
         super().__init__()
+        # to mimic paddlenlp implementation
         dropout = 0.1 if config.hidden_dropout_prob is None else config.hidden_dropout_prob
         act_dropout = config.hidden_dropout_prob if act_dropout is None else act_dropout
 
@@ -178,9 +186,18 @@ class ErnieMEncoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
-        self.activation = nn.GELU()
+        if isinstance(config.hidden_act, str):
+            self.activation = ACT2FN[config.hidden_act]
+        else:
+            self.activation = config.hidden_act
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, past_key_value=None, output_attentions=None):
+    def forward(self, 
+                hidden_states: torch.Tensor, 
+                attention_mask: Optional[torch.FloatTensor] = None, 
+                head_mask: Optional[torch.FloatTensor] = None, 
+                past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None, 
+                output_attentions: Optional[bool] = None
+                ):
         residual = hidden_states
         if output_attentions:
             hidden_states, attention_opt_weights = self.self_attn(
@@ -215,7 +232,7 @@ class ErnieMEncoderLayer(nn.Module):
 class ErnieMAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self_attn = ErnieMSelfOutput(config, position_embedding_type=position_embedding_type)
+        self.self_attn = ErnieMSelfAttention(config, position_embedding_type=position_embedding_type)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.pruned_heads = set()
 
@@ -338,7 +355,6 @@ ERNIE_M_INPUTS_DOCSTRING = r"""
 class ErnieMModel(ErnieMPreTrainedModel):
     def __init__(self, config):
         super(ErnieMModel, self).__init__(config)
-        self.config = config
         self.initializer_range = config.initializer_range
         self.embeddings = ErnieMEmbeddings(config)
         self.encoder = ErnieMEncoder(config)
@@ -425,23 +441,23 @@ class ErnieMModel(ErnieMPreTrainedModel):
             return_dict=return_dict,
         )
 
-        if type(encoder_outputs) == tuple:
+        if not return_dict:
             sequence_output = encoder_outputs[0]
             pooler_output = self.pooler(sequence_output)
             return (sequence_output, pooler_output) + encoder_outputs[1:]
 
-        elif type(encoder_outputs) == BaseModelOutputWithPastAndCrossAttentions:
+        elif return_dict:
             sequence_output = encoder_outputs["last_hidden_state"]
             pooler_output = self.pooler(sequence_output)
             hidden_states = None if not output_hidden_states else encoder_outputs["hidden_states"]
             attentions = None if not output_attentions else encoder_outputs["attentions"]
 
-        return BaseModelOutputWithPoolingAndCrossAttentions(
-            last_hidden_state=sequence_output,
-            pooler_output=pooler_output,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
+            return BaseModelOutputWithPoolingAndCrossAttentions(
+                last_hidden_state=sequence_output,
+                pooler_output=pooler_output,
+                hidden_states=hidden_states,
+                attentions=attentions,
+            )
 
 
 @add_start_docstrings(
@@ -449,7 +465,7 @@ class ErnieMModel(ErnieMPreTrainedModel):
     the pooled output) e.g. for GLUE tasks.""",
     ERNIE_M_START_DOCSTRING,
 )
-# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py
+# Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->ErnieM
 class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -473,17 +489,17 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        past_key_values=None,
-        use_cache=None,
-        output_hidden_states=None,
-        output_attentions=None,
-        return_dict=True,
-        labels=None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
+        labels: Optional[torch.Tensor] = None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -549,7 +565,7 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
     ERNIE_M_START_DOCSTRING,
 )
-# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py
+# Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->ErnieM
 class ErnieMForTokenClassification(ErnieMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -574,16 +590,16 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        past_key_values=None,
-        output_hidden_states=None,
-        output_attentions=None,
-        return_dict=True,
-        labels=None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.Tensor]] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
+        labels: Optional[torch.Tensor] = None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -630,7 +646,7 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
     ERNIE_M_START_DOCSTRING,
 )
-# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py
+# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->ErnieM
 class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -653,16 +669,16 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=True,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        start_positions: Optional[torch.Tensor] = None,
+        end_positions: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
     ):
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -729,7 +745,7 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
     ERNIE_M_START_DOCSTRING,
 )
-# Copied from https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py
+# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->ErnieM
 class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -753,15 +769,15 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=True,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -820,18 +836,8 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
     compute `start_prob` and `end_prob`, designed for Universal Information Extraction.""",
     ERNIE_M_START_DOCSTRING,
 )
-# Copied from https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/modeling.py#L774
+# Copied from paddlenlp.transformers.ernie_m.modeling.UIEM with UIEM->ErnieMUIEM
 class ErnieMUIEM(ErnieMPreTrainedModel):
-    """
-    Args:
-        input_ids (Tensor):
-            See [`ErnieMModel`].
-        attention_mask (Tensor, optional):
-            See [`ErnieMModel`].
-        position_ids (Tensor, optional):
-            See [`ErnieMModel`].
-    """
-
     def __init__(self, config):
         super(ErnieMUIEM, self).__init__(config)
         self.ernie_m = ErnieMModel(config)
@@ -840,19 +846,28 @@ class ErnieMUIEM(ErnieMPreTrainedModel):
         self.sigmoid = nn.Sigmoid()
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(ERNIE_M_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=True,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        start_positions: Optional[torch.Tensor] = None,
+        end_positions: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
     ):
+        r"""
+        start_positions (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for position (index) for computing the start_positions loss.
+            Position outside of the sequence are not taken into account for computing the loss.
+        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) for computing the end_positions  loss.
+            Position outside of the sequence are not taken into account for computing the loss.
+        """
 
         result = self.ernie_m(
             input_ids,
@@ -862,11 +877,11 @@ class ErnieMUIEM(ErnieMPreTrainedModel):
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
+            return_dict=return_dict,
         )
-        if type(result) == BaseModelOutputWithPoolingAndCrossAttentions:
+        if return_dict:
             sequence_output = result.last_hidden_state
-        elif type(result) == tuple:
+        elif not return_dict:
             sequence_output = result[0]
 
         start_logits = self.linear_start(sequence_output)
@@ -907,7 +922,8 @@ class ErnieMUIEM(ErnieMPreTrainedModel):
         )
 
 
-class ErnieMSelfOutput(nn.Module):
+#Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->ErnieM
+class ErnieMSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
