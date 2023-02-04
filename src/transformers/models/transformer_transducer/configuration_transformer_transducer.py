@@ -113,6 +113,7 @@ class TransformerTransducerConfig(PretrainedConfig):
         hidden_size=512,
         hidden_dropout=0.1,
         hidden_act="gelu",
+        joiner_act="tanh",
         layer_norm_eps=0.00001,
         max_position_embeddings=512,
         position_embedding_type="relative_key",
@@ -124,12 +125,16 @@ class TransformerTransducerConfig(PretrainedConfig):
         score_dropout=0.07,
         loss_reduction="mean",
         clamp=-1,
-        freq_mask_size=50,
-        time_mask_size=30,
-        freq_apply_num=2,
-        time_apply_num=10,
         blk_token_id=0,
         generate_repeat_max=10,
+        apply_spec_augment=True,
+        mask_time_prob=0.1,
+        mask_time_length=30,
+        mask_time_min_masks=1,
+        mask_feature_prob=0.02,
+        mask_feature_length=50,
+        mask_feature_min_masks=1,
+        use_cache=False,
         **kwargs
     ) -> None:
         self.encoder_layers = encoder_layers
@@ -143,12 +148,16 @@ class TransformerTransducerConfig(PretrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.hidden_act = hidden_act
 
+        self.joiner_act = joiner_act
+
         self.attention_dropout = attention_dropout
         self.score_dropout = score_dropout
         self.num_attention_heads = num_attention_heads
 
         self.layer_norm_eps = layer_norm_eps
         self.hidden_dropout = hidden_dropout
+
+        self.use_cache = use_cache
 
         self.max_position_embeddings = max_position_embeddings
         self.position_embedding_type = position_embedding_type
@@ -161,10 +170,13 @@ class TransformerTransducerConfig(PretrainedConfig):
         self.blk_token_id = blk_token_id
 
         # spec-augment
-        self.freq_mask_size = freq_mask_size
-        self.time_mask_size = time_mask_size
-        self.freq_apply_num = freq_apply_num
-        self.time_apply_num = time_apply_num
+        self.apply_spec_augment = apply_spec_augment
+        self.mask_time_prob = mask_time_prob
+        self.mask_time_length = mask_time_length
+        self.mask_time_min_masks = mask_time_min_masks
+        self.mask_feature_prob = mask_feature_prob
+        self.mask_feature_length = mask_feature_length
+        self.mask_feature_min_masks = mask_feature_min_masks
 
         # for generate
         self.attention_type = attention_type
