@@ -146,8 +146,7 @@
     - local: in_translation
       title: Modèles d'apprentissage par renforcement
     - local: in_translation
-        title: Time Series Transformer
-      title: Time series models
+      title: Modèles de séries temporelles
     - local: in_translation
       title: Graph models
     title: Modèles
