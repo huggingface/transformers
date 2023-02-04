@@ -164,6 +164,13 @@ class Speech2TextTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
+class SpeechT5Tokenizer(metaclass=DummyObject):
+    _backends = ["sentencepiece"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece"])
+
+
 class T5Tokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 

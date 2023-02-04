@@ -100,7 +100,7 @@ class GroupViTTextConfig(PretrainedConfig):
         num_attention_heads=4,
         max_position_embeddings=77,
         hidden_act="quick_gelu",
-        layer_norm_eps=0.00001,
+        layer_norm_eps=1e-5,
         dropout=0.0,
         attention_dropout=0.0,
         initializer_range=0.02,
