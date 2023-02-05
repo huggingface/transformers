@@ -1,9 +1,9 @@
 - sections:
   - local: index
     title: 🤗 Transformers
-  - local: quicktour
+  - local: in_translation
     title: Visite rapide
-  - local: installation
+  - local: in_translation
     title: Installation
   title: Démarrer
 - sections:
@@ -24,19 +24,19 @@
   - sections:
     - local: in_translation
       title: Créer votre architecture
-    - local: custom_models
+    - local: in_translation
       title: Partager vos modèles
-    - local: run_scripts
+    - local: in_translation
       title: Entraînement avec un script
-    - local: sagemaker
+    - local: in_translation
       title: Entraînement avec Amazon SageMaker
-    - local: converting_tensorflow_models
+    - local: in_translation
       title: Convertir depuis des checkpoints Tensorflow
-    - local: serialization
+    - local: in_translation
       title: Exporter vers ONNX
-    - local: torchscript
+    - local: in_translation
       title: Exporter vers TorchScript
-    - local: troubleshooting
+    - local: in_translation
       title: Aide au dépannage
     title: Usage général
   - sections:
@@ -50,7 +50,7 @@
       - isExpanded: false
         local: in_translation
         title: Classification de texte
-      - local: tasks/token_classification
+      - local: in_translation
         title: Classification de token
       - local: in_translation
         title: Système de question-réponse
