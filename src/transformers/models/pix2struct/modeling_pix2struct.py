@@ -53,7 +53,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Pix2StructConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224-in21k"
+_CHECKPOINT_FOR_DOC = "google/pix2struct-textcaps-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 

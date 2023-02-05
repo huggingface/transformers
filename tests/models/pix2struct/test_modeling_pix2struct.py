@@ -229,7 +229,7 @@ class Pix2StructTextModelTester:
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_labels = use_labels
-        self.d_kv = hidden_size // num_attention_heads,
+        self.d_kv = (hidden_size // num_attention_heads,)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim

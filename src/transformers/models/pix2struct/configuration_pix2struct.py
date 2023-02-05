@@ -101,7 +101,11 @@ class Pix2StructTextConfig(PretrainedConfig):
     ```"""
     model_type = "pix2struct_text_model"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "hidden_size", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    attribute_map = {
+        "hidden_size": "hidden_size",
+        "num_attention_heads": "num_heads",
+        "num_hidden_layers": "num_layers",
+    }
 
     def __init__(
         self,
@@ -170,7 +174,9 @@ class Pix2StructTextConfig(PretrainedConfig):
         )
 
     @classmethod
-    def from_pretrained(cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def from_pretrained(
+        cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs
+    ) -> "PretrainedConfig":
 
         config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
 
@@ -292,7 +298,9 @@ class Pix2StructVisionConfig(PretrainedConfig):
         self.d_kv = d_kv
 
     @classmethod
-    def from_pretrained(cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+    def from_pretrained(
+        cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs
+    ) -> "PretrainedConfig":
 
         config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
 
