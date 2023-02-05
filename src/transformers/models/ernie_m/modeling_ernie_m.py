@@ -82,7 +82,7 @@ class ErnieMPreTrainedModel(PreTrainedModel):
         if isinstance(module, ErnieMEncoder):
             module.gradient_checkpointing = value
 
-
+# Copied from paddlenlp.transformers.ernie_m.modeling.ErnieEmbeddings
 class ErnieMEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -355,12 +355,12 @@ ERNIE_M_INPUTS_DOCSTRING = r"""
     ERNIE_M_START_DOCSTRING,
 )
 class ErnieMModel(ErnieMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super(ErnieMModel, self).__init__(config)
         self.initializer_range = config.initializer_range
         self.embeddings = ErnieMEmbeddings(config)
         self.encoder = ErnieMEncoder(config)
-        self.pooler = ErnieMPooler(config)
+        self.pooler = ErnieMPooler(config) if add_pooling_layer else None
         self.post_init()
 
     def get_input_embeddings(self):
@@ -445,12 +445,12 @@ class ErnieMModel(ErnieMPreTrainedModel):
 
         if not return_dict:
             sequence_output = encoder_outputs[0]
-            pooler_output = self.pooler(sequence_output)
+            pooler_output = self.pooler(sequence_output) if self.pooler is not None else None
             return (sequence_output, pooler_output) + encoder_outputs[1:]
 
         elif return_dict:
             sequence_output = encoder_outputs["last_hidden_state"]
-            pooler_output = self.pooler(sequence_output)
+            pooler_output = self.pooler(sequence_output) if self.pooler is not None else None
             hidden_states = None if not output_hidden_states else encoder_outputs["hidden_states"]
             attentions = None if not output_attentions else encoder_outputs["attentions"]
 
@@ -468,9 +468,12 @@ class ErnieMModel(ErnieMPreTrainedModel):
     ERNIE_M_START_DOCSTRING,
 )
 class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with Bert->ErnieM,bert->ernie_m
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+        self.config = config
+
         self.ernie_m = ErnieMModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
@@ -567,11 +570,12 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
     ERNIE_M_START_DOCSTRING,
 )
 class ErnieMForTokenClassification(ErnieMPreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with Bert->ErnieM,bert->ernie_m
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.ernie_m = ErnieMModel(config)
+        self.ernie_m = ErnieMModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -647,13 +651,12 @@ class ErnieMForTokenClassification(ErnieMPreTrainedModel):
     ERNIE_M_START_DOCSTRING,
 )
 class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with Bert->ErnieM,bert->ernie_m
     def __init__(self, config):
         super().__init__(config)
-
-        config.num_labels = 2
         self.num_labels = config.num_labels
 
-        self.ernie_m = ErnieMModel(config)
+        self.ernie_m = ErnieMModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -745,6 +748,7 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
     ERNIE_M_START_DOCSTRING,
 )
 class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.__init__ with Bert->ErnieM,bert->ernie_m
     def __init__(self, config):
         super().__init__(config)
 
@@ -760,7 +764,6 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ERNIE_M_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -834,6 +837,7 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
     compute `start_prob` and `end_prob`, designed for Universal Information Extraction.""",
     ERNIE_M_START_DOCSTRING,
 )
+# Copied from paddlenlp.transformers.ernie_m.modeling.UIEM
 class ErnieMUIEM(ErnieMPreTrainedModel):
     def __init__(self, config):
         super(ErnieMUIEM, self).__init__(config)
@@ -919,6 +923,7 @@ class ErnieMUIEM(ErnieMPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->ErnieM,self.value->self.v_proj,self.key->self.k_proj,self.query->self.q_proj
 class ErnieMSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -1025,9 +1030,8 @@ class ErnieMSelfAttention(nn.Module):
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in ErnieMModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
