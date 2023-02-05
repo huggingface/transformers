@@ -209,9 +209,14 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
     
     original_outputs = original_model.generate({"image": original_pixel_values}, num_beams=1)
-    outputs = hf_model.generate(original_pixel_values, input_ids, max_length=10)
+    # TODO set eos_token_id in config for OPT models?
+    eos_token_id = tokenizer("\n", add_special_tokens=False).input_ids[0]
+    outputs = hf_model.generate(original_pixel_values, input_ids, do_sample=False, num_beams=5, max_length=30, min_length=1, top_p=0.9, repetition_penalty=1.0, length_penalty=1.0, temperature=1, eos_token_id=eos_token_id)
     print("Original generation:", original_outputs)
-    print("HF generation:", processor.batch_decode(outputs, skip_special_tokens=True))
+    prompt_length = input_ids.shape[1]
+    output_text = processor.batch_decode(outputs[:, prompt_length:], skip_special_tokens=True)
+    output_text = [text.strip() for text in output_text]
+    print("HF generation:", output_text)
 
     if pytorch_dump_folder_path is not None:
         processor.save_pretrained(pytorch_dump_folder_path)
