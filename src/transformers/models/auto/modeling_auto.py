@@ -42,7 +42,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot", "BlenderbotModel"),
         ("blenderbot-small", "BlenderbotSmallModel"),
         ("blip", "BlipModel"),
-        ("blip-2", "Blip2Model"),
         ("bloom", "BloomModel"),
         ("bridgetower", "BridgeTowerModel"),
         ("camembert", "CamembertModel"),
@@ -901,7 +900,6 @@ _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Zero Shot Image Classification mapping
         ("altclip", "AltCLIPModel"),
         ("blip", "BlipModel"),
-        ("blip-2", "Blip2Model"),
         ("chinese_clip", "ChineseCLIPModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),

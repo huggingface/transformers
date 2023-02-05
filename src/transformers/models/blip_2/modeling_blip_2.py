@@ -101,7 +101,7 @@ class Blip2VisionEmbeddings(nn.Module):
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         print("Shape of patch embeddings before CLS:", patch_embeds.shape)
-        print("First values of patch embeddings before CLS:", patch_embeds[0,:3,:3])
+        print("First values of patch embeddings before CLS:", patch_embeds[0, :3, :3])
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
@@ -1268,7 +1268,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
             query_length=query_length,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = sequence_output[:,0,:]
+        pooled_output = sequence_output[:, 0, :]
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -1400,7 +1400,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             # we compute the loss here since we need to take into account the sequence length of the query embeds
             if labels is not None:
                 logits = outputs.logits if return_dict else outputs[0]
-                
+
                 logits = logits[:, -labels.size(1) :, :]
                 # Shift so that tokens < n predict n
                 shift_logits = logits[..., :-1, :].contiguous()
