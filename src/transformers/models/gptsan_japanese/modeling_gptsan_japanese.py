@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Toshiyuki Sakamoto(tanreinama) and HuggingFace Inc. team.
+# Copyright 2023 Toshiyuki Sakamoto(tanreinama) and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -248,9 +248,8 @@ class GPTSANJapaneseLayerSparseFF(nn.Module):
 
     def __init__(self, config: GPTSANJapaneseConfig):
         super().__init__()
-        # Check if it is a sparse layer, if not then it is a dense layer
         self.mlp = GPTSANJapaneseSparseMLP(config)
-        self.smlp = nn.Linear(config.d_model, config.d_model, bias=False)
+        self.soft_bypass_mlp = nn.Linear(config.d_model, config.d_model, bias=False)
         self.norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
     def forward(self, hidden_states, output_router_logits):
@@ -265,7 +264,7 @@ class GPTSANJapaneseLayerSparseFF(nn.Module):
 
         """
         forwarded_states, router_tuple = self.mlp(hidden_states)
-        forwarded_states += torch.tanh(self.smlp(hidden_states))
+        forwarded_states += torch.tanh(self.soft_bypass_mlp(hidden_states))
         output = hidden_states + self.norm(forwarded_states)
 
         if output_router_logits and router_tuple is not None:
@@ -309,7 +308,6 @@ class GPTSANJapaneseAttention(nn.Module):
     A version of self-attention introduced in [Attention Is All You Need](https://arxiv.org/abs/1706.03762) using
     compatible weights of the model stored in [GPTSAN](https://github.com/tanreinama/GPTSAN/blob/main/modeling.py) to
     split key,value,query.
-
     Parameters:
         config : ([`GPTSANJapaneseConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -359,7 +357,7 @@ class GPTSANJapaneseAttention(nn.Module):
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
-        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
@@ -367,11 +365,10 @@ class GPTSANJapaneseAttention(nn.Module):
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         r"""
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
-
         Args:
             hidden_states (`torch.Tensor`) :
                 [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
-            layer_past (`torch.Tensor`) :
+            past_key_value (`torch.Tensor`) :
                 past status from previous present output with using `use_cache`.
             attention_mask (`torch.Tensor`) :
                 apply mask for attention.
@@ -390,8 +387,8 @@ class GPTSANJapaneseAttention(nn.Module):
             present = (k, v)
         # present shuld be ([batch, heads, sequence, hidden], [batch, heads, sequence, hidden])
 
-        if layer_past is not None:
-            pk, pv = torch.split(layer_past, [1, 1], dim=1)
+        if past_key_value is not None:
+            pk, pv = torch.split(past_key_value, [1, 1], dim=1)
             pk = pk.squeeze(dim=1)
             pv = pv.squeeze(dim=1)
             if use_cache is True:
@@ -430,13 +427,13 @@ class GPTSANJapaneseLayerSelfAttention(nn.Module):
 
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.SelfAttention = GPTSANJapaneseAttention(config)
+        self.self_attn = GPTSANJapaneseAttention(config)
         self.norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
-        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
@@ -444,11 +441,10 @@ class GPTSANJapaneseLayerSelfAttention(nn.Module):
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         r"""
         Self-attention and normalize block.
-
         Args:
             hidden_states (`torch.Tensor`) :
                 [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
-            layer_past (`torch.Tensor`) :
+            past_key_value (`torch.Tensor`) :
                 past status from previous present output with using `use_cache`.
             attention_mask (`torch.Tensor`) :
                 apply mask for attention.
@@ -461,9 +457,9 @@ class GPTSANJapaneseLayerSelfAttention(nn.Module):
         Returns:
             Tuple[torch.Tensor[num_groups, tokens_per_group, hidden_dim],...]
         """
-        atten_out = self.SelfAttention(
+        atten_out = self.self_attn(
             hidden_states=hidden_states,
-            layer_past=layer_past,
+            past_key_value=past_key_value,
             attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
@@ -477,7 +473,6 @@ class GPTSANJapaneseLayerSelfAttention(nn.Module):
 
         return outputs
 
-
 class GPTSANJapaneseBlock(nn.Module):
     """
     Self Attention and FFN Unit
@@ -485,13 +480,13 @@ class GPTSANJapaneseBlock(nn.Module):
 
     def __init__(self, config, ext_layer=False):
         super().__init__()
-        self.SelfAttention = GPTSANJapaneseLayerSelfAttention(config)
-        self.FeedForward = GPTSANJapaneseLayerDenseFF(config) if ext_layer else GPTSANJapaneseLayerSparseFF(config)
+        self.self_attn = GPTSANJapaneseLayerSelfAttention(config)
+        self.feed_forward = GPTSANJapaneseLayerDenseFF(config) if ext_layer else GPTSANJapaneseLayerSparseFF(config)
 
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
-        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
@@ -504,7 +499,7 @@ class GPTSANJapaneseBlock(nn.Module):
         Args:
             hidden_states (`torch.Tensor`) :
                 [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
-            layer_past (`torch.Tensor`) :
+            past_key_value (`torch.Tensor`) :
                 past status from previous present output with using `use_cache`.
             attention_mask (`torch.Tensor`) :
                 apply mask for attention.
@@ -519,9 +514,9 @@ class GPTSANJapaneseBlock(nn.Module):
         Returns:
             Tuple[torch.Tensor[num_groups, tokens_per_group, hidden_dim],...]
         """
-        atten_out = self.SelfAttention(
+        atten_out = self.self_attn(
             hidden_states=hidden_states,
-            layer_past=layer_past,
+            past_key_value=past_key_value,
             attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
@@ -529,18 +524,18 @@ class GPTSANJapaneseBlock(nn.Module):
         )
         attention_output = atten_out[0]
 
-        if isinstance(self.FeedForward, GPTSANJapaneseLayerSparseFF):
-            sparse_out = self.FeedForward(attention_output, output_router_tuple)
+        if isinstance(self.feed_forward, GPTSANJapaneseLayerSparseFF):
+            sparse_out = self.feed_forward(attention_output, output_router_tuple)
             if output_router_tuple:
                 hidden, router_tuple = sparse_out
             else:
                 hidden = sparse_out
         else:
-            hidden = self.FeedForward(attention_output)
+            hidden = self.feed_forward(attention_output)
 
         outputs = (hidden,) + atten_out[1:]
 
-        if isinstance(self.FeedForward, GPTSANJapaneseLayerSparseFF) and output_router_tuple:
+        if isinstance(self.feed_forward, GPTSANJapaneseLayerSparseFF) and output_router_tuple:
             outputs += (router_tuple,)
 
         return outputs
@@ -620,6 +615,7 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
         if isinstance(module, (GPTSANJapaneseAttention,)):
             module.gradient_checkpointing = value
 
+    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right with T5->GPTSANJapanese
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
@@ -736,7 +732,7 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
     def __init__(self, config: GPTSANJapaneseConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
-        self.position_embeddings = nn.Embedding(config.num_contexts, config.d_model)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
         self.token_bias = nn.Parameter(torch.zeros([config.vocab_size]))
         self.logits = nn.Linear(config.d_model, config.d_model, bias=True)
         self.logact = self.act = ACT2FN["swish"]
@@ -749,7 +745,7 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
             self.blocks.append(GPTSANJapaneseBlock(config, ext_layer=True))
 
         if config.num_ext_layers > 0:
-            self.extra_position_embeddings = nn.Embedding(config.num_contexts, config.d_model)
+            self.extra_position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
 
         if config.d_spout:
             spouts = []
@@ -801,12 +797,11 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         tokenizer.decode(c[0])
         "武田信玄は、戦国の頃より「智勇兼備」した英雄として織田信長に比されてきた戦国武将であり、..."
         ```"""
-        NUM_TOKENS = self.config.vocab_size
-        SEP_TOKEN = NUM_TOKENS - 5
-        NOT_TOKEN = NUM_TOKENS - 4
+        SEP_TOKEN = self.config.pad_token_id
+        NOT_TOKEN = self.config.unk_token_id
         device = self.position_embeddings.weight.device
         if input_ids is None:
-            input_ids = torch.zeros([1, 1]).int().to(device)
+            input_ids = torch.zeros([1, 1]).int()
         num_pasts_contexts = 0
         num_batch = input_ids.shape[0]
         pasts = None
@@ -866,46 +861,46 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
                 ],
             )
 
-        hidden = self.embed_tokens(input_ids)
+        hidden_states = self.embed_tokens(input_ids)
 
         if pasts is None:
             pasts = [None] * self.config.num_layers
-            pos = torch.arange(num_input_contexts).to(device)
-            pos = torch.clip(pos, 0, self.config.num_contexts - 1)
+            token_position = torch.arange(num_input_contexts).to(device)
+            token_position = torch.clip(token_position, 0, self.config.max_position_embeddings - 1)
         else:
             pasts = [p.squeeze(1) for p in torch.split(pasts, [1] * self.config.num_layers, 1)]
-            pos = torch.arange(num_input_contexts).to(device) + num_pasts_contexts
-            pos = torch.clip(pos, num_pasts_contexts, self.config.num_contexts - 1)
+            token_position = torch.arange(num_input_contexts).to(device) + num_pasts_contexts
+            token_position = torch.clip(token_position, num_pasts_contexts, self.config.max_position_embeddings - 1)
 
-        ppos = (torch.zeros((self.config.d_model, num_input_contexts)).to(device) + pos).transpose(0, 1).long()
-        hidden += torch.gather(self.position_embeddings.weight, dim=0, index=ppos)
+        gather_position = (torch.zeros((self.config.d_model, num_input_contexts)).to(device) + token_position).transpose(0, 1).long()
+        hidden_states += torch.gather(self.position_embeddings.weight, dim=0, index=gather_position)
 
-        atten_mask = make_attention_mask_torch(num_input_contexts, num_output_contexts, num_precontext)
+        attention_maks = make_attention_mask_torch(num_input_contexts, num_output_contexts, num_precontext)
 
         if self.config.num_ext_layers > 0:
-            ete = torch.gather(self.extra_position_embeddings.weight, dim=0, index=ppos)
-        del ppos
+            extra_position_embedding = torch.gather(self.extra_position_embeddings.weight, dim=0, index=gather_position)
+        del gather_position
 
         # Prepare head mask if needed
         if head_mask is not None:
             head_mask = self.get_head_mask(head_mask, self.config.n_layer)  # n_layer x batch x n_heads x N x N
 
         out_past_key_values = tuple() if self.config.use_cache or use_cache else None
-        out_hidden_states = (hidden,) if self.config.output_hidden_states or output_hidden_states else None
+        out_hidden_states = (hidden_states,) if self.config.output_hidden_states or output_hidden_states else None
         out_attentions = tuple() if self.config.output_attentions or output_attentions else None
         out_router_logits = tuple() if self.config.output_router_logits or output_router_logits else None
 
         for layer, past in enumerate(pasts):
             if layer == self.config.num_switch_layers:
-                hidden = hidden + ete
+                hidden_states = hidden_states + extra_position_embedding
 
             output_router_tuple = (
                 self.config.output_router_logits or output_router_logits
             ) and layer < self.config.num_switch_layers
             block_output = self.blocks[layer](
-                hidden_states=hidden,
-                layer_past=past,
-                attention_mask=atten_mask,
+                hidden_states=hidden_states,
+                past_key_value=past,
+                attention_mask=attention_maks,
                 head_mask=head_mask,
                 use_cache=self.config.use_cache or use_cache,
                 output_attentions=self.config.output_attentions or output_attentions,
@@ -913,9 +908,9 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
             )
 
             outpos = 0
-            hidden = block_output[outpos]
+            hidden_states = block_output[outpos]
             if self.config.output_hidden_states or output_hidden_states:
-                out_hidden_states += (hidden,)
+                out_hidden_states += (hidden_states,)
             if self.config.use_cache or use_cache:
                 outpos += 1
                 present = block_output[outpos]
@@ -929,10 +924,10 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
                 router_tuple = block_output[outpos]
                 out_router_logits.append(router_tuple[0])
 
-        hidden = self.logits(hidden)
-        hidden = self.logact(hidden)
+        hidden_states = self.logits(hidden_states)
+        hidden_states = self.logact(hidden_states)
 
-        logits = torch.einsum("bsc,vc->bsv", hidden, self.embed_tokens.weight)
+        logits = torch.einsum("bsc,vc->bsv", hidden_states, self.embed_tokens.weight)
         if logits.shape[-1] == self.token_bias.shape[-1]:
             logits = logits + self.token_bias
 
@@ -967,7 +962,6 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         connected_inputs: Optional[torch.LongTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        random_seed: Optional[int] = None,
         **kwargs
     ):
         if past_key_values is not None:
@@ -977,9 +971,8 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
                 "spout": None,
                 "past_key_values": past_key_values,
             }
-        NUM_TOKENS = self.config.vocab_size
-        SOT_TOKEN = NUM_TOKENS - 7
-        SEG_TOKEN = NUM_TOKENS - 2
+        SOT_TOKEN = self.config.bos_token_id
+        SEG_TOKEN = self.config.separator_token_id
         if connected_inputs is None:
             connected_inputs = torch.zeros(input_ids.shape[0]).int().to(input_ids.device)
         pre_input = torch.stack(
@@ -996,12 +989,6 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         pre_input = pre_input.to(input_ids.device)
         connected_inputs = connected_inputs + 1
         connected_inputs = torch.unsqueeze(connected_inputs, dim=1)
-        if random_seed is not None:
-            # PyTorchの内部を決定論的に設定する
-            torch.backends.cudnn.deterministic = True
-            torch.backends.cudnn.benchmark = False
-            np.random.seed(random_seed)
-            torch.manual_seed(random_seed)
         return {
             "input_ids": pre_input,
             "num_precontext": connected_inputs,
@@ -1025,4 +1012,6 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         )
         if generation_config.top_k is not None:
             logits_processor.append(TopKLogitsWarper(generation_config.top_k))
+        for p in logits_processor:
+            print(p)
         return logits_processor

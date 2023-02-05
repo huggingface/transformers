@@ -47,6 +47,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
+# Copied from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese
 def load_vocab_and_emoji(vocab_file, emoji_file):
     """Loads a vocabulary file and emoji file into a dictionary."""
     with open(emoji_file, "r", encoding="utf-8") as f:
@@ -101,13 +102,15 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
         unk_token (`str`, *optional*, defaults to `"nottoken"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (`str`, *optional*, defaults to `"separator"`):
+        unk_token (`str`, *optional*, defaults to `"<|nottoken|>"`):
+            The token used for unknown charactor
+        pad_token (`str`, *optional*, defaults to `"<|separator|>"`):
             The token used for padding
-        bos_token (`str`, *optional*, defaults to `"startoftext"`):
+        bos_token (`str`, *optional*, defaults to `"<|startoftext|>""`):
             The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `"endoftext"`):
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
-        mask_token (`str`, *optional*, defaults to `"inputmask"`):
+        mask_token (`str`, *optional*, defaults to `"<|inputmask|>"`):
             The mask token for mlm.
         do_clean_text (`bool`, *optional*, defaults to `False`):
             Whether or not to clean text for URL, EMAIL, TEL, Japanese DATE and Japanese PRICE.
@@ -118,6 +121,7 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
+    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.__init__
     def __init__(
         self,
         vocab_file,
@@ -157,20 +161,25 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
         )
 
     @property
+    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.vocab_size
     def vocab_size(self):
         # self.vocab contains support for character fluctuation unique to Japanese, and has a large number of vocab
         return len(self.raw_vocab)
 
+    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.get_vocab
     def get_vocab(self):
         return dict(self.raw_vocab, **self.added_tokens_encoder)
 
+    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer._tokenize
     def _tokenize(self, text):
         return self.subword_tokenizer.tokenize(text, clean=self.do_clean_text)
 
+    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.vocab.get(token, self.vocab.get(self.unk_token))
 
+    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer._convert_id_to_token
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.subword_tokenizer.convert_id_to_token(index)
@@ -214,6 +223,7 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
         text = "".join(words)
         return text
 
+    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer._build_conversation_input_ids
     def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         """This corresponds to DialoGPT variants of models."""
         input_ids = []
@@ -224,6 +234,7 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
             input_ids = input_ids[-self.model_max_length :]
         return input_ids
 
+    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
@@ -255,6 +266,7 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
         return vocab_file, emoji_file
 
 
+# Copied from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese
 class SubWordJapaneseTokenizer(object):
     """
     This tokenizer is based on GPTNeoXJapaneseTokenizer and has the following modifications
@@ -283,6 +295,7 @@ class SubWordJapaneseTokenizer(object):
     SOFTWARE.
     """
 
+    # Copied from tokenization_gpt_neox_japanese.SubWordJapaneseTokenizer.__init__
     def __init__(self, vocab, ids_to_tokens, emoji):
         self.vocab = vocab  # same as swe
         self.ids_to_tokens = ids_to_tokens  # same as bpe
@@ -304,9 +317,11 @@ class SubWordJapaneseTokenizer(object):
         blocks = "▀▁▂▃▄▅▆▇█▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟"
         self.content_trans1 = str.maketrans({k: "<BLOCK>" for k in keisen + blocks})
 
+    # Copied from tokenization_gpt_neox_japanese.SubWordJapaneseTokenizer.__len__
     def __len__(self):
         return len(self.ids_to_tokens)
 
+    # Copied from tokenization_gpt_neox_japanese.SubWordJapaneseTokenizer.clean_text
     def clean_text(self, content):
         content = self.content_repatter1.sub("<URL>", content)
         content = self.content_repatter2.sub("<EMAIL>", content)
@@ -319,6 +334,7 @@ class SubWordJapaneseTokenizer(object):
             content = content.replace("<BLOCK><BLOCK>", "<BLOCK>")
         return content
 
+    # Copied from tokenization_gpt_neox_japanese.SubWordJapaneseTokenizer.tokenize
     def tokenize(self, text, clean=False):
         text = text.replace(" ", "<SP>")
         text = text.replace("　", "<SP>")

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Switch Transformers model configuration"""
+"""  GPTSAN-japanese model configuration"""
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -41,8 +41,8 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 36000):
             Vocabulary size of the GPTSANJapanese model. Defines the number of different tokens that can be represented
             by the `inputs_ids` passed when calling [`GPTSANJapaneseModel`].
-        num_contexts (`int`, *optional*, defaults to 1280):
-            Size of the maximum tokens.
+        max_position_embeddings (`int`, *optional*, defaults to 1280):
+            The maximum sequence length that this model might ever be used with. Defaults set this to 1280.
         d_model (`int`, *optional*, defaults to 1024):
             Size of the encoder layers and the pooler layer.
         d_ff (`int`, *optional*, defaults to 8192):
@@ -68,8 +68,9 @@ class GPTSANJapaneseConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         router_bias (`bool`, *optional*, defaults to `False`):
             Whether to add a bias to the router.
-        router_jitter_noise (`float`, *optional*, defaults to 1e-2):
-            Amount of noise to add to the router.
+        router_jitter_noise (`float`, *optional*, defaults to 0.0):
+            Amount of noise to add to the router. Set it to 0.0 during prediction or set small value (usually 1e-2)
+            during training.
         router_dtype (`str`, *optional*, default to `"float32"`):
             The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the
             *selective precision* discussion in [the paper](https://arxiv.org/abs/2101.03961).
@@ -78,9 +79,10 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         output_hidden_states (`bool`, *optional*, default to `False`):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        use_cache (`bool`, *optional*, default to `False`):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
+        output_attentions (`bool`, *optional*, defaults to `False`):
+            Whether or not to return the attentions tensors of all attention layers.
+        initializer_factor (`float`, *optional*, defaults to 0.002):
+            A factor for initializing all weight matrices.
         output_router_logits (`bool`, *optional*, default to `False`):
             Whether or not to return the router logits of all experts.
     """
@@ -97,7 +99,7 @@ class GPTSANJapaneseConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=36000,
-        num_contexts=1280,
+        max_position_embeddings=1280,
         d_model=1024,
         d_ff=8192,
         d_ext=4096,
@@ -117,11 +119,10 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         output_attentions=False,
         initializer_factor=0.002,
         output_router_logits=False,
-        top_k=120,
         **kwargs
     ):
         self.vocab_size = vocab_size
-        self.num_contexts = num_contexts
+        self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
         self.d_ff = d_ff
         self.d_ext = d_ext
@@ -143,16 +144,6 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.output_router_logits = output_router_logits
 
-        kwargs["eos_token_id"] = vocab_size - 1
-        kwargs["separator_token_id"] = vocab_size - 2
-        kwargs["unk_token_id"] = vocab_size - 4
-        kwargs["pad_token_id"] = vocab_size - 5
-        kwargs["mask_token_id"] = vocab_size - 6
-        kwargs["bos_token_id"] = vocab_size - 7
-        kwargs["is_encoder_decoder"] = False
-        kwargs["use_cache"] = True
-        kwargs["do_sample"] = True
-        kwargs["top_k"] = top_k
         super().__init__(
             **kwargs,
         )
