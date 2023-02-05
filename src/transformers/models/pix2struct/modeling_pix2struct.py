@@ -121,15 +121,15 @@ class Pix2StructVisionEmbeddings(nn.Module):
 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        # the row and column indices are stored in the first and second position of the pixel_values
-        # pixel_values: `batch_size`, `seq_len`, `hidden_size` + 2
-        row_indices = pixel_values[:, :, 0].long()
-        col_indices = pixel_values[:, :, 1].long()
+    def forward(self, pixel_embeds: torch.Tensor) -> torch.Tensor:
+        # the row and column indices are stored in the first and second position of the pixel_embeds
+        # pixel_embeds: `batch_size`, `seq_len`, `hidden_size` + 2
+        row_indices = pixel_embeds[:, :, 0].long()
+        col_indices = pixel_embeds[:, :, 1].long()
 
-        pixel_values = pixel_values[:, :, 2:]
+        pixel_embeds = pixel_embeds[:, :, 2:]
 
-        embeddings = self.patch_projection(pixel_values)
+        embeddings = self.patch_projection(pixel_embeds)
         row_embeddings = self.row_embedder(row_indices)
         col_embeddings = self.column_embedder(col_indices)
 
@@ -417,7 +417,7 @@ class Pix2StructVisionPreTrainedModel(PreTrainedModel):
 
     config_class = Pix2StructConfig
     base_model_prefix = "pix2struct_encoder"
-    main_input_name = "pixel_values"
+    main_input_name = "pixel_embeds"
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
@@ -453,7 +453,7 @@ VIT_START_DOCSTRING = r"""
 
 VIT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_embeds (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`Pix2StructVisionImageProcessor.__call__`] for details.
 
@@ -512,7 +512,7 @@ class Pix2StructVisionModel(Pix2StructVisionPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_embeds: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -525,8 +525,8 @@ class Pix2StructVisionModel(Pix2StructVisionPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
+        if pixel_embeds is None:
+            raise ValueError("You have to specify pixel_embeds")
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -536,10 +536,10 @@ class Pix2StructVisionModel(Pix2StructVisionPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         if attention_mask is None:
-            # check where `pixel_values` is not 0
-            attention_mask = (pixel_values.sum(dim=-1) != 0).float()
+            # check where `pixel_embeds` is not 0
+            attention_mask = (pixel_embeds.sum(dim=-1) != 0).float()
 
-        embedding_output = self.embeddings(pixel_values)
+        embedding_output = self.embeddings(pixel_embeds)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1595,7 +1595,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_embeds: Optional[torch.FloatTensor] = None,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
@@ -1648,7 +1648,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                pixel_values=pixel_values,
+                pixel_embeds=pixel_embeds,
                 attention_mask=attention_mask,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
@@ -1698,17 +1698,17 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_embeds: torch.FloatTensor,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         **generate_kwargs,
     ):
-        batch_size, _, _ = pixel_values.shape
+        batch_size, _, _ = pixel_embeds.shape
 
         vision_outputs = self.encoder(
-            pixel_values=pixel_values,
+            pixel_embeds=pixel_embeds,
             attention_mask=attention_mask,
         )
 
