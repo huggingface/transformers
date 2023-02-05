@@ -50,7 +50,7 @@ class Pix2StructTextConfig(PretrainedConfig):
             Dimensionality of the encoder layers and the pooler layer.
         encoder_hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers from the vision model.
-        intermediate_size (`int`, *optional*, defaults to 2048):
+        d_ff (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
@@ -207,7 +207,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
+        d_ff (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
@@ -251,7 +251,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=768,
-        intermediate_size=2048,
+        d_ff=2048,
         projection_dim=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -260,6 +260,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
         patch_size=16,
         dense_act_fn="gelu_new",
         layer_norm_eps=1e-6,
+        dropout_rate=0.0,
         hidden_dropout_prob=0.0,
         attention_dropout=0.0,
         initializer_range=1e-10,
@@ -276,8 +277,9 @@ class Pix2StructVisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
+        self.d_ff = d_ff
         self.projection_dim = projection_dim
+        self.dropout_rate = dropout_rate
         self.hidden_dropout_prob = hidden_dropout_prob
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

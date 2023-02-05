@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
 
@@ -35,12 +35,13 @@ if is_vision_available():
 
 
 @require_vision
+@require_torch
 class Pix2StructProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
         image_processor = Pix2StructImageProcessor()
-        tokenizer = T5Tokenizer.from_pretrained("hf-internal-testing/tiny-random-BertModel")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
         processor = Pix2StructProcessor(image_processor, tokenizer)
 
@@ -123,11 +124,38 @@ class Pix2StructProcessorTest(unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+        self.assertListEqual(
+            list(inputs.keys()), ["pixel_embeds", "attention_mask", "input_ids", "decoder_attention_mask"]
+        )
 
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
             processor()
+
+    def test_processor_max_patches(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = Pix2StructProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input)
+
+        max_patches = [512, 1024, 2048, 4096]
+        expected_hidden_size = [770, 770, 770, 770]
+        # with text
+        for i, max_patch in enumerate(max_patches):
+            inputs = processor(text=input_str, images=image_input, max_patches=max_patch)
+            self.assertEqual(inputs["pixel_embeds"][0].shape[0], max_patch)
+            self.assertEqual(inputs["pixel_embeds"][0].shape[1], expected_hidden_size[i])
+
+        # without text input
+        for i, max_patch in enumerate(max_patches):
+            inputs = processor(images=image_input, max_patches=max_patch)
+            self.assertEqual(inputs["pixel_embeds"][0].shape[0], max_patch)
+            self.assertEqual(inputs["pixel_embeds"][0].shape[1], expected_hidden_size[i])
 
     def test_tokenizer_decode(self):
         image_processor = self.get_image_processor()
@@ -153,5 +181,7 @@ class Pix2StructProcessorTest(unittest.TestCase):
 
         inputs = processor(text=input_str, images=image_input)
 
-        # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
-        self.assertListEqual(list(inputs.keys()), ["pixel_values", "input_ids", "attention_mask"])
+        # For now the processor supports only ["pixel_embeds", "input_ids", "attention_mask", "decoder_attention_mask"]
+        self.assertListEqual(
+            list(inputs.keys()), ["pixel_embeds", "attention_mask", "input_ids", "decoder_attention_mask"]
+        )

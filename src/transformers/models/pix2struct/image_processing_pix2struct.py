@@ -67,12 +67,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
 
     def __init__(
-        self,
-        size: Dict[str, int] = None,
-        patch_size: Dict[str, int] = (16, 16),
-        do_normalize: bool = True,
-        do_convert_rgb: bool = True,
-        **kwargs
+        self, patch_size: Dict[str, int] = [16, 16], do_normalize: bool = True, do_convert_rgb: bool = True, **kwargs
     ) -> None:
 
         super().__init__(**kwargs)
@@ -182,8 +177,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        size: Optional[Dict[str, int]] = None,
-        max_patches: Optional[int] = None,
+        max_patches: Optional[int] = 2048,
         do_normalize: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         do_convert_rgb: bool = None,

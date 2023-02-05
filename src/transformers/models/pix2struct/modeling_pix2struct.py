@@ -44,7 +44,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_pix2struct import Pix2StructConfig, Pix2StructTextConfig
+from .configuration_pix2struct import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -58,8 +58,8 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 
 PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vit-base-patch16-224",
-    # See all Pix2StructVision models at https://huggingface.co/models?filter=vit
+    "google/pix2struct-textcaps-base",
+    # See all Pix2StructVision models at https://huggingface.co/models?filter=pix2struct
 ]
 
 
@@ -161,32 +161,18 @@ class Pix2StructVisionAttention(nn.Module):
     def forward(
         self,
         hidden_states,
-        mask=None,
-        key_value_states=None,
+        attention_mask=None,
         position_bias=None,
-        past_key_value=None,
         layer_head_mask=None,
-        query_length=None,
-        use_cache=False,
         output_attentions=False,
     ):
         """
-        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
+        Self-attention block
         """
         # Input is (batch_size, seq_length, dim)
         # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length = hidden_states.shape[:2]
-
-        real_seq_length = seq_length
-
-        if past_key_value is not None:
-            assert (
-                len(past_key_value) == 2
-            ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
-            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
-
-        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
 
         def shape(states):
             """projection"""
@@ -196,43 +182,12 @@ class Pix2StructVisionAttention(nn.Module):
             """reshape"""
             return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
 
-        def project(hidden_states, proj_layer, key_value_states, past_key_value):
-            """projects hidden states correctly to key/query states"""
-            if key_value_states is None:
-                # self-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(hidden_states))
-            elif past_key_value is None:
-                # cross-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(key_value_states))
-
-            if past_key_value is not None:
-                if key_value_states is None:
-                    # self-attn
-                    # (batch_size, n_heads, key_length, dim_per_head)
-                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
-                elif past_key_value.shape[2] != key_value_states.shape[1]:
-                    # checking that the `sequence_length` of the `past_key_value` is the same as
-                    # the provided `key_value_states` to support prefix tuning
-                    # cross-attn
-                    # (batch_size, n_heads, seq_length, dim_per_head)
-                    hidden_states = shape(proj_layer(key_value_states))
-                else:
-                    # cross-attn
-                    hidden_states = past_key_value
-            return hidden_states
-
         # get query states
         query_states = shape(self.query(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
 
         # get key/value states
-        key_states = project(
-            hidden_states, self.key, key_value_states, past_key_value[0] if past_key_value is not None else None
-        )
-        value_states = project(
-            hidden_states, self.value, key_value_states, past_key_value[1] if past_key_value is not None else None
-        )
+        key_states = shape(self.key(hidden_states))
+        value_states = shape(self.value(hidden_states))
 
         # compute scores
         scores = torch.matmul(
@@ -241,18 +196,13 @@ class Pix2StructVisionAttention(nn.Module):
 
         if position_bias is None:
             position_bias = torch.zeros(
-                (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                (1, self.n_heads, seq_length, seq_length), device=scores.device, dtype=scores.dtype
             )
             if self.gradient_checkpointing and self.training:
                 position_bias.requires_grad = True
 
-            # if key and values are already calculated
-            # we want only the last query position bias
-            if past_key_value is not None:
-                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
-
-            if mask is not None:
-                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+            if attention_mask is not None:
+                position_bias = position_bias + attention_mask  # (batch_size, n_heads, seq_length, key_length)
 
         position_bias_masked = position_bias
         if position_bias_masked is not None:
@@ -276,8 +226,7 @@ class Pix2StructVisionAttention(nn.Module):
         attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
 
-        present_key_value_state = (key_states, value_states) if use_cache else None
-        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
+        outputs = (attn_output,) + (position_bias,)
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
@@ -285,11 +234,11 @@ class Pix2StructVisionAttention(nn.Module):
 
 
 class Pix2StructVisionMlp(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Pix2StructVisionConfig):
         super().__init__()
-        self.wi_0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
-        self.wi_1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
-        self.wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        self.wi_0 = nn.Linear(config.hidden_size, config.d_ff, bias=config.mlp_bias)
+        self.wi_1 = nn.Linear(config.hidden_size, config.d_ff, bias=config.mlp_bias)
+        self.wo = nn.Linear(config.d_ff, config.hidden_size, bias=config.mlp_bias)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.act = ACT2FN[config.dense_act_fn]
 
@@ -310,8 +259,6 @@ class Pix2StructVisionMlp(nn.Module):
 
 
 class Pix2StructVisionLayer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
-
     def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -328,18 +275,22 @@ class Pix2StructVisionLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        residual = hidden_states
+
+        # in Pix2StructVision, layernorm is applied before self-attention
+        hidden_states = self.pre_attention_layer_norm(hidden_states)
+
         self_attention_outputs = self.attention(
-            self.pre_attention_layer_norm(
-                hidden_states
-            ),  # in Pix2StructVision, layernorm is applied before self-attention
-            mask=attention_mask,
+            hidden_states,
+            attention_mask=attention_mask,
+            layer_head_mask=head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = attention_output + residual
 
         # in Pix2StructVision, layernorm is also applied after self-attention
         layer_output = self.pre_mlp_layer_norm(hidden_states)
@@ -354,7 +305,7 @@ class Pix2StructVision(nn.Module):
     def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([Pix2StructVisionLayer(config) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([Pix2StructVisionLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(

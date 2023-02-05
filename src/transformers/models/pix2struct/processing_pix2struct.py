@@ -40,7 +40,7 @@ class Pix2StructProcessor(ProcessorMixin):
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "Pix2StructImageProcessor"
-    tokenizer_class = ("T5TokenizerFast", "T5TokenizerFast")
+    tokenizer_class = ("T5Tokenizer", "T5TokenizerFast")
 
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
@@ -55,6 +55,7 @@ class Pix2StructProcessor(ProcessorMixin):
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
+        max_patches: Optional[int] = 2048,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
@@ -101,7 +102,9 @@ class Pix2StructProcessor(ProcessorMixin):
             return text_encoding
 
         # add pixel_values
-        encoding_image_processor = self.image_processor(images, return_tensors=return_tensors, **kwargs)
+        encoding_image_processor = self.image_processor(
+            images, return_tensors=return_tensors, max_patches=max_patches, **kwargs
+        )
 
         if text is not None:
             text_encoding = self.tokenizer(
@@ -122,6 +125,9 @@ class Pix2StructProcessor(ProcessorMixin):
                 return_tensors=return_tensors,
                 **kwargs,
             )
+
+            if "attention_mask" in text_encoding:
+                text_encoding["decoder_attention_mask"] = text_encoding.pop("attention_mask")
         else:
             text_encoding = None
 
