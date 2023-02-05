@@ -82,6 +82,7 @@ class ErnieMPreTrainedModel(PreTrainedModel):
         if isinstance(module, ErnieMEncoder):
             module.gradient_checkpointing = value
 
+
 # Copied from paddlenlp.transformers.ernie_m.modeling.ErnieEmbeddings
 class ErnieMEmbeddings(nn.Module):
     def __init__(self, config):
