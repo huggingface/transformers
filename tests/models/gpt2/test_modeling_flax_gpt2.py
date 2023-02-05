@@ -224,7 +224,7 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
 
         expected_string = [
-            "Hello this is a long string of words. I'm going to try to explain what I mean.",
+            "Hello this is a long string of words. I'm going to start with the first one.\n",
             "Hey, I'm not sure if I'm going to be able to do",
         ]
 

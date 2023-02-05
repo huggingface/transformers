@@ -63,8 +63,6 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        weight_tying (`bool`, *optional*, defaults to `True`):
-            Whhether or not use weight tying between input and output embedding weight
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
@@ -101,7 +99,6 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         use_cache=True,
         bos_token_id=31996,
         eos_token_id=31999,
-        weight_tying=True,
         attention_dropout=0.1,
         hidden_dropout=0.0,
         **kwargs
@@ -119,6 +116,5 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.weight_tying = weight_tying
         self.attention_dropout = attention_dropout
         self.hidden_dropout = hidden_dropout
