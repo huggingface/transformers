@@ -165,14 +165,14 @@ If after trying everything suggested you still encounter build issues, please, p
 To deploy this feature with multiple GPUs adjust the [`Trainer`] command line arguments as
 following:
 
-1. replace `python -m torch.distributed.launch` with `deepspeed`.
+1. replace `torchrun` with `deepspeed`.
 2. add a new argument `--deepspeed ds_config.json`, where `ds_config.json` is the DeepSpeed configuration file as
    documented [here](https://www.deepspeed.ai/docs/config-json/). The file naming is up to you.
 
 Therefore, if your original command line looked as follows:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=2 your_program.py <normal cl args>
+torchrun --nproc_per_node=2 your_program.py <normal cl args>
 ```
 
 Now it should be:
@@ -181,14 +181,25 @@ Now it should be:
 deepspeed --num_gpus=2 your_program.py <normal cl args> --deepspeed ds_config.json
 ```
 
-Unlike, `torch.distributed.launch` where you have to specify how many GPUs to use with `--nproc_per_node`, with the
+Unlike, `torchrun` where you have to specify how many GPUs to use with `--nproc_per_node`, with the
 `deepspeed` launcher you don't have to use the corresponding `--num_gpus` if you want all of your GPUs used. The
 full details on how to configure various nodes and GPUs can be found [here](https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node).
 
-In fact, you can continue using `-m torch.distributed.launch` with DeepSpeed as long as you don't need to use
-`deepspeed` launcher-specific arguments. Typically if you don't need a multi-node setup you're not required to use
+In fact, you can continue using `torchrun` with DeepSpeed as long as you don't need to use
+`deepspeed` launcher-specific arguments. Typically, if you don't need a multi-node setup you're not required to use
 the `deepspeed` launcher. But since in the DeepSpeed documentation it'll be used everywhere, for consistency we will
 use it here as well.
+
+Note deepspeed expects that nodes in multi-node environment have shared storage by default.
+This default behavior can be overriden in deepspeed config file [checkpoint_options](https://www.deepspeed.ai/docs/config-json/#checkpoint-options)
+by setting
+```json
+{
+  "checkpoint": {
+    "use_node_local_storage": true
+  }
+}
+```
 
 Here is an example of running `run_translation.py` under DeepSpeed deploying all available GPUs:
 
