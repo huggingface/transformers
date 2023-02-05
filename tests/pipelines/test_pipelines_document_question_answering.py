@@ -59,9 +59,9 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
 
     @require_pytesseract
     @require_vision
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         dqa_pipeline = pipeline(
-            "document-question-answering", model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+            "document-question-answering", model=model, tokenizer=tokenizer, image_processor=processor
         )
 
         image = INVOICE_URL
@@ -81,11 +81,6 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
                 "question": question,
                 "word_boxes": word_boxes,
             },
-            {
-                "image": None,
-                "question": question,
-                "word_boxes": word_boxes,
-            },
         ]
         return dqa_pipeline, examples
 
@@ -99,7 +94,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
                     {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
                 ]
             ]
-            * 4,
+            * 3,
         )
 
     @require_torch

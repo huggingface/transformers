@@ -75,8 +75,6 @@ class FunnelConfig(PretrainedConfig):
             The dropout probability for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability used between the two layers of the feed-forward blocks.
-        type_vocab_size (`int`, *optional*, defaults to 3):
-            The vocabulary size of the `token_type_ids` passed when calling [`FunnelModel`] or [`TFFunnelModel`].
         initializer_range (`float`, *optional*, defaults to 0.1):
             The upper bound of the *uniform initializer* for initializing all weight matrices in attention layers.
         initializer_std (`float`, *optional*):
@@ -118,7 +116,6 @@ class FunnelConfig(PretrainedConfig):
         hidden_dropout=0.1,
         attention_dropout=0.1,
         activation_dropout=0.0,
-        type_vocab_size=3,
         initializer_range=0.1,
         initializer_std=None,
         layer_norm_eps=1e-9,
@@ -144,7 +141,6 @@ class FunnelConfig(PretrainedConfig):
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.initializer_std = initializer_std
         self.layer_norm_eps = layer_norm_eps
