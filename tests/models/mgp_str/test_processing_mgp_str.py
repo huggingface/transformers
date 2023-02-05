@@ -15,12 +15,14 @@
 """ Testing suite for the MGPSTRProcessor. """
 
 import unittest
+
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
+
 
 if is_torch_available():
     import torch
@@ -31,6 +33,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import ViTImageProcessor
+
 
 class MGPSTRProcessingTester:
     def __init__(
@@ -59,6 +62,7 @@ class MGPSTRProcessingTester:
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
+
     def prepare_image_processor_dict(self):
         return {
             "image_mean": self.image_mean,
@@ -195,5 +199,3 @@ class ViTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
                 self.image_processor_tester.size["width"],
             ),
         )
-
-
