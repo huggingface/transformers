@@ -47,7 +47,8 @@
     - local: in_translation
       title: Stratégies de génération de texte
     - sections:
-      - local: in_translation
+      - isExpanded: false
+        local: in_translation
         title: Classification de texte
       - local: tasks/token_classification
         title: Classification de token
@@ -64,7 +65,6 @@
       - local: in_translation
         title: Question à choix multiple
       title: Guides des tâches
-      isExpanded: false
     title: Traitement automatique des langues
   - sections:
     - local: in_translation
@@ -83,29 +83,29 @@
       title: Détection d'objets
     title: Vision par ordinateur
   - sections:
-    local: in_translation
-    title: Performance et extensibilité
+    - local: in_translation
+      title: Performance et extensibilité
   - sections:
-    - local: contributing
+    - local: in_translation
       title: Comment contribuer à transformers?
-    - local: add_new_model
+    - local: in_translation
       title: Comment ajouter un modèle à 🤗 Transformers?
-    - local: add_tensorflow_model
+    - local: in_translation
       title: Comment convertir un modèle 🤗 Transformers vers TensorFlow?
-    - local: add_new_pipeline
+    - local: in_translation
       title: Comment ajouter un pipeline à 🤗 Transformers?
-    - local: testing
+    - local: in_translation
       title: Tester
-    - local: pr_checks
+    - local: in_translation
       title: Vérification pour une Pull Request
     title: Contribuer
-  - local: notebooks
+  - local: in_translation
     title: 🤗 Transformers Notebooks
-  - local: community
+  - local: in_translation
     title: Ressources communautaires
-  - local: benchmarks
+  - local: in_translation
     title: Benchmarks
-  - local: migration
+  - local: in_translation
     title: Migration à partir de versions précédentes
   title: Guides d'utilisation
 - sections:
