@@ -1081,7 +1081,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
+    url = "https://huggingface.co/ybelkada/blip-test-image/resolve/main/demo.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
