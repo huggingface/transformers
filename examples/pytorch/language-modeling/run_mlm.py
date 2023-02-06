@@ -414,8 +414,9 @@ def main():
         max_seq_length = tokenizer.model_max_length
         if max_seq_length > 1024:
             logger.warning(
-                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
+                "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+                " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+                " override this default with `--block_size xxx`."
             )
             max_seq_length = 1024
     else:
