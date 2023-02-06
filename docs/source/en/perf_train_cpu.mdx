@@ -58,21 +58,6 @@ Take an example of the use cases on [Transformers question-answering](https://gi
 <b>--use_ipex \</b>
 <b>--bf16 --no_cuda</b></pre> 
 
-### Performance Examples
+### Practice example
 
-[bert-base-cased](https://huggingface.co/bert-base-cased), [distilbert-base-uncased](https://huggingface.co/distilbert-base-uncased), and [bert-large-uncased](https://huggingface.co/bert-large-uncased) are selected as examples with different model sizes to demonstrate the BFloat16 training performance achieved by IPEX and the speed-up ratio against native PyTorch Float32 on the 3rd Generation Xeon® Scalable Processors (Intel® Xeon® Platinum 8380H CPU). All the benchmarking is using [IPEX CPU launcher](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/performance_tuning/launch_script.html) to set system configs to ensure the best-to-best comparison, including numactl (--node_id 0, i.e., one socket full cores), jemalloc (--enable_jemalloc) and Intel OpenMP library.
-
-
-The examples are referring to the [Text-classification](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) (based on the script [run_glue.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py)), and SST-2, STSB and RTE are scoped from the [GLUE](https://gluebenchmark.com/) benchmark of fine-tuning the library models for sequence classification. Some setups for the training script are: per_device_train_batch_size is 128, max_seq_len is 128, num_train_epochs is 3 and learning_rate is 2e-5. Besides, we are taking the training samples per second as the performance metric to get the speed-up ratio of IPEX BFloat16 vs native PyTorch Float32.
-
-#### Software configuration:
-
-| Item              | Version                                                                                             |
-| :---------------: | :----------:                                                                                        |
-| PyTorch           | v1.12.1+cpu                                                                                         |
-| IPEX              | v1.12.100+cpu                                                                                       |
-|Transformers       | [main](https://github.com/huggingface/transformers/commit/0ea53822f8bdc2c0c41b45bcd04fa6c031e5e700) |
-
-#### Performance speed-up ratio:
-
-<img src="https://user-images.githubusercontent.com/83276252/210765922-1649fd07-5fbd-4a94-86a0-473f011ff827.png" width="75%"/>
+Blog: [Accelerating PyTorch Transformers with Intel Sapphire Rapids](https://huggingface.co/blog/intel-sapphire-rapids)
