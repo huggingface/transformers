@@ -2869,7 +2869,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             predicted mel spectrogram, or a tensor with shape `(num_frames,)` containing the speech waveform.
         """
         if speaker_embeddings is None:
-            speaker_embeddings = torch.zeros((1, 512))
+            speaker_embeddings = torch.zeros((1, 512), device=input_values.device)
 
         return _generate_speech(
             self,
