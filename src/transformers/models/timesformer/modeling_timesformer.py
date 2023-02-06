@@ -515,7 +515,7 @@ TIMESFORMER_START_DOCSTRING = r"""
 TIMESFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`VideoMAEFeatureExtractor`]. See
+            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
             [`VideoMAEFeatureExtractor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
@@ -575,7 +575,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
         >>> from decord import VideoReader, cpu
         >>> import numpy as np
 
-        >>> from transformers import TimeSformerFeatureExtractor, TimesformerModel
+        >>> from transformers import AutoFeatureExtractor, TimesformerModel
         >>> from huggingface_hub import hf_hub_download
 
 
@@ -599,7 +599,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = TimesformerModel.from_pretrained("facebook/timesformer-base-finetuned-k400")
 
         >>> # prepare video for the model
@@ -682,7 +682,7 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         >>> import torch
         >>> import numpy as np
 
-        >>> from transformers import VideoMAEFeatureExtractor, TimesformerForVideoClassification
+        >>> from transformers import AutoFeatureExtractor, TimesformerForVideoClassification
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
@@ -708,7 +708,7 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
         >>> model = TimesformerForVideoClassification.from_pretrained("facebook/timesformer-base-finetuned-k400")
 
         >>> inputs = feature_extractor(list(video), return_tensors="pt")

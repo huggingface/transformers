@@ -559,10 +559,10 @@ class RagModel(RagPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RagTokenizer, RagRetriever, RagModel
+        >>> from transformers import AutoTokenizer, RagRetriever, RagModel
         >>> import torch
 
-        >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/rag-token-base")
         >>> retriever = RagRetriever.from_pretrained(
         ...     "facebook/rag-token-base", index_name="exact", use_dummy_dataset=True
         ... )
@@ -806,10 +806,10 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RagTokenizer, RagRetriever, RagSequenceForGeneration
+        >>> from transformers import AutoTokenizer, RagRetriever, RagSequenceForGeneration
         >>> import torch
 
-        >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/rag-sequence-nq")
         >>> retriever = RagRetriever.from_pretrained(
         ...     "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
         ... )
@@ -1274,10 +1274,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RagTokenizer, RagRetriever, RagTokenForGeneration
+        >>> from transformers import AutoTokenizer, RagRetriever, RagTokenForGeneration
         >>> import torch
 
-        >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/rag-token-nq")
         >>> retriever = RagRetriever.from_pretrained(
         ...     "facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True
         ... )
@@ -1566,6 +1566,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
+                max_length=generation_config.max_length,
             )
             return self.beam_search(
                 input_ids,

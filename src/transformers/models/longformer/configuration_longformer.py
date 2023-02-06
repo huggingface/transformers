@@ -92,8 +92,6 @@ class LongformerConfig(PretrainedConfig):
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
         attention_window (`int` or `List[int]`, *optional*, defaults to 512):
             Size of an attention window around each token. If an `int`, use the same size for all layers. To specify a
             different window size for each layer, use a `List[int]` where `len(attention_window) == num_hidden_layers`.
@@ -134,7 +132,6 @@ class LongformerConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-12,
         position_embedding_type: str = "absolute",
-        classifier_dropout: float = None,
         onnx_export: bool = False,
         **kwargs
     ):
@@ -158,7 +155,6 @@ class LongformerConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
-        self.classifier_dropout = classifier_dropout
         self.onnx_export = onnx_export
 
 
