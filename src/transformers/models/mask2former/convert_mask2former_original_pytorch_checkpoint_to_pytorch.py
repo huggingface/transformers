@@ -20,16 +20,16 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
 
+import requests
 import torch
 import torchvision.transforms as T
-from PIL import Image
-from torch import Tensor, nn
-
-import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
 from huggingface_hub import hf_hub_download
+from PIL import Image
+from torch import Tensor, nn
+
 from transformers import (
     Mask2FormerConfig,
     Mask2FormerForUniversalSegmentation,
@@ -624,7 +624,6 @@ class OriginalMask2FormerCheckpointToOursConverter:
 
         rename_keys = []
         for i in range(self.config.decoder_layers - 1):
-
             rename_keys.append(
                 (
                     f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.out_proj.weight",

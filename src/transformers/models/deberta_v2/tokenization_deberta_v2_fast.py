@@ -128,7 +128,7 @@ class DebertaV2TokenizerFast(PreTrainedTokenizerFast):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(
             vocab_file,

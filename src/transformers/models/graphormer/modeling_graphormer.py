@@ -799,7 +799,7 @@ class GraphormerModel(GraphormerPreTrainedModel):
         perturb=None,
         masked_tokens=None,
         return_dict: Optional[bool] = None,
-        **unused
+        **unused,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

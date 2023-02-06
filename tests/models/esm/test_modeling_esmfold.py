@@ -144,7 +144,6 @@ class EsmFoldModelTester:
 
 @require_torch
 class EsmFoldModelTest(ModelTesterMixin, unittest.TestCase):
-
     test_mismatched_shapes = False
 
     all_model_classes = (EsmForProteinFolding,) if is_torch_available() else ()

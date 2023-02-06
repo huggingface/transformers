@@ -110,7 +110,7 @@ class Speech2Text2Config(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         max_target_positions=1024,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.d_model = d_model

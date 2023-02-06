@@ -23,7 +23,6 @@ if is_torch_available():
 
 if is_tf_available() and is_tensorflow_probability_available():
     import tensorflow as tf
-
     import tensorflow_probability as tfp
 
     from ..models.auto.modeling_tf_auto import (

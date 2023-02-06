@@ -134,11 +134,10 @@ jobs:
                 command: pip freeze | tee installed.txt
             - store_artifacts:
                   path: ~/transformers/installed.txt
-            - run: black --check --preview examples tests src utils
-            - run: isort --check-only examples tests src utils
+            - run: black --check examples tests src utils
+            - run: ruff examples tests src utils
             - run: python utils/custom_init_isort.py --check_only
             - run: python utils/sort_auto_mappings.py --check_only
-            - run: flake8 examples tests src utils
             - run: doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
             - run: python utils/check_doc_toc.py
 

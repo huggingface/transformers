@@ -241,7 +241,6 @@ class SwitchTransformersLayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # SwitchTransformers uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -334,7 +333,6 @@ class SwitchTransformersSparseMLP(nn.Module):
 
         next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
-
             token_indices = router_mask[:, :, idx].bool()
             next_states[token_indices] = expert(hidden_states[token_indices])
 
@@ -721,7 +719,6 @@ class SwitchTransformersBlock(nn.Module):
         output_router_logits=True,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -939,7 +936,6 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         config.num_layers = config.num_decoder_layers if self.is_decoder else config.num_layers
         self.block = nn.ModuleList()
         for i in range(config.num_layers):
-
             is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
 
             self.block.append(
@@ -1758,9 +1754,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]

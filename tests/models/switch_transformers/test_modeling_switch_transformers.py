@@ -73,7 +73,6 @@ class SwitchTransformersModelTester:
         expert_capacity=100,
         router_jitter_noise=0.0,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -548,7 +547,6 @@ class SwitchTransformersModelTester:
 
 @require_torch
 class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
     )
@@ -828,7 +826,6 @@ class SwitchTransformersEncoderOnlyModelTester:
         pad_token_id=0,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length

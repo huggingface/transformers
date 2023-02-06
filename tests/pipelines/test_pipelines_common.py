@@ -26,10 +26,10 @@ from unittest import skipIf
 
 import datasets
 import numpy as np
-
 import requests
 from huggingface_hub import HfFolder, Repository, create_repo, delete_repo, set_access_token
 from requests.exceptions import HTTPError
+
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -119,7 +119,6 @@ def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer
 
     # TODO: check and fix if possible
     if not to_skip and tokenizer_name is not None:
-
         if (
             test_casse_name == "QAPipelineTests"
             and not tokenizer_name.endswith("Fast")
@@ -196,7 +195,6 @@ def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer
 
 
 def validate_test_components(test_case, model, tokenizer, processor):
-
     # TODO: Move this to tiny model creation script
     # head-specific (within a model type) necessary changes to the config
     # 1. for `BlenderbotForCausalLM`
@@ -296,7 +294,6 @@ class PipelineTestCaseMeta(type):
             mapping = dct.get(key, {})
             if mapping:
                 for config_class, model_architectures in mapping.items():
-
                     if not isinstance(model_architectures, tuple):
                         model_architectures = (model_architectures,)
 

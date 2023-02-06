@@ -22,7 +22,6 @@ from ..bert.test_tokenization_bert import BertTokenizationTest
 
 @require_tokenizers
 class SqueezeBertTokenizationTest(BertTokenizationTest):
-
     tokenizer_class = SqueezeBertTokenizer
     rust_tokenizer_class = SqueezeBertTokenizerFast
     test_rust_tokenizer = True

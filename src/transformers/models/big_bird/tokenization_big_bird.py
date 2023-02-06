@@ -113,7 +113,7 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         cls_token="[CLS]",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -206,7 +206,7 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         spaces_between_special_tokens: bool = True,
-        **kwargs
+        **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 

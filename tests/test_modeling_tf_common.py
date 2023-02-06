@@ -28,10 +28,10 @@ from math import isnan
 from typing import List, Tuple, get_type_hints
 
 from datasets import Dataset
-
 from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
+
 from transformers import is_tf_available, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.auto import get_values
@@ -157,7 +157,6 @@ def _return_type_has_loss(model):
 
 @require_tf
 class TFModelTesterMixin:
-
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
@@ -618,7 +617,6 @@ class TFModelTesterMixin:
             )
 
     def prepare_pt_inputs_from_tf_inputs(self, tf_inputs_dict):
-
         pt_inputs_dict = {}
         for name, key in tf_inputs_dict.items():
             if type(key) == bool:
@@ -638,7 +636,6 @@ class TFModelTesterMixin:
         return pt_inputs_dict
 
     def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
-
         pt_inputs_dict = self.prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
 
         # send pytorch inputs to the correct device
@@ -670,7 +667,6 @@ class TFModelTesterMixin:
         import transformers
 
         for model_class in self.all_model_classes:
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             # Output all for aggressive testing
@@ -1069,7 +1065,6 @@ class TFModelTesterMixin:
             self.assertLessEqual(max_diff, 1e-5)
 
     def test_model_outputs_equivalence(self):
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):

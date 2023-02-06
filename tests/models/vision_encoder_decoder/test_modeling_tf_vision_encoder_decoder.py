@@ -84,7 +84,7 @@ class TFVisionEncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
@@ -114,7 +114,7 @@ class TFVisionEncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = TFVisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -158,7 +158,7 @@ class TFVisionEncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         return_dict,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
@@ -185,7 +185,7 @@ class TFVisionEncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = TFVisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -223,7 +223,7 @@ class TFVisionEncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         labels,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = TFVisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -253,7 +253,7 @@ class TFVisionEncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
@@ -403,7 +403,6 @@ class TFVisionEncoderDecoderMixin:
             )
 
     def prepare_pt_inputs_from_tf_inputs(self, tf_inputs_dict):
-
         pt_inputs_dict = {}
         for name, key in tf_inputs_dict.items():
             if type(key) == bool:
@@ -423,7 +422,6 @@ class TFVisionEncoderDecoderMixin:
         return pt_inputs_dict
 
     def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
-
         pt_inputs_dict = self.prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
 
         # send pytorch inputs to the correct device
@@ -463,7 +461,6 @@ class TFVisionEncoderDecoderMixin:
         self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
 
     def check_pt_to_tf_equivalence(self, config, decoder_config, tf_inputs_dict):
-
         encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         # Output all for aggressive testing
         encoder_decoder_config.output_hidden_states = True
@@ -479,7 +476,6 @@ class TFVisionEncoderDecoderMixin:
         self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
 
     def check_tf_to_pt_equivalence(self, config, decoder_config, tf_inputs_dict):
-
         encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         # Output all for aggressive testing
         encoder_decoder_config.output_hidden_states = True
@@ -534,7 +530,6 @@ class TFVisionEncoderDecoderMixin:
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
-
         config_inputs_dict = self.prepare_config_and_inputs()
         labels = config_inputs_dict.pop("decoder_token_labels")
 
@@ -839,7 +834,6 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
 
         with tempfile.TemporaryDirectory() as tmp_dirname:
-
             # Since most of HF's models don't have pretrained cross-attention layers, they are randomly
             # initialized even if we create models using `from_pretrained` method.
             # For the tests, the decoder need to be a model with pretrained cross-attention layers.
@@ -895,7 +889,6 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 class TFViT2GPT2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_coco_en(self):
-
         loc = "ydshieh/vit-gpt2-coco-en"
 
         feature_extractor = ViTFeatureExtractor.from_pretrained(loc)

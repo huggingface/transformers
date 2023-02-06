@@ -22,8 +22,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 from transformers.testing_utils import is_pt_tf_cross_test, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -432,7 +432,6 @@ class GroupViTTextModelTester:
 
 @require_torch
 class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (GroupViTTextModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -475,7 +474,6 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 class GroupViTModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:

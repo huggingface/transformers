@@ -64,7 +64,6 @@ class LayoutLMv3ImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_pytesseract
 class LayoutLMv3ImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = LayoutLMv3ImageProcessor if is_pytesseract_available() else None
 
     def setUp(self):

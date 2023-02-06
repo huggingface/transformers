@@ -24,7 +24,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 @require_rjieba
 @require_tokenizers
 class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = RoFormerTokenizer
     rust_tokenizer_class = RoFormerTokenizerFast
     space_between_special_tokens = True

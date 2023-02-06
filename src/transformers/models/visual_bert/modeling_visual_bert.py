@@ -1587,7 +1587,6 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         loss = None
 
         if labels is not None:
-
             # scores = batch x selected position x visual_feature
             # scores = selected_positions.bmm(visual_features.transpose(1,2))
             # label = batch x selected_postion x needed position

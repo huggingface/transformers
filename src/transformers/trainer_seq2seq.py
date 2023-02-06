@@ -33,7 +33,7 @@ class Seq2SeqTrainer(Trainer):
         eval_dataset: Optional[Dataset] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
-        **gen_kwargs
+        **gen_kwargs,
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -82,7 +82,7 @@ class Seq2SeqTrainer(Trainer):
         test_dataset: Dataset,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "test",
-        **gen_kwargs
+        **gen_kwargs,
     ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.

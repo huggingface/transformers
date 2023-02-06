@@ -30,9 +30,9 @@ from itertools import chain
 from typing import Optional
 
 import datasets
+import evaluate
 from datasets import load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     CONFIG_MAPPING,

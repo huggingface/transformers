@@ -120,7 +120,6 @@ class ScheduleInitTest(unittest.TestCase):
             self.assertAlmostEqual(a, b, delta=tol, msg=msg)
 
     def test_schedulers(self):
-
         common_kwargs = {"num_warmup_steps": 2, "num_training_steps": 10}
         # schedulers doct format
         # function: (sched_args_dict, expected_learning_rates)

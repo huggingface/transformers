@@ -101,7 +101,7 @@ class GPTNeoXJapaneseConfig(PretrainedConfig):
         eos_token_id=31999,
         attention_dropout=0.1,
         hidden_dropout=0.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size

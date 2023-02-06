@@ -85,7 +85,7 @@ class UperNetConfig(PretrainedConfig):
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
         loss_ignore_index=255,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

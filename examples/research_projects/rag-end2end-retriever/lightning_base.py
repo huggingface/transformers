@@ -69,7 +69,7 @@ class BaseTransformer(pl.LightningModule):
         config=None,
         tokenizer=None,
         model=None,
-        **config_kwargs
+        **config_kwargs,
     ):
         """Initialize a model, tokenizer and config."""
         super().__init__()
@@ -365,7 +365,7 @@ def generic_train(
     extra_callbacks=[],
     checkpoint_callback=None,
     logging_callback=None,
-    **extra_train_kwargs
+    **extra_train_kwargs,
 ):
     pl.seed_everything(args.seed)
 

@@ -675,7 +675,6 @@ class DonutSwinStage(nn.Module):
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
-
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             layer_outputs = layer_module(

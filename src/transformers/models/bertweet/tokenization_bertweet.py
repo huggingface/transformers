@@ -132,7 +132,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             normalization=normalization,

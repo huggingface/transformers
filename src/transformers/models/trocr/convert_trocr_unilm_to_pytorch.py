@@ -18,10 +18,10 @@
 import argparse
 from pathlib import Path
 
+import requests
 import torch
 from PIL import Image
 
-import requests
 from transformers import (
     RobertaTokenizer,
     TrOCRConfig,

@@ -108,7 +108,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         mask_token_sent="<mask_1>",
         additional_special_tokens=None,
         offset=103,  # entries 2 - 104 are only used for pretraining
-        **kwargs
+        **kwargs,
     ):
         self.offset = offset
 

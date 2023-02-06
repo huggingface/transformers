@@ -115,9 +115,8 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         eos_token=None,
         bos_token=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
-
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         name_or_path = kwargs.get("name_or_path")

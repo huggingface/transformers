@@ -821,7 +821,6 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
 
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
-
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1142,9 +1141,8 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs
+        **kwargs,
     ):
-
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             use_cache = False
 
@@ -1248,9 +1246,8 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs
+        **kwargs,
     ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.Tensor]]:
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1471,9 +1468,8 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]

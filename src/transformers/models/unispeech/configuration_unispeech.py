@@ -226,7 +226,7 @@ class UniSpeechConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         replace_prob=0.5,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.hidden_size = hidden_size

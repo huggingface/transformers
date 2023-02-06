@@ -20,9 +20,8 @@ from enum import Enum
 from typing import List, Optional, Union
 
 import torch
-from torch.utils.data import Dataset
-
 from filelock import FileLock
+from torch.utils.data import Dataset
 
 from ...tokenization_utils_base import PreTrainedTokenizerBase
 from ...utils import logging
@@ -121,7 +120,6 @@ class GlueDataset(Dataset):
         # and the others will use the cache.
         lock_path = cached_features_file + ".lock"
         with FileLock(lock_path):
-
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
                 self.features = torch.load(cached_features_file)

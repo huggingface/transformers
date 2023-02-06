@@ -16,12 +16,11 @@
 
 from typing import Callable, List, Optional, Tuple
 
-import numpy as np
-
 import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
@@ -166,7 +165,6 @@ class FlaxBeitDropPath(nn.Module):
 
 
 class FlaxBeitPatchEmbeddings(nn.Module):
-
     config: BeitConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -217,7 +215,6 @@ class FlaxBeitEmbeddings(nn.Module):
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, pixel_values, bool_masked_pos=None, deterministic=True):
-
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.shape
 
@@ -518,7 +515,6 @@ class FlaxBeitLayerCollection(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
@@ -605,7 +601,7 @@ class FlaxBeitPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if input_shape is None:
@@ -713,7 +709,6 @@ class FlaxBeitModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         hidden_states = self.embeddings(pixel_values, bool_masked_pos, deterministic=deterministic)
 
         outputs = self.encoder(

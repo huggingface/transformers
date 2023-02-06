@@ -24,9 +24,9 @@ import logging
 from collections import namedtuple
 
 import torch
-
 from model_bertabs import BertAbsSummarizer
 from models.model_builder import AbsSummarizer  # The authors' implementation
+
 from transformers import BertTokenizer
 
 

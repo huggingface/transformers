@@ -1824,7 +1824,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         cache_dir=None,
         local_files_only=False,
         _commit_hash=None,
-        **kwargs
+        **kwargs,
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
         # file or if `from_slow` is set to True.
@@ -1932,7 +1932,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             model_max_length = cls.max_model_input_sizes[pretrained_model_name_or_path]
             if model_max_length is not None and isinstance(model_max_length, (int, float)):
-
                 model_max_length = min(init_kwargs.get("model_max_length", int(1e30)), model_max_length)
                 # TODO(PVP) - uncomment following line in Transformers v5
                 # init_kwargs["model_max_length"] = model_max_length
@@ -2278,7 +2277,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> List[int]:
         """
         Converts a string to a sequence of ids (integer), using the tokenizer and vocabulary.
@@ -2474,7 +2473,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -2558,7 +2557,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         # Input type checking for clearer error
         def _is_valid_text_input(t):
@@ -2671,7 +2670,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Tokenize and prepare for the model a sequence or a pair of sequences.
@@ -2743,7 +2742,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         raise NotImplementedError
 
@@ -2773,7 +2772,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
@@ -2846,7 +2845,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         raise NotImplementedError
 
@@ -3083,7 +3082,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
@@ -3271,8 +3270,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 )
                 if truncation_strategy == TruncationStrategy.ONLY_FIRST:
                     error_msg = (
-                        error_msg
-                        + "Please select another truncation strategy than "
+                        error_msg + "Please select another truncation strategy than "
                         f"{truncation_strategy}, for instance 'longest_first' or 'only_second'."
                     )
                 logger.error(error_msg)
@@ -3373,7 +3371,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             if self.padding_side == "right":
                 if return_attention_mask:
-
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
@@ -3415,7 +3412,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
-        **kwargs
+        **kwargs,
     ) -> List[str]:
         """
         Convert a list of lists of token ids into a list of strings by calling decode.
@@ -3448,7 +3445,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
@@ -3484,7 +3481,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
-        **kwargs
+        **kwargs,
     ) -> str:
         raise NotImplementedError
 

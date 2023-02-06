@@ -609,7 +609,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         def get_input_ids(text):
             if isinstance(text, str):
@@ -693,7 +693,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         def get_input_ids(text):
             if isinstance(text, str):
@@ -924,7 +924,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         spaces_between_special_tokens: bool = True,
-        **kwargs
+        **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 

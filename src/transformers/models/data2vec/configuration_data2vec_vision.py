@@ -142,7 +142,7 @@ class Data2VecVisionConfig(PretrainedConfig):
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
         semantic_loss_ignore_index=255,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -180,7 +180,6 @@ class Data2VecVisionConfig(PretrainedConfig):
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
 class Data2VecVisionOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

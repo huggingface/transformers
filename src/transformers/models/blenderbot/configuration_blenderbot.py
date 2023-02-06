@@ -135,7 +135,7 @@ class BlenderbotConfig(PretrainedConfig):
         eos_token_id=2,
         encoder_no_repeat_ngram_size=3,
         forced_eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

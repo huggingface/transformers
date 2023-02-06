@@ -19,11 +19,10 @@ import random
 from functools import partial
 from typing import Callable, Optional, Tuple
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
@@ -916,7 +915,7 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -1472,7 +1471,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
         attention_mask: Optional[jnp.DeviceArray] = None,
         decoder_attention_mask: Optional[jnp.DeviceArray] = None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # initializing the cache
         batch_size, seq_length = decoder_input_ids.shape
@@ -1748,7 +1747,7 @@ class FlaxBartDecoderPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         config.is_decoder = True
         config.is_encoder_decoder = False
@@ -1920,7 +1919,6 @@ class FlaxBartForCausalLMModule(nn.Module):
         return_dict: bool = True,
         deterministic: bool = True,
     ):
-
         outputs = self.model(
             input_ids,
             attention_mask,

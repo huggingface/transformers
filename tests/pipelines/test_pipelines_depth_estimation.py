@@ -44,7 +44,6 @@ def hashimage(image: Image) -> str:
 @require_timm
 @require_torch
 class DepthEstimationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):

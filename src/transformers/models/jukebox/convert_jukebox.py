@@ -19,9 +19,9 @@ import json
 import os
 from pathlib import Path
 
+import requests
 import torch
 
-import requests
 from transformers import JukeboxConfig, JukeboxModel
 from transformers.utils import logging
 
@@ -116,7 +116,6 @@ def fix_jukebox_keys(state_dict, model_state_dict, key_prefix, mapping):
     re_prior_cond_proj_in = re.compile("conditioner_blocks.(\d*).cond.model.(\d*).(bias|weight)")
 
     for original_key, value in state_dict.items():
-
         # rename vqvae.encoder keys
         if re_encoder_block_conv_in.fullmatch(original_key):
             regex_match = re_encoder_block_conv_in.match(original_key)

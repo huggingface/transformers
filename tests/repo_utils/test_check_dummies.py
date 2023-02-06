@@ -20,7 +20,7 @@ import unittest
 git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 sys.path.append(os.path.join(git_repo_path, "utils"))
 
-import check_dummies
+import check_dummies  # noqa: E402
 from check_dummies import create_dummy_files, create_dummy_object, find_backend, read_init  # noqa: E402
 
 

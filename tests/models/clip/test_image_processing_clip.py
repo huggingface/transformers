@@ -114,7 +114,6 @@ class CLIPImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class CLIPImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = CLIPImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -247,7 +246,6 @@ class CLIPImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase)
 @require_torch
 @require_vision
 class CLIPImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = CLIPImageProcessor if is_vision_available() else None
 
     def setUp(self):

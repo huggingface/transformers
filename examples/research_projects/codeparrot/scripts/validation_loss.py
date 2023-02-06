@@ -1,12 +1,12 @@
 import logging
 
 import torch
+from accelerate import Accelerator
+from arguments import EvaluationArguments
 from datasets import load_dataset
 from torch.utils.data import IterableDataset
 from torch.utils.data.dataloader import DataLoader
 
-from accelerate import Accelerator
-from arguments import EvaluationArguments
 from transformers import AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, set_seed
 
 

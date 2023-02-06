@@ -4,7 +4,6 @@
 import os
 
 import pytest
-
 from attr import dataclass
 
 

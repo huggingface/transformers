@@ -66,7 +66,6 @@ if is_torch_available():
 class TestTrainerDistributedNeuronCore(TestCasePlus):
     @require_torch_neuroncore
     def test_trainer(self):
-
         distributed_args = f"""
             -m torch.distributed.launch
             --nproc_per_node=2
@@ -83,7 +82,6 @@ class TestTrainerDistributedNeuronCore(TestCasePlus):
 class TestTrainerDistributed(TestCasePlus):
     @require_torch_multi_gpu
     def test_trainer(self):
-
         distributed_args = f"""
             -m torch.distributed.launch
             --nproc_per_node={torch.cuda.device_count()}

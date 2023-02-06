@@ -491,7 +491,7 @@ class DetaImageProcessor(BaseImageProcessor):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         do_pad: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
@@ -568,7 +568,7 @@ class DetaImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[ChannelDimension] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
@@ -746,7 +746,7 @@ class DetaImageProcessor(BaseImageProcessor):
         format: Optional[Union[str, AnnotionFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.

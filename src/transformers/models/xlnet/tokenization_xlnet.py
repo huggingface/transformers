@@ -145,7 +145,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         additional_special_tokens=["<eop>", "<eod>"],
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
@@ -256,7 +256,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         spaces_between_special_tokens: bool = True,
-        **kwargs
+        **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 

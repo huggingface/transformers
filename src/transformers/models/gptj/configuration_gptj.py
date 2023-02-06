@@ -112,7 +112,7 @@ class GPTJConfig(PretrainedConfig):
         bos_token_id=50256,
         eos_token_id=50256,
         tie_word_embeddings=False,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.n_positions = n_positions

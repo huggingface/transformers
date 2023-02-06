@@ -148,7 +148,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask>",
         add_prefix_space=False,
         trim_offsets=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,

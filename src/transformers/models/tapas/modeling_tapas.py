@@ -289,7 +289,6 @@ class TapasEmbeddings(nn.Module):
             position_ids = position_ids.unsqueeze(0).expand(input_shape)
             # when self.config.reset_position_index_per_cell is set to True, create relative position embeddings
             if self.config.reset_position_index_per_cell:
-
                 # shape (batch_size, seq_len)
                 col_index = IndexMap(token_type_ids[:, :, 1], self.config.type_vocab_sizes[1], batch_dims=1)
                 # shape (batch_size, seq_len)
@@ -1023,7 +1022,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> Union[Tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):

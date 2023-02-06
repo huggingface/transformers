@@ -26,20 +26,20 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import datasets
-import numpy as np
-from datasets import load_dataset
-from tqdm import tqdm
-
 import evaluate
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
-import transformers
+from datasets import load_dataset
 from flax import struct, traverse_util
 from flax.jax_utils import pad_shard_unpad, replicate, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import Repository, create_repo
+from tqdm import tqdm
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoTokenizer,
@@ -586,7 +586,6 @@ def main():
     total_steps = steps_per_epoch * num_epochs
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (0/{num_epochs})", position=0)
     for epoch in epochs:
-
         train_start = time.time()
         train_metrics = []
 
@@ -623,7 +622,6 @@ def main():
                 train_metrics = []
 
             if (cur_step % training_args.eval_steps == 0 or cur_step % steps_per_epoch == 0) and cur_step > 0:
-
                 # evaluate
                 eval_loader = glue_eval_data_collator(eval_dataset, eval_batch_size)
                 for batch in tqdm(

@@ -141,7 +141,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         do_phonemize=True,
         phonemizer_lang="en-us",
         phonemizer_backend="espeak",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,
@@ -453,7 +453,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         output_char_offsets: bool = False,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
@@ -509,7 +509,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         output_char_offsets: bool = False,
-        **kwargs
+        **kwargs,
     ) -> List[str]:
         """
         Convert a list of lists of token ids into a list of strings by calling decode.

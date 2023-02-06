@@ -101,7 +101,6 @@ class Swin2SRImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class Swin2SRImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = Swin2SRImageProcessor if is_vision_available() else None
 
     def setUp(self):

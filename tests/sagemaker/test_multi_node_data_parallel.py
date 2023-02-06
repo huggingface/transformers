@@ -5,7 +5,6 @@ import unittest
 from ast import literal_eval
 
 import pytest
-
 from parameterized import parameterized, parameterized_class
 
 from . import is_sagemaker_available

@@ -15,7 +15,6 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
-
 import requests
 
 from ..utils import is_torch_available, logging
@@ -302,7 +301,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         feature_extractor: Union["SequenceFeatureExtractor", str],
         *,
         decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.feature_extractor = feature_extractor

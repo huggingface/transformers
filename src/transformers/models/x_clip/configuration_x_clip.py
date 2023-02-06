@@ -100,7 +100,7 @@ class XCLIPTextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -118,7 +118,6 @@ class XCLIPTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from XCLIPConfig
@@ -219,7 +218,7 @@ class XCLIPVisionConfig(PretrainedConfig):
         initializer_range=0.02,
         initializer_factor=1.0,
         drop_path_rate=0.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -244,7 +243,6 @@ class XCLIPVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from XCLIPConfig
@@ -311,7 +309,7 @@ class XCLIPConfig(PretrainedConfig):
         prompt_attention_dropout=0.0,
         prompt_projection_dropout=0.0,
         logit_scale_init_value=2.6592,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

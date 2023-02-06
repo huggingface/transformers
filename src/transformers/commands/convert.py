@@ -71,7 +71,7 @@ class ConvertCommand(BaseTransformersCLICommand):
         pytorch_dump_output: str,
         config: str,
         finetuning_task_name: str,
-        *args
+        *args,
     ):
         self._logger = logging.get_logger("transformers-cli/converting")
 

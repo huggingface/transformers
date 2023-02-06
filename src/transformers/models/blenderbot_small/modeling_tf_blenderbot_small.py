@@ -792,7 +792,6 @@ class TFBlenderbotSmallEncoder(tf.keras.layers.Layer):
 
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
-
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1109,9 +1108,8 @@ class TFBlenderbotSmallMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs
+        **kwargs,
     ):
-
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1212,9 +1210,8 @@ class TFBlenderbotSmallModel(TFBlenderbotSmallPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs
+        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFSeq2SeqModelOutput]:
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1435,9 +1432,8 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]

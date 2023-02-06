@@ -116,7 +116,7 @@ class ViTMAEConfig(PretrainedConfig):
         decoder_intermediate_size=2048,
         mask_ratio=0.75,
         norm_pix_loss=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

@@ -1069,7 +1069,6 @@ class DetaEncoder(DetaPreTrainedModel):
         """
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes):
-
             ref_y, ref_x = meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),

@@ -129,7 +129,7 @@ class SwinConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         encoder_stride=32,
         out_features=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -168,7 +168,6 @@ class SwinConfig(PretrainedConfig):
 
 
 class SwinOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

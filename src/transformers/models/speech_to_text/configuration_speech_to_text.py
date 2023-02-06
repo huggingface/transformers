@@ -144,7 +144,7 @@ class Speech2TextConfig(PretrainedConfig):
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.d_model = d_model

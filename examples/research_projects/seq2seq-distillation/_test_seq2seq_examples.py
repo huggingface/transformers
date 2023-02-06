@@ -5,18 +5,18 @@ import sys
 import tempfile
 from pathlib import Path
 
+import lightning_base
 import pytest
 import pytorch_lightning as pl
 import torch
-from torch import nn
-
-import lightning_base
 from convert_pl_checkpoint_to_hf import convert_pl_to_hf
 from distillation import distill_main
 from finetune import SummarizationModule, main
 from huggingface_hub import list_models
 from parameterized import parameterized
 from run_eval import generate_summaries_or_translations
+from torch import nn
+
 from transformers import AutoConfig, AutoModelForSeq2SeqLM
 from transformers.testing_utils import CaptureStderr, CaptureStdout, TestCasePlus, require_torch_gpu, slow
 from utils import label_smoothed_nll_loss, lmap, load_json

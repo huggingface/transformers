@@ -391,7 +391,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         image_std: Union[float, List[float]] = None,
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
-        **kwargs
+        **kwargs,
     ):
         if "size_divisibility" in kwargs:
             warnings.warn(
@@ -466,7 +466,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         size_divisor: int = 0,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format=None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image to the given size. Size can be min_size (scalar) or `(height, width)` tuple. If size is an
@@ -644,7 +644,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
@@ -789,7 +789,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.

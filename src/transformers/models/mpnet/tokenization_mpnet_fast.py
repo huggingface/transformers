@@ -124,7 +124,7 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask>",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,

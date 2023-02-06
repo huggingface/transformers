@@ -30,7 +30,7 @@ from transformers.utils import is_sentencepiece_available
 
 
 if is_sentencepiece_available():
-    from transformers.models.m2m_100.tokenization_m2m_100 import save_json, VOCAB_FILES_NAMES
+    from transformers.models.m2m_100.tokenization_m2m_100 import VOCAB_FILES_NAMES, save_json
 
 from ...test_tokenization_common import TokenizerTesterMixin
 

@@ -48,10 +48,10 @@ TOLERANCE = 1e-3
 
 T5_SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 if is_torch_available() and is_datasets_available() and is_faiss_available():
+    import faiss
     import torch
     from datasets import Dataset
 
-    import faiss
     from transformers import (
         AutoConfig,
         AutoModel,
@@ -99,7 +99,6 @@ def require_retrieval(test_case):
 @require_retrieval
 @require_sentencepiece
 class RagTestMixin:
-
     all_model_classes = (
         (RagModel, RagTokenForGeneration, RagSequenceForGeneration)
         if is_torch_available() and is_datasets_available() and is_faiss_available()
@@ -493,7 +492,7 @@ class RagTestMixin:
         decoder_attention_mask,
         retriever_n_docs,
         generator_n_docs,
-        **kwargs
+        **kwargs,
     ):
         self.assertIsNotNone(config.question_encoder)
         self.assertIsNotNone(config.generator)

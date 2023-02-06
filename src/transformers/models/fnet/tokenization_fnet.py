@@ -113,7 +113,7 @@ class FNetTokenizer(PreTrainedTokenizer):
         cls_token="[CLS]",
         mask_token="[MASK]",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it and
         # is included in the raw text, there should be a match in a non-normalized sentence.
@@ -238,7 +238,7 @@ class FNetTokenizer(PreTrainedTokenizer):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         spaces_between_special_tokens: bool = True,
-        **kwargs
+        **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 

@@ -550,7 +550,6 @@ class TFRobertaPreLayerNormModelTester:
 @require_tf
 # Copied from tests.models.roberta.test_modelling_tf_roberta.TFRobertaPreLayerNormModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
 class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             TFRobertaPreLayerNormModel,

@@ -361,7 +361,6 @@ class RoFormerModelTester:
 
 @require_torch
 class RoFormerModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             RoFormerModel,
@@ -491,7 +490,6 @@ class RoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
         )
 
     def test_positional_emb_weights_against_roformer(self):
-
         desired_weights = torch.tensor(
             [
                 [0.0000, 0.0000, 0.0000, 0.0000, 0.0000],

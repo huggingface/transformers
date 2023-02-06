@@ -21,7 +21,6 @@ from transformers import ChineseCLIPConfig, ChineseCLIPModel
 
 
 def copy_attn_layer(hf_attn_layer, pt_weights, prefix):
-
     q_proj, k_proj, v_proj = pt_weights[f"{prefix}.in_proj_weight"].chunk(3, dim=0)
     q_proj_bias, k_proj_bias, v_proj_bias = pt_weights[f"{prefix}.in_proj_bias"].chunk(3, dim=0)
 

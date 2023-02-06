@@ -20,8 +20,8 @@ import inspect
 import unittest
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
+
 from transformers import VideoMAEConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device

@@ -246,7 +246,7 @@ class SpeechT5Config(PretrainedConfig):
         decoder_max_relative_position=160,
         use_cache=True,
         is_encoder_decoder=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

@@ -307,7 +307,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         max_question_len=None,
         handle_impossible_answer=None,
         align_to_words=None,
-        **kwargs
+        **kwargs,
     ):
         # Set defaults values
         preprocess_params = {}

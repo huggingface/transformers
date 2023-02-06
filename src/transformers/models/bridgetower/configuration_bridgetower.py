@@ -88,7 +88,7 @@ class BridgeTowerVisionConfig(PretrainedConfig):
         stop_gradient=False,
         share_layernorm=True,
         remove_last_layer=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
@@ -207,7 +207,7 @@ class BridgeTowerTextConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -317,7 +317,7 @@ class BridgeTowerConfig(PretrainedConfig):
         init_layernorm_from_vision_encoder=False,
         text_config=None,
         vision_config=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.share_cross_modal_transformer_layers = share_cross_modal_transformer_layers

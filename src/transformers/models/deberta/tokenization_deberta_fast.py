@@ -154,9 +154,8 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
         pad_token="[PAD]",
         mask_token="[MASK]",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
-
         super().__init__(
             vocab_file,
             merges_file,

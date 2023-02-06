@@ -1165,7 +1165,6 @@ class TrainingArguments:
                 self.half_precision_backend = self.fp16_backend
 
             if self.bf16 or self.bf16_full_eval:
-
                 if self.no_cuda and not is_torch_bf16_cpu_available() and not is_torch_tpu_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")

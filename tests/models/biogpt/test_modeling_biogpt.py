@@ -263,7 +263,6 @@ class BioGptModelTester:
 
 @require_torch
 class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (BioGptModel, BioGptForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (BioGptForCausalLM,) if is_torch_available() else ()
     test_pruning = False

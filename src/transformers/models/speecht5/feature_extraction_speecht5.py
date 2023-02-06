@@ -91,7 +91,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         mel_floor: float = 1e-10,
         reduction_factor: int = 2,
         return_attention_mask: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.do_normalize = do_normalize
@@ -242,7 +242,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
@@ -358,7 +358,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         is_batched = bool(
             isinstance(speech, (list, tuple))

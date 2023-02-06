@@ -20,6 +20,7 @@ import jax
 import jax.numpy as jnp
 from configuration_hybrid_clip import HybridCLIPConfig
 from flax.core.frozen_dict import FrozenDict
+
 from transformers import FLAX_MODEL_MAPPING, FlaxCLIPVisionModel
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from transformers.models.clip.modeling_flax_clip import FlaxCLIPOutput
@@ -132,7 +133,7 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
         input_shape: Optional[Tuple] = None,
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
-        **kwargs
+        **kwargs,
     ):
         if input_shape is None:
             input_shape = ((1, 1), (1, config.vision_config.image_size, config.vision_config.image_size, 3))

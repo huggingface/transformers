@@ -16,8 +16,8 @@ from collections import defaultdict
 from pathlib import Path
 
 import pandas as pd
-
 from rouge_cli import calculate_rouge_path
+
 from utils import calculate_rouge
 
 
@@ -87,7 +87,6 @@ def test_single_sent_scores_dont_depend_on_newline_sep():
 
 
 def test_pegasus_newline():
-
     pred = [
         """" "a person who has such a video needs to immediately give it to the investigators," prosecutor says .<n> "it is a very disturbing scene," editor-in-chief of bild online tells "erin burnett: outfront" """
     ]

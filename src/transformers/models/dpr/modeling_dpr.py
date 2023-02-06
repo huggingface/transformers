@@ -170,7 +170,6 @@ class DPRPreTrainedModel(PreTrainedModel):
 
 
 class DPREncoder(DPRPreTrainedModel):
-
     base_model_prefix = "bert_model"
 
     def __init__(self, config: DPRConfig):
@@ -227,7 +226,6 @@ class DPREncoder(DPRPreTrainedModel):
 
 
 class DPRSpanPredictor(DPRPreTrainedModel):
-
     base_model_prefix = "encoder"
 
     def __init__(self, config: DPRConfig):

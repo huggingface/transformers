@@ -96,7 +96,7 @@ while True:
     queues.append(rq)
 strings
 outs = pipe(strings, batch_size=len(strings))
-for (rq, out) in zip(queues, outs):
+for rq, out in zip(queues, outs):
     await rq.put(out)
 ```
 

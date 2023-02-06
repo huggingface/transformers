@@ -57,7 +57,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor: int = 32,
         resample=PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.do_resize = do_resize
         self.do_rescale = do_rescale

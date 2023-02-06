@@ -1604,10 +1604,10 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
 
         if config.vocab_size is None:
             raise ValueError(
-                f"You are trying to instantiate {self.__class__} with a configuration that does not define the"
-                " vocabulary size of the language model head. Please instantiate the model as follows:"
-                " `Wav2Vec2ConformerForCTC.from_pretrained(..., vocab_size=vocab_size)`. or define `vocab_size` of"
-                " your model's configuration."
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `Wav2Vec2ConformerForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
             )
         output_hidden_size = (
             config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
@@ -1668,7 +1668,6 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
 
         loss = None
         if labels is not None:
-
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
@@ -1721,8 +1720,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
 
         if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
-                "Sequence classification does not support the use of Wav2Vec2Conformer adapters"
-                " (config.add_adapter=True)"
+                "Sequence classification does not support the use of Wav2Vec2Conformer adapters (config.add_adapter=True)"
             )
         self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
@@ -1833,8 +1831,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
 
         if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
-                "Audio frame classification does not support the use of Wav2Vec2Conformer adapters"
-                " (config.add_adapter=True)"
+                "Audio frame classification does not support the use of Wav2Vec2Conformer adapters (config.add_adapter=True)"
             )
         self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings

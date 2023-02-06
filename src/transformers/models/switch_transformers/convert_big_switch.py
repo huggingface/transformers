@@ -2,12 +2,12 @@ import argparse
 import json
 import os
 
-import torch
-from tensorflow.io import gfile
-
 import tensorstore as ts
+import torch
 from flax import serialization
 from flax.traverse_util import flatten_dict, unflatten_dict
+from tensorflow.io import gfile
+
 from transformers.modeling_utils import dtype_byte_size
 from transformers.models.switch_transformers.convert_switch_transformers_original_flax_checkpoint_to_pytorch import (
     rename_keys,

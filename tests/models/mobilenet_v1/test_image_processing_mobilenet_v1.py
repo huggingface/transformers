@@ -72,7 +72,6 @@ class MobileNetV1ImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class MobileNetV1ImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = MobileNetV1ImageProcessor if is_vision_available() else None
 
     def setUp(self):

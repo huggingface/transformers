@@ -593,7 +593,7 @@ class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -673,7 +673,7 @@ class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         if input_shape is None:
             input_shape = (1, config.image_size, config.image_size, 3)
@@ -744,7 +744,7 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         if input_shape is None:
             input_shape = ((1, 1), (1, config.vision_config.image_size, config.vision_config.image_size, 3))

@@ -87,7 +87,6 @@ def rename_state_dict_key(k, patterns):
 
 
 def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPegasusForConditionalGeneration:
-
     cfg = BigBirdPegasusConfig(**config_update)
     torch_model = BigBirdPegasusForConditionalGeneration(cfg)
     state_dict = torch_model.state_dict()

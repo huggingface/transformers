@@ -254,7 +254,6 @@ class MobileBertModelTester:
 
 @require_torch
 class MobileBertModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             MobileBertModel,

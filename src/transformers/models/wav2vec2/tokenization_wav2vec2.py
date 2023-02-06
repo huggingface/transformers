@@ -168,7 +168,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         word_delimiter_token="|",
         replace_word_delimiter_char=" ",
         do_lower_case=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,
@@ -424,7 +424,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces: bool = True,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
-        **kwargs
+        **kwargs,
     ) -> List[str]:
         """
         Convert a list of lists of token ids into a list of strings by calling decode.
@@ -494,7 +494,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces: bool = True,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
@@ -735,7 +735,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         do_lower_case=False,
         do_normalize=False,
         return_attention_mask=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,
@@ -803,7 +803,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -888,7 +888,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         token_ids: List[int],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         special _decode function is needed for Wav2Vec2Tokenizer because added tokens should be treated exactly the

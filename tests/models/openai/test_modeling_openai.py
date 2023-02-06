@@ -190,7 +190,6 @@ class OpenAIGPTModelTester:
 
 @require_torch
 class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel, OpenAIGPTForSequenceClassification)
         if is_torch_available()

@@ -133,7 +133,7 @@ class MarianConfig(PretrainedConfig):
         eos_token_id=0,
         forced_eos_token_id=0,
         share_encoder_decoder_embeddings=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.decoder_vocab_size = decoder_vocab_size or vocab_size

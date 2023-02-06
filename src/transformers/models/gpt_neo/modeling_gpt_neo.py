@@ -219,7 +219,6 @@ class GPTNeoSelfAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
@@ -596,7 +595,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."

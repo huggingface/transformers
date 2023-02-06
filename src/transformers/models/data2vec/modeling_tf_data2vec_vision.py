@@ -165,7 +165,6 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None) -> tf.Tensor:
-
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, projection_dim = shape_list(embeddings)
 
@@ -909,7 +908,6 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[tuple, TFData2VecVisionModelOutputWithPooling]:
-
         outputs = self.data2vec_vision(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
@@ -1027,7 +1025,7 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
         padding: str = "valid",
         bias: bool = False,
         dilation: Union[int, Tuple[int, int]] = 1,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.conv = tf.keras.layers.Conv2D(
@@ -1261,7 +1259,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         in_index: int = 2,
         kernel_size: int = 3,
         dilation: Union[int, Tuple[int, int]] = 1,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.in_channels = config.hidden_size

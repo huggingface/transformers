@@ -16,8 +16,8 @@
 import unittest
 
 import numpy as np
-
 from parameterized import parameterized
+
 from transformers.testing_utils import require_flax, require_tf, require_torch, require_vision
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 

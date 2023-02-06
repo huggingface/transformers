@@ -171,7 +171,6 @@ class Swinv2ModelTester:
 
 @require_torch
 class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (Swinv2Model, Swinv2ForImageClassification, Swinv2ForMaskedImageModeling) if is_torch_available() else ()
     )

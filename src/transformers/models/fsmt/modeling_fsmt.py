@@ -1273,7 +1273,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed

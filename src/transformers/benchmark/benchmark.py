@@ -48,7 +48,6 @@ logger = logging.get_logger(__name__)
 
 
 class PyTorchBenchmark(Benchmark):
-
     args: PyTorchBenchmarkArguments
     configs: PretrainedConfig
     framework: str = "PyTorch"

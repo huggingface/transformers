@@ -27,18 +27,19 @@ import random
 from pathlib import Path
 
 import datasets
+import evaluate
 import numpy as np
 import torch
-from datasets import load_dataset
-from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
-
-import evaluate
-import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
+from datasets import load_dataset
 from huggingface_hub import Repository, create_repo
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
+from utils_qa import postprocess_qa_predictions
+
+import transformers
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
@@ -53,7 +54,6 @@ from transformers import (
 )
 from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
-from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

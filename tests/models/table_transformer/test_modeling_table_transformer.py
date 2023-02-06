@@ -20,6 +20,7 @@ import math
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import TableTransformerConfig, is_timm_available, is_vision_available
 from transformers.testing_utils import require_timm, require_vision, slow, torch_device
 

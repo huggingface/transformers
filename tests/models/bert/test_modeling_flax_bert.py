@@ -133,7 +133,6 @@ class FlaxBertModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     test_head_masking = True
 
     all_model_classes = (

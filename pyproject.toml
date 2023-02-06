@@ -1,3 +1,13 @@
 [tool.black]
 line-length = 119
-target-version = ['py35']
+target-version = ['py37']
+
+[tool.ruff]
+# Never enforce `E501` (line length violations).
+ignore = ["E501", "E741", "W605"]
+select = ["E", "F", "I", "W"]
+line-length = 119
+
+[tool.ruff.isort]
+lines-after-imports = 2
+known-first-party = ["transformers"]

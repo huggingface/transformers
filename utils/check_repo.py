@@ -445,7 +445,7 @@ def get_model_test_files():
             path = os.path.join(target_dir, file_or_dir)
             if os.path.isfile(path):
                 filename = os.path.split(path)[-1]
-                if "test_modeling" in filename and not os.path.splitext(filename)[0] in _ignore_files:
+                if "test_modeling" in filename and os.path.splitext(filename)[0] not in _ignore_files:
                     file = os.path.join(*path.split(os.sep)[1:])
                     test_files.append(file)
 

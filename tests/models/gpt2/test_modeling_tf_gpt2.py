@@ -355,7 +355,6 @@ class TFGPT2ModelTester:
 
 @require_tf
 class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (TFGPT2Model, TFGPT2LMHeadModel, TFGPT2ForSequenceClassification, TFGPT2DoubleHeadsModel)
         if is_tf_available()
@@ -439,7 +438,6 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-
             # Skip these 2 classes which uses `tf.gather` with `batch_dims=1`
             if model_class in [TFGPT2ForSequenceClassification, TFGPT2DoubleHeadsModel]:
                 continue

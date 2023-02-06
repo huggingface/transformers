@@ -484,9 +484,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         pretrained_model_name_or_path: Union[str, os.PathLike],
         dtype: jnp.dtype = jnp.float32,
         *model_args,
-        **kwargs
+        **kwargs,
     ):
-
         r"""
         Instantiate a pretrained flax model from a pre-trained model configuration.
 
@@ -810,7 +809,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if from_pt:
             state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file, is_sharded)
         else:
-
             if is_sharded:
                 state = cls.load_flax_sharded_weights(resolved_archive_file)
             else:

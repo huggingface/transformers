@@ -215,7 +215,6 @@ class SqueezeBertModelTester(object):
 
 @require_torch
 class SqueezeBertModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             SqueezeBertModel,

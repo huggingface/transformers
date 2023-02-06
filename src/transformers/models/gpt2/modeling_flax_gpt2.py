@@ -199,7 +199,6 @@ class FlaxGPT2Attention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None

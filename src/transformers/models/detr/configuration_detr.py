@@ -174,7 +174,7 @@ class DetrConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
-        **kwargs
+        **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
             raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
@@ -235,7 +235,6 @@ class DetrConfig(PretrainedConfig):
 
 
 class DetrOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

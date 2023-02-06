@@ -138,7 +138,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         model_max_length=512,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         separate_vocabs=False,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 

@@ -115,7 +115,6 @@ class DetaImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class DetaImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = DetaImageProcessor if is_vision_available() else None
 
     def setUp(self):

@@ -169,7 +169,6 @@ def get_norm(norm, out_channels):
 
 
 def _create_grid_offsets(size: List[int], stride: int, offset: float, device):
-
     grid_height, grid_width = size
     shifts_x = torch.arange(
         offset * stride,
@@ -390,7 +389,6 @@ def assign_boxes_to_levels(
     canonical_box_size: int,
     canonical_level: int,
 ):
-
     box_sizes = torch.sqrt(torch.cat([boxes.area() for boxes in box_lists]))
     # Eqn.(1) in FPN paper
     level_assignments = torch.floor(canonical_level + torch.log2(box_sizes / canonical_box_size + 1e-8))
@@ -1708,9 +1706,10 @@ class GeneralizedRCNN(nn.Module):
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             elif os.path.isfile(pretrained_model_name_or_path + ".index"):
-                assert from_tf, (
-                    "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint"
-                    .format(pretrained_model_name_or_path + ".index")
+                assert (
+                    from_tf
+                ), "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
+                    pretrained_model_name_or_path + ".index"
                 )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:

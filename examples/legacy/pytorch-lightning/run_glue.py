@@ -7,21 +7,19 @@ from argparse import Namespace
 
 import numpy as np
 import torch
+from lightning_base import BaseTransformer, add_generic_args, generic_train
 from torch.utils.data import DataLoader, TensorDataset
 
-from lightning_base import BaseTransformer, add_generic_args, generic_train
 from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
-from transformers import glue_output_modes
+from transformers import glue_output_modes, glue_tasks_num_labels
 from transformers import glue_processors as processors
-from transformers import glue_tasks_num_labels
 
 
 logger = logging.getLogger(__name__)
 
 
 class GLUETransformer(BaseTransformer):
-
     mode = "sequence-classification"
 
     def __init__(self, hparams):

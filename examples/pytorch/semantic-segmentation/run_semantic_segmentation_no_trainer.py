@@ -22,21 +22,21 @@ import random
 from pathlib import Path
 
 import datasets
+import evaluate
 import numpy as np
 import torch
+from accelerate import Accelerator
+from accelerate.logging import get_logger
+from accelerate.utils import set_seed
 from datasets import load_dataset
+from huggingface_hub import Repository, create_repo, hf_hub_download
 from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.transforms import functional
 from tqdm.auto import tqdm
 
-import evaluate
 import transformers
-from accelerate import Accelerator
-from accelerate.logging import get_logger
-from accelerate.utils import set_seed
-from huggingface_hub import Repository, create_repo, hf_hub_download
 from transformers import (
     AutoConfig,
     AutoImageProcessor,

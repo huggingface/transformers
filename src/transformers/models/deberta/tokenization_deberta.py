@@ -191,7 +191,7 @@ class DebertaTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         add_prefix_space=False,
         add_bos_token=False,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token

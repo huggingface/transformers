@@ -219,7 +219,6 @@ class TFHubertModelTester:
 
 @require_tf
 class TFHubertModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (TFHubertModel, TFHubertForCTC) if is_tf_available() else ()
     test_resize_embeddings = False
     test_head_masking = False

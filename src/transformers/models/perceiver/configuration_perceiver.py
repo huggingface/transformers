@@ -145,7 +145,7 @@ class PerceiverConfig(PretrainedConfig):
         audio_samples_per_frame=1920,
         samples_per_patch=16,
         output_shape=[1, 16, 224, 224],
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

@@ -98,7 +98,7 @@ class BitConfig(PretrainedConfig):
         output_stride=32,
         width_factor=1,
         out_features=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:

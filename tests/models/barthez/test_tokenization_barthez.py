@@ -25,7 +25,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 @require_sentencepiece
 @slow  # see https://github.com/huggingface/transformers/issues/11457
 class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = BarthezTokenizer
     rust_tokenizer_class = BarthezTokenizerFast
     test_rust_tokenizer = True

@@ -100,7 +100,7 @@ class BertGenerationConfig(PretrainedConfig):
         eos_token_id=1,
         position_embedding_type="absolute",
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

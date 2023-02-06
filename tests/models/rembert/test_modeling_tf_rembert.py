@@ -571,7 +571,6 @@ class TFRemBertModelTester:
 
 @require_tf
 class TFRemBertModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             TFRemBertModel,

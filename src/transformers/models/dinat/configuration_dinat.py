@@ -117,7 +117,7 @@ class DinatConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         layer_scale_init_value=0.0,
         out_features=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

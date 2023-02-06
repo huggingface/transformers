@@ -82,7 +82,6 @@ class OwlViTImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class OwlViTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = OwlViTImageProcessor if is_vision_available() else None
 
     def setUp(self):

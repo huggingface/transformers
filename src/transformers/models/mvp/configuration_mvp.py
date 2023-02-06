@@ -138,7 +138,7 @@ class MvpConfig(PretrainedConfig):
         use_prompt=False,
         prompt_length=100,
         prompt_mid_dim=800,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

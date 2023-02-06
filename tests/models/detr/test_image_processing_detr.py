@@ -115,7 +115,6 @@ class DetrImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class DetrImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = DetrImageProcessor if is_vision_available() else None
 
     def setUp(self):

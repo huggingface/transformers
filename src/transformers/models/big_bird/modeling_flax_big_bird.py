@@ -15,12 +15,11 @@
 
 from typing import Callable, Optional, Tuple
 
-import numpy as np
-
 import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning
@@ -481,7 +480,6 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
 
     @staticmethod
     def create_masks_for_block_sparse_attn(attention_mask, block_size: int):
-
         batch_size, seq_length = attention_mask.shape
         if seq_length % block_size != 0:
             raise ValueError(
@@ -1578,7 +1576,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
         gradient_checkpointing: bool = False,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
         if config.attention_type == "block_sparse" and input_shape is None:
@@ -1862,7 +1860,6 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         # Model
         outputs = self.bert(
             input_ids,
@@ -2181,7 +2178,7 @@ class FlaxBigBirdForMultipleChoice(FlaxBigBirdPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         if config.attention_type == "block_sparse" and input_shape is None:
             input_shape = (1, 1, 12 * config.block_size)
@@ -2328,7 +2325,6 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         # Model
         outputs = self.bert(
             input_ids,
