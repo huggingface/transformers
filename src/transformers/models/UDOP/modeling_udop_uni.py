@@ -2,13 +2,10 @@
 # Licensed under the MIT license.
 import copy
 import logging
-import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, Tuple
 
-import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
 
 from transformers.modeling_outputs import BaseModelOutput

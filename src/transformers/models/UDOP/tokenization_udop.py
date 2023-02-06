@@ -4,7 +4,7 @@ from shutil import copyfile
 from typing import List, Optional, Tuple
 
 import sentencepiece as spm
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
+from transformers import PreTrainedTokenizer
 from transformers.utils import logging
 
 
@@ -87,7 +87,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         # Add extra_ids to the special token list
-        if extra_ids > 0 and not "<extra_id_0>" in additional_special_tokens:
+        if extra_ids > 0 and  "<extra_id_0>" not in additional_special_tokens:
             additional_special_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids)]
             additional_special_tokens.extend(["<extra_l_id_{}>".format(i) for i in range(extra_ids)])
             additional_special_tokens.extend(["</extra_l_id_{}>".format(i) for i in range(extra_ids)])
@@ -97,10 +97,10 @@ class UdopTokenizer(PreTrainedTokenizer):
         elif extra_ids > 0 and additional_special_tokens is not None:
             extra_ids = 0
 
-        if loc_extra_ids > 0 and not "<loc_0>" in additional_special_tokens:
+        if loc_extra_ids > 0 and "<loc_0>" not in additional_special_tokens:
             additional_special_tokens.extend(["<loc_{}>".format(i) for i in range(loc_extra_ids)])
 
-        if other_extra_ids > 0 and not "<other_0>" in additional_special_tokens:
+        if other_extra_ids > 0 and "<other_0>" not in additional_special_tokens:
             additional_special_tokens.extend(["<other_{}>".format(i) for i in range(other_extra_ids)])
 
         PreTrainedTokenizer.__init__(

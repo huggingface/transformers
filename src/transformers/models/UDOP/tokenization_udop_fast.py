@@ -36,10 +36,10 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
             additional_special_tokens.extend(["<extra_t_id_{}>".format(i) for i in range(extra_ids)])
             additional_special_tokens.extend(["</extra_t_id_{}>".format(i) for i in range(extra_ids)])
 
-        if loc_extra_ids > 0 and not "<loc_0>" in additional_special_tokens:
+        if loc_extra_ids > 0 and "<loc_0>" not in additional_special_tokens:
             additional_special_tokens.extend(["<loc_{}>".format(i) for i in range(loc_extra_ids)])
 
-        if other_extra_ids > 0 and not "<other_0>" in additional_special_tokens:
+        if other_extra_ids > 0 and "<other_0>" not in additional_special_tokens:
             additional_special_tokens.extend(["<other_{}>".format(i) for i in range(other_extra_ids)])
 
         slow_tokenizer = self.slow_tokenizer_class(
