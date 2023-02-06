@@ -929,7 +929,7 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     "The bare Data2VecVision Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION,beit->data2vec_vision
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -993,7 +993,7 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     DATA2VEC_VISION_START_DOCSTRING,
 )
 class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TFSequenceClassificationLoss):
-    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForImageClassification.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION
+    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForImageClassification.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

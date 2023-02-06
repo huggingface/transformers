@@ -128,12 +128,36 @@ class TFBeitModelTester:
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
         model = TFBeitModel(config=config)
         result = model(pixel_values, training=False)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (
+            self.image_size
+            if isinstance(self.image_size, collections.abc.Iterable)
+            else (self.image_size, self.image_size)
+        )
+        patch_size = (
+            self.patch_size
+            if isinstance(self.image_size, collections.abc.Iterable)
+            else (self.patch_size, self.patch_size)
+        )
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
     def create_and_check_for_masked_lm(self, config, pixel_values, labels, pixel_labels):
         model = TFBeitForMaskedImageModeling(config=config)
         result = model(pixel_values, training=False)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length - 1, self.vocab_size))
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (
+            self.image_size
+            if isinstance(self.image_size, collections.abc.Iterable)
+            else (self.image_size, self.image_size)
+        )
+        patch_size = (
+            self.patch_size
+            if isinstance(self.image_size, collections.abc.Iterable)
+            else (self.patch_size, self.patch_size)
+        )
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches, self.vocab_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
         config.num_labels = self.type_sequence_label_size
@@ -238,7 +262,7 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_for_semantic_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_segmentation(*config_and_inputs)
+        self.model_tester.create_and_check_for_semantic_segmentation(*config_and_inputs)
 
     @unittest.skip("Test was written for TF 1.x and isn't really relevant here")
     def test_compile_tf_model(self):
