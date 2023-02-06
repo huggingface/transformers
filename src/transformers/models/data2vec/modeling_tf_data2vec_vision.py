@@ -461,7 +461,7 @@ class TFData2VecVisionOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitLayer with Beit->Data2VecVision
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitLayer with Beit->Data2VecVision,beit->data2vec
 class TFData2VecVisionLayer(tf.keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -824,7 +824,7 @@ class TFData2VecVisionPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPreTrainedModel with Beit->Data2VecVision
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPreTrainedModel with Beit->Data2VecVision,beit->data2vec_vision
 class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -929,7 +929,7 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     "The bare Data2VecVision Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION,beit->data2vec_vision
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
