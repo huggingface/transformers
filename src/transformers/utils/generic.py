@@ -16,12 +16,14 @@ Generic utilities
 """
 
 import inspect
+import operator
 import tempfile
 from collections import OrderedDict, UserDict
 from collections.abc import MutableMapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import fields
 from enum import Enum
+from functools import reduce
 from typing import Any, ContextManager, List, Tuple
 
 import numpy as np
@@ -516,3 +518,8 @@ def tensor_size(array):
         return array.size
     else:
         raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
+
+
+def prod(iterable):
+    # same as math.prod for python >= 3.8
+    return reduce(operator.mul, iterable, 1)
