@@ -868,7 +868,7 @@ class TFBeitModel(TFBeitPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.config = config
 
-        self.data2vec_vision = TFBeitMainLayer(config, add_pooling_layer=add_pooling_layer, name="beit")
+        self.beit = TFBeitMainLayer(config, add_pooling_layer=add_pooling_layer, name="beit")
 
     def get_input_embeddings(self):
         return self.beit.get_input_embeddings()
