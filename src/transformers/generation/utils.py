@@ -16,9 +16,9 @@
 
 import copy
 import inspect
-import math
 import warnings
 from dataclasses import dataclass
+import numpy as np
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -1985,8 +1985,8 @@ class GenerationMixin:
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul(
-                    (math.prod(next_tokens != i for i in eos_token_id)).long()
-                )
+                    (np.prod([next_tokens != i for i in eos_token_id]))
+                ).long()
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -2230,8 +2230,8 @@ class GenerationMixin:
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul(
-                    (math.prod(next_tokens != i for i in eos_token_id)).long()
-                )
+                    (np.prod([next_tokens != i for i in eos_token_id]))
+                ).long()
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -2498,8 +2498,8 @@ class GenerationMixin:
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul(
-                    (math.prod(next_tokens != i for i in eos_token_id)).long()
-                )
+                    (np.prod([next_tokens != i for i in eos_token_id]))
+                ).long()
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
