@@ -134,6 +134,9 @@ class TransformerTransducerConfig(PretrainedConfig):
         mask_feature_prob=0.02,
         mask_feature_length=50,
         mask_feature_min_masks=1,
+        mask_chunk_size=3,
+        mask_left_context=10,
+        mask_right_context=3,
         use_cache=False,
         **kwargs
     ) -> None:
@@ -168,6 +171,11 @@ class TransformerTransducerConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
         self.blk_token_id = blk_token_id
+
+        # attention_mask
+        self.mask_chunk_size = mask_chunk_size
+        self.mask_left_context = mask_left_context
+        self.mask_right_context = mask_right_context
 
         # spec-augment
         self.apply_spec_augment = apply_spec_augment
