@@ -323,7 +323,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
         speech_recognizer.feature_extractor.n_samples //= 50
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
-        audio = ds[40]["audio"]
+        audio = ds[40]["audio"]["array"]
         output = speech_recognizer(audio)
         self.assertEqual(output, {"text": "v 돼요 돼요����������� 투 투 투 투 투 투"})
 
