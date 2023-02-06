@@ -16,7 +16,6 @@
 Feature extractor class for Whisper
 """
 import copy
-import json
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
