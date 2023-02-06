@@ -25,7 +25,7 @@ from transformers.utils import is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, GPT2Tokenizer, BlipImageProcessor, Blip2Processor, PreTrainedTokenizerFast
+    from transformers import AutoProcessor, Blip2Processor, BlipImageProcessor, GPT2Tokenizer, PreTrainedTokenizerFast
 
 
 @require_vision
