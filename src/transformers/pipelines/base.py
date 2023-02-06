@@ -780,7 +780,9 @@ class Pipeline(_ScikitCompat):
 
         # Special handling
         if self.framework == "pt" and self.device.type != "cpu":
-            self.model = self.model.to(self.device)
+            # there is no need to call `.to` on a model that has been loaded with  `accelerate`
+            if not hasattr(self.model, "hf_device_map"):
+                self.model = self.model.to(self.device)
 
         # Update config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
