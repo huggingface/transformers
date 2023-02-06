@@ -33,7 +33,6 @@ else:
 @require_vision
 @require_torch
 class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-
     model_mapping = MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):

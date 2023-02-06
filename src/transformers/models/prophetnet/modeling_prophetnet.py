@@ -666,7 +666,6 @@ class ProphetNetAttention(nn.Module):
         past_key_value: Optional[Tuple[Tensor]] = None,
         output_attentions: bool = False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
-
         batch_size, tgt_len, hidden_size = hidden_states.size()
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -1589,7 +1588,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."

@@ -534,7 +534,6 @@ class BigBirdBlockSparseAttention(nn.Module):
         plan_num_rand_blocks,
         output_attentions,
     ):
-
         # BigBird block-sparse attention as suggested in paper
 
         # ITC:
@@ -1606,7 +1605,6 @@ class BigBirdEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1632,7 +1630,6 @@ class BigBirdEncoder(nn.Module):
                     blocked_encoder_mask,
                 )
             else:
-
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
@@ -2178,7 +2175,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
     @staticmethod
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
-
         batch_size, seq_length = attention_mask.size()
         if seq_length % block_size != 0:
             raise ValueError(

@@ -8,7 +8,6 @@ from transformers import AutoTokenizer
 
 
 class GenerationIntegrationTestsMixin:
-
     # To be populated by the child classes
     framework_dependent_parameters = {
         "AutoModelForSeq2SeqLM": None,

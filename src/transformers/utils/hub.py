@@ -48,6 +48,7 @@ from huggingface_hub.utils import (
     hf_raise_for_status,
 )
 from requests.exceptions import HTTPError
+
 from transformers.utils.logging import tqdm
 
 from . import __version__, logging
@@ -709,7 +710,7 @@ class PushToHubMixin:
         use_auth_token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
         create_pr: bool = False,
-        **deprecated_kwargs
+        **deprecated_kwargs,
     ) -> str:
         """
         Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in

@@ -4,10 +4,9 @@ from transformers.utils import is_accelerate_available, is_bitsandbytes_availabl
 
 
 if is_bitsandbytes_available():
+    import bitsandbytes as bnb
     import torch
     import torch.nn as nn
-
-    import bitsandbytes as bnb
 
 if is_accelerate_available():
     from accelerate import init_empty_weights

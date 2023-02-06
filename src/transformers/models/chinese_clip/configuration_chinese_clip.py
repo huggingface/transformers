@@ -122,7 +122,7 @@ class ChineseCLIPTextConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
@@ -144,7 +144,6 @@ class ChineseCLIPTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from ChineseCLIPConfig
@@ -228,7 +227,7 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -248,7 +247,6 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from ChineseCLIPConfig
@@ -402,7 +400,6 @@ class ChineseCLIPOnnxConfig(OnnxConfig):
         seq_length: int = -1,
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
-
         text_input_dict = super().generate_dummy_inputs(
             processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
         )

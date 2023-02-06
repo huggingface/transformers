@@ -104,7 +104,7 @@ class TimesformerConfig(PretrainedConfig):
         qkv_bias=True,
         attention_type="divided_space_time",
         drop_path_rate=0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

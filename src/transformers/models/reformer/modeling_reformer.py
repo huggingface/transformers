@@ -1226,7 +1226,6 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
     def _compute_attn_mask(
         self, query_indices, key_indices, attention_mask, query_key_dots_shape, do_standard_self_attention
     ):
-
         # chunk attention mask and look before and after
         if attention_mask is not None:
             attention_mask = attention_mask.to(torch.uint8)[:, None, :]

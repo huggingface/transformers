@@ -24,10 +24,10 @@ from zipfile import ZipFile
 
 import numpy as np
 import torch
+from huggingface_hub.hf_api import list_models
 from torch import nn
 from tqdm import tqdm
 
-from huggingface_hub.hf_api import list_models
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
 
 
@@ -631,7 +631,7 @@ class OpusState:
             model.model.decoder.embed_positions.weight = wpos_tensor
 
         if cfg.normalize_embedding:
-            if not ("encoder_emb_ln_scale_pre" in state_dict):
+            if "encoder_emb_ln_scale_pre" not in state_dict:
                 raise ValueError("encoder_emb_ln_scale_pre is not in state dictionary")
             raise NotImplementedError("Need to convert layernorm_embedding")
 

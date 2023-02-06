@@ -82,7 +82,6 @@ class DonutImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class DonutImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = DonutImageProcessor if is_vision_available() else None
 
     def setUp(self):
