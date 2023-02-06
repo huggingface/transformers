@@ -122,7 +122,7 @@ class Pix2StructTextConfig(PretrainedConfig):
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
         feed_forward_proj="gated-gelu",
-        is_encoder_decoder=True,
+        is_encoder_decoder=False,
         decoder_start_token_id=0,
         use_cache=False,
         pad_token_id=0,
@@ -170,6 +170,8 @@ class Pix2StructTextConfig(PretrainedConfig):
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
+            is_decoder=is_decoder,
+            decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
 

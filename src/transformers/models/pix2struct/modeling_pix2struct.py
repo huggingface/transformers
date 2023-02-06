@@ -202,7 +202,10 @@ class Pix2StructVisionAttention(nn.Module):
                 position_bias.requires_grad = True
 
             if attention_mask is not None:
-                position_bias = position_bias + attention_mask  # (batch_size, n_heads, seq_length, key_length)
+                if attention_mask.dim() == 2:
+                    position_bias = position_bias + attention_mask[:, None, :, None].to(position_bias.device)
+                else:  
+                    position_bias = position_bias + attention_mask.to(position_bias.device) # (batch_size, n_heads, seq_length, key_length)
 
         position_bias_masked = position_bias
         if position_bias_masked is not None:
@@ -301,7 +304,7 @@ class Pix2StructVisionLayer(nn.Module):
         return outputs
 
 
-class Pix2StructVision(nn.Module):
+class Pix2StructVisionEncoder(nn.Module):
     def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
         self.config = config
@@ -370,7 +373,7 @@ class Pix2StructVisionPreTrainedModel(PreTrainedModel):
     base_model_prefix = "pix2struct_encoder"
     main_input_name = "pixel_embeds"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = ["Pix2StructVisionLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, Pix2StructLayerNorm]) -> None:
         """Initialize the weights"""
@@ -385,9 +388,13 @@ class Pix2StructVisionPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Pix2StructLayerNorm):
             if module.weight is not None:
                 module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module: Pix2StructVision, value: bool = False) -> None:
-        if isinstance(module, Pix2StructVision):
+    def _set_gradient_checkpointing(self, module: Pix2StructVisionEncoder, value: bool = False) -> None:
+        if isinstance(module, Pix2StructVisionEncoder):
             module.gradient_checkpointing = value
 
 
@@ -435,7 +442,7 @@ class Pix2StructVisionModel(Pix2StructVisionPreTrainedModel):
         self.config = config
 
         self.embeddings = Pix2StructVisionEmbeddings(config)
-        self.encoder = Pix2StructVision(config)
+        self.encoder = Pix2StructVisionEncoder(config)
 
         self.layernorm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -479,6 +486,10 @@ class Pix2StructVisionModel(Pix2StructVisionPreTrainedModel):
         if pixel_embeds is None:
             raise ValueError("You have to specify pixel_embeds")
 
+        if attention_mask is None:
+            # check where `pixel_embeds` is not 0
+            attention_mask = (pixel_embeds.sum(dim=-1) != 0).float()
+
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -503,15 +514,12 @@ class Pix2StructVisionModel(Pix2StructVisionPreTrainedModel):
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
 
-        pooled_output = None
-
         if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+            head_outputs = (sequence_output, )
             return head_outputs + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutput(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -1038,6 +1046,12 @@ class Pix2StructTextPreTrainedModel(PreTrainedModel):
             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((hidden_size) ** -0.5))
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Pix2StructTextModel):
+            module.lm_head.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (Pix2StructTextAttention, Pix2StructTextModel)):
@@ -1272,7 +1286,7 @@ class Pix2StructTextModel(Pix2StructTextPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[3],)
                 if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[4],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1557,6 +1571,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,

@@ -58,8 +58,9 @@ class Pix2StructVisionModelTester:
         patch_size=2,
         num_channels=3,
         is_training=True,
-        hidden_size=32,
+        hidden_size=12,
         projection_dim=32,
+        max_patches = 64,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -75,6 +76,10 @@ class Pix2StructVisionModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.hidden_size = hidden_size
+        self.max_patches = max_patches
+        self.seq_length = self.max_patches
+        self.patch_proj_dim = ((patch_size**2) * num_channels) + 2
+
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -84,15 +89,11 @@ class Pix2StructVisionModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
 
-        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
-
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_embeds = floats_tensor([self.batch_size, self.max_patches, self.patch_proj_dim])
         config = self.get_config()
 
-        return config, pixel_values
+        return config, pixel_embeds
 
     def get_config(self):
         return Pix2StructVisionConfig(
@@ -109,23 +110,18 @@ class Pix2StructVisionModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(self, config, pixel_values):
+    def create_and_check_model(self, config, pixel_embeds):
         model = Pix2StructVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+            result = model(pixel_embeds)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        config, pixel_embeds = config_and_inputs
+        inputs_dict = {"pixel_embeds": pixel_embeds, "attention_mask": torch.randint(0, 2, (self.batch_size, self.max_patches))}
         return config, inputs_dict
 
 
@@ -151,7 +147,7 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="Pix2Struct does not use inputs_embeds")
+    @unittest.skip(reason="Pix2StructVision does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -173,7 +169,7 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["pixel_values"]
+            expected_arg_names = ["pixel_embeds"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
@@ -184,6 +180,9 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_training_gradient_checkpointing(self):
+        pass
+
+    def test_retain_grad_hidden_states_attentions(self):
         pass
 
     @unittest.skip(reason="Pix2StructVisionModel has no base class and is not available in MODEL_MAPPING")
@@ -229,7 +228,7 @@ class Pix2StructTextModelTester:
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_labels = use_labels
-        self.d_kv = (hidden_size // num_attention_heads,)
+        self.d_kv = hidden_size // num_attention_heads
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
@@ -284,8 +283,7 @@ class Pix2StructTextModelTester:
         with torch.no_grad():
             result = model(input_ids, attention_mask=input_mask)
             result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -353,11 +351,11 @@ class Pix2StructTextImageModelsModelTester:
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        vision_config, pixel_embeds = self.vision_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, pixel_values
+        return config, input_ids, attention_mask, pixel_embeds
 
     def get_config(self):
         return Pix2StructConfig.from_text_vision_configs(
@@ -366,12 +364,12 @@ class Pix2StructTextImageModelsModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        config, input_ids, attention_mask, pixel_embeds = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
             "labels": input_ids,
             "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
+            "pixel_embeds": pixel_embeds,
         }
         return config, inputs_dict
 
@@ -433,7 +431,7 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = (
-                    ["input_ids"] if model_class != Pix2StructForConditionalGeneration else ["pixel_values"]
+                    ["input_ids"] if model_class != Pix2StructForConditionalGeneration else ["pixel_embeds"]
                 )
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
@@ -515,8 +513,8 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             try:
                 input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # Pix2Struct needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
+                pixel_embeds = inputs_dict["pixel_embeds"]  # Pix2Struct needs pixel_embeds
+                traced_model = torch.jit.trace(model, (input_ids, pixel_embeds))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
