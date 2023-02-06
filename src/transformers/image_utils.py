@@ -30,7 +30,7 @@ from .utils import (
     requires_backends,
     to_numpy,
 )
-from .utils.constants import (  # noqa: F401; just here for backwards compatibility
+from .utils.constants import (  # noqa: F401
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     IMAGENET_STANDARD_MEAN,

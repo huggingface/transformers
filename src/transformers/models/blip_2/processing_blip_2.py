@@ -25,7 +25,7 @@ from ...utils import TensorType
 
 class Blip2Processor(ProcessorMixin):
     r"""
-    Constructs a BLIP-2 processor which wraps an OPT/T5 tokenizer and a BLIP image processor into a single processor.
+    Constructs a BLIP-2 processor which wraps a BLIP image processor and an OPT/T5 tokenizer into a single processor.
 
     [`BlipProcessor`] offers all the functionalities of [`BlipImageProcessor`] and [`AutoTokenizer`]. See the docstring
     of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
