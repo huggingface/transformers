@@ -406,7 +406,10 @@ class ModelTesterMixin:
                 model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
-                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    if isinstance(model_slow_init.state_dict()[key],torch.BoolTensor):
+                        max_diff = (model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]).sum().item()
+                    else:
+                        max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_save_load_fast_init_to_base(self):
@@ -452,9 +455,14 @@ class ModelTesterMixin:
                 model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
-                    max_diff = torch.max(
-                        torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
-                    ).item()
+                    if isinstance(model_slow_init.state_dict()[key],torch.BoolTensor):
+                        max_diff = torch.max(
+                            model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]
+                        ).item()
+                    else:
+                        max_diff = torch.max(
+                            torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
+                        ).item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_initialization(self):
@@ -2638,7 +2646,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
 
 
 def random_attention_mask(shape, rng=None, name=None):
-    attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None)
+    attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None).to(torch.bool)
     # make sure that at least one token is attended to for each batch
     attn_mask[:, -1] = 1
     return attn_mask
