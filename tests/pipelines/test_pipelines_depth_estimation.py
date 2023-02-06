@@ -48,7 +48,7 @@ class DepthEstimationPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
-        depth_estimator = DepthEstimationPipeline(model=model, feature_extractor=processor)
+        depth_estimator = DepthEstimationPipeline(model=model, image_processor=processor)
         return depth_estimator, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",

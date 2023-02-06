@@ -39,7 +39,7 @@ class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         example_video_filepath = hf_hub_download(
             repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
         )
-        video_classifier = VideoClassificationPipeline(model=model, feature_extractor=processor, top_k=2)
+        video_classifier = VideoClassificationPipeline(model=model, image_processor=processor, top_k=2)
         examples = [
             example_video_filepath,
             "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
