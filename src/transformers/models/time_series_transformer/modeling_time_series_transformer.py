@@ -1169,7 +1169,7 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.value_embedding(inputs_embeds)
-        # hidden_states = self.layernorm_embedding(hidden_states)
+        hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
@@ -1372,7 +1372,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         hidden_states = self.value_embedding(inputs_embeds)
-        # hidden_states = self.layernorm_embedding(hidden_states)
+        hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
