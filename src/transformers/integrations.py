@@ -1053,7 +1053,7 @@ class MLflowCallback(TrainerCallback):
 
 class DagsHubCallback(MLflowCallback):
     """
-    A [`TrainerCallback`] that logs to [DagsHub](https://dagshub.com/).
+    A [`TrainerCallback`] that logs to [DagsHub](https://dagshub.com/). Extends [`MLflowCallback`]
     """
 
     def __init__(self):
@@ -1070,7 +1070,7 @@ class DagsHubCallback(MLflowCallback):
         Setup the DagsHub's Logging integration.
 
         Environment:
-            HF_DAGSHUB_LOG_ARTIFACTS (`str`, *optional*):
+        - **HF_DAGSHUB_LOG_ARTIFACTS** (`str`, *optional*):
                 Whether to save the data and model artifacts for the experiment. Default to `False`.
         """
 
