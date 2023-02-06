@@ -139,7 +139,7 @@ Los usuarios de TensorFlow pueden activar la misma funcionalidad con [`PushToHub
 - El `hub_model_id`, el cual es tu usuario Hub y el nombre del modelo.
 
 ```py
->>> from transformers.keras.callbacks import PushToHubCallback
+>>> from transformers import PushToHubCallback
 
 >>> push_to_hub_callback = PushToHubCallback(
 ...     output_dir="./your_model_save_path", tokenizer=tokenizer, hub_model_id="your-username/my-awesome-model"
