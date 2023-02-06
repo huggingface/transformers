@@ -334,7 +334,7 @@ class CLAPConfig(PretrainedConfig):
     >>> # We can also initialize a CLAPConfig from a CLAPTextConfig and a CLAPAudioConfig
     >>> from transformers import CLAPTextConfig, CLAPAudioConfig
 
-    >>> # Initializing a CLAPText and CLAPVision configuration
+    >>> # Initializing a CLAPText and CLAPAudioConfig configuration
     >>> config_text = CLAPTextConfig()
     >>> config_vision = CLAPAudioConfig()
 
