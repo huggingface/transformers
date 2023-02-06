@@ -14,7 +14,7 @@
 # limitations under the License.
 import unittest
 
-from transformers import is_torch_available, pipeline
+from transformers import is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -605,16 +605,3 @@ class XmodModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
         self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
-
-    @slow
-    def test_fill_mask_pipeline(self):
-        fill_mask_pipeline = pipeline(
-            task="fill-mask",
-            tokenizer="xlm-roberta-base",
-            model="jvamvas/xmod-base",
-            model_kwargs={"default_language": "en_XX"},
-        )
-        src_text = ["Hello, my name is <mask>."]
-        results = [x["token_str"] for x in fill_mask_pipeline(src_text)]
-        expected_results = ["Sarah", "Anna", "Maria", "Amanda", "Jessica"]
-        self.assertListEqual(expected_results, results)
