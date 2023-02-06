@@ -124,7 +124,7 @@ class FunnelConfig(PretrainedConfig):
         separate_cls=True,
         truncate_seq=True,
         pool_q_only=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.block_sizes = block_sizes

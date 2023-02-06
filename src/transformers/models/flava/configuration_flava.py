@@ -109,7 +109,7 @@ class FlavaImageConfig(PretrainedConfig):
         qkv_bias: bool = True,
         mask_token: bool = True,
         vocab_size: int = 8192,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -236,7 +236,7 @@ class FlavaTextConfig(PretrainedConfig):
         layer_norm_eps: float = 1e-12,
         pad_token_id: int = 0,
         qkv_bias: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -341,7 +341,7 @@ class FlavaMultimodalConfig(PretrainedConfig):
         layer_norm_eps: float = 1e-12,
         qkv_bias: bool = True,
         use_cls_token: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -552,7 +552,7 @@ class FlavaConfig(PretrainedConfig):
         global_backprop_contrastive: bool = True,
         skip_unmasked_multimodal_encoder: bool = True,
         return_loss: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -618,7 +618,7 @@ class FlavaConfig(PretrainedConfig):
         text_config: FlavaTextConfig,
         multimodal_config: FlavaMultimodalConfig,
         image_codebook_config: FlavaImageCodebookConfig,
-        **kwargs
+        **kwargs,
     ):
         r"""
         Instantiate a [`FlavaConfig`] (or a derived class) from flava text model configuration, flava image model

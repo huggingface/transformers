@@ -62,7 +62,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
@@ -95,7 +95,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -135,7 +135,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         inputs = input_values if input_features is None else input_features
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
@@ -173,7 +173,7 @@ class EncoderDecoderMixin:
         return_dict,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
@@ -202,7 +202,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -245,7 +245,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -292,7 +292,7 @@ class EncoderDecoderMixin:
         labels=None,
         input_values=None,
         input_features=None,
-        **kwargs
+        **kwargs,
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]

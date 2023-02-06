@@ -345,7 +345,7 @@ def full_text_generation(
     gm_scale=0.9,
     kl_scale=0.01,
     repetition_penalty=1.0,
-    **kwargs
+    **kwargs,
 ):
     classifier, class_id = get_classifier(discrim, class_label, device)
 

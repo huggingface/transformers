@@ -63,7 +63,7 @@ class BlipProcessor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         This method uses [`BlipImageProcessor.__call__`] method to prepare image(s) for the model, and

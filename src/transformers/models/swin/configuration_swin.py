@@ -129,7 +129,7 @@ class SwinConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         encoder_stride=32,
         out_features=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

@@ -106,7 +106,7 @@ class ViTConfig(PretrainedConfig):
         num_channels=3,
         qkv_bias=True,
         encoder_stride=16,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

@@ -179,7 +179,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         eos_token="<eos>",
         additional_special_tokens=["<formula>"],
         language="en",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             special=special,

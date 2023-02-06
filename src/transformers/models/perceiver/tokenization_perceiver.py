@@ -66,7 +66,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         cls_token="[CLS]",
         sep_token="[SEP]",
         model_max_length=2048,
-        **kwargs
+        **kwargs,
     ) -> None:
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token

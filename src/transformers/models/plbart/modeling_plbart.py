@@ -1369,7 +1369,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        **kwargs  # TODO: Check if this is needed. It is unused?
+        **kwargs,  # TODO: Check if this is needed. It is unused?
     ) -> Dict[str, Any]:
         # cut decoder_input_ids if past is used
         if past_key_values is not None:

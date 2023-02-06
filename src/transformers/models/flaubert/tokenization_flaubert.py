@@ -245,7 +245,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         ],
         lang2id=None,
         id2lang=None,
-        **kwargs
+        **kwargs,
     ):
         do_lowercase_and_remove_accent = kwargs.pop("do_lowercase_and_remove_accent", None)
         if do_lowercase_and_remove_accent is not None:

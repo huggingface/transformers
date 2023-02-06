@@ -115,7 +115,7 @@ class AbstractSeq2SeqDataset(Dataset):
         type_path="train",
         n_obs=None,
         prefix="",
-        **dataset_kwargs
+        **dataset_kwargs,
     ):
         super().__init__()
         self.src_file = Path(data_dir).joinpath(type_path + ".source")

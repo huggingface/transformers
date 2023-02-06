@@ -345,7 +345,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         if not _do_init:
             raise ValueError(
@@ -748,7 +748,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         attention_mask: Optional[jnp.DeviceArray] = None,
         decoder_attention_mask: Optional[jnp.DeviceArray] = None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # initializing the cache
         batch_size, seq_length = decoder_input_ids.shape
@@ -785,7 +785,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         encoder_pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = None,
         decoder_pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = None,
         *model_args,
-        **kwargs
+        **kwargs,
     ) -> FlaxPreTrainedModel:
         r"""
         Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model

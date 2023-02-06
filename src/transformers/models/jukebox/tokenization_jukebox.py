@@ -126,7 +126,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         max_n_lyric_tokens=512,
         n_genres=5,
         unk_token="<|endoftext|>",
-        **kwargs
+        **kwargs,
     ):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(

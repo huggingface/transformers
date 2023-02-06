@@ -320,7 +320,7 @@ class HerbertTokenizer(PreTrainedTokenizer):
         ],
         lang2id=None,
         id2lang=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,

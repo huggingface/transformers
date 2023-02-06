@@ -1223,7 +1223,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs
+        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFFunnelForPreTrainingOutput]:
         r"""
         Returns:

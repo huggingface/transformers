@@ -176,7 +176,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         no_pr: bool,
         push: bool,
         extra_commit_description: str,
-        *args
+        *args,
     ):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
         self._model_name = model_name

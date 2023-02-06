@@ -97,7 +97,7 @@ class ConvNextConfig(PretrainedConfig):
         drop_path_rate=0.0,
         image_size=224,
         out_features=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

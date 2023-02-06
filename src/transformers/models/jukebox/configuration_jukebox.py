@@ -301,7 +301,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         spread=None,
         timing_dims=64,
         zero_out=False,
-        **kwargs
+        **kwargs,
     ):
         self.act_fn = act_fn
         self.alignment_head = alignment_head
@@ -459,7 +459,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         sample_length=1058304,
         init_scale=0.2,
         zero_out=False,
-        **kwargs
+        **kwargs,
     ):
         self.hop_fraction = hop_fraction
         self.conv_input_shape = conv_input_shape

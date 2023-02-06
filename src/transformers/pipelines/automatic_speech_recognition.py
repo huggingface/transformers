@@ -302,7 +302,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         feature_extractor: Union["SequenceFeatureExtractor", str],
         *,
         decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.feature_extractor = feature_extractor

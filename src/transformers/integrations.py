@@ -1157,7 +1157,7 @@ class NeptuneCallback(TrainerCallback):
         run: Optional["Run"] = None,
         log_parameters: bool = True,
         log_checkpoints: Optional[str] = None,
-        **neptune_run_kwargs
+        **neptune_run_kwargs,
     ):
         if not is_neptune_available():
             raise ValueError(

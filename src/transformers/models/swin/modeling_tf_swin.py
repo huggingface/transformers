@@ -788,7 +788,7 @@ class TFSwinStage(tf.keras.layers.Layer):
         num_heads: int,
         drop_path: List[float],
         downsample: Optional[Callable],
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.config = config

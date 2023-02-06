@@ -98,7 +98,7 @@ class BeamScorer(ABC):
         next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
-        **kwargs
+        **kwargs,
     ) -> Tuple[torch.Tensor]:
         raise NotImplementedError("This is an abstract method.")
 
@@ -111,7 +111,7 @@ class BeamScorer(ABC):
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         max_length: int,
-        **kwargs
+        **kwargs,
     ) -> torch.LongTensor:
         raise NotImplementedError("This is an abstract method.")
 

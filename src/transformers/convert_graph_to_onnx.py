@@ -358,7 +358,7 @@ def convert(
     tokenizer: Optional[str] = None,
     use_external_format: bool = False,
     pipeline_name: str = "feature-extraction",
-    **model_kwargs
+    **model_kwargs,
 ):
     """
     Convert the pipeline object to the ONNX Intermediate Representation (IR) format

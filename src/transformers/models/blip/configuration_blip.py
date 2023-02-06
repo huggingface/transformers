@@ -133,7 +133,7 @@ class BlipTextConfig(PretrainedConfig):
         sep_token_id=102,
         is_decoder=True,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
@@ -241,7 +241,7 @@ class BlipVisionConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=1e-10,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -332,7 +332,7 @@ class BlipConfig(PretrainedConfig):
         projection_dim=512,
         logit_scale_init_value=2.6592,
         image_text_hidden_size=256,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

@@ -320,7 +320,7 @@ class PushToHubCallback(Callback):
         hub_model_id: Optional[str] = None,
         hub_token: Optional[str] = None,
         checkpoint: bool = False,
-        **model_card_args
+        **model_card_args,
     ):
         super().__init__()
         if checkpoint and save_strategy != "epoch":

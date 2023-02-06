@@ -1577,7 +1577,7 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
         gradient_checkpointing: bool = False,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
         if config.attention_type == "block_sparse" and input_shape is None:
@@ -2179,7 +2179,7 @@ class FlaxBigBirdForMultipleChoice(FlaxBigBirdPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         if config.attention_type == "block_sparse" and input_shape is None:
             input_shape = (1, 1, 12 * config.block_size)

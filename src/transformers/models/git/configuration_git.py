@@ -91,7 +91,7 @@ class GitVisionConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -210,7 +210,7 @@ class GitConfig(PretrainedConfig):
         bos_token_id=101,
         eos_token_id=102,
         num_image_with_embedding=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
 

@@ -128,7 +128,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         layer_norm_epsilon=1e-5,
         init_std=0.02,
         output_attentions=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -281,7 +281,7 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
         layer_norm_epsilon=1e-5,
         init_std=0.02,
         output_attentions=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

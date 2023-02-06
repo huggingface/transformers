@@ -1025,7 +1025,7 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
         padding: str = "valid",
         bias: bool = False,
         dilation: Union[int, Tuple[int, int]] = 1,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.conv = tf.keras.layers.Conv2D(
@@ -1259,7 +1259,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         in_index: int = 2,
         kernel_size: int = 3,
         dilation: Union[int, Tuple[int, int]] = 1,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.in_channels = config.hidden_size

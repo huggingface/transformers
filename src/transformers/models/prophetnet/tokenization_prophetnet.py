@@ -340,7 +340,7 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
         mask_token: Optional[str] = "[MASK]",
         tokenize_chinese_chars: Optional[bool] = True,
         strip_accents: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             do_lower_case=do_lower_case,

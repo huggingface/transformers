@@ -111,7 +111,7 @@ class PoolFormerConfig(PretrainedConfig):
         use_layer_scale=True,
         layer_scale_init_value=1e-5,
         initializer_range=0.02,
-        **kwargs
+        **kwargs,
     ):
         self.num_channels = num_channels
         self.patch_size = patch_size

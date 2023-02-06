@@ -2507,7 +2507,7 @@ class OneFormerTextContextDecoder(nn.Module):
         visual_dim=1024,
         dropout=0.1,
         layer_norm_eps=1e-05,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
 

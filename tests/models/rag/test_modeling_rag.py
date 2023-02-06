@@ -492,7 +492,7 @@ class RagTestMixin:
         decoder_attention_mask,
         retriever_n_docs,
         generator_n_docs,
-        **kwargs
+        **kwargs,
     ):
         self.assertIsNotNone(config.question_encoder)
         self.assertIsNotNone(config.generator)

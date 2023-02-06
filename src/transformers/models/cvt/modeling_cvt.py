@@ -212,7 +212,7 @@ class CvtSelfAttention(nn.Module):
         qkv_bias,
         attention_drop_rate,
         with_cls_token=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         self.scale = embed_dim**-0.5

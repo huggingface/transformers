@@ -91,7 +91,7 @@ class TFMobileViTConvLayer(tf.keras.layers.Layer):
         dilation: int = 1,
         use_normalization: bool = True,
         use_activation: Union[bool, str] = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         logger.warning(
@@ -197,7 +197,7 @@ class TFMobileViTMobileNetLayer(tf.keras.layers.Layer):
         out_channels: int,
         stride: int = 1,
         num_stages: int = 1,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
 
@@ -383,7 +383,7 @@ class TFMobileViTLayer(tf.keras.layers.Layer):
         hidden_size: int,
         num_stages: int,
         dilation: int = 1,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.patch_width = config.patch_size

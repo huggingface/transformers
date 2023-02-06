@@ -1550,7 +1550,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel):
         input_pronunciation_ids=None,
         past_key_values=None,
         attention_mask=None,
-        **model_kwargs
+        **model_kwargs,
     ):
         input_shape = input_ids.shape
 

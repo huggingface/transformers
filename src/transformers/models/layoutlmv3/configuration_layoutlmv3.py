@@ -153,7 +153,7 @@ class LayoutLMv3Config(PretrainedConfig):
         num_channels=3,
         patch_size=16,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_size=vocab_size,

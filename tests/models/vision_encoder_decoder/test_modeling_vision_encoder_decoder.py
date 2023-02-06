@@ -135,7 +135,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         return_dict,
         pixel_values=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
@@ -226,7 +226,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         labels=None,
         pixel_values=None,
-        **kwargs
+        **kwargs,
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
@@ -402,7 +402,7 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
         decoder_attention_mask,
         labels=None,
         pixel_values=None,
-        **kwargs
+        **kwargs,
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
@@ -590,7 +590,7 @@ class Swin2BartModelTest(EncoderDecoderMixin, unittest.TestCase):
         decoder_attention_mask,
         labels=None,
         pixel_values=None,
-        **kwargs
+        **kwargs,
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]

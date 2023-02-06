@@ -1143,7 +1143,7 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
         input_ids: Optional[torch.LongTensor],
         past_key_values=None,
         attention_mask: Optional[torch.Tensor] = None,
-        **model_kwargs
+        **model_kwargs,
     ):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly

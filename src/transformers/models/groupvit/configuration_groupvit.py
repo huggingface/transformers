@@ -108,7 +108,7 @@ class GroupViTTextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -220,7 +220,7 @@ class GroupViTVisionConfig(PretrainedConfig):
         initializer_factor=1.0,
         assign_eps=1.0,
         assign_mlp_ratio=[0.5, 4],
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -301,7 +301,7 @@ class GroupViTConfig(PretrainedConfig):
         projection_dim=256,
         projection_intermediate_dim=4096,
         logit_scale_init_value=2.6592,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

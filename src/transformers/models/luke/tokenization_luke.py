@@ -313,7 +313,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -596,7 +596,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -741,7 +741,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -822,7 +822,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -931,7 +931,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         entities_pair: Optional[EntityInput] = None,
         entity_spans: Optional[EntitySpanInput] = None,
         entity_spans_pair: Optional[EntitySpanInput] = None,
-        **kwargs
+        **kwargs,
     ) -> Tuple[list, list, list, list, list, list]:
         def get_input_ids(text):
             tokens = self.tokenize(text, **kwargs)
@@ -1182,7 +1182,7 @@ class LukeTokenizer(PreTrainedTokenizer):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Prepares a sequence of input id, entity id and entity span, or a pair of sequences of inputs ids, entity ids,
