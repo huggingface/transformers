@@ -135,6 +135,7 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
     # setting framework_dependent_parameters needs to be gated, just like its contents' imports
     if is_tf_available():
         framework_dependent_parameters = {
+            "AutoModelForCausalLM": TFAutoModelForCausalLM,
             "AutoModelForSeq2SeqLM": TFAutoModelForSeq2SeqLM,
             "LogitsProcessorList": TFLogitsProcessorList,
             "MinLengthLogitsProcessor": TFMinLengthLogitsProcessor,
