@@ -45,23 +45,23 @@ def convert_tf_gptsan_to_pt(args):
                     player = int(k[9])
                 elif k.startswith("pasts/out"):
                     player = 8
-                name = "spout.%d.weight" % (player * 2)  # enter to nn.Sequencial with Tanh, so 2 at a time
+                name = "model.spout.%d.weight" % (player * 2)  # enter to nn.Sequencial with Tanh, so 2 at a time
                 state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
                 new_state[name] = torch.tensor(state)
             elif k.startswith("model/moe"):
                 player = int(k[9:].split("/")[0])
                 if k.endswith("/switch_gating/kernel"):
-                    name = "blocks.%d.feed_forward.mlp.router.classifier.weight" % player
+                    name = "model.blocks.%d.feed_forward.mlp.router.classifier.weight" % player
                     state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
                 elif k.endswith("/softmlp/kernel"):
-                    name = "blocks.%d.feed_forward.soft_bypass_mlp.weight" % player
+                    name = "model.blocks.%d.feed_forward.soft_bypass_mlp.weight" % player
                     state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
                 elif k.endswith("/wo/kernel") or k.endswith("/wi/kernel"):
                     nlayer = k[-9:-7]
                     for i in range(16):
-                        name = "blocks.%d.feed_forward.mlp.experts.expert_%d.%s.weight" % (player, i, nlayer)
+                        name = "model.blocks.%d.feed_forward.mlp.experts.expert_%d.%s.weight" % (player, i, nlayer)
                         state = (
                             vnp[i].transpose([1, 0]).copy()
                         )  # In Mesh-Tensorflow, it is one array, so it is divided
@@ -69,68 +69,78 @@ def convert_tf_gptsan_to_pt(args):
             elif k.startswith("model/mlp"):
                 player = int(k[9:].split("/")[0])
                 if k.endswith("/p1/kernel"):
-                    name = "blocks.%d.feed_forward.mlp.wi.weight" % player
+                    name = "model.blocks.%d.feed_forward.mlp.wi.weight" % player
                     state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
                 elif k.endswith("/p1/bias"):
-                    name = "blocks.%d.feed_forward.mlp.wi.bias" % player
+                    name = "model.blocks.%d.feed_forward.mlp.wi.bias" % player
                     state = vnp.copy()  # same because it is one dimensional
                     new_state[name] = torch.tensor(state)
                 elif k.endswith("/p2/kernel"):
-                    name = "blocks.%d.feed_forward.mlp.wo.weight" % player
+                    name = "model.blocks.%d.feed_forward.mlp.wo.weight" % player
                     state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
                 elif k.endswith("/p2/bias"):
-                    name = "blocks.%d.feed_forward.mlp.wo.bias" % player
+                    name = "model.blocks.%d.feed_forward.mlp.wo.bias" % player
                     state = vnp.copy()  # same because it is one dimensional
                     new_state[name] = torch.tensor(state)
             elif k.startswith("model/ln"):
                 player = int(k[8:].split("/")[0])
                 if k.endswith("/b"):
-                    name = "blocks.%d.feed_forward.norm.bias" % player
+                    name = "model.blocks.%d.feed_forward.norm.bias" % player
                     state = vnp.copy()  # same because it is one dimensional
                     new_state[name] = torch.tensor(state)
                 elif k.endswith("/g"):
-                    name = "blocks.%d.feed_forward.norm.weight" % player
+                    name = "model.blocks.%d.feed_forward.norm.weight" % player
                     state = vnp.copy()  # same because it is one dimensional
                     new_state[name] = torch.tensor(state)
             elif k.startswith("model/att"):
                 player = int(k[9:].split("/")[0])
                 if k.endswith("/qkv/kernel"):
-                    name = "blocks.%d.self_attn.self_attn.qkv" % player
                     state = vnp.copy()  # Compute same dimension as Mesh-tensorflow using einsum
-                    new_state[name] = torch.tensor(state)
+                    state_q = state[:,0,:,:]
+                    state_k = state[:,1,:,:]
+                    state_v = state[:,2,:,:]
+                    state_q = state_q.reshape([state_q.shape[0], state_q.shape[1]*state_q.shape[2]]).transpose([1, 0]).copy() # Mesh-Tensorflow is a diagonal matrix
+                    state_k = state_k.reshape([state_k.shape[0], state_k.shape[1]*state_k.shape[2]]).transpose([1, 0]).copy() # Mesh-Tensorflow is a diagonal matrix
+                    state_v = state_v.reshape([state_v.shape[0], state_v.shape[1]*state_v.shape[2]]).transpose([1, 0]).copy() # Mesh-Tensorflow is a diagonal matrix
+                    name = "model.blocks.%d.self_attn.self_attn.q_proj.weight" % player
+                    new_state[name] = torch.tensor(state_q)
+                    name = "model.blocks.%d.self_attn.self_attn.k_proj.weight" % player
+                    new_state[name] = torch.tensor(state_k)
+                    name = "model.blocks.%d.self_attn.self_attn.v_proj.weight" % player
+                    new_state[name] = torch.tensor(state_v)
                 elif k.endswith("/o/kernel"):
-                    name = "blocks.%d.self_attn.self_attn.o" % player
-                    state = vnp.copy()  # Compute same dimension as Mesh-tensorflow using einsum
+                    name = "model.blocks.%d.self_attn.self_attn.out_proj.weight" % player
+                    state = vnp.reshape([vnp.shape[0]*vnp.shape[1], vnp.shape[2]]).transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
                     new_state[name] = torch.tensor(state)
             elif k.startswith("model/an"):
                 player = int(k[8:].split("/")[0])
                 if k.endswith("/b"):
-                    name = "blocks.%d.self_attn.norm.bias" % player
+                    name = "model.blocks.%d.self_attn.norm.bias" % player
                     state = vnp.copy()  # same because it is one dimensional
                     new_state[name] = torch.tensor(state)
                 elif k.endswith("/g"):
-                    name = "blocks.%d.self_attn.norm.weight" % player
+                    name = "model.blocks.%d.self_attn.norm.weight" % player
                     state = vnp.copy()  # same because it is one dimensional
                     new_state[name] = torch.tensor(state)
             elif k.startswith("model/wte") or k.startswith("model/wpe") or k.startswith("model/ete"):
                 nlayer = {"wte": "embed_tokens", "wpe": "position_embeddings", "ete": "extra_position_embeddings"}[
                     k[-3:]
                 ]
-                name = "%s.weight" % nlayer
+                name = "model.%s.weight" % nlayer
                 state = vnp.copy()  # same in embedded
                 new_state[name] = torch.tensor(state)
             elif k.startswith("model/wob"):
-                name = "token_bias"
+                name = "final_logits_bias"
                 state = vnp.copy()  # same in embedded
                 new_state[name] = torch.tensor(state)
             elif k == "model/dense/kernel":
-                name = "logits.weight"
+                name = "lm_head.weight"
                 state = vnp.transpose([1, 0]).copy()  # Mesh-Tensorflow is a diagonal matrix
                 new_state[name] = torch.tensor(state)
             elif k == "model/dense_1/bias":
-                name = "logits.bias"
+                name = "lm_head.bias"
                 state = vnp.copy()  # same because it is one dimensional
                 new_state[name] = torch.tensor(state)
     torch.save(new_state, args.output)

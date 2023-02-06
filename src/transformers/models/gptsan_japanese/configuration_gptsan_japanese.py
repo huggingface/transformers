@@ -85,6 +85,8 @@ class GPTSANJapaneseConfig(PretrainedConfig):
             A factor for initializing all weight matrices.
         output_router_logits (`bool`, *optional*, default to `False`):
             Whether or not to return the router logits of all experts.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models)
     """
     model_type = "gptsan-japanese"
     keys_to_ignore_at_inference = [
@@ -119,6 +121,10 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         output_attentions=False,
         initializer_factor=0.002,
         output_router_logits=False,
+        use_cache=True,
+        pad_token_id=35995,
+        eos_token_id=35999,
+        unk_token_id=35996,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -143,7 +149,11 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         self.output_attentions = output_attentions
         self.initializer_factor = initializer_factor
         self.output_router_logits = output_router_logits
+        self.use_cache = use_cache
 
         super().__init__(
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
+            unk_token_id=unk_token_id,
             **kwargs,
         )
