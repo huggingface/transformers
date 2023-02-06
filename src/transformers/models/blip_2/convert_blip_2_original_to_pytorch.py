@@ -88,12 +88,12 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
-def get_blip2_config(model_name):
-    # TODO support objects right away instead of dicts
+def get_blip2_config(model_name, eos_token_id):
+    # the OPT models require the eos_token_id to be updated in the config
     if "opt-2.7b" in model_name:
-        text_config = OPTConfig.from_pretrained("facebook/opt-2.7b").to_dict()
+        text_config = OPTConfig.from_pretrained("facebook/opt-2.7b", eos_token_id=eos_token_id).to_dict()
     elif "opt-6.7b" in model_name:
-        text_config = OPTConfig.from_pretrained("facebook/opt-6.7b").to_dict()
+        text_config = OPTConfig.from_pretrained("facebook/opt-6.7b", eos_token_id=eos_token_id).to_dict()
     elif "t5-xl" in model_name:
         text_config = T5Config.from_pretrained("google/flan-t5-xl", dense_act_fn="gelu").to_dict()
     elif "t5-xxl" in model_name:
@@ -109,7 +109,13 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     """
     Copy/paste/tweak model's weights to Transformers design.
     """
-    config = get_blip2_config(model_name)
+    tokenizer = (
+        AutoTokenizer.from_pretrained("facebook/opt-2.7b")
+        if "opt" in model_name
+        else AutoTokenizer.from_pretrained("google/flan-t5-xl")
+    )
+    eos_token_id = tokenizer("\n", add_special_tokens=False).input_ids[0]
+    config = get_blip2_config(model_name, eos_token_id=eos_token_id)
 
     hf_model = Blip2ForConditionalGeneration(config).eval()
 
@@ -165,11 +171,6 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     device = "cuda" if torch.cuda.is_available() else "cpu"
     image = load_demo_image()
     original_pixel_values = vis_processors["eval"](image).unsqueeze(0).to(device)
-    tokenizer = (
-        AutoTokenizer.from_pretrained("facebook/opt-2.7b")
-        if "opt" in model_name
-        else AutoTokenizer.from_pretrained("google/flan-t5-xl")
-    )
     input_ids = tokenizer(["\n"], return_tensors="pt").input_ids.to(device)
 
     # create processor
@@ -214,9 +215,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     prompt = ""
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
 
-    original_outputs = original_model.generate({"image": original_pixel_values}, num_beams=1)
-    # TODO set eos_token_id in config for OPT models?
-    eos_token_id = tokenizer("\n", add_special_tokens=False).input_ids[0]
+    original_outputs = original_model.generate({"image": original_pixel_values})
     outputs = hf_model.generate(
         original_pixel_values,
         input_ids,
@@ -228,7 +227,6 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         repetition_penalty=1.0,
         length_penalty=1.0,
         temperature=1,
-        eos_token_id=eos_token_id,
     )
     print("Original generation:", original_outputs)
     prompt_length = input_ids.shape[1]
