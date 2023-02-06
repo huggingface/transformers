@@ -323,15 +323,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
         speech_recognizer.feature_extractor.n_samples //= 50
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
-        filename = ds[40]["file"]
-        output = speech_recognizer(filename)
+        audio = ds[40]["audio"]
+        output = speech_recognizer(audio)
         self.assertEqual(output, {"text": "v 돼요 돼요����������� 투 투 투 투 투 투"})
 
         # Output is random so chunking *can* affect the output.
-        output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
+        output = speech_recognizer([audio], chunk_length_s=5, batch_size=4)
         self.assertEqual(output, [{"text": "v 돼요 돼요����������� 투 투 투 투 투 투"}])
 
-        output = speech_recognizer(filename, return_language=True)
+        output = speech_recognizer(audio, return_language=True)
         self.assertEqual(
             output,
             {
@@ -371,10 +371,16 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             output,
             {
-                "text": " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario promaque.",
+                "text": (
+                    " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario"
+                    " promaque."
+                ),
                 "chunks": [
                     {
-                        "text": " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario promaque.",
+                        "text": (
+                            " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le"
+                            " tendario promaque."
+                        ),
                         "language": "spanish",
                     }
                 ],
@@ -413,11 +419,17 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             output,
             {
-                "text": " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario promaque. A man said to the universe, Sir, I exist.",
+                "text": (
+                    " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario"
+                    " promaque. A man said to the universe, Sir, I exist."
+                ),
                 "chunks": [
                     {
                         "language": "spanish",
-                        "text": " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario promaque.",
+                        "text": (
+                            " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le"
+                            " tendario promaque."
+                        ),
                     },
                     {"language": "english", "text": " A man said to the universe, Sir, I exist."},
                 ],

@@ -867,7 +867,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 # Last token should always be timestamps, so there shouldn't be
                 # leftover
                 raise ValueError(
-                    "There was an error while processing timestamps, we haven't found a timestamp as last token. Was WhisperTimeStampLogitsProcessor used?"
+                    "There was an error while processing timestamps, we haven't found a timestamp as last token. Was"
+                    " WhisperTimeStampLogitsProcessor used?"
                 )
             # Happens when we don't use timestamps
             resolved_tokens = _find_longest_common_sequence(previous_tokens)
