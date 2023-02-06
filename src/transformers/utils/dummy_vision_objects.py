@@ -65,21 +65,6 @@ class ChineseCLIPImageProcessor(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])
 
-
-class CLAPFeatureExtractor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
-class CLAPImageProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class CLIPFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
