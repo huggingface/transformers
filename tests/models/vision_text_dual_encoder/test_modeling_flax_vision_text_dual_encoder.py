@@ -306,7 +306,6 @@ class FlaxViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
             "vision_config": vision_config,
             "pixel_values": pixel_values,
             "attention_mask": attention_mask,
-            "text_config": text_config,
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
         }
@@ -357,7 +356,6 @@ class FlaxCLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase)
             "vision_config": vision_config,
             "pixel_values": pixel_values,
             "attention_mask": attention_mask,
-            "text_config": text_config,
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
         }

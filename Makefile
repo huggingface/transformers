@@ -52,7 +52,7 @@ quality:
 	isort --check-only $(check_dirs)
 	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
-	flake8 $(check_dirs)
+	ruff $(check_dirs)
 	doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
 	python utils/check_doc_toc.py
 
@@ -69,6 +69,7 @@ extra_style_checks:
 style:
 	black $(check_dirs)
 	isort $(check_dirs)
+	ruff $(check_dirs) --fix
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks
 
