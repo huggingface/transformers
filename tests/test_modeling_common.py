@@ -406,7 +406,7 @@ class ModelTesterMixin:
                 model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
-                    if isinstance(model_slow_init.state_dict()[key],torch.BoolTensor):
+                    if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
                         max_diff = (model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]).sum().item()
                     else:
                         max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
@@ -455,7 +455,7 @@ class ModelTesterMixin:
                 model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
-                    if isinstance(model_slow_init.state_dict()[key],torch.BoolTensor):
+                    if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
                         max_diff = torch.max(
                             model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]
                         ).item()
