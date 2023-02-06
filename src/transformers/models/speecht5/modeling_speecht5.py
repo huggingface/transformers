@@ -2570,7 +2570,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan
+        >>> from transformers import SpeechT5Processor, SpeechT5ForTextToSpeech, SpeechT5HifiGan, set_seed
         >>> import torch
 
         >>> processor = SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
@@ -2580,10 +2580,12 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         >>> inputs = processor(text="Hello, my dog is cute", return_tensors="pt")
         >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file
 
+        >>> set_seed(555)  # make deterministic
+
         >>> # generate speech
         >>> speech = model.generate_speech(inputs["input_ids"], speaker_embeddings, vocoder=vocoder)
         >>> speech.shape
-        torch.Size([15872])
+        torch.Size([16384])
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2764,7 +2766,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import SpeechT5Processor, SpeechT5ForSpeechToSpeech, SpeechT5HifiGan
+        >>> from transformers import SpeechT5Processor, SpeechT5ForSpeechToSpeech, SpeechT5HifiGan, set_seed
         >>> from datasets import load_dataset
         >>> import torch
 
@@ -2781,10 +2783,12 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
 
         >>> speaker_embeddings = torch.zeros((1, 512))  # or load xvectors from a file
 
+        >>> set_seed(555)  # make deterministic
+
         >>> # generate speech
         >>> speech = model.generate_speech(inputs["input_values"], speaker_embeddings, vocoder=vocoder)
         >>> speech.shape
-        torch.Size([77312])
+        torch.Size([77824])
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
