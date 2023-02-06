@@ -291,17 +291,8 @@ class Blip2PreTrainedModel(PreTrainedModel):
         if isinstance(module, Blip2VisionEmbeddings):
             if hasattr(self.config, "vision_config"):
                 factor = self.config.vision_config.initializer_range
-            nn.init.trunc_normal_(
-                module.position_embedding,
-                mean=0.0,
-                std=factor,
-            )
-
-            nn.init.trunc_normal_(
-                module.class_embedding,
-                mean=0.0,
-                std=factor,
-            )
+            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
+            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
 
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -616,10 +607,7 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
         return self.attention_map
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -856,9 +844,8 @@ class Blip2QFormerLayer(nn.Module):
             query_attention_output = attention_output[:, :query_length, :]
 
             if self.has_cross_attention:
-                assert (
-                    encoder_hidden_states is not None
-                ), "encoder_hidden_states must be given for cross-attention layers"
+                if encoder_hidden_states is None:
+                    raise ValueError("encoder_hidden_states must be given for cross-attention layers")
                 cross_attention_outputs = self.crossattention(
                     query_attention_output,
                     attention_mask,
@@ -868,9 +855,8 @@ class Blip2QFormerLayer(nn.Module):
                     output_attentions=output_attentions,
                 )
                 query_attention_output = cross_attention_outputs[0]
-                outputs = (
-                    outputs + cross_attention_outputs[1:-1]
-                )  # add cross attentions if we output attention weights
+                # add cross attentions if we output attention weights
+                outputs = outputs + cross_attention_outputs[1:-1]
 
             layer_output = apply_chunking_to_forward(
                 self.feed_forward_chunk_query,
@@ -1053,14 +1039,16 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         has_query: bool = False,
     ) -> torch.Tensor:
         """
-        Arguments:
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
+
+        Arguments:
             attention_mask (`torch.Tensor`):
                 Mask with ones indicating tokens to attend to, zeros for tokens to ignore.
             input_shape (`Tuple[int]`):
                 The shape of the input to the model.
             device: (`torch.device`):
                 The device of the input to the model.
+
         Returns:
             `torch.Tensor` The extended attention mask, with a the same dtype as `attention_mask.dtype`.
         """
@@ -1141,21 +1129,19 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         is_decoder=False,  # TODO remove this argument
     ):
         r"""
-        encoder_hidden_states  (:
-            obj:`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`): Sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
-            configured as a decoder.
+        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (:
-            obj:`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape
-            `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key and value
-            hidden states of the attention blocks. Can be used to speed up decoding. If `past_key_values` are used, the
-            user can optionally input only the last `decoder_input_ids` (those that don't have their past key value
-            states given to this model) of shape `(batch_size, 1)` instead of all `decoder_input_ids` of shape
+        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of:
+            shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key and
+            value hidden states of the attention blocks. Can be used to speed up decoding. If `past_key_values` are
+            used, the user can optionally input only the last `decoder_input_ids` (those that don't have their past key
+            value states given to this model) of shape `(batch_size, 1)` instead of all `decoder_input_ids` of shape
             `(batch_size, sequence_length)`.
         use_cache (`bool`, `optional`):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
