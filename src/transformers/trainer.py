@@ -368,10 +368,18 @@ class Trainer:
 
         # At this stage the model is already loaded
         if getattr(model, "is_loaded_in_8bit", False):
-            raise ValueError(
-                "The model you want to train is loaded in 8-bit precision. "
-                "Training an 8-bit model is not supported yet. "
-            )
+            if getattr(model, "_is_int8_training_enabled", False):
+                logger.info(
+                    "The model is loaded in 8-bit precision. To train this model you need to add additional modules"
+                    " inside the model such as adapters using `peft` library and freeze the model weights. Please"
+                    " check "
+                    " the examples in https://github.com/huggingface/peft for more details."
+                )
+            else:
+                raise ValueError(
+                    "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
+                    " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
+                )
 
         # Setup Sharded DDP training
         self.sharded_ddp = None
@@ -458,7 +466,7 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        if self.place_model_on_device:
+        if self.place_model_on_device and not getattr(model, "is_loaded_in_8bit", False):
             self._move_model_to_device(model, args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
@@ -587,27 +595,26 @@ class Trainer:
             if args.half_precision_backend == "cuda_amp":
                 self.use_cuda_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
-                self.do_grad_scaling = True
-                if self.sharded_ddp is not None:
-                    self.scaler = ShardedGradScaler()
-                elif self.fsdp is not None:
-                    if self.amp_dtype == torch.float16:
+                #  bf16 does not need grad scaling
+                self.do_grad_scaling = self.amp_dtype == torch.float16
+                if self.do_grad_scaling:
+                    if self.sharded_ddp is not None:
+                        self.scaler = ShardedGradScaler()
+                    elif self.fsdp is not None:
                         from torch.distributed.fsdp.sharded_grad_scaler import (
                             ShardedGradScaler as FSDPShardedGradScaler,
                         )
 
                         self.scaler = FSDPShardedGradScaler()
+                    elif is_torch_tpu_available():
+                        from torch_xla.amp import GradScaler
+
+                        self.scaler = GradScaler()
                     else:
-                        self.do_grad_scaling = False
-                        self.use_cuda_amp = False
-                        self.amp_dtype = None
-
-                elif is_torch_tpu_available():
-                    from torch_xla.amp import GradScaler
-
-                    self.scaler = GradScaler()
-                else:
-                    self.scaler = torch.cuda.amp.GradScaler()
+                        self.scaler = torch.cuda.amp.GradScaler()
+                elif self.fsdp is not None:
+                    self.use_cuda_amp = False
+                    self.amp_dtype = None
             elif args.half_precision_backend == "cpu_amp":
                 self.use_cpu_amp = True
                 self.amp_dtype = torch.bfloat16
@@ -661,7 +668,7 @@ class Trainer:
 
         # torch.compile
         if args.torch_compile and not is_torch_compile_available():
-            raise RuntimeError("Using torch.compile requires a nighly install of PyTorch.")
+            raise RuntimeError("Using torch.compile requires a nightly install of PyTorch.")
 
     def add_callback(self, callback):
         """
@@ -861,7 +868,7 @@ class Trainer:
 
             return DataLoader(
                 train_dataset,
-                batch_size=self.args.per_device_train_batch_size,
+                batch_size=self._train_batch_size,
                 collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,

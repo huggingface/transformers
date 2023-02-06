@@ -133,6 +133,18 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
     "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
+    "SpeechT5Decoder",  # Building part of bigger (tested) model.
+    "SpeechT5DecoderWithoutPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5DecoderWithSpeechPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5DecoderWithTextPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5Encoder",  # Building part of bigger (tested) model.
+    "SpeechT5EncoderWithoutPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5EncoderWithSpeechPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5EncoderWithTextPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5SpeechDecoder",  # Building part of bigger (tested) model.
+    "SpeechT5SpeechEncoder",  # Building part of bigger (tested) model.
+    "SpeechT5TextDecoder",  # Building part of bigger (tested) model.
+    "SpeechT5TextEncoder",  # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -269,6 +281,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPTextModel",
     "AltCLIPVisionModel",
     "AltRobertaModel",
+    "SpeechT5ForSpeechToSpeech",
+    "SpeechT5ForTextToSpeech",
+    "SpeechT5HifiGan",
 ]
 
 # Update this list for models that have multiple model types for the same
@@ -377,6 +392,8 @@ def is_a_private_model(model):
     if model.endswith("Encoder"):
         return True
     if model.endswith("Decoder"):
+        return True
+    if model.endswith("Prenet"):
         return True
     return False
 
