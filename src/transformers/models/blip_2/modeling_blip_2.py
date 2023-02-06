@@ -1268,8 +1268,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         if config.use_decoder_only_language_model:
             language_model = AutoModelForCausalLM.from_config(config.text_config)
-            # TODO remove this hack
-            language_model.prepare_inputs_for_generation = prepare_inputs_for_generation
         else:
             language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
         self.language_model = language_model
@@ -1458,27 +1456,3 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         )
 
         return outputs
-
-
-# this is copied from GPT-2's prepare_inputs_for_generation, just removed token_type_ids and position_ids
-def prepare_inputs_for_generation(input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
-    # only last token for inputs_ids if past is defined in kwargs
-    if past_key_values:
-        input_ids = input_ids[:, -1].unsqueeze(-1)
-
-    attention_mask = kwargs.get("attention_mask", None)
-
-    # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-    if inputs_embeds is not None and past_key_values is None:
-        model_inputs = {"inputs_embeds": inputs_embeds}
-    else:
-        model_inputs = {"input_ids": input_ids}
-
-    model_inputs.update(
-        {
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "attention_mask": attention_mask,
-        }
-    )
-    return model_inputs
