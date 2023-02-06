@@ -34,7 +34,7 @@ from ..models.auto import (
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
 from ..pytorch_utils import torch_int_div
-from ..utils import ModelOutput, logging
+from ..utils import ModelOutput, logging, prod
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .configuration_utils import GenerationConfig
@@ -1985,7 +1985,7 @@ class GenerationMixin:
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul(
-                    (np.prod([next_tokens != i for i in eos_token_id]))
+                    (prod(next_tokens != i for i in eos_token_id))
                 ).long()
 
             # stop when each sentence is finished, or if we exceed the maximum length
@@ -2230,7 +2230,7 @@ class GenerationMixin:
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul(
-                    (np.prod([next_tokens != i for i in eos_token_id]))
+                    (prod(next_tokens != i for i in eos_token_id))
                 ).long()
 
             # stop when each sentence is finished, or if we exceed the maximum length
@@ -2498,7 +2498,7 @@ class GenerationMixin:
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul(
-                    (np.prod([next_tokens != i for i in eos_token_id]))
+                    (prod(next_tokens != i for i in eos_token_id))
                 ).long()
 
             # stop when each sentence is finished, or if we exceed the maximum length
