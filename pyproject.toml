@@ -5,3 +5,8 @@ target-version = ['py37']
 [tool.ruff]
 # Never enforce `E501` (line length violations).
 ignore = ["E501", "E741"]
+
+[tool.ruff.isort]
+no-lines-before=["first-party"]
+lines-after-imports = 2
+known-first-party = ["transformers"]

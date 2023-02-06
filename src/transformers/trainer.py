@@ -37,7 +37,7 @@ from tqdm.auto import tqdm
 
 
 # Integrations must be imported before ML frameworks:
-from .integrations import (  # isort: split
+from .integrations import (  # noqa: I101
     default_hp_search_backend,
     get_reporting_integration_callbacks,
     hp_params,
