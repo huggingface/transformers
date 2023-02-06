@@ -3045,7 +3045,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def reverse_bettertransformer(self):
         """
-        Reverts the transformation from [`~to_bettertransformer`] so that the original modeling is used, for example in
+        Reverts the transformation from [`~PreTrainedModel.to_bettertransformer`] so that the original modeling is used, for example in
         order to save the model.
 
         Returns:
