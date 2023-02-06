@@ -22,44 +22,6 @@ from typing import Dict
 from ...configuration_utils import PretrainedConfig
 
 
-__all__ = ["ERNIE_M_PRETRAINED_INIT_CONFIGURATION", "ErnieMConfig", "ERNIE_M_PRETRAINED_RESOURCE_FILES_MAP"]
-
-
-ERNIE_M_PRETRAINED_INIT_CONFIGURATION = {
-    "ernie-m-base_pytorch": {
-        "attention_probs_dropout_prob": 0.1,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.1,
-        "hidden_size": 768,
-        "initializer_range": 0.02,
-        "max_position_embeddings": 514,
-        "num_attention_heads": 12,
-        "num_hidden_layers": 12,
-        "vocab_size": 250002,
-        "pad_token_id": 1,
-        "layer_norm_eps": 1e-05,
-    },
-    "ernie-m-large_pytorch": {
-        "attention_probs_dropout_prob": 0.1,
-        "hidden_act": "gelu",
-        "hidden_dropout_prob": 0.1,
-        "hidden_size": 1024,
-        "initializer_range": 0.02,
-        "max_position_embeddings": 514,
-        "num_attention_heads": 16,
-        "num_hidden_layers": 24,
-        "vocab_size": 250002,
-        "pad_token_id": 1,
-        "layer_norm_eps": 1e-05,
-    },
-}
-
-ERNIE_M_PRETRAINED_RESOURCE_FILES_MAP = {
-    "model_state": {
-        "ernie-m-base_pytorch": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/pytorch_model.bin",
-        "ernie-m-large_pytorch": "https://huggingface.co/susnato/ernie-m-large_pytorch/blob/main/pytorch_model.bin",
-    }
-}
 ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "susnato/ernie-m-base_pytorch": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/config.json",
     "susnato/ernie-m-large_pytorch": "https://huggingface.co/susnato/ernie-m-large_pytorch/blob/main/config.json",

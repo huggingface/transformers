@@ -221,7 +221,11 @@ class ErnieMEncoderLayer(nn.Module):
         hidden_states = residual + self.dropout1(hidden_states)
         hidden_states = self.norm1(hidden_states)
         residual = hidden_states
-        hidden_states = self.linear2(self.dropout(self.activation(self.linear1(hidden_states))))
+
+        hidden_states = self.linear1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.linear2(hidden_states)
         hidden_states = residual + self.dropout2(hidden_states)
         hidden_states = self.norm2(hidden_states)
 
@@ -583,18 +587,17 @@ class ErnieMModel(ErnieMPreTrainedModel):
             pooler_output = self.pooler(sequence_output) if self.pooler is not None else None
             return (sequence_output, pooler_output) + encoder_outputs[1:]
 
-        elif return_dict:
-            sequence_output = encoder_outputs["last_hidden_state"]
-            pooler_output = self.pooler(sequence_output) if self.pooler is not None else None
-            hidden_states = None if not output_hidden_states else encoder_outputs["hidden_states"]
-            attentions = None if not output_attentions else encoder_outputs["attentions"]
+        sequence_output = encoder_outputs["last_hidden_state"]
+        pooler_output = self.pooler(sequence_output) if self.pooler is not None else None
+        hidden_states = None if not output_hidden_states else encoder_outputs["hidden_states"]
+        attentions = None if not output_attentions else encoder_outputs["attentions"]
 
-            return BaseModelOutputWithPoolingAndCrossAttentions(
-                last_hidden_state=sequence_output,
-                pooler_output=pooler_output,
-                hidden_states=hidden_states,
-                attentions=attentions,
-            )
+        return BaseModelOutputWithPoolingAndCrossAttentions(
+            last_hidden_state=sequence_output,
+            pooler_output=pooler_output,
+            hidden_states=hidden_states,
+            attentions=attentions,
+        )
 
 
 @add_start_docstrings(
