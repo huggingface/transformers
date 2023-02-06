@@ -18,9 +18,9 @@ import copy
 import inspect
 import warnings
 from dataclasses import dataclass
-import numpy as np
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.distributed as dist
 from torch import nn
