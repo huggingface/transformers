@@ -23,6 +23,7 @@ import numpy as np
 import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
+from ...generation import TFLogitsProcessorList
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFModelInputType,
@@ -1002,6 +1003,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         doc_scores=None,
         n_docs=None,
         generation_config=None,
+        logits_processor=TFLogitsProcessorList(),
         **kwargs
     ):
         """
@@ -1045,6 +1047,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
+            logits_processor (`TFLogitsProcessorList`, *optional*):
+                Custom logits processors that complement the default logits processors built from arguments and a
+                model's config. If a logit processor is passed that is already created with the arguments or a model's
+                config an error is thrown.
             kwargs:
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model.
@@ -1149,6 +1155,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         pre_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=tf.shape(decoder_input_ids)[-1],
+            logits_processor=logits_processor,
         )
 
         if generation_config.num_beams == 1:
