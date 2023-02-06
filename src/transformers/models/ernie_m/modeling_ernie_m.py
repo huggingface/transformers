@@ -296,6 +296,7 @@ class ErnieMPooler(nn.Module):
         pooled_output = self.activation(pooled_output)
         return pooled_output
 
+
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->ErnieM,self.value->self.v_proj,self.key->self.k_proj,self.query->self.q_proj
 class ErnieMSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):

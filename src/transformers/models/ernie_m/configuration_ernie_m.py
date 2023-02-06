@@ -70,10 +70,9 @@ class ErnieMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [*ErnieMModel*]. It is used to instantiate a ERNIEM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ERNIE-M architecture. Configuration
-    objects inherit from [*PretrainedConfig*] and can be used to control the model outputs. Read the documentation from
-    [*PretrainedConfig*] for more information.
-    [susnato/ernie-m-base_pytorch](https://huggingface.co/susnato/ernie-m-base_pytorch)
+    defaults will yield a similar configuration to that of the ERNIE-M architecture. Configuration objects inherit from
+    [*PretrainedConfig*] and can be used to control the model outputs. Read the documentation from [*PretrainedConfig*]
+    for more information. [susnato/ernie-m-base_pytorch](https://huggingface.co/susnato/ernie-m-base_pytorch)
 
     Args:
             vocab_size (int, *optional*):
@@ -87,8 +86,8 @@ class ErnieMConfig(PretrainedConfig):
             num_attention_heads (int, *optional*):
                 Number of attention heads for each attention layer in the Transformer encoder. Defaults to *12*.
             intermediate_size (int, *optional*):
-                Dimensionality of the feed-forward (ff) layer in the encoder. Input tensors to feed-forward layers are firstly
-                projected from *hidden_size* to *intermediate_size*, and then projected back to *hidden_size*.
+                Dimensionality of the feed-forward (ff) layer in the encoder. Input tensors to feed-forward layers are
+                firstly projected from *hidden_size* to *intermediate_size*, and then projected back to *hidden_size*.
                 Typically *intermediate_size* is larger than *hidden_size*. Defaults to *3072*.
             hidden_act (str, *optional*):
                 The non-linear activation function in the feed-forward layer. `"gelu"`, `"relu"` and any other paddle
@@ -100,8 +99,7 @@ class ErnieMConfig(PretrainedConfig):
                 The dropout probability used in MultiHeadAttention in all encoder layers to drop some attention target.
                 Defaults to *0.1*.
             act_dropout (float, *optional*):
-                This dropout probability is used in ErnieMEncoderLayer after activation
-                Defaults to *0.0*
+                This dropout probability is used in ErnieMEncoderLayer after activation Defaults to *0.0*
             max_position_embeddings (int, *optional*):
                 The maximum value of the dimensionality of position encoding, which dictates the maximum supported
                 length of an input sequence. Defaults to *512*.
