@@ -532,6 +532,7 @@ class TFGenerationMixin:
         self,
         input_ids: Optional[tf.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
+        logits_processor: Optional[TFLogitsProcessorList] = None,
         seed=None,
         **kwargs,
     ) -> Union[TFGenerateOutput, tf.Tensor]:
@@ -560,6 +561,10 @@ class TFGenerationMixin:
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
+            logits_processor (`LogitsProcessorList`, *optional*):
+                Custom logits processors that complement the default logits processors built from arguments and
+                generation config. If a logit processor is passed that is already created with the arguments or a
+                generation config an error is thrown. This feature is intended for advanced users.
             seed (`List[int]`, *optional*):
                 Random seed to control sampling, containing two integers, used when `do_sample` is `True`. See the
                 `seed` argument from stateless functions in `tf.random`.
@@ -638,6 +643,8 @@ class TFGenerationMixin:
                 model_kwargs["decoder_input_ids"] = tf.cast(model_kwargs["decoder_input_ids"], tf.int32)
 
         # 3. Set generation parameters if not already defined
+        logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
+
         if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
             if model_kwargs.get("attention_mask") is None:
                 logger.warning(
@@ -755,6 +762,7 @@ class TFGenerationMixin:
         logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
+            logits_processor=logits_processor,
         )
 
         # 10. go into different generation modes
@@ -1194,6 +1202,7 @@ class TFGenerationMixin:
         self,
         generation_config: GenerationConfig,
         input_ids_seq_length: int,
+        logits_processor: Optional[TFLogitsProcessorList],
     ) -> TFLogitsProcessorList:
         """
         This class returns a [`TFLogitsProcessorList`] list object that contains all relevant [`TFLogitsProcessor`]
@@ -1240,7 +1249,30 @@ class TFGenerationMixin:
             )
         if generation_config.forced_decoder_ids is not None:
             processors.append(TFForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
+
+        processors = self._merge_criteria_processor_list(processors, logits_processor)
         return processors
+
+    def _merge_criteria_processor_list(
+        self,
+        default_list: TFLogitsProcessorList,
+        custom_list: TFLogitsProcessorList,
+    ) -> TFLogitsProcessorList:
+        if len(custom_list) == 0:
+            return default_list
+        for default in default_list:
+            for custom in custom_list:
+                if type(custom) is type(default):
+                    object_type = "logits processor"
+                    raise ValueError(
+                        f"A custom {object_type} of type {type(custom)} with values {custom} has been passed to"
+                        f" `generate`, but it has already been created with the values {default}. {default} has been"
+                        " created by passing the corresponding arguments to generate or by the model's config default"
+                        f" values. If you just want to change the default values of {object_type} consider passing"
+                        f" them as arguments to `generate` instead of using a custom {object_type}."
+                    )
+        default_list.extend(custom_list)
+        return default_list
 
     def greedy_search(
         self,
