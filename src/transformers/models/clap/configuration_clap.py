@@ -245,24 +245,10 @@ class CLAPAudioConfig(PretrainedConfig):
         enable_patch_layer_norm=True,
         drop_path_rate=0.0,
         attention_probs_dropout_prob=0.0,
-        swin_drop_path_rate=0.1,
         qkv_bias=True,
-        swin_norm_before_mlp="ln",
         mlp_ratio=4.0,
-        swin_use_checkpoint=False,
-        swin_absolute_positional_embedding=False,
-        swin_hidden_act="gelu",
         aff_block_r=4,
         enable_patch_fusion=False,
-        spectrogram_window_size=1024,
-        spectrogram_freeze_parameters=True,
-        spectrogram_ref=1.0,
-        spectrogram_amin=1e-10,
-        spectrogram_top_db=None,
-        spectrogram_time_drop_width=64,
-        spectrogram_time_stripes_num=2,
-        spectrogram_freq_drop_width=8,
-        spectrogram_freq_stripes_num=2,
         layer_norm_eps=1e-5,
         **kwargs
     ):
@@ -296,28 +282,11 @@ class CLAPAudioConfig(PretrainedConfig):
         self.enable_patch_layer_norm = enable_patch_layer_norm
         self.drop_path_rate = drop_path_rate
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.swin_drop_path_rate = swin_drop_path_rate
         self.qkv_bias = qkv_bias
-        self.swin_norm_before_mlp = swin_norm_before_mlp
         self.mlp_ratio = mlp_ratio
-        self.swin_use_checkpoint = swin_use_checkpoint
-        self.swin_absolute_positional_embedding = swin_absolute_positional_embedding
         self.patch_embed_input_channels = patch_embed_input_channels
-        self.swin_hidden_act = swin_hidden_act
         self.aff_block_r = aff_block_r
         self.enable_patch_fusion = enable_patch_fusion
-        self.spectrogram_window_size = spectrogram_window_size
-        # self.spectrogram_window = spectrogram_window
-        # self.spectrogram_center = spectrogram_center
-        # self.spectrogram_pad_mode = spectrogram_pad_mode
-        self.spectrogram_freeze_parameters = spectrogram_freeze_parameters
-        self.spectrogram_ref = spectrogram_ref
-        self.spectrogram_amin = spectrogram_amin
-        self.spectrogram_top_db = spectrogram_top_db
-        self.spectrogram_time_drop_width = spectrogram_time_drop_width
-        self.spectrogram_time_stripes_num = spectrogram_time_stripes_num
-        self.spectrogram_freq_drop_width = spectrogram_freq_drop_width
-        self.spectrogram_freq_stripes_num = spectrogram_freq_stripes_num
         self.layer_norm_eps = layer_norm_eps
 
     @classmethod
