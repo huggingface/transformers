@@ -662,10 +662,6 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        # if print_values:
-        #     print("Shape of attention scores before softmax:", attention_scores.shape)
-        #     print("First values of attention scores before softmax:", attention_scores[0, 0, :3, :3])
-
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             seq_length = hidden_states.size()[1]
             position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
@@ -684,24 +680,12 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
-        # if print_values:
-        #     print("Shape of attention scores before attention mask:", attention_scores.shape)
-        #     print("First values of attention scores before attention mask:", attention_scores[0, 0, :3, :3])
-
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
 
-        # if print_values:
-        #     print("Shape of attention scores after attention mask:", attention_scores.shape)
-        #     print("First values of attention scores after attention mask:", attention_scores[0, 0, :3, :3])
-
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
-
-        # if print_values:
-        #     print("Shape of attention_probs:", attention_probs.shape)
-        #     print("First values of attention_probs:", attention_probs[0, 0, :3, :3])
 
         if is_cross_attention and self.save_attention:
             self.save_attention_map(attention_probs)
@@ -776,7 +760,7 @@ class Blip2QFormerAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-        print_values=False,
+        print_values=False,  # TODO remove this
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.attention(
             hidden_states,
@@ -866,14 +850,7 @@ class Blip2QFormerLayer(nn.Module):
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:-1]
 
-        # if self.layer_idx == 0:
-        #     print("Shape of self-attention outputs:", attention_output.shape)
-        #     print("First values of self-attention outputs:", attention_output[0, :3, :3])
-
         present_key_value = self_attention_outputs[-1]
-
-        # if self.layer_idx == 0:
-        #     print("Query length:", query_length)
 
         if query_length > 0:
             query_attention_output = attention_output[:, :query_length, :]
@@ -895,20 +872,12 @@ class Blip2QFormerLayer(nn.Module):
                     outputs + cross_attention_outputs[1:-1]
                 )  # add cross attentions if we output attention weights
 
-                # if self.layer_idx == 0:
-                #     print("Query attention output:", query_attention_output.shape)
-                #     print("First values of query attention output:", query_attention_output[0, :3, :3])
-
             layer_output = apply_chunking_to_forward(
                 self.feed_forward_chunk_query,
                 self.chunk_size_feed_forward,
                 self.seq_len_dim,
                 query_attention_output,
             )
-
-            # if self.layer_idx == 0:
-            #     print("Layer output:", layer_output.shape)
-            #     print("First values of layer output:", layer_output[0, :3, :3])
 
             if attention_output.shape[1] > query_length:
                 layer_output_text = apply_chunking_to_forward(
@@ -967,7 +936,7 @@ class Blip2QFormerEncoder(nn.Module):
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_cross_attentions = () if output_attentions else None
 
         next_decoder_cache = () if use_cache else None
 
@@ -1002,10 +971,6 @@ class Blip2QFormerEncoder(nn.Module):
                     encoder_attention_mask,
                 )
             else:
-                # if i == 0:
-                #     print(f"Shape of hidden states before layer {i}:", hidden_states.shape)
-                #     print(f"First values of hidden states before layer {i}:", hidden_states[0, :3, :3])
-                #     print("Shape of the encoder hidden states:", encoder_hidden_states.shape)
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
@@ -1016,16 +981,14 @@ class Blip2QFormerEncoder(nn.Module):
                     output_attentions,
                     query_length,
                 )
-                # if i == 0:
-                #     print(f"Shape of hidden states after layer {i}:", hidden_states.shape)
-                #     print(f"First values of hidden states after layer {i}:", layer_outputs[0][0, :3, :3])
 
             hidden_states = layer_outputs[0]
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
+                if layer_module.has_cross_attention:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1384,6 +1347,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
         query_output = query_outputs[0]
@@ -1404,6 +1369,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             outputs = self.language_model(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
             logits = outputs.logits if return_dict else outputs[0]
@@ -1424,6 +1391,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
                 attention_mask=attention_mask,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
                 labels=labels,
             )
@@ -1484,16 +1453,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             attention_mask = torch.ones_like(input_ids)
         attention_mask = torch.cat([language_attention_mask, attention_mask], dim=1)
 
-        # TODO support nucleus sampling and beam search
-        # if use_nucleus_sampling:
-        #     query_embeds = language_model_inputs.repeat_interleave(num_captions, dim=0)
-        #     num_beams = 1
-        # else:
-        num_beams = 1
-        query_embeds = language_model_inputs.repeat_interleave(num_beams, dim=0)
-
+        # concatenate query embeddings with prompt embeddings
         inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-        inputs_embeds = torch.cat([query_embeds, inputs_embeds], dim=1)
+        inputs_embeds = torch.cat([language_model_inputs, inputs_embeds], dim=1)
 
         outputs = self.language_model.generate(
             inputs_embeds=inputs_embeds,

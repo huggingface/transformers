@@ -1,5 +1,7 @@
 import torch
+
 from transformers import Blip2Config, Blip2ForConditionalGeneration, Blip2VisionConfig
+
 
 vision_config = Blip2VisionConfig(num_hidden_layers=2)
 config = Blip2Config(vision_config=vision_config.to_dict())
