@@ -4,7 +4,6 @@ icecream
 imageio
 lpips
 matplotlib
-more_itertools
 numpy
 omegaconf
 opencv_python_headless
