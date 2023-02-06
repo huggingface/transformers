@@ -210,7 +210,6 @@ _import_structure = {
         "CLAPProcessor",
         "CLAPFeatureExtractor"
         "CLAPTextConfig",
-        "CLAPTokenizer",
     ],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -675,7 +674,6 @@ else:
     _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.bloom"].append("BloomTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
-    _import_structure["models.clap"].append("CLAPTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -3705,7 +3703,6 @@ if TYPE_CHECKING:
         CLAPProcessor,
         CLAPFeatureExtractor,
         CLAPTextConfig,
-        CLAPTokenizer,
     )
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4133,7 +4130,6 @@ if TYPE_CHECKING:
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.bloom import BloomTokenizerFast
         from .models.camembert import CamembertTokenizerFast
-        from .models.clap import CLAPTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
         from .models.convbert import ConvBertTokenizerFast

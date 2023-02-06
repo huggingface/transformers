@@ -17,13 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_tokenizers_available,
-    is_torch_available,
-    is_vision_available,
-)
+from ...utils import OptionalDependencyNotAvailable,_LazyModule,is_torch_available
 
 
 _import_structure = {
@@ -34,25 +28,9 @@ _import_structure = {
         "CLAPOnnxConfig",
         "CLAPTextConfig",
     ],
-    "processing_clap": ["CLAPProcessor"],
-    "tokenization_clap": ["CLAPTokenizer"],
+    "feature_extraction_clap": ["CLAPFeatureExtractor"],
+    "processing_clap": ["CLAPProcessor"]
 }
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_clap_fast"] = ["CLAPTokenizerFast"]
-
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["feature_extraction_clap"] = ["CLAPFeatureExtractor"]
 
 try:
     if not is_torch_available():
@@ -80,23 +58,8 @@ if TYPE_CHECKING:
     )
     from .processing_clap import CLAPProcessor
     from .tokenization_clap import CLAPTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_clap_fast import CLAPTokenizerFast
-
-    try:
-        if not is_torchvision_available(): #TODO this depencie will be removed
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_clap import CLAPFeatureExtractor
-
+    from .feature_extraction_clap import CLAPFeatureExtractor
+    
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
