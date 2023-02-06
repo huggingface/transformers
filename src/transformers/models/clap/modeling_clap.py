@@ -43,42 +43,87 @@ from .configuration_clap import CLAPAudioConfig, CLAPConfig, CLAPTextConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "laion-ai/base"
+_CHECKPOINT_FOR_DOC = "laion-ai/clap-htst-unfused-base"
 
 CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "laion-ai/base",
+    "laion-ai/clap-htst-unfused-base",
     # See all clap models at https://huggingface.co/models?filter=clap
 ]
 
 
-def do_mixup(x, mixup_lambda):
+# Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L176
+def do_mixup(hidden_states, mixup_lambda):
     """
+    MIXUP is a data augmentation method, proposed by Hongyi Zhang et al on 25 Oct. 2017. https://arxiv.org/abs/1710.09412 
+    Based on the mixing ratio sampled from the Beta distribution, it is a method of expanding data by mixing both input and output. 
+    By using this, it is said that generalization performance improves because the decision boundary becomes smooth.
+
     Args:
-      x: (batch_size , ...)
-      mixup_lambda: (batch_size,)
-    Returns:
-      out: (batch_size, ...)
+        hidden_states: (`torch.FloatTensor` of shape (batch_size, seq_length, hidden_size))
+            Input hidden states
+        mixup_lambda: (`torch.FloatTensor`)
+            Mixing ratio sampled from the Beta distribution
     """
     out = (
-        x.transpose(0, -1) * mixup_lambda + torch.flip(x, dims=[0]).transpose(0, -1) * (1 - mixup_lambda)
+        hidden_states.transpose(0, -1) * mixup_lambda + torch.flip(hidden_states, dims=[0]).transpose(0, -1) * (1 - mixup_lambda)
     ).transpose(0, -1)
     return out
 
 
-def interpolate(x, ratio):
-    """Interpolate data in time domain. This is used to compensate the
+# Adapted from: https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L191
+def interpolate(hidden_states, ratio):
+    """
+    Interpolate data in time domain. This is used to compensate the
     resolution reduction in downsampling of a CNN.
 
     Args:
-      x: (batch_size, time_steps, classes_num)
-      ratio: int, ratio to interpolate
-    Returns:
-      upsampled: (batch_size, time_steps * ratio, classes_num)
+        hidden_states: (`torch.FloatTensor` of shape (batch_size, time_steps, classes_num))
+            Input hidden states
+        ratio: (`int`)
+            The ratio of the length of the output to the length of the input.
     """
-    (batch_size, time_steps, classes_num) = x.shape
-    upsampled = x[:, :, None, :].repeat(1, 1, ratio, 1)
+    (batch_size, time_steps, classes_num) = hidden_states.shape
+    upsampled = hidden_states[:, :, None, :].repeat(1, 1, ratio, 1)
     upsampled = upsampled.reshape(batch_size, time_steps * ratio, classes_num)
     return upsampled
+
+
+# Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L249
+def window_partition(hidden_states, window_size):
+    """
+    Returns the resized hidden states. The output shape should be `(batch_size * num_windows, window_size, window_size, num_channels)`
+
+    Args:
+        hidden_states: (`torch.FloatTensor` of shape `(batch_size, height, width, num_channels)`)
+            Input hidden states
+        window_size: (`int`)
+            Window size
+    """
+    batch_size, height, width, num_channels = hidden_states.shape
+    
+    hidden_states = hidden_states.view(batch_size, height // window_size, window_size, width // window_size, window_size, num_channels)
+    windows = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
+    return windows
+
+
+# Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L263
+def window_reverse(windows, window_size, height, width):
+    """
+    Args:
+        windows: (`torch.FloatTensor` of shape `(num_windows * batch_size, window_size, window_size, num_channels)`)
+            Input windows
+        window_size: (`int`)
+            Window size
+        height: (`int`)
+            Height of the resized image
+        width: (`int`)
+            Width of the resized image
+    """
+    batch_size = int(windows.shape[0] / (height * width / window_size / window_size))
+
+    hidden_states = windows.view(batch_size, height // window_size, width // window_size, window_size, window_size, -1)
+    hidden_states = hidden_states.permute(0, 1, 3, 2, 4, 5).contiguous().view(batch_size, height, width, -1)
+    return hidden_states
 
 
 # Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
@@ -96,6 +141,19 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+
+# contrastive loss function, adapted from
+# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/Clip.html
+def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
+    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
+
+
+# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clap
+def clap_loss(similarity: torch.Tensor) -> torch.Tensor:
+    caption_loss = contrastive_loss(similarity)
+    image_loss = contrastive_loss(similarity.t())
+    return (caption_loss + image_loss) / 2.0
 
 
 @dataclass
@@ -129,6 +187,7 @@ class CLAPTextModelOutput(ModelOutput):
 
 
 @dataclass
+# Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput
 class SwinEncoderOutput(ModelOutput):
     """
     Swin encoder's outputs, with potential hidden states and attentions.
@@ -160,7 +219,7 @@ class SwinEncoderOutput(ModelOutput):
 @dataclass
 class CLAPAudioModelOutput(ModelOutput):
     """
-    Base class for text model's outputs that also contains a pooling of the last hidden states.
+    CLAPAudio model output to mimic the output of the original implementation.
 
     Args:
         framewise_output (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
@@ -217,13 +276,11 @@ class CLAPOutput(ModelOutput):
         )
 
 
+# Adapted from transformers.models.swin.modeling_swin.SwinDropPath
 class CLAPDropPath(nn.Module):
     """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
-    DropConnect impl I created for EfficientNet, etc networks, however, the original name is misleading as 'Drop
-    Connect' is a different form of dropout in a separate paper... See discussion:
-    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
-    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is a 
+    slightly refactored version of the `SwinDropPath` implementation.
     """
 
     def __init__(self, drop_prob=None):
@@ -332,122 +389,52 @@ class CLAPAudioPatchEmbed(nn.Module):
                 padding=padding,
             )
 
-    def forward(self, x, is_longer_idx=None):
+    def forward(self, hidden_states, is_longer_idx=None):
         if self.enable_fusion:
-            global_x = x[:, 0:1, :, :]
+            global_hidden_states = hidden_states[:, 0:1, :, :]
 
             # global processing
-            B, C, H, W = global_x.shape
-            assert (
-                H == self.img_size[0] and W == self.img_size[1]
-            ), f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
-            global_x = self.proj(global_x)
-            TW = global_x.size(-1)
+            batch_size, num_channels, height, width = global_hidden_states.shape
+
+            if height != self.img_size[0] or width != self.img_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+                )
+            
+            global_hidden_states = self.proj(global_hidden_states)
+            output_width = global_hidden_states.size(-1)
             if len(is_longer_idx) > 0:
                 # local processing
-                local_x = x[is_longer_idx, 1:, :, :].contiguous()
-                B, C, H, W = local_x.shape
-                local_x = local_x.view(B * C, 1, H, W)
-                local_x = self.mel_conv2d(local_x)
-                local_x = local_x.view(B, C, local_x.size(1), local_x.size(2), local_x.size(3))
-                local_x = local_x.permute((0, 2, 3, 1, 4)).contiguous().flatten(3)
-                TB, TC, TH, _ = local_x.size()
-                if local_x.size(-1) < TW:
-                    local_x = torch.cat(
-                        [local_x, torch.zeros((TB, TC, TH, TW - local_x.size(-1)), device=global_x.device)], dim=-1
+                local_hidden_states = hidden_states[is_longer_idx, 1:, :, :].contiguous()
+                batch_size, num_channels, height, width = local_hidden_states.shape
+
+                local_hidden_states = local_hidden_states.view(batch_size * num_channels, 1, height, width)
+                local_hidden_states = self.mel_conv2d(local_hidden_states)
+                local_hidden_states = local_hidden_states.view(batch_size, num_channels, local_hidden_states.size(1), local_hidden_states.size(2), local_hidden_states.size(3))
+                local_hidden_states = local_hidden_states.permute((0, 2, 3, 1, 4)).contiguous().flatten(3)
+                output_batch_size, output_num_channels, output_height, _ = local_hidden_states.size()
+                
+                if local_hidden_states.size(-1) < output_width:
+                    local_hidden_states = torch.cat(
+                        [local_hidden_states, torch.zeros((output_batch_size, output_num_channels, output_height, output_width - local_hidden_states.size(-1)), device=global_hidden_states.device)], dim=-1
                     )
                 else:
-                    local_x = local_x[:, :, :, :TW]
+                    local_hidden_states = local_hidden_states[:, :, :, :output_width]
 
-                global_x[is_longer_idx] = self.fusion_model(global_x[is_longer_idx], local_x)
-            x = global_x
+                global_hidden_states[is_longer_idx] = self.fusion_model(global_hidden_states[is_longer_idx], local_hidden_states)
+            hidden_states = global_hidden_states
         else:
-            B, C, H, W = x.shape
-            assert (
-                H == self.img_size[0] and W == self.img_size[1]
-            ), f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
-            x = self.proj(x)
+            _, _, height, width = hidden_states.shape
+            if height != self.img_size[0] or width != self.img_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+                )
+            hidden_states = self.proj(hidden_states)
 
         if self.flatten:
-            x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
-        x = self.norm(x)
-        return x
-
-
-def _no_grad_trunc_normal_(tensor, mean, std, a, b):
-    # Cut & paste from PyTorch official master until it's in a few official releases - RW
-    # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
-    def norm_cdf(x):
-        # Computes standard normal cumulative distribution function
-        return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
-
-    with torch.no_grad():
-        # Values are generated by using a truncated uniform distribution and
-        # then using the inverse CDF for the normal distribution.
-        # Get upper and lower cdf values
-        l = norm_cdf((a - mean) / std)
-        u = norm_cdf((b - mean) / std)
-
-        # Uniformly fill tensor with values from [l, u], then translate to
-        # [2l-1, 2u-1].
-        tensor.uniform_(2 * l - 1, 2 * u - 1)
-
-        # Use inverse cdf transform for normal distribution to get truncated
-        # standard normal
-        tensor.erfinv_()
-
-        # Transform to proper mean, std
-        tensor.mul_(std * math.sqrt(2.0))
-        tensor.add_(mean)
-
-        # Clamp to ensure it's in the proper range
-        tensor.clamp_(min=a, max=b)
-        return tensor
-
-
-def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
-    # type: (Tensor, float, float, float, float) -> Tensor
-    r"""Fills the input Tensor with values drawn from a truncated
-    Args:
-    normal distribution. The values are effectively drawn from the normal distribution :math:`\mathcal{N}(\text{mean},
-    \text{std}^2)` with values outside :math:`[a, b]` redrawn until they are within the bounds. The method used for
-    generating the random values works best when :math:`a \leq \text{mean} \leq b`.
-        tensor: an n-dimensional `torch.Tensor` mean: the mean of the normal distribution std: the standard deviation
-        of the normal distribution a: the minimum cutoff value b: the maximum cutoff value
-    Examples:
-        >>> w = torch.empty(3, 5) >>> nn.init.trunc_normal_(w)
-    """
-    return _no_grad_trunc_normal_(tensor, mean, std, a, b)
-
-
-def window_partition(x, window_size):
-    """
-    Args:
-        x: (B, H, W, C)
-        window_size (int): window size
-    Returns:
-        windows: (num_windows*B, window_size, window_size, C)
-    """
-    B, H, W, C = x.shape
-    x = x.view(B, H // window_size, window_size, W // window_size, window_size, C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, C)
-    return windows
-
-
-def window_reverse(windows, window_size, H, W):
-    """
-    Args:
-        windows: (num_windows*B, window_size, window_size, C)
-        window_size (int): Window size
-        H (int): Height of image
-        W (int): Width of image
-    Returns:
-        x: (B, H, W, C)
-    """
-    B = int(windows.shape[0] / (H * W / window_size / window_size))
-    x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
-    return x
+            hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        hidden_states = self.norm(hidden_states)
+        return hidden_states
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->CLAPAudio
@@ -755,19 +742,6 @@ class CLAPAudioSwinLayer(nn.Module):
 
         layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
         return layer_outputs
-
-
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/Clip.html
-def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
-
-
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clap
-def clap_loss(similarity: torch.Tensor) -> torch.Tensor:
-    caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
-    return (caption_loss + image_loss) / 2.0
 
 
 @dataclass
@@ -1752,8 +1726,8 @@ class CLAPModel(CLAPPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, CLAPModel
 
-        >>> model = CLAPModel.from_pretrained("laion-ai/base")
-        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/base")
+        >>> model = CLAPModel.from_pretrained("laion-ai/clap-htst-unfused-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/clap-htst-unfused-base")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1833,8 +1807,8 @@ class CLAPModel(CLAPPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, CLAPModel
 
-        >>> model = CLAPModel.from_pretrained("laion-ai/base")
-        >>> processor = AutoProcessor.from_pretrained("laion-ai/base")
+        >>> model = CLAPModel.from_pretrained("laion-ai/clap-htst-unfused-base")
+        >>> processor = AutoProcessor.from_pretrained("laion-ai/clap-htst-unfused-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1946,8 +1920,8 @@ class CLAPTextModelWithProjection(CLAPPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, CLAPTextModelWithProjection
 
-        >>> model = CLAPTextModelWithProjection.from_pretrained("laion-ai/base")
-        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/base")
+        >>> model = CLAPTextModelWithProjection.from_pretrained("laion-ai/clap-htst-unfused-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/clap-htst-unfused-base")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
