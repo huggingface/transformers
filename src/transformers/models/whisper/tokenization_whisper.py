@@ -791,8 +791,19 @@ class WhisperTokenizer(PreTrainedTokenizer):
                         # 1/ Indeed some language
                         # TODO Handle when language is different from the previous
                         # one, and we cannot use timestamped tokens to create chunks
-                        last_language = language
+                        if last_language and language != last_language and not return_timestamps:
+                            previous_tokens.append(current_tokens)
+                            resolved_tokens = _find_longest_common_sequence(previous_tokens)
+                            resolved_text = self.decode(resolved_tokens)
+                            chunk["text"] = resolved_text
+                            chunks.append(chunk)
+
+                            # Flush all our temporary context
+                            previous_tokens = []
+                            current_tokens = []
+                            chunk = new_chunk()
                         chunk["language"] = language
+                        last_language = language
                     else:
                         # 2/ This is a regular special token, ignoring it
                         pass
@@ -842,19 +853,22 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
             if "stride" in output:
                 time_offset += chunk_len - stride_right
-                # Leftover tokens
-                if current_tokens:
-                    previous_tokens.append(current_tokens)
-                else:
-                    chunk = new_chunk()
-                    previous_tokens = []
-                    current_tokens = []
+
+            # Leftover tokens
+            if current_tokens:
+                previous_tokens.append(current_tokens)
+            elif any(p for p in previous_tokens):
+                chunk = new_chunk()
+                previous_tokens = []
+                current_tokens = []
 
         if previous_tokens:
             if return_timestamps:
                 # Last token should always be timestamps, so there shouldn't be
                 # leftover
-                raise ValueError("There was an error while processing these timestamps")
+                raise ValueError(
+                    "There was an error while processing timestamps, we haven't found a timestamp as last token. Was WhisperTimeStampLogitsProcessor used?"
+                )
             # Happens when we don't use timestamps
             resolved_tokens = _find_longest_common_sequence(previous_tokens)
             resolved_text = self.decode(resolved_tokens)

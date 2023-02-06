@@ -315,8 +315,34 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    def test_torch_whisper_fast(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-WhisperForConditionalGeneration",
+            framework="pt",
+        )
+        speech_recognizer.feature_extractor.n_samples //= 50
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "v 돼요 돼요����������� 투 투 투 투 투 투"})
+
+        # Output is random so chunking *can* affect the output.
+        output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
+        self.assertEqual(output, [{"text": "v 돼요 돼요����������� 투 투 투 투 투 투"}])
+
+        output = speech_recognizer(filename, return_language=True)
+        self.assertEqual(
+            output,
+            {
+                "text": "v 돼요 돼요����������� 투 투 투 투 투 투",
+                "chunks": [{"text": "v 돼요 돼요����������� 투 투 투 투 투 투", "language": None}],
+            },
+        )
+
+    @require_torch
     @slow
-    def test_torch_whisper(self):
+    def test_torch_whisper_slow(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
@@ -329,6 +355,74 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
         self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
+
+        output = speech_recognizer(filename, return_language=True)
+        self.assertEqual(
+            output,
+            {
+                "text": " A man said to the universe, Sir, I exist.",
+                "chunks": [{"text": " A man said to the universe, Sir, I exist.", "language": "english"}],
+            },
+        )
+
+        output = speech_recognizer(
+            "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/4.flac", return_language=True
+        )
+        self.assertEqual(
+            output,
+            {
+                "text": " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario promaque.",
+                "chunks": [
+                    {
+                        "text": " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario promaque.",
+                        "language": "spanish",
+                    }
+                ],
+            },
+        )
+
+    @require_torch
+    @slow
+    def test_torch_whisper_mixed_language(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        en_audio = ds[40]["audio"]["array"]
+        dataset = load_dataset("Narsil/asr_dummy")
+        third_item = dataset["test"][3]
+        filename = third_item["file"]
+
+        # sp_audio = librosa.load(filename, sr=speech_recognizer.feature_extractor.sampling_rate)[0]
+        from transformers.pipelines.audio_utils import ffmpeg_read
+
+        with open(filename, "rb") as f:
+            inputs = f.read()
+
+        sp_audio = ffmpeg_read(inputs, sampling_rate=speech_recognizer.feature_extractor.sampling_rate)
+        array = np.concatenate([sp_audio, en_audio])
+
+        output = speech_recognizer(
+            array,
+            chunk_length_s=7.0,
+            stride_length_s=[0, 0],
+            return_language=True,
+        )
+        self.assertEqual(
+            output,
+            {
+                "text": " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario promaque. A man said to the universe, Sir, I exist.",
+                "chunks": [
+                    {
+                        "language": "spanish",
+                        "text": " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario promaque.",
+                    },
+                    {"language": "english", "text": " A man said to the universe, Sir, I exist."},
+                ],
+            },
+        )
 
     @slow
     @require_torch
