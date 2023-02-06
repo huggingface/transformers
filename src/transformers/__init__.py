@@ -749,6 +749,7 @@ else:
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
     _import_structure["models.speecht5"].append("SpeechT5FeatureExtractor")
+    _import_structure["models.transformer_transducer"].append("TransformerTransducerFeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
