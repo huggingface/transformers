@@ -948,7 +948,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
-        bool_masked_pos: Optional[tf.bool] = None,
+        bool_masked_pos: Optional[tf.Tensor] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1310,8 +1310,7 @@ class TFBeitFCNHead(tf.keras.layers.Layer):
     Args:
     Fully Convolution Networks for Semantic Segmentation. This head is implemented from
     [FCNNet](https://arxiv.org/abs/1411.4038).
-        config (BeitConfig): Configuration.
-        kernel_size (int): The kernel size for convs in the head. Default: 3.
+        config (BeitConfig): Configuration. kernel_size (int): The kernel size for convs in the head. Default: 3.
         dilation (int): The dilation rate for convs in the head. Default: 1.
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """

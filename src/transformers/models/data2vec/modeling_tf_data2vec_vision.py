@@ -75,7 +75,7 @@ TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitModelOutputWithPooling with Beit->Data2VecVision
 class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
     """
-    Class for outputs of [`Data2VecVisionModel`].
+    Class for outputs of [`TFData2VecVisionModel`].
 
     Args:
         last_hidden_state (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -473,7 +473,7 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
 
         self.attention = TFData2VecVisionAttention(config, window_size=window_size, name="attention")
         self.intermediate = TFData2VecVisionIntermediate(config, name="intermediate")
-        self.beit_output = TFData2VecVisionOutput(config, name="output")
+        self.data2vec_output = TFData2VecVisionOutput(config, name="output")
 
         self.layernorm_before = tf.keras.layers.LayerNormalization(
             epsilon=config.layer_norm_eps, name="layernorm_before"
@@ -561,7 +561,7 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         layer_output = self.layernorm_after(hidden_states)
 
         layer_output = self.intermediate(layer_output)
-        layer_output = self.beit_output(layer_output)
+        layer_output = self.data2vec_output(layer_output)
 
         if self.lambda_2 is not None:
             layer_output = self.lambda_2 * layer_output
@@ -832,7 +832,7 @@ class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = Data2VecVisionConfig
-    base_model_prefix = "beit"
+    base_model_prefix = "data2vec_vision"
     main_input_name = "pixel_values"
     _keys_to_ignore_on_load_unexpected = [r"relative_position_index"]
 
@@ -929,16 +929,18 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     "The bare Data2VecVision Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision, _FEAT_EXTRACTOR->_IMAGE_PROCESSOR
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.config = config
 
-        self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=add_pooling_layer, name="beit")
+        self.data2vec_vision = TFData2VecVisionMainLayer(
+            config, add_pooling_layer=add_pooling_layer, name="data2vec_vision"
+        )
 
     def get_input_embeddings(self):
-        return self.beit.get_input_embeddings()
+        return self.data2vec_vision.get_input_embeddings()
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
@@ -998,7 +1000,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.beit = TFData2VecVisionMainLayer(config, add_pooling_layer=True, name="beit")
+        self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=True, name="data2vec_vision")
 
         # Classifier head
         self.classifier = tf.keras.layers.Dense(
@@ -1087,7 +1089,7 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
             dilation_rate=dilation,
             name="conv",
         )
-        self.bn = tf.keras.layers.BatchNormalization(name="bn")
+        self.bn = tf.keras.layers.BatchNormalization(name="bn", momentum=0.9, epsilon=1e-5)
         self.activation = tf.nn.relu
         self.in_channels = in_channels
         self.out_channels = out_channels
