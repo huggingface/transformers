@@ -87,7 +87,7 @@ class FlaxResNetModelTester(unittest.TestCase):
         model = FlaxResNetModel(config=config)
         result = model(pixel_values)
 
-        # NOTE: Shout the size shape be (b, h, w, c) or (b, c, h, w) ?
+        # Output shape (b, h, w, c)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.image_size // 32, self.image_size // 32, self.hidden_sizes[-1]),
@@ -191,15 +191,6 @@ class FlaxResNetModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
-
-    @unittest.skip(reason="NOTE: Test passing on seperate file but failing in this codebase due to unknown reasons, working on it")
-    def test_save_load_from_base(self):
-        pass
-
-    @unittest.skip(reason="NOTE: Test passing on seperate file but failing in this codebase due to unknown reasons, working on it")
-    def test_save_load_to_base(self):
-        pass
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():

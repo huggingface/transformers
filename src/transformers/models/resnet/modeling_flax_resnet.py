@@ -414,7 +414,7 @@ class FlaxResNetPreTrainedModel(FlaxPreTrainedModel):
             mutable=["batch_stats"],
         )[
             0
-        ]  # NOTE: Return the output class from tuple. Seems to be working but is a ideal solution ?
+        ]  # Returning the output class from tuple
 
 
 class FlaxResNetModule(nn.Module):
