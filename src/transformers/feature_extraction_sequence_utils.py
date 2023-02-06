@@ -370,13 +370,13 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     @staticmethod
     def hz_to_mel(freq: float, mel_scale: str = "htk") -> float:
-        r"""Convert Hz to Mels.
+        """Convert Hz to Mels.
 
         Args:
             freqs (float):
                 Frequencies in Hz
             mel_scale (str, *optional*):
-                Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
+                Scale to use: `htk` or `slaney`. (Default: `htk`)
 
         Returns:
             mels (float): Frequency in Mels
@@ -410,7 +410,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         Args:
             mels (np.array): Mel frequencies
-            mel_scale (str, optional): Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
+            mel_scale (str, optional): Scale to use: `htk` or `slaney`. (Default: `htk`)
 
         Returns:
             freqs (np.array): Mels converted in Hz
@@ -473,12 +473,12 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         norm: Optional[str] = None,
         mel_scale: str = "htk",
     ) -> np.array:
-        r"""
+        """
         Create a frequency bin conversion matrix used to obtain the Mel Frequency Cepstral Coefficient. This is called
-        a `mel filter bank`, and various implementation exist, which differ in the number of filters, the shape of the
+        a *mel filter bank*, and various implementation exist, which differ in the number of filters, the shape of the
         filters, the way the filters are spaced, the bandwidth of the filters, and the manner in which the spectrum is
         warped. The goal of these features is to approximate the non-linear human perception of the variation in pitch
-        with respect to the frequency. This code is heavily inspired from the `torchaudio` implementation, refer to XXX
+        with respect to the frequency. This code is heavily inspired from the *torchaudio* implementation, refer to XXX
         for more details.
 
 
@@ -508,14 +508,14 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 Sample rate of the audio waveform
             norm (str or None, optional):
                 If "slaney", divide the triangular mel weights by the width of the mel band (area normalization).
-                (Default: ``None``)
+                (Default: `None`)
             mel_scale (str, optional):
-                Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
+                Scale to use: `htk` or `slaney`. (Default: `htk`)
 
         Returns:
-            Tensor: Triangular filter banks (fb matrix) of size (``n_freqs``, ``n_mels``) meaning number of frequencies
-            to highlight/apply to x the number of filterbanks. Each column is a filterbank so that assuming there is a
-            matrix A of size (..., ``n_freqs``), the applied result would be ``A * melscale_fbanks(A.size(-1), ...)``.
+            Tensor: Triangular filter banks (fb matrix) of size (`n_freqs`, `n_mels`) meaning number of frequencies to
+            highlight/apply to x the number of filterbanks. Each column is a filterbank so that assuming there is a
+            matrix A of size (..., `n_freqs`), the applied result would be `A * melscale_fbanks(A.size(-1), ...)`.
 
         """
 
