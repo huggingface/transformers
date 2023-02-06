@@ -1231,12 +1231,12 @@ else:
     _import_structure["models.clap"].extend(
         [
             "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CLAPAudioModel",
+            "CLAPAudioModelWithProjection",
             "CLAPModel",
             "CLAPPreTrainedModel",
             "CLAPTextModel",
             "CLAPTextModelWithProjection",
-            "CLAPAudioModel",
-            "CLAPAudioModelWithProjection",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -3700,8 +3700,8 @@ if TYPE_CHECKING:
         CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLAPAudioConfig,
         CLAPConfig,
-        CLAPProcessor,
         CLAPFeatureExtractor,
+        CLAPProcessor,
         CLAPTextConfig,
     )
     from .models.clip import (
@@ -4590,12 +4590,12 @@ if TYPE_CHECKING:
         )
         from .models.clap import (
             CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLAPAudioModel,
+            CLAPAudioModelWithProjection,
             CLAPModel,
             CLAPPreTrainedModel,
             CLAPTextModel,
             CLAPTextModelWithProjection,
-            CLAPAudioModel,
-            CLAPAudioModelWithProjection,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable,_LazyModule,is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -29,7 +29,7 @@ _import_structure = {
         "CLAPTextConfig",
     ],
     "feature_extraction_clap": ["CLAPFeatureExtractor"],
-    "processing_clap": ["CLAPProcessor"]
+    "processing_clap": ["CLAPProcessor"],
 }
 
 try:
@@ -56,10 +56,10 @@ if TYPE_CHECKING:
         CLAPOnnxConfig,
         CLAPTextConfig,
     )
+    from .feature_extraction_clap import CLAPFeatureExtractor
     from .processing_clap import CLAPProcessor
     from .tokenization_clap import CLAPTokenizer
-    from .feature_extraction_clap import CLAPFeatureExtractor
-    
+
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
@@ -68,12 +68,12 @@ if TYPE_CHECKING:
     else:
         from .modeling_clap import (
             CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLAPAudioModel,
+            CLAPAudioModelWithProjection,
             CLAPModel,
             CLAPPreTrainedModel,
             CLAPTextModel,
             CLAPTextModelWithProjection,
-            CLAPAudioModel,
-            CLAPAudioModelWithProjection,
         )
 
 else:

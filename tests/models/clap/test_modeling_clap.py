@@ -50,11 +50,11 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
+        CLAPAudioModel,
+        CLAPAudioModelWithProjection,
         CLAPModel,
         CLAPTextModel,
         CLAPTextModelWithProjection,
-        CLAPAudioModel,
-        CLAPAudioModelWithProjection,
     )
     from transformers.models.clap.modeling_clap import CLAP_PRETRAINED_MODEL_ARCHIVE_LIST
 
