@@ -49,7 +49,7 @@ def mae_model(name, pretrained_weights, image_size, vocab_size, max_2d_position_
 
         on_load_checkpoint(model, weights["model"])
         model.load_state_dict(weights["model"], strict=False)
-    except:
+    except FileNotFoundError:
         print(
             "================              Failed loaded mae              Ignore this if you are finetuning the model "
             "             ================              "

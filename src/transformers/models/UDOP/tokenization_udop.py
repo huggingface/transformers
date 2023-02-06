@@ -4,7 +4,9 @@ from shutil import copyfile
 from typing import List, Optional, Tuple
 
 import sentencepiece as spm
+from tokenizers import processors
 from transformers import PreTrainedTokenizer
+from transformers.convert_slow_tokenizer import SpmConverter
 from transformers.utils import logging
 
 
@@ -224,13 +226,6 @@ class UdopTokenizer(PreTrainedTokenizer):
 
 
 # Below are for Rust-based Fast Tokenizer
-
-from typing import List, Optional, Tuple
-
-from tokenizers import processors
-from transformers.convert_slow_tokenizer import SpmConverter
-
-
 class UdopConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [(piece.piece, piece.score) for piece in proto.pieces]
