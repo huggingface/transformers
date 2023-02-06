@@ -47,7 +47,6 @@ class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         return video_classifier, examples
 
     def run_pipeline_test(self, video_classifier, examples):
-
         for example in examples:
             outputs = video_classifier(example)
 

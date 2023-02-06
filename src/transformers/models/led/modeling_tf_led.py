@@ -1769,7 +1769,12 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         if global_attention_mask is not None:
             attention_mask = attention_mask * tf.cast((global_attention_mask + 1), dtype=attention_mask.dtype)
 
-        (padding_len, input_ids, attention_mask, inputs_embeds,) = self._pad_to_window_size(
+        (
+            padding_len,
+            input_ids,
+            attention_mask,
+            inputs_embeds,
+        ) = self._pad_to_window_size(
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
@@ -1809,7 +1814,6 @@ class TFLEDEncoder(tf.keras.layers.Layer):
 
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
-
             if output_hidden_states:
                 hidden_states_to_add = self.compute_hidden_states(hidden_states, padding_len)
                 encoder_states = encoder_states + (hidden_states_to_add,)
@@ -2190,7 +2194,6 @@ class TFLEDMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs
     ):
-
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             use_cache = False
 
@@ -2292,7 +2295,6 @@ class TFLEDModel(TFLEDPreTrainedModel):
         training=False,
         **kwargs
     ):
-
         outputs = self.led(
             input_ids=input_ids,
             attention_mask=attention_mask,

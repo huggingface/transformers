@@ -85,7 +85,6 @@ class VideoClassificationPipeline(Pipeline):
         return super().__call__(videos, **kwargs)
 
     def preprocess(self, video, num_frames=None, frame_sampling_rate=1):
-
         if num_frames is None:
             num_frames = self.model.config.num_frames
 

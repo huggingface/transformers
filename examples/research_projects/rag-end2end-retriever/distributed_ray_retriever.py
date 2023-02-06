@@ -166,7 +166,6 @@ class RagRayDistributedRetriever(RagRetriever):
         )
 
     def re_load(self):
-
         logger.info("re-loading the new dataset with embeddings")
         # access from the training loop
 

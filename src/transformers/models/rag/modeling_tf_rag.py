@@ -491,7 +491,6 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings_to_model_forward(RAG_START_DOCSTRING)
 class TFRagModel(TFRagPreTrainedModel):
-
     load_weight_prefix = "tf_rag_model_1"
 
     def __init__(
@@ -602,7 +601,6 @@ class TFRagModel(TFRagPreTrainedModel):
 
         # encoder_outputs are pre-computed during RAG-token generation
         if encoder_outputs is None:
-
             if has_to_retrieve:
                 question_enc_outputs = self.question_encoder(
                     input_ids, attention_mask=attention_mask, return_dict=True, training=training
@@ -726,7 +724,6 @@ class TFRagModel(TFRagPreTrainedModel):
     RAG_START_DOCSTRING,
 )
 class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss):
-
     load_weight_prefix = "tf_rag_token_for_generation_1/rag"
 
     def __init__(
@@ -1299,7 +1296,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     RAG_START_DOCSTRING,
 )
 class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss):
-
     load_weight_prefix = "tf_rag_sequence_for_generation_1/rag"
 
     def __init__(

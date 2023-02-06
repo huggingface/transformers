@@ -93,7 +93,6 @@ class BlipImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = True,
         **kwargs
     ) -> None:
-
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 384, "width": 384}
         size = get_size_dict(size, default_to_square=True)

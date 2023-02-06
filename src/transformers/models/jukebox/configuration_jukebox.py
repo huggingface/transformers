@@ -486,7 +486,6 @@ class JukeboxVQVAEConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from CLIPConfig
@@ -576,7 +575,6 @@ class JukeboxConfig(PretrainedConfig):
         init_std=0.2,
         **kwargs,
     ):
-
         if vqvae_config is None:
             vqvae_config = {}
             logger.info("vqvae_config is None. initializing the JukeboxVQVAE with default values.")

@@ -271,7 +271,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         predict_timestamps=False,
         **kwargs
     ):
-
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token

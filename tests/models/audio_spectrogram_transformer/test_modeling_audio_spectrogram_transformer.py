@@ -225,7 +225,6 @@ class ASTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_audio_classification(self):
-
         feature_extractor = self.default_feature_extractor
         model = ASTForAudioClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593").to(torch_device)
 

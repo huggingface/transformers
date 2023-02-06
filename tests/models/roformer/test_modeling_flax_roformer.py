@@ -116,7 +116,6 @@ class FlaxRoFormerModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxRoFormerModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     test_head_masking = True
 
     all_model_classes = (

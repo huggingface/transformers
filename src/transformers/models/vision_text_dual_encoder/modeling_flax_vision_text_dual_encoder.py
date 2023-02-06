@@ -229,7 +229,6 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         _do_init: bool = True,
         **kwargs
     ):
-
         if not _do_init:
             raise ValueError(
                 "`FlaxVisionTextDualEncoderModel` cannot be created without initializing, `_do_init` must be `True`."

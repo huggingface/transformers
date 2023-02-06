@@ -292,7 +292,6 @@ class AltCLIPTextModelTester:
 
 @require_torch
 class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (AltCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
@@ -343,7 +342,6 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 class AltCLIPModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -395,7 +393,6 @@ def prepare_img():
 
 @require_torch
 class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
     fx_compatible = True
     test_head_masking = False

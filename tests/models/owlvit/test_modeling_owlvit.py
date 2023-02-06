@@ -293,7 +293,6 @@ class OwlViTTextModelTester:
 
 @require_torch
 class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (OwlViTTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -339,7 +338,6 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 class OwlViTModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:

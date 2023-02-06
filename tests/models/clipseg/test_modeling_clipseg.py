@@ -302,7 +302,6 @@ class CLIPSegTextModelTester:
 
 @require_torch
 class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (CLIPSegTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -346,7 +345,6 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 class CLIPSegModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -560,7 +558,6 @@ class CLIPSegModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-
                 # load PyTorch class
                 pt_model = model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.

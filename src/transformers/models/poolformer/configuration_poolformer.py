@@ -133,7 +133,6 @@ class PoolFormerConfig(PretrainedConfig):
 
 
 class PoolFormerOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

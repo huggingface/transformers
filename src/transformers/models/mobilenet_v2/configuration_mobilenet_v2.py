@@ -140,7 +140,6 @@ class MobileNetV2Config(PretrainedConfig):
 
 
 class MobileNetV2OnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

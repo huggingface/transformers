@@ -81,7 +81,6 @@ class FlaxT5ModelTester:
         scope=None,
         decoder_layers=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -228,7 +227,6 @@ class FlaxT5ModelTester:
 
 @require_flax
 class FlaxT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxT5Model, FlaxT5ForConditionalGeneration) if is_flax_available() else ()
     all_generative_model_classes = (FlaxT5ForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
@@ -489,7 +487,6 @@ class FlaxT5EncoderOnlyModelTester:
         decoder_start_token_id=0,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -576,7 +573,6 @@ class FlaxT5EncoderOnlyModelTester:
 
 @require_flax
 class FlaxT5EncoderOnlyModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxT5EncoderModel,) if is_flax_available() else ()
     is_encoder_decoder = False
 

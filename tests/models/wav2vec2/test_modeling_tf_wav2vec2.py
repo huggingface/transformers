@@ -62,7 +62,6 @@ if is_librosa_available():
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -283,7 +282,6 @@ class TFWav2Vec2ModelTester:
 
 @require_tf
 class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (TFWav2Vec2Model, TFWav2Vec2ForCTC) if is_tf_available() else ()
     test_resize_embeddings = False
     test_head_masking = False

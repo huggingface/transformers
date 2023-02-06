@@ -393,7 +393,6 @@ class XCLIPTextModelTester:
 
 @require_torch
 class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (XCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -445,7 +444,6 @@ class XCLIPModelTester:
         mit_hidden_size=64,
         is_training=True,
     ):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:

@@ -147,7 +147,6 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 
 # Copied from transformers.models.encoder_decoder.modeling_tf_encoder_decoder.shift_tokens_right
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
-
     if pad_token_id is None:
         raise ValueError("Make sure to set the pad_token_id attribute of the model's configuration.")
     pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
@@ -603,7 +602,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                 )
 
         if encoder_outputs is None:
-
             encoder_inputs = {
                 "input_ids": pixel_values,
                 "output_attentions": output_attentions,

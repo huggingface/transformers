@@ -130,7 +130,6 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
 
     # Need to change some parameters name to match Flax names
     for pt_key, pt_tensor in pt_state_dict.items():
-
         pt_tuple_key = tuple(pt_key.split("."))
 
         # remove base model prefix if necessary
@@ -187,7 +186,6 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
         )
         # Need to change some parameters name to match Flax names
         for pt_key, pt_tensor in pt_state_dict.items():
-
             pt_tuple_key = tuple(pt_key.split("."))
 
             # remove base model prefix if necessary

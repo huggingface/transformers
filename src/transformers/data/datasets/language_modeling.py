@@ -72,7 +72,6 @@ class TextDataset(Dataset):
         # and the others will use the cache.
         lock_path = cached_features_file + ".lock"
         with FileLock(lock_path):
-
             if os.path.exists(cached_features_file) and not overwrite_cache:
                 start = time.time()
                 with open(cached_features_file, "rb") as handle:

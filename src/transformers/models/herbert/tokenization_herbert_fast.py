@@ -74,7 +74,6 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         sep_token="</s>",
         **kwargs
     ):
-
         super().__init__(
             vocab_file,
             merges_file,

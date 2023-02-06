@@ -361,7 +361,6 @@ class TestTrainerExt(TestCasePlus):
             args += extra_args_str.split()
 
         if distributed:
-
             if n_gpus_to_use is None:
                 n_gpus_to_use = get_gpu_count()
             master_port = get_torch_dist_unique_port()

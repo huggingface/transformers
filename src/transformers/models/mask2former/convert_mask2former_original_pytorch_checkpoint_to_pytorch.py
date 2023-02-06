@@ -624,7 +624,6 @@ class OriginalMask2FormerCheckpointToOursConverter:
 
         rename_keys = []
         for i in range(self.config.decoder_layers - 1):
-
             rename_keys.append(
                 (
                     f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.out_proj.weight",

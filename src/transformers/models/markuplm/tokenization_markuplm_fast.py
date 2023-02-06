@@ -321,6 +321,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             node_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Node-level integer labels (for token classification tasks).
         """
+
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):

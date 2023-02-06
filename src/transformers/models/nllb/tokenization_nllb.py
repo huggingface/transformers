@@ -142,7 +142,6 @@ class NllbTokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         **kwargs
     ):
-
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 

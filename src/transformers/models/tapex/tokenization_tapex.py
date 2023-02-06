@@ -755,7 +755,6 @@ class TapexTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
@@ -1140,10 +1139,8 @@ class TapexTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         batch_outputs = {}
         for text in answer:
-
             if self.do_lower_case:
                 text = text.lower()
 

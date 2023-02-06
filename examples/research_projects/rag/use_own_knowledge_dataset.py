@@ -56,7 +56,6 @@ def main(
     processing_args: "ProcessingArguments",
     index_hnsw_args: "IndexHnswArguments",
 ):
-
     ######################################
     logger.info("Step 1 - Create the dataset")
     ######################################

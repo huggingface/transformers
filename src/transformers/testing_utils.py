@@ -778,6 +778,7 @@ def get_tests_dir(append_path=None):
 # The original code came from:
 # https://github.com/fastai/fastai/blob/master/tests/utils/text.py
 
+
 # When any function contains print() calls that get overwritten, like progress bars,
 # a special care needs to be applied, since under pytest -s captured output (capsys
 # or contextlib.redirect_stdout) contains any temporary printed strings, followed by

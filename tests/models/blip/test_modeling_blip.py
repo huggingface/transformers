@@ -301,7 +301,6 @@ class BlipTextModelTester:
 
 @require_torch
 class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (BlipTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -345,7 +344,6 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 class BlipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -523,7 +521,6 @@ class BlipModelTest(ModelTesterMixin, unittest.TestCase):
 
 class BlipTextRetrievalModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -571,7 +568,6 @@ class BlipTextRetrievalModelTester:
 
 class BlipTextImageModelsModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:

@@ -553,7 +553,6 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         def _decoder_forward(
             module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, encoder_hidden_states, **kwargs
         ):
-
             projection_module = module._get_projection_module()
             decoder_module = module._get_decoder_module()
 

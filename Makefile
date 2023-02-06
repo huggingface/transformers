@@ -9,7 +9,7 @@ modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
 	@if test -n "$(modified_py_files)"; then \
 		echo "Checking/fixing $(modified_py_files)"; \
-		black --preview $(modified_py_files); \
+		black $(modified_py_files); \
 		isort $(modified_py_files); \
 		flake8 $(modified_py_files); \
 	else \
@@ -48,7 +48,7 @@ repo-consistency:
 # this target runs checks on all files
 
 quality:
-	black --check --preview $(check_dirs)
+	black --check $(check_dirs)
 	isort --check-only $(check_dirs)
 	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
@@ -67,7 +67,7 @@ extra_style_checks:
 # this target runs checks on all files and potentially modifies some of them
 
 style:
-	black --preview $(check_dirs)
+	black $(check_dirs)
 	isort $(check_dirs)
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks

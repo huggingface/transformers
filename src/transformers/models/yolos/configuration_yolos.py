@@ -160,7 +160,6 @@ class YolosConfig(PretrainedConfig):
 
 
 class YolosOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

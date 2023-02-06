@@ -168,7 +168,6 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.1, top_k=None):
-
         results = []
         for model_output in model_outputs:
             label = model_output["candidate_label"]
