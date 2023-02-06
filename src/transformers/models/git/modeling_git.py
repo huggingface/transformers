@@ -1514,7 +1514,7 @@ class GitForCausalLM(GitPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=True, **kwargs
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
     ):
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
