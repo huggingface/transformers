@@ -253,7 +253,7 @@ def get_inverse_sqrt_schedule(
         decay = 1.0 / math.sqrt((current_step + shift) / timescale)
         return decay
 
-    return LambdaLR(optimizer, lr_lambda, last_epoch)
+    return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
 
 
 TYPE_TO_SCHEDULER_FUNCTION = {
@@ -298,6 +298,9 @@ def get_scheduler(
         raise ValueError(f"{name} requires `num_warmup_steps`, please provide that argument.")
 
     if name == SchedulerType.CONSTANT_WITH_WARMUP:
+        return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
+
+    if name == SchedulerType.INVERSE_SQRT:
         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
 
     # All other schedulers require `num_training_steps`
