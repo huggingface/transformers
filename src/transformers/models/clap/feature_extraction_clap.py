@@ -234,9 +234,12 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             longer = False
             # only use repeat as a new possible value for padding. you repeat the audio before applying the usual max_length padding
             if waveform.shape[0] < max_length:
+                if padding == "repeat":
+                    n_repeat = int(max_length / len(waveform))
+                    waveform = np.stack(np.tile(waveform, n_repeat + 1))[:max_length]
                 if padding == "repeatpad":
                     n_repeat = int(max_length / len(waveform))
-                    waveform = waveform.repeat(n_repeat)
+                    waveform = np.stack(np.tile(waveform, n_repeat))
                 waveform = np.pad(waveform, (0, max_length - waveform.shape[0]), mode="constant", constant_values=0)
 
             if truncation == "fusion":
@@ -251,10 +254,10 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         truncation: str = "fusion",
+        padding: Optional[str] = "repeatpad",
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = None,
-        padding: Optional[str] = "repeatpad",
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
         **kwargs
@@ -319,11 +322,11 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         )
 
         if is_batched:
-            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
+            raw_speech = [np.asarray(speech, dtype=np.float64) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech, dtype=np.float32)
+            raw_speech = np.asarray(raw_speech, dtype=np.float64)
         elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
-            raw_speech = raw_speech.astype(np.float32)
+            raw_speech = raw_speech.astype(np.float64)
 
         # always return batch
         if not is_batched:
@@ -353,7 +356,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             is_longer[rand_idx] = True
 
         if isinstance(input_mel[0], List):
-            input_mel = [np.asarray(mel, dtype=np.float32) for feature in input_mel]
+            input_mel = [np.asarray(mel, dtype=np.float64) for feature in input_mel]
 
         input_features = {"input_features": input_mel, "is_longer": is_longer}
         input_features = BatchFeature(input_features)
