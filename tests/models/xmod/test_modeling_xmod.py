@@ -14,7 +14,7 @@
 # limitations under the License.
 import unittest
 
-from transformers import is_torch_available
+from transformers import is_torch_available, XLMRobertaTokenizer
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -605,3 +605,48 @@ class XmodModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
         self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
+
+    @slow
+    def test_end_to_end_mask_fill(self):
+        tokenizer = XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
+        model = XmodForMaskedLM.from_pretrained("jvamvas/xmod-base", default_language="en_XX")
+        model.to(torch_device)
+
+        sentences = [
+            "Hello, my dog is a little <mask>.",
+            "Hi <mask>!",
+        ]
+
+        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
+        input_ids = inputs["input_ids"].to(torch_device)
+
+        outputs = model(
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"].to(torch_device),
+        )
+        probs = outputs.logits.softmax(dim=-1)
+        _, predictions = probs.topk(1)
+        predictions = predictions.squeeze(-1)
+
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
+        output_non_padded = model(input_ids=inputs_non_padded)
+        probs_non_padded = output_non_padded.logits.softmax(dim=-1)
+        _, predictions_non_padded = probs_non_padded.topk(1)
+        predictions_non_padded = predictions_non_padded.squeeze(-1)
+
+        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
+        output_padded = model(input_ids=inputs_padded)
+        probs_padded = output_padded.logits.softmax(dim=-1)
+        _, predictions_padded = probs_padded.topk(1)
+        predictions_padded = predictions_padded.squeeze(-1)
+
+        batch_out_sentence = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(predictions_non_padded[0], skip_special_tokens=True)
+        padded_sentence = tokenizer.decode(predictions_padded[0], skip_special_tokens=True)
+
+        expected_output_sentence = [
+            "Hello, my dog is a little girl.",
+            "Hi everyone!",
+        ]
+        self.assertListEqual(expected_output_sentence, batch_out_sentence)
+        self.assertListEqual(batch_out_sentence, [non_padded_sentence, padded_sentence])
