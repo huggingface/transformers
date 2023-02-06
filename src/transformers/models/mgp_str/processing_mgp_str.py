@@ -14,8 +14,6 @@
 # limitations under the License.
 """Processor class for MGP-STR."""
 
-import torch.nn.functional as F
-
 from transformers import BertTokenizer, GPT2Tokenizer, MGPSTRTokenizer
 
 from ...processing_utils import ProcessorMixin

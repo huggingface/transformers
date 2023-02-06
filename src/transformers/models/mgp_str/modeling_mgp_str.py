@@ -338,7 +338,6 @@ class MGPSTRModel(MGPSTRPreTrainedModel):
 
         attens = []
         out = []
-        out_softmax = []
 
         # char
         char_attn, x_char = self.char_a3_module(x)
