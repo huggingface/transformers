@@ -14,16 +14,9 @@
 # limitations under the License.
 
 import re
+import unicodedata
 from fractions import Fraction
 from typing import Iterator, List, Match, Optional, Union
-
-from ...utils import is_more_itertools_available
-
-
-if is_more_itertools_available():
-    from more_itertools import windowed
-
-import unicodedata
 
 import regex
 
@@ -240,7 +233,9 @@ class EnglishNumberNormalizer:
         if len(words) == 0:
             return
 
-        for prev, current, next in windowed([None] + words + [None], 3):
+        for i, current in enumerate(words):
+            prev = words[i - 1] if i != 0 else None
+            next = words[i + 1] if i != len(words) - 1 else None
             if skip:
                 skip = False
                 continue

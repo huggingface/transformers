@@ -116,7 +116,6 @@ from .import_utils import (
     is_kenlm_available,
     is_keras_nlp_available,
     is_librosa_available,
-    is_more_itertools_available,
     is_natten_available,
     is_ninja_available,
     is_onnx_available,
