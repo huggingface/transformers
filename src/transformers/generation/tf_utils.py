@@ -1033,6 +1033,7 @@ class TFGenerationMixin:
         if (
             self.config.is_encoder_decoder
             and hasattr(self, "encoder")
+            and hasattr(self.encoder, "main_input_name")
             and self.encoder.main_input_name != self.main_input_name
         ):
             input_name = self.encoder.main_input_name
