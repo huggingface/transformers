@@ -16,6 +16,7 @@ logger = logging.get_logger(__name__)
 # [NOTE]: copied from https://github.com/pytorch/audio/blob/main/torchaudio/functional/functional.py#L415-L446
 def hz_to_mel(freq: float, mel_scale: str = "htk") -> float:
     r"""Convert Hz to Mels.
+
     Args:
         freqs (float): Frequencies in Hz
         mel_scale (str, optional): Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
@@ -49,6 +50,7 @@ def hz_to_mel(freq: float, mel_scale: str = "htk") -> float:
 # [NOTE]: copied from https://github.com/pytorch/audio/blob/main/torchaudio/functional/functional.py#L449-L479
 def mel_to_hz(mels: np.ndarray, mel_scale: str = "htk") -> np.ndarray:
     """Convert mel bin numbers to frequencies.
+
     Args:
         mels (Tensor): Mel frequencies
         mel_scale (str, optional): Scale to use: ``htk`` or ``slaney``. (Default: ``htk``)
