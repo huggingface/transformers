@@ -19,6 +19,7 @@ import random
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 from torch import nn
 from torch.distributions import (
@@ -430,6 +431,41 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     inverted_mask = 1.0 - expanded_mask
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+
+# Copied from transformers.models.marian.modeling_marian.MarianSinusoidalPositionalEmbedding with Marian->TimeSeries
+class TimeSeriesSinusoidalPositionalEmbedding(nn.Embedding):
+    """This module produces sinusoidal positional embeddings of any length."""
+
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
+        super().__init__(num_positions, embedding_dim)
+        self.weight = self._init_weight(self.weight)
+
+    @staticmethod
+    def _init_weight(out: nn.Parameter) -> nn.Parameter:
+        """
+        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
+        the 2nd half of the vector. [dim // 2:]
+        """
+        n_pos, dim = out.shape
+        position_enc = np.array(
+            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+        )
+        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
+        sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
+        out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
+        out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
+        out.detach_()
+        return out
+
+    @torch.no_grad()
+    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
+        """`input_ids_shape` is expected to be [bsz x seqlen]."""
+        bsz, seq_len = input_ids_shape[:2]
+        positions = torch.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+        )
+        return super().forward(positions)
 
 
 class ValueEmbedding(nn.Module):
@@ -944,6 +980,8 @@ class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, TimeSeriesSinusoidalPositionalEmbedding):
+            pass
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -1118,6 +1156,9 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
         self.layerdrop = config.encoder_layerdrop
 
         self.value_embedding = ValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
+            config.context_length + config.prediction_length, config.d_model
+        )
         self.layers = nn.ModuleList([TimeSeriesTransformerEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
@@ -1169,7 +1210,9 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.value_embedding(inputs_embeds)
-        hidden_states = self.layernorm_embedding(hidden_states)
+        embed_pos = self.embed_positions(inputs_embeds.size())
+
+        hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
@@ -1248,6 +1291,9 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
 
         self.value_embedding = ValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
+            config.context_length + config.prediction_length, config.d_model
+        )
         self.layers = nn.ModuleList([TimeSeriesTransformerDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
@@ -1372,7 +1418,8 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         hidden_states = self.value_embedding(inputs_embeds)
-        hidden_states = self.layernorm_embedding(hidden_states)
+        embed_pos = self.embed_positions(inputs_embeds.size(), past_key_values_length=self.config.context_length)
+        hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
