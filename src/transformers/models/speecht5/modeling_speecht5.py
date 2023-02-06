@@ -2296,7 +2296,9 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         >>> from transformers import SpeechT5Processor, SpeechT5ForSpeechToText
         >>> from datasets import load_dataset
 
-        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> dataset = load_dataset(
+        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation"
+        ... )  # doctest: +IGNORE_RESULT
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
 
@@ -2770,7 +2772,9 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         >>> from datasets import load_dataset
         >>> import torch
 
-        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+        >>> dataset = load_dataset(
+        ...     "hf-internal-testing/librispeech_asr_demo", "clean", split="validation"
+        ... )  # doctest: +IGNORE_RESULT
         >>> dataset = dataset.sort("id")
         >>> sampling_rate = dataset.features["audio"].sampling_rate
 
