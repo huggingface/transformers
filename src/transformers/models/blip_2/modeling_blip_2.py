@@ -45,6 +45,7 @@ from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionCo
 
 logger = logging.get_logger(__name__)
 
+# TODO update organization
 _CHECKPOINT_FOR_DOC = "Salesforce/blip2-opt-2.7b"
 
 BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1303,8 +1304,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Blip2ForConditionalGeneration
 
-        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        >>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/blip2-opt-2.7b")
+        >>> model = Blip2ForConditionalGeneration.from_pretrained("nielsr/blip2-opt-2.7b")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1419,6 +1420,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         Returns:
             captions (list): A list of strings of length batch_size * num_captions.
         """
+        batch_size = pixel_values.shape[0]
         image_embeds = self.vision_model(pixel_values, return_dict=True).last_hidden_state
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
 
@@ -1435,6 +1437,12 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         language_attention_mask = torch.ones(
             language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
         )
+        if input_ids is None:
+            input_ids = (
+                torch.LongTensor([[self.config.text_config.bos_token_id]])
+                .repeat(batch_size, 1)
+                .to(image_embeds.device)
+            )
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
         attention_mask = torch.cat([language_attention_mask, attention_mask], dim=1)

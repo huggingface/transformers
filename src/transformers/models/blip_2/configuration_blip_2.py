@@ -266,10 +266,10 @@ class Blip2QFormerConfig(PretrainedConfig):
 
 class Blip2Config(PretrainedConfig):
     r"""
-    [`Blip2Config`] is the configuration class to store the configuration of a [`Blip2Model`]. It is used to
-    instantiate a BLIP-2 model according to the specified arguments, defining the vision model, Q-Former model and
-    language model configs. Instantiating a configuration with the defaults will yield a similar configuration to that
-    of the BLIP-2 [Salesforce/blip2-opt-2.7b](https://huggingface.co/Salesforce/blip2-opt-2.7b) architecture.
+    [`Blip2Config`] is the configuration class to store the configuration of a [`Blip2ForConditionalGeneration`]. It is
+    used to instantiate a BLIP-2 model according to the specified arguments, defining the vision model, Q-Former model
+    and language model configs. Instantiating a configuration with the defaults will yield a similar configuration to
+    that of the BLIP-2 [Salesforce/blip2-opt-2.7b](https://huggingface.co/Salesforce/blip2-opt-2.7b) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -290,13 +290,19 @@ class Blip2Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Blip2VisionConfig, Blip2QFormerConfig, OPTConfig, Blip2Config, Blip2Model
+    >>> from transformers import (
+    ...     Blip2VisionConfig,
+    ...     Blip2QFormerConfig,
+    ...     OPTConfig,
+    ...     Blip2Config,
+    ...     Blip2ForConditionalGeneration,
+    ... )
 
     >>> # Initializing a Blip2Config with Salesforce/blip2-opt-2.7b style configuration
     >>> configuration = Blip2Config()
 
-    >>> # Initializing a Blip2Model (with random weights) from the Salesforce/blip2-opt-2.7b style configuration
-    >>> model = Blip2Model(configuration)
+    >>> # Initializing a Blip2ForConditionalGeneration (with random weights) from the Salesforce/blip2-opt-2.7b style configuration
+    >>> model = Blip2ForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

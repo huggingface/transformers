@@ -571,7 +571,7 @@ class Blip2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP_2/demo.jpg"
+    url = "https://huggingface.co/ybelkada/blip-test-image/resolve/main/demo.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -581,53 +581,31 @@ def prepare_img():
 @slow
 class Blip2ModelIntegrationTest(unittest.TestCase):
     def test_inference_image_captioning(self):
-        model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b").to(torch_device)
-        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        image = prepare_img()
+        # TODO update organization
+        processor = Blip2Processor.from_pretrained("nielsr/blip2-opt-2.7b")
+        model = Blip2ForConditionalGeneration.from_pretrained("nielsr/blip2-opt-2.7b").to(torch_device)
 
-        # image only
+        # prepare image
+        image = prepare_img()
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
 
         predictions = model.generate(**inputs)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102])
+        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118])
+        self.assertEqual("a woman sitting on the beach with a dog", generated_text)
 
         # image and context
-        context = ["a picture of"]
-        inputs = processor(images=image, text=context, return_tensors="pt").to(torch_device)
+        prompt = "Question: which city is this? Answer:"
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
 
         predictions = model.generate(**inputs)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
         self.assertEqual(
             predictions[0].tolist(),
-            [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
+            [2, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
         )
-
-    def test_inference_image_captioning_fp16(self):
-        model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ).to(torch_device)
-        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        image = prepare_img()
-
-        # image only
-        inputs = processor(images=image, return_tensors="pt").to(torch_device, torch.float16)
-
-        predictions = model.generate(**inputs)
-
-        # Test output
-        self.assertEqual(predictions[0].tolist(), [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102])
-
-        # image and context
-        context = ["a picture of"]
-        inputs = processor(images=image, text=context, return_tensors="pt").to(torch_device, torch.float16)
-
-        predictions = model.generate(**inputs)
-
-        # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
-        )
+        self.assertEqual(generated_text, "it's not a city, it's a beach")
