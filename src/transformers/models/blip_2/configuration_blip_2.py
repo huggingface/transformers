@@ -337,11 +337,11 @@ class Blip2Config(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the Blip2TextConfig with default values.")
+            logger.info("text_config is None. Initializing the text config with default values.")
 
         self.vision_config = Blip2VisionConfig(**vision_config)
         self.qformer_config = Blip2QFormerConfig(**qformer_config)
-        text_model_type = text_config["model_type"]
+        text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         self.num_query_tokens = num_query_tokens

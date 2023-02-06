@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -60,10 +60,15 @@ class Blip2ForConditionalGenerationModelOutput(ModelOutput):
 
     Args:
         loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Languge modeling loss from the text decoder.
+            Language modeling loss from the language model.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
-            Prediction scores of the language modeling head of the text language model.
-        ...
+            Prediction scores of the language modeling head of the language model.
+        vision_outputs (...):
+            Outputs of the vision encoder.
+        qformer_outputs (...):
+            Outputs of the Q-Former (Querying Transformer).
+        language_model_outputs (...):
+            Outputs of the language model.
     """
 
     loss: Optional[Tuple[torch.FloatTensor]] = None
@@ -71,6 +76,14 @@ class Blip2ForConditionalGenerationModelOutput(ModelOutput):
     vision_outputs: Optional[torch.FloatTensor] = None
     qformer_outputs: Optional[Tuple[torch.FloatTensor]] = None
     language_model_outputs: Optional[Tuple[torch.FloatTensor]] = None
+
+    def to_tuple(self) -> Tuple[Any]:
+        return tuple(
+            self[k]
+            if k not in ["vision_outputs", "qformer_outputs", "language_model_outputs"]
+            else getattr(self, k).to_tuple()
+            for k in self.keys()
+        )
 
 
 class Blip2VisionEmbeddings(nn.Module):
@@ -99,9 +112,6 @@ class Blip2VisionEmbeddings(nn.Module):
         batch_size = pixel_values.shape[0]
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-
-        print("Shape of patch embeddings before CLS:", patch_embeds.shape)
-        print("First values of patch embeddings before CLS:", patch_embeds[0, :3, :3])
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
@@ -992,10 +1002,10 @@ class Blip2QFormerEncoder(nn.Module):
                     encoder_attention_mask,
                 )
             else:
-                if i == 0:
-                    print(f"Shape of hidden states before layer {i}:", hidden_states.shape)
-                    print(f"First values of hidden states before layer {i}:", hidden_states[0, :3, :3])
-                    print("Shape of the encoder hidden states:", encoder_hidden_states.shape)
+                # if i == 0:
+                #     print(f"Shape of hidden states before layer {i}:", hidden_states.shape)
+                #     print(f"First values of hidden states before layer {i}:", hidden_states[0, :3, :3])
+                #     print("Shape of the encoder hidden states:", encoder_hidden_states.shape)
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
@@ -1006,9 +1016,9 @@ class Blip2QFormerEncoder(nn.Module):
                     output_attentions,
                     query_length,
                 )
-                if i == 0:
-                    print(f"Shape of hidden states after layer {i}:", hidden_states.shape)
-                    print(f"First values of hidden states after layer {i}:", layer_outputs[0][0, :3, :3])
+                # if i == 0:
+                #     print(f"Shape of hidden states after layer {i}:", hidden_states.shape)
+                #     print(f"First values of hidden states after layer {i}:", layer_outputs[0][0, :3, :3])
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -1396,11 +1406,10 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
                 attention_mask=attention_mask,
                 return_dict=return_dict,
             )
+            logits = outputs.logits if return_dict else outputs[0]
             loss = None
             # we compute the loss here since we need to take into account the sequence length of the query embeds
             if labels is not None:
-                logits = outputs.logits if return_dict else outputs[0]
-
                 logits = logits[:, -labels.size(1) :, :]
                 # Shift so that tokens < n predict n
                 shift_logits = logits[..., :-1, :].contiguous()
@@ -1418,15 +1427,16 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
                 return_dict=return_dict,
                 labels=labels,
             )
-            loss = outputs.loss
+            loss = outputs.loss if return_dict else outputs[0]
+            logits = outputs.logits if return_dict else outputs[1]
 
         if not return_dict:
-            outputs = (loss, outputs[1], image_embeds, vision_outputs[0]) + vision_outputs[2:]
-            return tuple(output for output in outputs if output is not None)
+            output = (logits, vision_outputs, query_outputs, outputs)
+            return ((loss,) + output) if loss is not None else output
 
         return Blip2ForConditionalGenerationModelOutput(
             loss=loss,
-            logits=outputs.logits,
+            logits=logits,
             vision_outputs=vision_outputs,
             qformer_outputs=query_outputs,
             language_model_outputs=outputs,
