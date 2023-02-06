@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from . import (
+    UDOP,
     albert,
     align,
     altclip,
