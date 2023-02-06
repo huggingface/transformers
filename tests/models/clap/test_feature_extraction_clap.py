@@ -37,6 +37,7 @@ if is_torch_available():
 
 global_rng = random.Random()
 
+
 # Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
@@ -50,6 +51,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
             values[-1].append(rng.random() * scale)
 
     return values
+
 
 @require_torch
 @require_torchaudio
@@ -225,7 +227,6 @@ class CLAPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         input_features = feaure_extractor(input_speech, return_tensors="pt").input_features
         self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
 
-
     def integration_test_fusion(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
@@ -240,7 +241,7 @@ class CLAPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
 
         input_speech = self._load_datasamples(1)
         feaure_extractor = CLAPFeatureExtractor()
-        input_features = feaure_extractor(input_speech, return_tensors="pt", truncation = "rand_trunc").input_features
+        input_features = feaure_extractor(input_speech, return_tensors="pt", truncation="rand_trunc").input_features
         self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
-        
+
         # TODO test fusion with a longer audio
