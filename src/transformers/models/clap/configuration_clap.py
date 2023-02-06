@@ -216,14 +216,8 @@ class CLAPAudioConfig(PretrainedConfig):
 
     def __init__(
         self,
-        sample_rate=48000,
-        audio_length=1024,
         window_size=8,
-        hop_size=1024,
-        fmin=50,
-        fmax=14000,
         mel_bins=64,
-        clip_samples=480000,
         spec_size=256,
         hidden_act="gelu",
         patch_size=4,
@@ -253,14 +247,8 @@ class CLAPAudioConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(**kwargs)
-        self.sample_rate = sample_rate
-        self.audio_length = audio_length
         self.window_size = window_size
-        self.hop_size = hop_size
-        self.fmin = fmin
-        self.fmax = fmax
         self.mel_bins = mel_bins
-        self.clip_samples = clip_samples
         self.spec_size = spec_size
         self.patch_size = patch_size
         self.patch_stride = patch_stride
