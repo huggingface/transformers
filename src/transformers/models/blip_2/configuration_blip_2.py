@@ -148,15 +148,16 @@ class Blip2QFormerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Blip2QFormerModel`]. It is used to instantiate a
     BLIP-2 Querying Transformer (Q-Former) model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the BLIP-2
-    [...](https://huggingface.co/...) architecture. Configuration objects inherit from [`PretrainedConfig`] and can be
-    used to control the model outputs. Read the documentation from [`PretrainedConfig`] for more information.
+    [Salesforce/blip2-opt-2.7b](https://huggingface.co/Salesforce/blip2-opt-2.7b) architecture. Configuration objects
+    inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
+    [`PretrainedConfig`] for more information.
 
     Note that [`Blip2QFormerModel`] is very similar to [`BertLMHeadModel`] with interleaved cross-attention.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BertModel`] or [`TFBertModel`].
+            Vocabulary size of the Q-Former model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling the model.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -279,7 +280,7 @@ class Blip2Config(PretrainedConfig):
         qformer_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`Blip2QFormerConfig`].
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
+            Dictionary of configuration options used to initialize any [`PretrainedConfig`].
         num_query_tokens (`int`, *optional*, defaults to 32):
             The number of query tokens passed through the Transformer.
 
