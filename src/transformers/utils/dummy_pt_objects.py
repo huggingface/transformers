@@ -1465,14 +1465,14 @@ class CLAPTextModelWithProjection(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class CLAPVisionModel(metaclass=DummyObject):
+class CLAPAudioModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class CLAPVisionModelWithProjection(metaclass=DummyObject):
+class CLAPAudioModelWithProjection(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

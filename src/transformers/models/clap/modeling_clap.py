@@ -262,11 +262,11 @@ class CLAPOutput(ModelOutput):
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`CLAPTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLAPVisionModel`].
+            The image embeddings obtained by applying the projection layer to the pooled output of [`CLAPAudioModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`CLAPTextModel`].
         vision_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLAPVisionModel`].
+            The output of the [`CLAPAudioModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -819,11 +819,11 @@ CLAP_TEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-CLAP_VISION_INPUTS_DOCSTRING = r"""
+CLAP_AUDIO_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLAPImageProcessor.__call__`] for details.
+            [`AutoFeatureExtractor`]. See [`CLAPFeatureExtractor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -858,7 +858,7 @@ CLAP_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`CLAPImageProcessor.__call__`] for details.
+            [`AutoFeatureExtractor`]. See [`CLAPFeatureExtractor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):

@@ -162,7 +162,7 @@ class CLAPTextConfig(PretrainedConfig):
 
 class CLAPAudioConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLAPVisionModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`CLAPAudioModel`]. It is used to instantiate a
     CLAP vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the CLAP
     [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
@@ -200,13 +200,13 @@ class CLAPAudioConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLAPAudioConfig, CLAPVisionModel
+    >>> from transformers import CLAPAudioConfig, CLAPAudioModel
 
     >>> # Initializing a CLAPAudioConfig with laion-ai/base style configuration
     >>> configuration = CLAPAudioConfig()
 
-    >>> # Initializing a CLAPVisionModel (with random weights) from the laion-ai/base style configuration
-    >>> model = CLAPVisionModel(configuration)
+    >>> # Initializing a CLAPAudioModel (with random weights) from the laion-ai/base style configuration
+    >>> model = CLAPAudioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

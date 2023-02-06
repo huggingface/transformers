@@ -53,8 +53,8 @@ if is_torch_available():
         CLAPModel,
         CLAPTextModel,
         CLAPTextModelWithProjection,
-        CLAPVisionModel,
-        CLAPVisionModelWithProjection,
+        CLAPAudioModel,
+        CLAPAudioModelWithProjection,
     )
     from transformers.models.clap.modeling_clap import CLAP_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -73,7 +73,7 @@ if is_flax_available():
     )
 
 
-class CLAPVisionModelTester:
+class CLAPAudioModelTester:
     def __init__(
         self,
         parent,
@@ -134,7 +134,7 @@ class CLAPVisionModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = CLAPVisionModel(config=config)
+        model = CLAPAudioModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -147,7 +147,7 @@ class CLAPVisionModelTester:
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, pixel_values):
-        model = CLAPVisionModelWithProjection(config=config)
+        model = CLAPAudioModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -167,20 +167,20 @@ class CLAPVisionModelTester:
 
 
 @require_torch
-class CLAPVisionModelTest(ModelTesterMixin, unittest.TestCase):
+class CLAPAudioModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as CLAP does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (CLAPVisionModel, CLAPVisionModelWithProjection) if is_torch_available() else ()
+    all_model_classes = (CLAPAudioModel, CLAPAudioModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = CLAPVisionModelTester(self)
+        self.model_tester = CLAPAudioModelTester(self)
         self.config_tester = ConfigTester(self, config_class=CLAPAudioConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
@@ -225,24 +225,24 @@ class CLAPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="CLAPVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="CLAPAudioModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="CLAPVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="CLAPAudioModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLAPVisionModel.from_pretrained(model_name)
+            model = CLAPAudioModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
         for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLAPVisionModelWithProjection.from_pretrained(model_name)
+            model = CLAPAudioModelWithProjection.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertTrue(hasattr(model, "visual_projection"))
 
@@ -410,7 +410,7 @@ class CLAPModelTester:
 
         self.parent = parent
         self.text_model_tester = CLAPTextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = CLAPVisionModelTester(parent, **vision_kwargs)
+        self.vision_model_tester = CLAPAudioModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):

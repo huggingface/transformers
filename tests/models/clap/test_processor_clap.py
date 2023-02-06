@@ -22,134 +22,89 @@ import numpy as np
 import pytest
 
 from transformers import CLAPTokenizer, CLAPTokenizerFast
-from transformers.models.clap.tokenization_clap import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_vision
-from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
+from transformers.utils import is_torchvision_available
+from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
+from .test_feature_extraction_clap import floats_list
 
 
-if is_vision_available():
-    from PIL import Image
-
-    from transformers import CLAPImageProcessor, CLAPProcessor
+if is_torchvision_available():
+    from transformers import CLAPFeatureExtractor, CLAPProcessor
 
 
-@require_vision
+TRANSCRIBE = 50358
+NOTIMESTAMPS = 50362
+
+
+
+@require_torchaudio
+@require_sentencepiece
 class CLAPProcessorTest(unittest.TestCase):
     def setUp(self):
+        self.checkpoint = "laionai/clap-tiny-hsat"
         self.tmpdirname = tempfile.mkdtemp()
 
-        # fmt: off
-        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "lo", "l</w>", "w</w>", "r</w>", "t</w>", "low</w>", "er</w>", "lowest</w>", "newer</w>", "wider", "<unk>", "<|startoftext|>", "<|endoftext|>"]
-        # fmt: on
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-        merges = ["#version: 0.2", "l o", "lo w</w>", "e r</w>", ""]
-        self.special_tokens_map = {"unk_token": "<unk>"}
-
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
-        with open(self.vocab_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(vocab_tokens) + "\n")
-        with open(self.merges_file, "w", encoding="utf-8") as fp:
-            fp.write("\n".join(merges))
-
-        image_processor_map = {
-            "do_resize": True,
-            "size": 20,
-            "do_center_crop": True,
-            "crop_size": 18,
-            "do_normalize": True,
-            "image_mean": [0.48145466, 0.4578275, 0.40821073],
-            "image_std": [0.26862954, 0.26130258, 0.27577711],
-        }
-        self.image_processor_file = os.path.join(self.tmpdirname, IMAGE_PROCESSOR_NAME)
-        with open(self.image_processor_file, "w", encoding="utf-8") as fp:
-            json.dump(image_processor_map, fp)
-
     def get_tokenizer(self, **kwargs):
-        return CLAPTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return CLAPTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
-    def get_rust_tokenizer(self, **kwargs):
-        return CLAPTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_image_processor(self, **kwargs):
-        return CLAPImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+    def get_feature_extractor(self, **kwargs):
+        return CLAPFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
-
     def test_save_load_pretrained_default(self):
-        tokenizer_slow = self.get_tokenizer()
-        tokenizer_fast = self.get_rust_tokenizer()
-        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+        feature_extractor = self.get_feature_extractor()
 
-        processor_slow = CLAPProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
-        processor_slow.save_pretrained(self.tmpdirname)
-        processor_slow = CLAPProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        processor = CLAPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        processor_fast = CLAPProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
-        processor_fast.save_pretrained(self.tmpdirname)
-        processor_fast = CLAPProcessor.from_pretrained(self.tmpdirname)
+        processor.save_pretrained(self.tmpdirname)
+        processor = CLAPProcessor.from_pretrained(self.tmpdirname)
 
-        self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
-        self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
-        self.assertEqual(tokenizer_slow.get_vocab(), tokenizer_fast.get_vocab())
-        self.assertIsInstance(processor_slow.tokenizer, CLAPTokenizer)
-        self.assertIsInstance(processor_fast.tokenizer, CLAPTokenizerFast)
+        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
+        self.assertIsInstance(processor.tokenizer, CLAPTokenizer)
 
-        self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor_slow.image_processor, CLAPImageProcessor)
-        self.assertIsInstance(processor_fast.image_processor, CLAPImageProcessor)
+        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
+        self.assertIsInstance(processor.feature_extractor, CLAPFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = CLAPProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = CLAPProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+        feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
 
         processor = CLAPProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, CLAPTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, CLAPTokenizer)
 
-        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, CLAPImageProcessor)
+        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.feature_extractor, CLAPFeatureExtractor)
 
-    def test_image_processor(self):
-        image_processor = self.get_image_processor()
+    def test_feature_extractor(self):
+        feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLAPProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CLAPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        image_input = self.prepare_image_inputs()
+        raw_speech = floats_list((3, 1000))
 
-        input_image_proc = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
+        input_processor = processor(raw_speech, return_tensors="np")
 
-        for key in input_image_proc.keys():
-            self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
+        for key in input_feat_extract.keys():
+            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
-        image_processor = self.get_image_processor()
+        feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLAPProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CLAPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        input_str = "lower newer"
+        input_str = "This is a test string"
 
         encoded_processor = processor(text=input_str)
 
@@ -158,28 +113,11 @@ class CLAPProcessorTest(unittest.TestCase):
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
 
-    def test_processor(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-
-        processor = CLAPProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(list(inputs.keys()), ["input_ids", "attention_mask", "pixel_values"])
-
-        # test if it raises when no input is passed
-        with pytest.raises(ValueError):
-            processor()
-
     def test_tokenizer_decode(self):
-        image_processor = self.get_image_processor()
+        feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLAPProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CLAPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -189,14 +127,13 @@ class CLAPProcessorTest(unittest.TestCase):
         self.assertListEqual(decoded_tok, decoded_processor)
 
     def test_model_input_names(self):
-        image_processor = self.get_image_processor()
+        feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLAPProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = CLAPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        input_str = "lower newer"
-        image_input = self.prepare_image_inputs()
-
-        inputs = processor(text=input_str, images=image_input)
-
-        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
+        self.assertListEqual(
+            processor.model_input_names,
+            feature_extractor.model_input_names,
+            msg="`processor` and `feature_extractor` model input names do not match",
+        )

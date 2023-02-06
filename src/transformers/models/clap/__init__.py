@@ -53,7 +53,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_clap"] = ["CLAPFeatureExtractor"]
-    _import_structure["image_processing_clap"] = ["CLAPImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -67,8 +66,8 @@ else:
         "CLAPPreTrainedModel",
         "CLAPTextModel",
         "CLAPTextModelWithProjection",
-        "CLAPVisionModel",
-        "CLAPVisionModelWithProjection",
+        "CLAPAudioModel",
+        "CLAPAudioModelWithProjection",
     ]
 
 if TYPE_CHECKING:
@@ -91,13 +90,12 @@ if TYPE_CHECKING:
         from .tokenization_clap_fast import CLAPTokenizerFast
 
     try:
-        if not is_vision_available():
+        if not is_torchvision_available(): #TODO this depencie will be removed
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
         from .feature_extraction_clap import CLAPFeatureExtractor
-        from .image_processing_clap import CLAPImageProcessor
 
     try:
         if not is_torch_available():
@@ -111,8 +109,8 @@ if TYPE_CHECKING:
             CLAPPreTrainedModel,
             CLAPTextModel,
             CLAPTextModelWithProjection,
-            CLAPVisionModel,
-            CLAPVisionModelWithProjection,
+            CLAPAudioModel,
+            CLAPAudioModelWithProjection,
         )
 
 else:

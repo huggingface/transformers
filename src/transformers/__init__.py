@@ -208,6 +208,7 @@ _import_structure = {
         "CLAPAudioConfig",
         "CLAPConfig",
         "CLAPProcessor",
+        "CLAPFeatureExtractor"
         "CLAPTextConfig",
         "CLAPTokenizer",
     ],
@@ -809,7 +810,6 @@ else:
     _import_structure["models.blip"].extend(["BlipImageProcessor"])
     _import_structure["models.bridgetower"].append("BridgeTowerImageProcessor")
     _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
-    _import_structure["models.clap"].extend(["CLAPFeatureExtractor", "CLAPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
     _import_structure["models.conditional_detr"].extend(
         ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
@@ -1237,8 +1237,8 @@ else:
             "CLAPPreTrainedModel",
             "CLAPTextModel",
             "CLAPTextModelWithProjection",
-            "CLAPVisionModel",
-            "CLAPVisionModelWithProjection",
+            "CLAPAudioModel",
+            "CLAPAudioModelWithProjection",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -3703,6 +3703,7 @@ if TYPE_CHECKING:
         CLAPAudioConfig,
         CLAPConfig,
         CLAPProcessor,
+        CLAPFeatureExtractor,
         CLAPTextConfig,
         CLAPTokenizer,
     )
@@ -4236,7 +4237,6 @@ if TYPE_CHECKING:
         from .models.blip import BlipImageProcessor
         from .models.bridgetower import BridgeTowerImageProcessor
         from .models.chinese_clip import ChineseCLIPFeatureExtractor, ChineseCLIPImageProcessor
-        from .models.clap import CLAPFeatureExtractor, CLAPImageProcessor
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor, ConditionalDetrImageProcessor
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
@@ -4598,8 +4598,8 @@ if TYPE_CHECKING:
             CLAPPreTrainedModel,
             CLAPTextModel,
             CLAPTextModelWithProjection,
-            CLAPVisionModel,
-            CLAPVisionModelWithProjection,
+            CLAPAudioModel,
+            CLAPAudioModelWithProjection,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
