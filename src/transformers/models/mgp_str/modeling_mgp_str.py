@@ -294,8 +294,8 @@ class MGPSTRModel(MGPSTRPreTrainedModel):
                 Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
                 [`ViTImageProcessor.__call__`] for details.
         Returns:
-            `List[torch.FloatTensor]`: The list of logits output of char, bpe, wp. `List[torch.FloatTensor]`: The list
-            of attention output of char, bpe, wp.
+            out(`List[torch.FloatTensor]`): The list of logits output of char, bpe, wp.
+            attens(`List[torch.FloatTensor]`): The list of attention output of char, bpe, wp.
 
         Example:
 
@@ -338,23 +338,27 @@ class MGPSTRModel(MGPSTRPreTrainedModel):
 
         attens = []
         out = []
+        out_softmax = []
 
         # char
         char_attn, x_char = self.char_a3_module(x)
         char_out = self.char_head(x_char)
         attens.append(char_attn)
         out.append(char_out)
+        out.append(F.softmax(char_out, dim=2))
 
         # bpe
         bpe_attn, x_bpe = self.bpe_a3_module(x)
         bpe_out = self.bpe_head(x_bpe)
         attens.append(bpe_attn)
         out.append(bpe_out)
+        out.append(F.softmax(bpe_out, dim=2))
 
         # wp
         wp_attn, x_wp = self.wp_a3_module(x)
         wp_out = self.wp_head(x_wp)
         attens.append(wp_attn)
         out.append(wp_out)
+        out.append(F.softmax(wp_out, dim=2))
 
         return out, attens

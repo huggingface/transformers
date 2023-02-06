@@ -77,12 +77,12 @@ class MGPSTRProcessor(ProcessorMixin):
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
-        char_preds, bpe_preds, wp_preds = sequences
+        char_preds, char_preds_softmax, bpe_preds, bpe_preds_softmax, wp_preds, wp_preds_softmax = sequences
         batch_size = char_preds.size(0)
 
-        char_strs, char_scores = self._decode_helper(char_preds, "char")
-        bpe_strs, bpe_scores = self._decode_helper(bpe_preds, "bpe")
-        wp_strs, wp_scores = self._decode_helper(wp_preds, "wp")
+        char_strs, char_scores = self._decode_helper(char_preds, char_preds_softmax, "char")
+        bpe_strs, bpe_scores = self._decode_helper(bpe_preds, bpe_preds_softmax, "bpe")
+        wp_strs, wp_scores = self._decode_helper(wp_preds, wp_preds_softmax, "wp")
 
         final_strs = []
         final_scores = []
@@ -101,13 +101,15 @@ class MGPSTRProcessor(ProcessorMixin):
         out["wp_preds"] = wp_strs
         return out
 
-    def _decode_helper(self, pred_logits, type):
+    def _decode_helper(self, pred_logits, pred_softmax, decode_type):
         """
         Convert a list of lists of bpe token ids into a list of strings by calling bpe tokenizer.
 
         Args:
             pred_logits (`torch.Tensor`):
                 List of model prediction logits.
+            pred_softmax (`torch.Tensor`):
+                List of model prediction softmax.
             tyope (`str`):
                 Type of model prediction. Must be one of ['char', 'bpe', 'wp'].
         Returns:
@@ -115,15 +117,15 @@ class MGPSTRProcessor(ProcessorMixin):
                 dec_strs(`str`): The decode strings of model prediction. conf_scores(`List[float]`): The confidence
                 score of model prediction.
         """
-        if type == "char":
+        if decode_type == "char":
             decoder = self.char_tokenizer.batch_decode
             eos_token = 1
             eos_str = "[s]"
-        elif type == "bpe":
+        elif decode_type == "bpe":
             decoder = self.bpe_decode
             eos_token = 2
             eos_str = "#"
-        elif type == "wp":
+        elif decode_type == "wp":
             decoder = self.wp_decode
             eos_token = 102
             eos_str = "[SEP]"
@@ -136,7 +138,7 @@ class MGPSTRProcessor(ProcessorMixin):
         _, preds_index = pred_logits.topk(1, dim=-1, largest=True, sorted=True)
         preds_index = preds_index.view(-1, batch_max_length)[:, 1:]
         preds_str = decoder(preds_index)
-        preds_max_prob, _ = F.softmax(pred_logits, dim=2).max(dim=2)
+        preds_max_prob, _ = pred_softmax.max(dim=2)
         preds_max_prob = preds_max_prob[:, 1:]
 
         for index in range(batch_size):
