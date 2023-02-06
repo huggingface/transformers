@@ -435,20 +435,10 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 class ValueEmbedding(nn.Module):
     def __init__(self, feature_size, d_model):
         super(ValueEmbedding, self).__init__()
-        self.value_conv = nn.Conv1d(
-            in_channels=feature_size,
-            out_channels=d_model,
-            kernel_size=3,
-            padding="same",
-            padding_mode="replicate",
-            bias=False,
-        )
-        for m in self.modules():
-            if isinstance(m, nn.Conv1d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_in", nonlinearity="leaky_relu")
+        self.value_proj = nn.Linear(in_features=feature_size, out_features=d_model, bias=False)
 
     def forward(self, x):
-        return self.value_conv(x.permute(0, 2, 1)).transpose(1, 2)
+        return self.value_proj(x)
 
 
 @dataclass
@@ -1179,7 +1169,7 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.value_embedding(inputs_embeds)
-        hidden_states = self.layernorm_embedding(hidden_states)
+        # hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
@@ -1382,7 +1372,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         hidden_states = self.value_embedding(inputs_embeds)
-        hidden_states = self.layernorm_embedding(hidden_states)
+        # hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
@@ -1605,9 +1595,9 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         embedded_cat = self.embedder(static_categorical_features)
 
         # static features
-        log_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
+        log_abs_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
         log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
-        static_feat = torch.cat((embedded_cat, static_real_features, log_loc, log_scale), dim=1)
+        static_feat = torch.cat((embedded_cat, static_real_features, log_abs_loc, log_scale), dim=1)
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
 
         # all features
@@ -1699,10 +1689,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         )
 
         if encoder_outputs is None:
-            if future_values is not None:
-                enc_input = transformer_inputs[:, : self.config.context_length, ...]
-            else:
-                enc_input = transformer_inputs[:, : self.config.context_length - 1, ...]
+            enc_input = transformer_inputs[:, : self.config.context_length, ...]
             encoder_outputs = self.encoder(
                 inputs_embeds=enc_input,
                 head_mask=head_mask,
@@ -1718,10 +1705,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        if future_values is not None:
-            dec_input = transformer_inputs[:, self.config.context_length :, ...]
-        else:
-            dec_input = transformer_inputs[:, self.config.context_length - 1 :, ...]
+        dec_input = transformer_inputs[:, self.config.context_length :, ...]
         decoder_outputs = self.decoder(
             inputs_embeds=dec_input,
             attention_mask=decoder_attention_mask,
