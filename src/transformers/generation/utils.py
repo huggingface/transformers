@@ -20,7 +20,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.distributed as dist
 from torch import nn
@@ -1984,9 +1983,7 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul(
-                    (prod(next_tokens != i for i in eos_token_id))
-                ).long()
+                unfinished_sequences = unfinished_sequences.mul((prod(next_tokens != i for i in eos_token_id))).long()
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -2229,9 +2226,7 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul(
-                    (prod(next_tokens != i for i in eos_token_id))
-                ).long()
+                unfinished_sequences = unfinished_sequences.mul((prod(next_tokens != i for i in eos_token_id))).long()
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -2497,9 +2492,7 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul(
-                    (prod(next_tokens != i for i in eos_token_id))
-                ).long()
+                unfinished_sequences = unfinished_sequences.mul((prod(next_tokens != i for i in eos_token_id))).long()
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
