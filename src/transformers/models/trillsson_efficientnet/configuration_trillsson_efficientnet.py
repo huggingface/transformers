@@ -29,15 +29,15 @@ TRILLSSON_EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class TrillssonEfficientNetConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [*TrillssonEfficientNet Model*]. It is used to
+    This is the configuration class to store the configuration of a [`TrillssonEfficientNet Model`]. It is used to
     instantiate an TrillssonEfficientNet model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the
     TrillssonEfficientNet
     [vumichien/nonsemantic-speech-trillsson3](https://huggingface.co/vumichien/nonsemantic-speech-trillsson3)
     architecture.
 
-    Configuration objects inherit from [*PretrainedConfig*] and can be used to control the model outputs. Read the
-    documentation from [*PretrainedConfig*] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
@@ -72,11 +72,11 @@ class TrillssonEfficientNetConfig(PretrainedConfig):
             The maximum frequency in Hz.
         f_min (`float`, *optional*, defaults to 125.0):
             The minimum frequency in Hz.
-        fft_length (`int`, *optional*, defaults to None):
+        fft_length (`int`, *optional*):
             The FFT length. If None, it will be computed from the window length.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.8):
             The dropout probability for the classifier.
-        block_config (`list`, *optional*, defaults to None):
+        block_config (`list`, *optional*):
             The block configuration for the model.
 
     Example:
