@@ -1,9 +1,9 @@
 import multiprocessing
 import time
 
+from arguments import PretokenizationArguments
 from datasets import load_dataset
 
-from arguments import PretokenizationArguments
 from transformers import AutoTokenizer, HfArgumentParser
 
 

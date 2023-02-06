@@ -232,7 +232,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         generator_pretrained_model_name_or_path: str = None,
         retriever: RagRetriever = None,
         *model_args,
-        **kwargs
+        **kwargs,
     ) -> TFPreTrainedModel:
         r"""
         Instantiates an question encoder and a generator from one or two base classes of the library from pretrained
@@ -491,7 +491,6 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings_to_model_forward(RAG_START_DOCSTRING)
 class TFRagModel(TFRagPreTrainedModel):
-
     load_weight_prefix = "tf_rag_model_1"
 
     def __init__(
@@ -562,7 +561,7 @@ class TFRagModel(TFRagPreTrainedModel):
         n_docs: Optional[int] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs
+        **kwargs,
     ):
         r"""
         Returns:
@@ -602,7 +601,6 @@ class TFRagModel(TFRagPreTrainedModel):
 
         # encoder_outputs are pre-computed during RAG-token generation
         if encoder_outputs is None:
-
             if has_to_retrieve:
                 question_enc_outputs = self.question_encoder(
                     input_ids, attention_mask=attention_mask, return_dict=True, training=training
@@ -726,7 +724,6 @@ class TFRagModel(TFRagPreTrainedModel):
     RAG_START_DOCSTRING,
 )
 class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss):
-
     load_weight_prefix = "tf_rag_token_for_generation_1/rag"
 
     def __init__(
@@ -771,7 +768,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         encoder_outputs=None,
         doc_scores=None,
         n_docs=None,
-        **kwargs
+        **kwargs,
     ):
         if past_key_values is not None:
             # if past is defined use only last decoder_input_ids
@@ -863,7 +860,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         reduce_loss: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs  # needs kwargs for generation
+        **kwargs,  # needs kwargs for generation
     ):
         r"""
         do_marginalize (`bool`, *optional*):
@@ -1004,7 +1001,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         n_docs=None,
         generation_config=None,
         logits_processor=TFLogitsProcessorList(),
-        **kwargs
+        **kwargs,
     ):
         """
         Implements TFRAG token decoding.
@@ -1299,7 +1296,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     RAG_START_DOCSTRING,
 )
 class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss):
-
     load_weight_prefix = "tf_rag_sequence_for_generation_1/rag"
 
     def __init__(
@@ -1370,7 +1366,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         reduce_loss: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs  # needs kwargs for generation
+        **kwargs,  # needs kwargs for generation
     ) -> Union[Tuple[tf.Tensor], TFRetrievAugLMMarginOutput]:
         r"""
         exclude_bos_score (`bool`, *optional*):
@@ -1592,7 +1588,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         num_return_sequences=None,  # defaults to 1
         num_beams=None,  # defaults to 1
         n_docs=None,
-        **model_kwargs
+        **model_kwargs,
     ):
         """
         Implements RAG sequence "thorough" decoding. Read the [`~generation.GenerationMixin.generate`]` documentation

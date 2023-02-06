@@ -18,8 +18,8 @@ import json
 import unittest
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
+
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 

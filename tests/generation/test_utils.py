@@ -1413,7 +1413,6 @@ class GenerationTesterMixin:
     def test_contrastive_generate(self):
         # check `generate()` and `contrastive_search()` are equal
         for model_class in self.all_generative_model_classes:
-
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
@@ -1435,7 +1434,6 @@ class GenerationTesterMixin:
 
     def test_contrastive_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
-
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
@@ -1661,7 +1659,6 @@ class GenerationTesterMixin:
 
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
-
     # tests whether the top_k_top_p function behaves as expected
     def test_top_k_top_p_filtering(self):
         logits = torch.tensor(
@@ -1792,7 +1789,6 @@ class UtilsFunctionsTest(unittest.TestCase):
 
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMixin):
-
     # setting framework_dependent_parameters needs to be gated, just like its contents' imports
     if is_torch_available():
         framework_dependent_parameters = {

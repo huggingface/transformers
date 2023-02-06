@@ -36,7 +36,6 @@ if is_tf_available():
 
 @require_tf
 class UtilsFunctionsTest(unittest.TestCase):
-
     # tests whether the top_k_top_p_filtering function behaves as expected
     def test_top_k_top_p_filtering(self):
         logits = tf.convert_to_tensor(
@@ -133,7 +132,6 @@ class UtilsFunctionsTest(unittest.TestCase):
 
 @require_tf
 class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMixin):
-
     # setting framework_dependent_parameters needs to be gated, just like its contents' imports
     if is_tf_available():
         framework_dependent_parameters = {

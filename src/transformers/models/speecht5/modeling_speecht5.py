@@ -1440,7 +1440,6 @@ class SpeechT5EncoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-
         hidden_states, attention_mask = self.prenet(input_values, attention_mask)
 
         outputs = self.wrapped_encoder(
@@ -1484,7 +1483,6 @@ class SpeechT5EncoderWithTextPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-
         hidden_states = self.prenet(input_values)
 
         outputs = self.wrapped_encoder(
@@ -1522,7 +1520,6 @@ class SpeechT5EncoderWithoutPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-
         return self.wrapped_encoder(
             hidden_states=input_values,
             attention_mask=attention_mask,
@@ -1792,7 +1789,6 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-
         decoder_hidden_states = self.prenet(input_values, speaker_embeddings)
 
         outputs = self.wrapped_decoder(
@@ -1846,7 +1842,6 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-
         decoder_hidden_states, attention_mask = self.prenet(input_values, attention_mask, past_key_values)
 
         outputs = self.wrapped_decoder(
@@ -1894,7 +1889,6 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-
         outputs = self.wrapped_decoder(
             hidden_states=input_values,
             attention_mask=attention_mask,
@@ -2381,7 +2375,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
         if past is not None:

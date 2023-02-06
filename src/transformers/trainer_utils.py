@@ -398,7 +398,6 @@ class TrainerMemoryTracker:
     }
 
     def __init__(self, skip_memory_metrics=False):
-
         self.skip_memory_metrics = skip_memory_metrics
 
         if not is_psutil_available():

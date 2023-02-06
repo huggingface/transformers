@@ -78,7 +78,7 @@ class Text2TextGenerationPipeline(Pipeline):
         clean_up_tokenization_spaces=None,
         truncation=None,
         stop_sequence=None,
-        **generate_kwargs
+        **generate_kwargs,
     ):
         preprocess_params = {}
         if truncation is not None:

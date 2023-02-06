@@ -363,7 +363,6 @@ class FlaubertModelTester(object):
 
 @require_torch
 class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             FlaubertModel,
@@ -439,7 +438,6 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_torchscript_device_change(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-
             # FlauBertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == FlaubertForMultipleChoice:
                 return

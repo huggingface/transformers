@@ -322,7 +322,7 @@ class GenerationConfig(PushToHubMixin):
         save_directory: Union[str, os.PathLike],
         config_file_name: Optional[Union[str, os.PathLike]] = None,
         push_to_hub: bool = False,
-        **kwargs
+        **kwargs,
     ):
         r"""
         Save a generation configuration object to the directory `save_directory`, so that it can be re-loaded using the
@@ -372,7 +372,7 @@ class GenerationConfig(PushToHubMixin):
         cls,
         pretrained_model_name: Union[str, os.PathLike],
         config_file_name: Optional[Union[str, os.PathLike]] = None,
-        **kwargs
+        **kwargs,
     ) -> "GenerationConfig":
         r"""
         Instantiate a [`GenerationConfig`] from a generation configuration file.

@@ -42,7 +42,6 @@ if is_tf_available():
 
 @require_tf
 class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             TFMobileBertModel,
