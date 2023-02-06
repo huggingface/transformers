@@ -40,6 +40,7 @@ from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
+from .integrations import is_optimum_available
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -3013,6 +3014,56 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
+
+    def to_bettertransformer(self) -> "PreTrainedModel":
+        """
+        Converts the model to use [PyTorch's native attention
+        implementation](https://pytorch.org/docs/stable/generated/torch.nn.MultiheadAttention.html), integrated to
+        Transformers through [Optimum library](https://huggingface.co/docs/optimum/bettertransformer/overview). Only a
+        subset of all Transformers models are supported.
+
+        PyTorch's attention fastpath allows to speed up inference through kernel fusions and the use of [nested
+        tensors](https://pytorch.org/docs/stable/nested.html). Detailed benchmarks can be found in [this blog
+        post](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2).
+
+        Returns:
+            [`PreTrainedModel`]: The model converted to BetterTransformer.
+        """
+        if not is_optimum_available():
+            raise ImportError("The package `optimum` is required to use Better Transformer.")
+
+        from optimum.version import __version__ as optimum_version
+
+        if version.parse(optimum_version) < version.parse("1.7.0"):
+            raise ImportError(
+                f"Please install optimum>=1.7.0 to use Better Transformer. The version {optimum_version} was found."
+            )
+
+        from optimum.bettertransformer import BetterTransformer
+
+        return BetterTransformer.transform(self)
+
+    def reverse_bettertransformer(self):
+        """
+        Reverts the transformation from [`~to_bettertransformer`] so that the original modeling is used, for example in
+        order to save the model.
+
+        Returns:
+            [`PreTrainedModel`]: The model converted back to the original modeling.
+        """
+        if not is_optimum_available():
+            raise ImportError("The package `optimum` is required to use Better Transformer.")
+
+        from optimum.version import __version__ as optimum_version
+
+        if version.parse(optimum_version) < version.parse("1.7.0"):
+            raise ImportError(
+                f"Please install optimum>=1.7.0 to use Better Transformer. The version {optimum_version} was found."
+            )
+
+        from optimum.bettertransformer import BetterTransformer
+
+        return BetterTransformer.reverse(self)
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
