@@ -278,6 +278,7 @@ class StdScaler(nn.Module):
         self.keepdim = keepdim
         self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
 
+    @torch.no_grad()
     def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         denominator = weights.sum(self.dim, keepdim=self.keepdim)
         denominator = denominator.clamp_min(1.0)
@@ -299,50 +300,49 @@ class MeanScaler(nn.Module):
             Dimension along which to compute the scale.
         keepdim (`bool`, *optional*, defaults to `False`):
             Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        default_scale (`float`, *optional*, defaults to 0.0):
+            Default scale that is used for elements that are constantly zero.
         minimum_scale (`float`, *optional*, defaults to 1e-10):
-            Default scale that is used for elements that are constantly zero along dimension `dim`.
+            Default minimum possible scale that is used for any item.
     """
 
-    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
+    def __init__(self, dim: int = -1, keepdim: bool = True, default_scale: float = 0.0, minimum_scale: float = 1e-10):
         super().__init__()
-        if not dim > 0:
-            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
         self.dim = dim
         self.keepdim = keepdim
         self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
+        self.register_buffer("default_scale", torch.tensor(default_scale))
 
-    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # these will have shape (N, C)
-        total_weight = weights.sum(dim=self.dim)
-        weighted_sum = (data.abs() * weights).sum(dim=self.dim)
+    @torch.no_grad()
+    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        # shape: (N, [C], T=1)
+        ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
+        num_observed = observed_indicator.sum(self.dim, keepdim=True)
 
-        # first compute a global scale per-dimension
-        total_observed = total_weight.sum(dim=0)
-        denominator = torch.max(total_observed, torch.ones_like(total_observed))
-        default_scale = weighted_sum.sum(dim=0) / denominator
+        scale = ts_sum / torch.clamp(num_observed, min=1)
 
-        # then compute a per-item, per-dimension scale
-        denominator = torch.max(total_weight, torch.ones_like(total_weight))
-        scale = weighted_sum / denominator
+        # Set default_scale for time-series which are all zeros.
+        # If `default_scale` is provided, we use it, otherwise we use the scale
+        # of the batch.
+        # Note: We want to support tracing and to remove branching we we always
+        # calculate the batch_scale. Also, using `where` allows us to set
+        # values conditionally.
+        batch_sum = ts_sum.sum(dim=0)
+        batch_observations = torch.clamp(num_observed.sum(0), min=1)
+        batch_scale = torch.squeeze(batch_sum / batch_observations)
 
-        # use per-batch scale when no element is observed
-        # or when the sequence contains only zeros
-        scale = (
-            torch.max(
-                self.minimum_scale,
-                torch.where(
-                    weighted_sum > torch.zeros_like(weighted_sum),
-                    scale,
-                    default_scale * torch.ones_like(total_weight),
-                ),
-            )
-            .detach()
-            .unsqueeze(dim=self.dim)
-        )
+        default_scale = torch.where(self.default_scale > 0.0, self.default_scale, batch_scale)
 
-        loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        # apply default scale where there are no observations
+        torch.where(num_observed > 0, scale, default_scale)
 
-        return data / scale, loc, scale if self.keepdim else scale.squeeze(dim=self.dim)
+        # ensure the scale is at least `self.minimum_scale`
+        scale = torch.clamp(scale, min=self.minimum_scale)
+
+        if not self.keepdim:
+            scale = scale.squeeze(dim=self.dim)
+
+        return data / scale, torch.zeros_like(scale), scale
 
 
 class NOPScaler(nn.Module):
