@@ -25,12 +25,12 @@ import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
+import bitsandbytes as bnb
 import datasets
 import numpy as np
 import torch
 from datasets import DatasetDict, load_dataset, load_metric
 
-import bitsandbytes as bnb
 import transformers
 from transformers import (
     AutoConfig,

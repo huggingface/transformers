@@ -27,6 +27,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 
 if is_flax_available():
     import jax
+
     from transformers import FlaxBeitForImageClassification, FlaxBeitForMaskedImageModeling, FlaxBeitModel
 
 if is_vision_available():

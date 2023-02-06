@@ -19,16 +19,16 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
 
+import requests
 import torch
 import torchvision.transforms as T
-from PIL import Image
-from torch import Tensor, nn
-
-import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.data import MetadataCatalog
 from detectron2.projects.deeplab import add_deeplab_config
+from PIL import Image
+from torch import Tensor, nn
+
 from transformers.models.maskformer.feature_extraction_maskformer import MaskFormerFeatureExtractor
 from transformers.models.maskformer.modeling_maskformer import (
     MaskFormerConfig,

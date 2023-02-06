@@ -34,14 +34,13 @@ from pathlib import Path
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
-import numpy as np
-from PIL import Image
-from tqdm.auto import tqdm
-
 import cv2
+import numpy as np
 import requests
 import wget
 from filelock import FileLock
+from PIL import Image
+from tqdm.auto import tqdm
 from yaml import Loader, dump, load
 
 

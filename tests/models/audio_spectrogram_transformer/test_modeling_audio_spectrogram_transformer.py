@@ -18,6 +18,7 @@ import inspect
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import ASTConfig
 from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_torchaudio_available

@@ -25,14 +25,14 @@ import random
 
 import numpy as np
 import torch
+from pabee.modeling_pabee_albert import AlbertForSequenceClassificationWithPabee
+from pabee.modeling_pabee_bert import BertForSequenceClassificationWithPabee
 from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 import transformers
-from pabee.modeling_pabee_albert import AlbertForSequenceClassificationWithPabee
-from pabee.modeling_pabee_bert import BertForSequenceClassificationWithPabee
 from transformers import (
     WEIGHTS_NAME,
     AdamW,

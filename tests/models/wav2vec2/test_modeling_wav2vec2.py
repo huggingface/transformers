@@ -81,6 +81,7 @@ if is_torchaudio_available():
 
 if is_pyctcdecode_available():
     import pyctcdecode.decoder
+
     from transformers import Wav2Vec2ProcessorWithLM
     from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 

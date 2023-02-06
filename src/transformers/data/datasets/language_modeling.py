@@ -21,9 +21,8 @@ import warnings
 from typing import Dict, List, Optional
 
 import torch
-from torch.utils.data import Dataset
-
 from filelock import FileLock
+from torch.utils.data import Dataset
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging

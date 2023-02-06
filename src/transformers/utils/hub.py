@@ -48,6 +48,7 @@ from huggingface_hub.utils import (
     hf_raise_for_status,
 )
 from requests.exceptions import HTTPError
+
 from transformers.utils.logging import tqdm
 
 from . import __version__, logging

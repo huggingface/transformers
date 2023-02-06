@@ -6,10 +6,9 @@ from typing import Callable, List, Optional, Union
 
 import numpy as np
 import tensorflow as tf
+from huggingface_hub import Repository, create_repo
 from packaging.version import parse
 from tensorflow.keras.callbacks import Callback
-
-from huggingface_hub import Repository, create_repo
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
 from .modelcard import TrainingSummary

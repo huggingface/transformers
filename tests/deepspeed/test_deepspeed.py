@@ -21,8 +21,8 @@ import unittest
 from copy import deepcopy
 
 import datasets
-
 from parameterized import parameterized
+
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available, unset_hf_deepspeed_config

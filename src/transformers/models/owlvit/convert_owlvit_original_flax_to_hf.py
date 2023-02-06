@@ -18,14 +18,14 @@ https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit"""
 import argparse
 import collections
 
-import torch
-import torch.nn as nn
-
 import jax
 import jax.numpy as jnp
+import torch
+import torch.nn as nn
 from clip.model import CLIP
 from flax.training import checkpoints
 from huggingface_hub import Repository
+
 from transformers import (
     CLIPTokenizer,
     OwlViTConfig,

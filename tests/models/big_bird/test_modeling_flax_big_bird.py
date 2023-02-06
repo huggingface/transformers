@@ -24,6 +24,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, rando
 
 if is_flax_available():
     import jax
+
     from transformers.models.big_bird.modeling_flax_big_bird import (
         FlaxBigBirdForCausalLM,
         FlaxBigBirdForMaskedLM,

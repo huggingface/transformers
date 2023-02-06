@@ -37,7 +37,8 @@ from tqdm.auto import tqdm
 
 
 # Integrations must be imported before ML frameworks:
-from .integrations import (  # noqa: I101
+# isort: off
+from .integrations import (
     default_hp_search_backend,
     get_reporting_integration_callbacks,
     hp_params,
@@ -52,15 +53,16 @@ from .integrations import (  # noqa: I101
     run_hp_search_wandb,
 )
 
+# isort: on
+
 import numpy as np
 import torch
 import torch.distributed as dist
+from huggingface_hub import Repository, create_repo
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
-
-from huggingface_hub import Repository, create_repo
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -1414,9 +1416,8 @@ class Trainer:
         # Distributed training using PyTorch FSDP
         elif self.fsdp is not None:
             # PyTorch FSDP!
-            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
+            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, MixedPrecision
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-            from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
             from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
             if FSDPOption.OFFLOAD in self.args.fsdp:

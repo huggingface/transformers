@@ -20,8 +20,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device

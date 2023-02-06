@@ -6,8 +6,8 @@ target-version = ['py37']
 # Never enforce `E501` (line length violations).
 ignore = ["E501", "E741", "W605"]
 select = ["E", "F", "I", "W"]
+line-length = 119
 
 [tool.ruff.isort]
-no-lines-before=["first-party"]
 lines-after-imports = 2
 known-first-party = ["transformers"]

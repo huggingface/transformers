@@ -30,9 +30,9 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 import h5py
 import numpy as np
 import tensorflow as tf
+from huggingface_hub import Repository, list_repo_files
 from packaging.version import parse
 
-from huggingface_hub import Repository, list_repo_files
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 from . import DataCollatorWithPadding, DefaultDataCollator

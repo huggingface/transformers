@@ -26,10 +26,10 @@ from unittest import skipIf
 
 import datasets
 import numpy as np
-
 import requests
 from huggingface_hub import HfFolder, Repository, create_repo, delete_repo, set_access_token
 from requests.exceptions import HTTPError
+
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,

@@ -30,11 +30,10 @@ import abc
 import functools
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 
-import numpy as onp
-from absl import logging
-
 import jax
 import jax.numpy as jnp
+import numpy as onp
+from absl import logging
 from jax import lax, random
 
 

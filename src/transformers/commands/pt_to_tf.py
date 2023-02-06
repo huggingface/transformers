@@ -17,10 +17,9 @@ import os
 from argparse import ArgumentParser, Namespace
 from importlib import import_module
 
+import huggingface_hub
 import numpy as np
 from packaging import version
-
-import huggingface_hub
 
 from .. import (
     FEATURE_EXTRACTOR_MAPPING,

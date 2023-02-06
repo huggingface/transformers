@@ -16,9 +16,9 @@ from transformers.utils import cached_property, is_datasets_available, is_faiss_
 
 
 if is_tf_available() and is_datasets_available() and is_faiss_available():
+    import faiss
     import tensorflow as tf
     from datasets import Dataset
-    import faiss
 
     from transformers import (
         AutoConfig,
@@ -31,7 +31,6 @@ if is_tf_available() and is_datasets_available() and is_faiss_available():
         TFRagSequenceForGeneration,
         TFRagTokenForGeneration,
     )
-
     from transformers.modeling_tf_outputs import TFBaseModelOutput
 
 from ..bart.test_modeling_tf_bart import TFBartModelTester

@@ -21,10 +21,10 @@ import unittest
 from typing import List, Tuple
 
 import numpy as np
-
-import transformers
 from huggingface_hub import HfFolder, delete_repo, set_access_token
 from requests.exceptions import HTTPError
+
+import transformers
 from transformers import BertConfig, is_flax_available, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
@@ -48,6 +48,7 @@ if is_flax_available():
     from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
     from flax.serialization import from_bytes
     from flax.traverse_util import flatten_dict, unflatten_dict
+
     from transformers import (
         FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,

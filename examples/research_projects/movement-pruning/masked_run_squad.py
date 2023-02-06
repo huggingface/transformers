@@ -25,12 +25,12 @@ import timeit
 
 import numpy as np
 import torch
+from emmental import MaskedBertConfig, MaskedBertForQuestionAnswering
 from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from emmental import MaskedBertConfig, MaskedBertForQuestionAnswering
 from transformers import (
     WEIGHTS_NAME,
     AdamW,

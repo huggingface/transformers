@@ -26,10 +26,10 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import datasets
+import evaluate
 import tensorflow as tf
 from datasets import ClassLabel, load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     CONFIG_MAPPING,

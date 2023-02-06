@@ -19,8 +19,8 @@ import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
+
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from transformers.image_transforms import (
     PaddingMode,

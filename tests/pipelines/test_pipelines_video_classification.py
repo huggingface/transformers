@@ -15,6 +15,7 @@
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEFeatureExtractor
 from transformers.pipelines import VideoClassificationPipeline, pipeline
 from transformers.testing_utils import (

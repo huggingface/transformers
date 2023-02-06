@@ -18,9 +18,9 @@ from typing import Dict
 
 import datasets
 import numpy as np
+import requests
 from datasets import load_dataset
 
-import requests
 from transformers import (
     MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
     MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,

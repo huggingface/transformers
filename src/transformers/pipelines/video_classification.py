@@ -9,7 +9,6 @@ from .base import PIPELINE_INIT_ARGS, Pipeline
 
 if is_decord_available():
     import numpy as np
-
     from decord import VideoReader
 
 

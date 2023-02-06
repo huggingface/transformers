@@ -42,8 +42,8 @@ from test_module.custom_configuration import CustomConfig  # noqa E402
 
 if is_torch_available():
     import torch
-
     from test_module.custom_modeling import CustomModel
+
     from transformers import (
         AutoConfig,
         AutoModel,

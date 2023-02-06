@@ -24,6 +24,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, rando
 
 if is_flax_available():
     import jax.numpy as jnp
+
     from transformers.models.albert.modeling_flax_albert import (
         FlaxAlbertForMaskedLM,
         FlaxAlbertForMultipleChoice,

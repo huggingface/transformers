@@ -21,8 +21,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 import transformers
 from transformers import MODEL_MAPPING, CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
 from transformers.models.auto import get_values
@@ -60,6 +60,7 @@ if is_vision_available():
 
 if is_flax_available():
     import jax.numpy as jnp
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,

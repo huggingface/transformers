@@ -21,7 +21,6 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
-
 import regex as re
 
 from ...utils import is_tf_available, is_torch_available, logging

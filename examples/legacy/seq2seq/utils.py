@@ -29,10 +29,10 @@ import torch
 import torch.distributed as dist
 from rouge_score import rouge_scorer, scoring
 from sacrebleu import corpus_bleu
+from sentence_splitter import add_newline_to_end_of_each_sentence
 from torch import nn
 from torch.utils.data import Dataset, Sampler
 
-from sentence_splitter import add_newline_to_end_of_each_sentence
 from transformers import BartTokenizer, EvalPrediction, PreTrainedTokenizer, T5Tokenizer
 from transformers.models.bart.modeling_bart import shift_tokens_right
 from transformers.utils import cached_property

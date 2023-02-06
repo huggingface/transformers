@@ -22,7 +22,6 @@ from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-
 import regex as re
 
 from ...tokenization_utils import PreTrainedTokenizer

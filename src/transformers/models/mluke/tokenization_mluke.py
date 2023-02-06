@@ -23,7 +23,6 @@ from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-
 import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer

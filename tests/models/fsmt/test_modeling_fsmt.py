@@ -17,8 +17,8 @@ import tempfile
 import unittest
 
 import timeout_decorator  # noqa
-
 from parameterized import parameterized
+
 from transformers import FSMTConfig, is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property

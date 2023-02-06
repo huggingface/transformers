@@ -30,11 +30,11 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
-
-import transformers
 from huggingface_hub import HfFolder, delete_repo, set_access_token
 from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoModel,
@@ -108,9 +108,9 @@ if is_accelerate_available():
 
 if is_torch_available():
     import torch
+    from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from torch import nn
 
-    from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_MAPPING,
@@ -160,6 +160,7 @@ if is_tf_available():
 
 if is_flax_available():
     import jax.numpy as jnp
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,

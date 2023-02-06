@@ -21,19 +21,19 @@ import timeit
 
 import datasets
 import numpy as np
-import torch
-from absl import logging as absl_logging
-from datasets import load_dataset, load_metric
-from torch.utils.data import DataLoader
-
 import pycuda.autoinit  # noqa: F401
 import pycuda.driver as cuda
 import tensorrt as trt
-import transformers
+import torch
+from absl import logging as absl_logging
 from accelerate import Accelerator
+from datasets import load_dataset, load_metric
+from torch.utils.data import DataLoader
+from utils_qa import postprocess_qa_predictions
+
+import transformers
 from transformers import AutoTokenizer, EvalPrediction, default_data_collator, set_seed
 from transformers.trainer_pt_utils import nested_concat, nested_truncate
-from utils_qa import postprocess_qa_predictions
 
 
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)

@@ -328,7 +328,6 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 
     try:
         import tensorflow as tf
-
         import tf2onnx
         from tf2onnx import __version__ as t2ov
 

@@ -33,6 +33,7 @@ if is_flax_available():
     import jax.numpy as jnp
     from flax.training.common_utils import onehot
     from flax.traverse_util import flatten_dict
+
     from transformers import (
         FlaxBartForCausalLM,
         FlaxBertForCausalLM,

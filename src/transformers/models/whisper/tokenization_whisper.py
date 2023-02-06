@@ -18,7 +18,6 @@ import os
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
-
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer

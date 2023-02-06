@@ -23,10 +23,13 @@ from .utils import ENV_VARS_TRUE_VALUES
 
 
 # Integrations must be imported before ML frameworks:
-from .integrations import (  # isort: split
+# isort: off
+from .integrations import (
     is_comet_available,
     is_wandb_available,
 )
+
+# isort: on
 
 import numpy as np
 import tensorflow as tf

@@ -19,13 +19,13 @@ import os
 from pickle import UnpicklingError
 from typing import Dict, Tuple
 
-import numpy as np
-
 import jax
 import jax.numpy as jnp
-import transformers
+import numpy as np
 from flax.serialization import from_bytes
 from flax.traverse_util import flatten_dict, unflatten_dict
+
+import transformers
 
 from .utils import logging
 

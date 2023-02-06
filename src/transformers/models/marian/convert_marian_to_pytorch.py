@@ -24,10 +24,10 @@ from zipfile import ZipFile
 
 import numpy as np
 import torch
+from huggingface_hub.hf_api import list_models
 from torch import nn
 from tqdm import tqdm
 
-from huggingface_hub.hf_api import list_models
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
 
 

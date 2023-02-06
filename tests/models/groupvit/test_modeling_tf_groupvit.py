@@ -23,8 +23,8 @@ import unittest
 from importlib import import_module
 
 import numpy as np
-
 import requests
+
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 from transformers.testing_utils import (
     is_pt_tf_cross_test,

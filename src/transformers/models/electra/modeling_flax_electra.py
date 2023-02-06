@@ -15,12 +15,11 @@
 
 from typing import Callable, Optional, Tuple
 
-import numpy as np
-
 import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning

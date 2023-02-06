@@ -15,13 +15,13 @@
 
 from typing import Callable, Dict, Tuple
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.random import PRNGKey
 from modeling_flax_performer_utils import make_fast_softmax_attention
+
 from transformers.file_utils import add_start_docstrings
 from transformers.modeling_flax_utils import ACT2FN
 from transformers.models.bert.configuration_bert import BertConfig

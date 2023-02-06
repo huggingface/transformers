@@ -31,20 +31,21 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import datasets
-import numpy as np
-from datasets import load_dataset
-from tqdm import tqdm
-
 import evaluate
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
-import transformers
+from datasets import load_dataset
 from flax import struct, traverse_util
 from flax.jax_utils import pad_shard_unpad, replicate, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import Repository, create_repo
+from tqdm import tqdm
+from utils_qa import postprocess_qa_predictions
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoTokenizer,
@@ -55,7 +56,6 @@ from transformers import (
     is_tensorboard_available,
 )
 from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
-from utils_qa import postprocess_qa_predictions
 
 
 logger = logging.getLogger(__name__)

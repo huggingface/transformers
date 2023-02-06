@@ -26,8 +26,8 @@ import unittest
 import numpy as np
 import pytest
 from datasets import load_dataset
-
 from huggingface_hub import snapshot_download
+
 from transformers import Wav2Vec2Config, is_tf_available
 from transformers.testing_utils import (
     CaptureLogger,
@@ -53,6 +53,7 @@ if is_tf_available():
 
 if is_pyctcdecode_available():
     import pyctcdecode.decoder
+
     from transformers import Wav2Vec2ProcessorWithLM
     from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 

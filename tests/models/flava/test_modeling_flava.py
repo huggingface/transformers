@@ -22,8 +22,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import (
     FlavaConfig,
     FlavaImageCodebookConfig,

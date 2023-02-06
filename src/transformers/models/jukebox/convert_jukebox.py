@@ -19,9 +19,9 @@ import json
 import os
 from pathlib import Path
 
+import requests
 import torch
 
-import requests
 from transformers import JukeboxConfig, JukeboxModel
 from transformers.utils import logging
 

@@ -24,6 +24,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 
 if is_flax_available():
     import jax.numpy as jnp
+
     from transformers.models.roberta_prelayernorm.modeling_flax_roberta_prelayernorm import (
         FlaxRobertaPreLayerNormForCausalLM,
         FlaxRobertaPreLayerNormForMaskedLM,

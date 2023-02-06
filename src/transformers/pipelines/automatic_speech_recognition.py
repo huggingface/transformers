@@ -15,7 +15,6 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
-
 import requests
 
 from ..utils import is_torch_available, logging

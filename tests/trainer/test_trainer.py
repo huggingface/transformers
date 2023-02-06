@@ -29,10 +29,10 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import numpy as np
-
 from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
 from parameterized import parameterized
 from requests.exceptions import HTTPError
+
 from transformers import (
     AutoTokenizer,
     IntervalStrategy,

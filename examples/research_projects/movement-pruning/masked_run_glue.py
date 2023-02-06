@@ -24,12 +24,12 @@ import random
 
 import numpy as np
 import torch
+from emmental import MaskedBertConfig, MaskedBertForSequenceClassification
 from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from emmental import MaskedBertConfig, MaskedBertForSequenceClassification
 from transformers import (
     WEIGHTS_NAME,
     AdamW,

@@ -10,8 +10,7 @@ modified_only_fixup:
 	@if test -n "$(modified_py_files)"; then \
 		echo "Checking/fixing $(modified_py_files)"; \
 		black $(modified_py_files); \
-		isort $(modified_py_files); \
-		flake8 $(modified_py_files); \
+		ruff $(modified_py_files) --fix; \
 	else \
 		echo "No library .py files were modified"; \
 	fi
@@ -49,7 +48,6 @@ repo-consistency:
 
 quality:
 	black --check $(check_dirs)
-	isort --check-only $(check_dirs)
 	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
 	ruff $(check_dirs)
@@ -68,7 +66,6 @@ extra_style_checks:
 
 style:
 	black $(check_dirs)
-	isort $(check_dirs)
 	ruff $(check_dirs) --fix
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks

@@ -463,7 +463,6 @@ def load_tf_weights_in_bert_generation(
     try:
         import numpy as np
         import tensorflow.compat.v1 as tf
-
         import tensorflow_hub as hub
         import tensorflow_text  # noqa: F401
 

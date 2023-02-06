@@ -354,6 +354,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import sigopt
+
     from transformers.utils.versions import importlib_metadata
 
     if trainer.args.process_index == 0:

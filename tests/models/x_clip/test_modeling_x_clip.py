@@ -21,8 +21,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
+
 from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available

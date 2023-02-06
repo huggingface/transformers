@@ -46,6 +46,7 @@ if is_flax_available():
     from flax.core.frozen_dict import unfreeze
     from flax.training.common_utils import onehot
     from flax.traverse_util import flatten_dict
+
     from transformers import FLAX_MODEL_MAPPING, ByT5Tokenizer, T5Config, T5Tokenizer
     from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
     from transformers.models.t5.modeling_flax_t5 import (
