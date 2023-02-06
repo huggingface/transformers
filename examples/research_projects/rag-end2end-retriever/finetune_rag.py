@@ -408,11 +408,11 @@ class GenerativeQAModule(BaseTransformer):
         self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
 
         log_dict = {
-            "val_avg_em": metrics["val_avg_em"],
+            f"{prefix}_avg_em": metrics[f"{prefix}_avg_em"],
             "step_count": metrics["step_count"],
-            "val_avg_loss": metrics["val_avg_loss"],
-            "val_loss": loss,
-            "val_em": metrics_tensor,
+            f"{prefix}_avg_loss": metrics[f"{prefix}_avg_loss"],
+            f"{prefix}_loss": loss,
+            f"{prefix}_em": metrics_tensor,
         }
         self.log_dict(log_dict)
 
