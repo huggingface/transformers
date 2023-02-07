@@ -115,7 +115,7 @@ def check_attribute_being_used(config_class, attributes, default_value, modeling
 
             # configuration class specific cases
             if not case_allowed:
-                case_allowed = attribute in CASES_TO_ALLOW[config_class.__name__]
+                case_allowed = attribute in CASES_TO_ALLOW.get(config_class.__name__, [])
 
     return attribute_used or case_allowed
 
