@@ -768,29 +768,32 @@ def bilinear_interpolation(image, y, x):
     new_pixel += d * dx * dy
     return new_pixel
 
+
 def np_bilinear_resize(image, new_height, new_width):
     """
-    Taken from `[here](https://stackoverflow.com/questions/70024313/resize-using-bilinear-interpolation-in-python)` with the 
+    Taken from `[here](https://stackoverflow.com/questions/70024313/resize-using-bilinear-interpolation-in-python)` with the
     torchvision.transforms.Resize(size=[chunk_frames, self.feature_size])
     This function is not optimal in terms of performances, but has the same results as the `torchvision.transforms.resize` function
     when called with the default `bilinear` interpolation.
     """
-    new_image = np.zeros((new_height, new_width), image.dtype)  # new_image = [[0 for _ in range(new_width)] for _ in range(new_height)]
+    new_image = np.zeros(
+        (new_height, new_width), image.dtype
+    )  # new_image = [[0 for _ in range(new_width)] for _ in range(new_height)]
 
     orig_height = image.shape[0]
     orig_width = image.shape[1]
 
     # Compute center column and center row
-    x_orig_center = (orig_width-1) / 2
-    y_orig_center = (orig_height-1) / 2
+    x_orig_center = (orig_width - 1) / 2
+    y_orig_center = (orig_height - 1) / 2
 
     # Compute center of resized image
-    x_scaled_center = (new_width-1) / 2
-    y_scaled_center = (new_height-1) / 2
+    x_scaled_center = (new_width - 1) / 2
+    y_scaled_center = (new_height - 1) / 2
 
     # Compute the scale in both axes
-    scale_x = orig_width / new_width;
-    scale_y = orig_height / new_height;
+    scale_x = orig_width / new_width
+    scale_y = orig_height / new_height
 
     for y in range(new_height):
         for x in range(new_width):

@@ -62,10 +62,10 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         truncation (`str`, *optional*, `"fusions"`):
             Truncation pattern for long audio inputs. Two patterns are available:
                 - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and  a downsampled version of the entire mel spectrogram. These 4 spectrogram will have a dimension of `n_fft, feature_size`. TODO check this
-            If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy of the original mel obtained from the padded audio. 
+            If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy of the original mel obtained from the padded audio.
                 - `rand_trunc` will select a random crop of the mel spectrogram.
         padding (`str`, *optional*, `"repeatpad"`):
-            Padding pattern for shorter audio inputs. Three patterns were originaly implemented: 
+            Padding pattern for shorter audio inputs. Three patterns were originaly implemented:
                 - `repeatpad`:
                 - `repeat`:
                 - `pad`:
@@ -221,7 +221,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
                 overflow = len(waveform) - max_length
                 idx = np.random.randint(0, overflow + 1)
                 waveform = waveform[idx : idx + max_length]
-                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)[None,:]
+                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)[None, :]
             elif truncation == "fusion":
                 mel = self._np_extract_fbank_features(waveform, self.mel_filters)
                 chunk_frames = max_length // self.hop_length + 1  # the +1 related to how the spectrogram is computed
@@ -277,10 +277,10 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             truncation (`str`, *optional*):
                 Truncation pattern for long audio inputs. Two patterns are available:
                     - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and  a downsampled version of the entire mel spectrogram. These 4 spectrogram will have a dimension of `n_fft, feature_size`. TODO check this
-                If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy of the original mel obtained from the padded audio. 
+                If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy of the original mel obtained from the padded audio.
                     - `rand_trunc` will select a random crop of the mel spectrogram.
             padding (`str`, *optional*):
-                Padding pattern for shorter audio inputs. Three patterns were originaly implemented: 
+                Padding pattern for shorter audio inputs. Three patterns were originaly implemented:
                     - `repeatpad`: the audio is repeated, and then padded to fit the `max_length`.
                     - `repeat`: the audio is repeated and then cut to fit the `max_length`
                     - `pad`: the audio is padded.
@@ -297,7 +297,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         """
         truncation = truncation if truncation is not None else self.truncation
         padding = padding if padding else self.padding
-        
+
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
@@ -329,12 +329,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
         # convert to mel spectrogram, truncate and pad if needed.
         padded_inputs = [
-            self._get_input_mel(
-                waveform,
-                max_length if max_length else self.nb_max_samples,
-                truncation,
-                padding
-            )
+            self._get_input_mel(waveform, max_length if max_length else self.nb_max_samples, truncation, padding)
             for waveform in raw_speech
         ]
 
