@@ -19,10 +19,14 @@ We have recently integrated `BetterTransformer` for faster inference on GPU for 
 
 ## `bitsandbytes` integration for Int8 mixed-precision matrix decomposition
 
-Note that this feature is also totally applicable in a multi GPU setup as well.
+<Tip>
 
-From the paper [`LLM.int8() : 8-bit Matrix Multiplication for Transformers at Scale`](https://arxiv.org/abs/2208.07339), we support HuggingFace integration for all models in the Hub with a few lines of code. 
-The method reduce `nn.Linear` size by 2 for `float16` and `bfloat16` weights and by 4 for `float32` weights, with close to no impact to the quality by operating on the outliers in half-precision.
+Note that this feature can also be used in a multi GPU setup.
+
+</Tip>
+
+From the paper [`LLM.int8() : 8-bit Matrix Multiplication for Transformers at Scale`](https://arxiv.org/abs/2208.07339), we support Hugging Face integration for all models in the Hub with a few lines of code.
+The method reduces `nn.Linear` size by 2 for `float16` and `bfloat16` weights and by 4 for `float32` weights, with close to no impact to the quality by operating on the outliers in half-precision.
 
 ![HFxbitsandbytes.png](https://s3.amazonaws.com/moonup/production/uploads/1659861207959-62441d1d9fdefb55a0b7d12c.png)
 
@@ -36,19 +40,43 @@ Below are some notes to help you use this module, or follow the demos on [Google
 
 ### Requirements
 
-- Make sure you run that on NVIDIA GPUs that support 8-bit tensor cores (Turing, Ampere or newer architectures - e.g. T4, RTX20s RTX30s, A40-A100).
+- Make sure you run on NVIDIA GPUs that support 8-bit tensor cores (Turing, Ampere or newer architectures - e.g. T4, RTX20s RTX30s, A40-A100).
 - Install the correct version of `bitsandbytes` by running:
 `pip install bitsandbytes>=0.31.5`
 - Install `accelerate`
 `pip install accelerate>=0.12.0`
 
-### Running mixed-int8 models - single GPU setup
+### Running mixed-Int8 models - single GPU setup
 
 After installing the required libraries, the way to load your mixed 8-bit model is as follows:
+
 ```py
+from transformers import AutoModelForCausalLM
+
 model_name = "bigscience/bloom-2b5"
 model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
 ```
+
+For text generation, we recommend:
+
+* using the model's `generate()` method instead of the `pipeline()` function. Although inference is possible with the `pipeline()` function, it is not optimized for mixed-8bit models, and will be slower than using the `generate()` method. Moreover, some sampling strategies are like nucleaus sampling are not supported by the `pipeline()` function for mixed-8bit models.
+* placing all inputs on the same device as the model.
+
+Here is a simple example:
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_name = "bigscience/bloom-2b5"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+
+text = "Hello, my llama is cute"
+inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+generated_ids = model.generate(**inputs)
+outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+```
+
 
 ### Running mixed-int8 models - multi GPU setup
 

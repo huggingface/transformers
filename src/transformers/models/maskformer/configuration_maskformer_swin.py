@@ -113,7 +113,7 @@ class MaskFormerSwinConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         out_features=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

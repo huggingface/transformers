@@ -301,7 +301,7 @@ class JukeboxPriorConfig(PretrainedConfig):
         spread=None,
         timing_dims=64,
         zero_out=False,
-        **kwargs
+        **kwargs,
     ):
         self.act_fn = act_fn
         self.alignment_head = alignment_head
@@ -459,7 +459,7 @@ class JukeboxVQVAEConfig(PretrainedConfig):
         sample_length=1058304,
         init_scale=0.2,
         zero_out=False,
-        **kwargs
+        **kwargs,
     ):
         self.hop_fraction = hop_fraction
         self.conv_input_shape = conv_input_shape
@@ -486,7 +486,6 @@ class JukeboxVQVAEConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from CLIPConfig
@@ -576,7 +575,6 @@ class JukeboxConfig(PretrainedConfig):
         init_std=0.2,
         **kwargs,
     ):
-
         if vqvae_config is None:
             vqvae_config = {}
             logger.info("vqvae_config is None. initializing the JukeboxVQVAE with default values.")

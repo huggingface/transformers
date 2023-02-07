@@ -107,7 +107,7 @@ class SplinterConfig(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         question_token_id=104,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

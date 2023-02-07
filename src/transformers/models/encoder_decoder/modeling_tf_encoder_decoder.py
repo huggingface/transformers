@@ -157,7 +157,6 @@ ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 
 
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
-
     if pad_token_id is None:
         raise ValueError("Make sure to set the pad_token_id attribute of the model's configuration.")
     pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
@@ -348,7 +347,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         encoder_pretrained_model_name_or_path: str = None,
         decoder_pretrained_model_name_or_path: str = None,
         *model_args,
-        **kwargs
+        **kwargs,
     ) -> TFPreTrainedModel:
         r"""
         Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model
@@ -573,7 +572,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
                 )
 
         if encoder_outputs is None:
-
             encoder_inputs = {
                 "input_ids": input_ids,
                 "attention_mask": attention_mask,

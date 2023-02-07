@@ -185,7 +185,7 @@ class WhisperConfig(PretrainedConfig):
         eos_token_id=50256,
         suppress_tokens=None,
         begin_suppress_tokens=[220, 50256],
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.num_mel_bins = num_mel_bins

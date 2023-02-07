@@ -219,7 +219,7 @@ class AdamWeightDecay(Adam):
         include_in_weight_decay: Optional[List[str]] = None,
         exclude_from_weight_decay: Optional[List[str]] = None,
         name: str = "AdamWeightDecay",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(learning_rate, beta_1, beta_2, epsilon, amsgrad, name, **kwargs)
         self.weight_decay_rate = weight_decay_rate

@@ -85,7 +85,7 @@ class LayoutLMv3Processor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         This method first forwards the `images` argument to [`~LayoutLMv3ImageProcessor.__call__`]. In case
