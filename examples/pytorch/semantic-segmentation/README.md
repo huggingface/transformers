@@ -62,7 +62,7 @@ validation_dataset = create_dataset(image_paths_validation, label_paths_validati
 # step 2: create DatasetDict
 dataset = DatasetDict({
     "train": train_dataset,
-    "validation": val_dataset,
+    "validation": validation_dataset,
   }
 )
 
