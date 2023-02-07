@@ -131,7 +131,7 @@ class BigBirdConfig(PretrainedConfig):
         block_size=64,
         num_random_blocks=3,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,

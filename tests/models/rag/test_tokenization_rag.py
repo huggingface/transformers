@@ -110,7 +110,6 @@ class RagTokenizerTest(TestCase):
 
     @require_tokenizers
     def test_save_load_pretrained_with_saved_config(self):
-
         save_dir = os.path.join(self.tmpdirname, "rag_tokenizer")
         rag_config = RagConfig(question_encoder=DPRConfig().to_dict(), generator=BartConfig().to_dict())
         rag_tokenizer = RagTokenizer(question_encoder=self.get_dpr_tokenizer(), generator=self.get_bart_tokenizer())

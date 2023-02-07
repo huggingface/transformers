@@ -171,7 +171,7 @@ class FSMTConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
-        **common_kwargs
+        **common_kwargs,
     ):
         self.langs = langs
         self.src_vocab_size = src_vocab_size

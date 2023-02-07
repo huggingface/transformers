@@ -163,7 +163,6 @@ class TFAttention(tf.keras.layers.Layer):
         output_attentions,
         training=False,
     ):
-
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
                 raise ValueError(
@@ -230,7 +229,6 @@ class TFBlock(tf.keras.layers.Layer):
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
 
         if config.add_cross_attention:
-
             self.crossattention = TFAttention(nx, config, scale, name="crossattention", is_cross_attention=True)
             self.ln_cross_attn = tf.keras.layers.LayerNormalization(
                 epsilon=config.layer_norm_epsilon, name="ln_cross_attn"
@@ -365,7 +363,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:

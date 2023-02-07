@@ -174,7 +174,7 @@ class DetaConfig(PretrainedConfig):
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
         focal_alpha=0.25,
-        **kwargs
+        **kwargs,
     ):
         if backbone_config is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")

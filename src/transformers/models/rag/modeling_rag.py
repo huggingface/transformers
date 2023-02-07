@@ -246,7 +246,7 @@ class RagPreTrainedModel(PreTrainedModel):
         question_encoder_pretrained_model_name_or_path: str = None,
         generator_pretrained_model_name_or_path: str = None,
         retriever: RagRetriever = None,
-        **kwargs
+        **kwargs,
     ) -> PreTrainedModel:
         r"""
         Instantiates an question encoder and a generator from one or two base classes of the library from pretrained
@@ -588,7 +588,6 @@ class RagModel(RagPreTrainedModel):
         )
         # encoder_outputs are pre-computed during RAG-token generation
         if encoder_outputs is None:
-
             if has_to_retrieve:
                 question_enc_outputs = self.question_encoder(
                     input_ids, attention_mask=attention_mask, return_dict=True
@@ -603,7 +602,6 @@ class RagModel(RagPreTrainedModel):
                     return_tensors="pt",
                 )
                 if self.context_encoder_training:
-
                     (
                         context_input_ids,
                         context_attention_mask,
@@ -789,7 +787,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         reduce_loss: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         n_docs: Optional[int] = None,
-        **kwargs  # needs kwargs for generation
+        **kwargs,  # needs kwargs for generation
     ) -> RetrievAugLMMarginOutput:
         r"""
         exclude_bos_score (`bool`, *optional*):
@@ -921,7 +919,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         num_return_sequences: Optional[int] = None,  # defaults to 1
         num_beams: Optional[int] = None,  # defaults to 1
         n_docs: Optional[int] = None,
-        **model_kwargs
+        **model_kwargs,
     ) -> torch.LongTensor:
         """
         Implements RAG sequence "thorough" decoding. Read the [`~generation.GenerationMixin.generate`]` documentation
@@ -1176,7 +1174,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         encoder_outputs=None,
         doc_scores=None,
         n_docs=None,
-        **kwargs
+        **kwargs,
     ):
         if past_key_values is not None:
             # if past is defined use only last decoder_input_ids
@@ -1225,7 +1223,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
         return reordered_past
 
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
-
         n_docs = n_docs if n_docs is not None else self.config.n_docs
 
         # RAG-token marginalization
@@ -1257,7 +1254,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         reduce_loss: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
         n_docs: Optional[int] = None,
-        **kwargs  # needs kwargs for generation
+        **kwargs,  # needs kwargs for generation
     ) -> RetrievAugLMMarginOutput:
         r"""
         do_marginalize (`bool`, *optional*):
@@ -1390,7 +1387,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
         logits_processor: Optional[LogitsProcessorList] = LogitsProcessorList(),
         stopping_criteria: Optional[StoppingCriteriaList] = StoppingCriteriaList(),
-        **kwargs
+        **kwargs,
     ) -> torch.LongTensor:
         """
         Implements RAG token decoding.

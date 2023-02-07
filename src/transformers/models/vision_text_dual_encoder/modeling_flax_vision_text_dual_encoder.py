@@ -227,9 +227,8 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
-
         if not _do_init:
             raise ValueError(
                 "`FlaxVisionTextDualEncoderModel` cannot be created without initializing, `_do_init` must be `True`."

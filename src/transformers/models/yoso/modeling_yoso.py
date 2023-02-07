@@ -98,7 +98,6 @@ def normalize(input_tensors):
 
 
 def hashing(query, key, num_hash, hash_len):
-
     if len(query.size()) != 3:
         raise ValueError("Query has incorrect size.")
     if len(key.size()) != 3:

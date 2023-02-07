@@ -19,7 +19,6 @@ import argparse
 import os
 
 import torch
-
 from emmental.modules import ThresholdBinarizer, TopKBinarizer
 
 

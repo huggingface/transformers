@@ -126,7 +126,7 @@ class PegasusConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         forced_eos_token_id=1,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
