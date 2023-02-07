@@ -20,8 +20,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -360,7 +360,6 @@ class Blip2ForConditionalGenerationModelTester:
     def __init__(
         self, parent, vision_kwargs=None, qformer_kwargs=None, text_kwargs=None, is_training=True, num_query_tokens=10
     ):
-
         if vision_kwargs is None:
             vision_kwargs = {}
         if qformer_kwargs is None:

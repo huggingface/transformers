@@ -65,7 +65,7 @@ class Blip2Processor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         This method uses [`BlipImageProcessor.__call__`] method to prepare image(s) for the model, and
@@ -78,7 +78,6 @@ class Blip2Processor(ProcessorMixin):
 
         # Get only text
         if images is None:
-
             self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(
                 text=text,

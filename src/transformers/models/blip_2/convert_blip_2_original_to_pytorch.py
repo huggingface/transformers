@@ -20,14 +20,14 @@ URL: https://github.com/salesforce/LAVIS/tree/main/projects/blip2
 
 import argparse
 
-import torch
-from PIL import Image
-
 import requests
+import torch
 
 # pip3 install salesforce-lavis
 # I'm actually installing a slightly modified version: pip3 install git+https://github.com/nielsrogge/LAVIS.git@fix_lavis
 from lavis.models import load_model_and_preprocess
+from PIL import Image
+
 from transformers import (
     AutoTokenizer,
     Blip2Config,

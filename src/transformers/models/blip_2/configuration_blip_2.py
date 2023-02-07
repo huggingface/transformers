@@ -105,7 +105,7 @@ class Blip2VisionConfig(PretrainedConfig):
         initializer_range=1e-10,
         initializer_factor=1.0,
         qkv_bias=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -127,7 +127,6 @@ class Blip2VisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from Blip2Config
@@ -226,7 +225,7 @@ class Blip2QFormerConfig(PretrainedConfig):
         classifier_dropout=None,
         cross_attention_frequency=2,
         encoder_hidden_size=1408,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
@@ -248,7 +247,6 @@ class Blip2QFormerConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the qformer config dict if we are loading from Blip2Config
@@ -352,7 +350,7 @@ class Blip2Config(PretrainedConfig):
         vision_config: Blip2VisionConfig,
         qformer_config: Blip2QFormerConfig,
         text_config: PretrainedConfig,
-        **kwargs
+        **kwargs,
     ):
         r"""
         Instantiate a [`Blip2Config`] (or a derived class) from a BLIP-2 vision model, Q-Former and language model
