@@ -16,8 +16,7 @@
 
 
 import math
-import os
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -43,80 +42,6 @@ CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch"""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            if pointer.shape != array.shape:
-                raise AssertionError("Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
-
-
-@torch.jit.script  # type: ignore
 def rms_layernorm(hidden: torch.Tensor, weight: torch.Tensor, eps: float):
     old_dtype = hidden.dtype
     variance = hidden.to(torch.float32).pow(2).mean(dim=-1, keepdim=True)
@@ -125,44 +50,36 @@ def rms_layernorm(hidden: torch.Tensor, weight: torch.Tensor, eps: float):
 
 
 class CPMAntLayerNorm(nn.Module):
-    """RMS LayerNorm"""
+    """
+    We use Root Mean Square (RMS) Layer Normalization, please see https://arxiv.org/abs/1910.07467 for details."
+    """
 
     def __init__(
         self,
-        dim_norm: int,
-        eps: float = 1e-6,
+        config: CPMAntConfig,
         init_var: float = 1.0,
     ):
         super().__init__()
+        self.eps = config.eps
+        self.dim_norm = config.dim_model
+        self.weight = torch.nn.parameter.Parameter(torch.full((config.dim_model,), init_var))
 
-        self.eps = eps
-        self.dim_norm = dim_norm
-        self.weight = torch.nn.parameter.Parameter(torch.full((dim_norm,), init_var))
-
-    def forward(self, x: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor):
         """
         Args:
-            x (`torch.Tensor` of shape `(batch, seq_len, dim_in)`)
-        """  # noqa: E501
-        if x.size(-1) != self.dim_norm:
-            raise AssertionError("x.size(-1) != self.dim_norm")
-        return rms_layernorm(x, self.weight, self.eps)
+            hidden_states (`torch.Tensor` of shape `(batch, seq_len, dim_in)`)
+        """
+        if hidden_states.size(-1) != self.dim_norm:
+            raise AssertionError("hidden_states.size(-1) != self.dim_norm")
+        return rms_layernorm(hidden_states, self.weight, self.eps)
 
 
 class CPMAntAttention(nn.Module):
-    def __init__(
-        self,
-        dim_model: int,
-        num_heads: int,
-        dim_head: int,
-        dropout_p: Optional[float] = None,
-        use_cache: Optional[bool] = False,
-    ) -> None:
+    def __init__(self, config: CPMAntConfig):
         super().__init__()
-        self.use_cache = use_cache
-        self.dim_model = dim_model
-        self.num_heads = num_heads
-        self.dim_head = dim_head
+        self.dim_model = config.dim_model
+        self.num_heads = config.num_heads
+        self.dim_head = config.dim_head
 
         self.project_q = nn.Linear(self.dim_model, self.num_heads * self.dim_head, bias=False)
         self.project_k = nn.Linear(self.dim_model, self.num_heads * self.dim_head, bias=False)
@@ -172,8 +89,8 @@ class CPMAntAttention(nn.Module):
 
         self.softmax = torch.nn.Softmax(dim=-1)
 
-        if dropout_p is not None:
-            self.dropout = torch.nn.Dropout(p=dropout_p)
+        if config.dropout_p is not None:
+            self.dropout = torch.nn.Dropout(p=config.dropout_p)
         else:
             self.dropout = None
 
@@ -183,22 +100,22 @@ class CPMAntAttention(nn.Module):
         hidden_kv: torch.Tensor,
         attention_mask: torch.BoolTensor,
         position_bias: torch.Tensor,
-        past_kv: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        use_cache: Optional[bool] = False,
     ):
         """
         Args:
             hidden_q (`torch.Tensor`):
-                Indices of input sequence tokens of shape `(batch, len_q, dim_model)`. It will be embedded by model's
-                internal embedding lookup matrix.
+                Input of transformer block(self-attention block). It can be the raw embedding of a batch of sequences.
             hidden_kv (`torch.Tensor` of shape `(batch, len_k, dim_model)`)):
                 Tensor *key_value* and *query* of shape `(batch, len_k, dim_model)`
             attention_mask (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Avoid invalid areas to participate in the calculation of self-attention.
             position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
-            past_kv (`Tuple(torch.FloatTensor)`, *optional*): Cached past key and value projection states.
-        """  # noqa: E501
-
+            past_key_values (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
+                Cached past key and value projection states.
+        """
         batch_size = hidden_q.size(0)
         len_q = hidden_q.size(1)
         len_k = hidden_kv.size(1)
@@ -211,12 +128,12 @@ class CPMAntAttention(nn.Module):
         key = key.view(batch_size, len_k, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
         value = value.view(batch_size, len_k, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
 
-        if past_kv is not None:
-            key = torch.cat([past_kv[0], key], dim=-2)
-            value = torch.cat([past_kv[1], value], dim=-2)
+        if past_key_values is not None:
+            key = torch.cat([past_key_values[0], key], dim=-2)
+            value = torch.cat([past_key_values[1], value], dim=-2)
             len_k = key.size(-2)
 
-        # (b, n_h, len_q, d_h) @ (b, n_h, d_h, len_k) -> (b, n_h, len_q, len_k)
+        # (batch_size, num_head, len_q, dim_head) @ (batch_size, num_head, dim_head, len_k) -> (batch_size, num_head, len_q, len_k)
         score = torch.matmul(query, key.transpose(-1, -2)) / math.sqrt(self.dim_head)
         score = score + position_bias
 
@@ -236,7 +153,7 @@ class CPMAntAttention(nn.Module):
         if self.dropout is not None:
             score = self.dropout(score)
 
-        # (b, n_h, len_q, len_k) @ (b, n_h, len_k, d_h) -> (b, n_h, len_q, d_h)
+        # (batch_size, num_head, len_q, len_k) @ (batch_size, num_head, len_k, dim_head) -> (batch_size, num_head, len_q, dim_head)
         score = torch.matmul(score, value)
 
         score = score.view(batch_size, self.num_heads, len_q, self.dim_head).permute(0, 2, 1, 3)
@@ -244,49 +161,19 @@ class CPMAntAttention(nn.Module):
 
         score = self.attention_out(score)
 
-        if self.use_cache:
+        if use_cache:
             return score, (key, value)
 
         return score
 
 
 class CPMAntSelfAttentionBlock(nn.Module):
-    """The whole cross-attention block. A sequence of operation. Consists of layernorm, self-attention and residual
-    connection.
-
-        Args:
-            dim_model (int): Main dimension of modules in transformer blocks.
-            num_heads (int): Number of attention heads in the Transformer encoder.
-            dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
-            eps (float, optional): The epsilon used by the layer normalization layers.
-            dropout_p (float, optional): Defaults to 0.
-            use_cache (bool, optional): Whether to use cache.
-    """  # noqa: E501
-
-    def __init__(
-        self,
-        dim_model: int,
-        num_heads: int,
-        dim_head: int,
-        eps: float = 1e-6,
-        dropout_p: Optional[float] = None,
-        use_cache: Optional[bool] = False,
-    ):
+    def __init__(self, config: CPMAntConfig):
         super().__init__()
-        self.use_cache = use_cache
-        self.layernorm_before_attention = CPMAntLayerNorm(
-            dim_norm=dim_model,
-            eps=eps,
-        )
-        self.self_attention = CPMAntAttention(
-            dim_model=dim_model,
-            num_heads=num_heads,
-            dim_head=dim_head,
-            dropout_p=dropout_p,
-            use_cache=self.use_cache,
-        )
-        if dropout_p:
-            self.dropout = torch.nn.Dropout(dropout_p)
+        self.layernorm_before_attention = CPMAntLayerNorm(config)
+        self.self_attention = CPMAntAttention(config)
+        if config.dropout_p:
+            self.dropout = torch.nn.Dropout(config.dropout_p)
         else:
             self.dropout = None
 
@@ -295,7 +182,8 @@ class CPMAntSelfAttentionBlock(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        use_cache: Optional[bool] = False,
     ):
         """
         Args:
@@ -305,128 +193,77 @@ class CPMAntSelfAttentionBlock(nn.Module):
                 Avoid invalid areas to participate in the calculation of self-attention.
             position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*): Cached past key and value projection states.
-        """  # noqa: E501
-        x = self.layernorm_before_attention(hidden_states)
-        x = self.self_attention(x, x, attention_mask, position_bias, past_key_value)
-        if self.use_cache:
-            x, current_key_value = x
+            past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
+                Cached past key and value projection states.
+        """
+        outputs = self.layernorm_before_attention(hidden_states)
+        outputs = self.self_attention(outputs, outputs, attention_mask, position_bias, past_key_values, use_cache)
+        if use_cache:
+            outputs, current_key_value = outputs
 
         if self.dropout is not None:
-            x = self.dropout(x)
-        hidden_states = hidden_states + x
+            outputs = self.dropout(outputs)
+        hidden_states = hidden_states + outputs
 
-        if self.use_cache:
+        if use_cache:
             return (hidden_states, current_key_value)
 
         return hidden_states
 
 
 class DenseGatedACT(nn.Module):
-    def __init__(
-        self,
-        dim_in: int,
-        dim_ff: int,
-    ):
+    def __init__(self, config: CPMAntConfig):
         super().__init__()
-
-        self.w_0 = nn.Linear(dim_in, dim_ff, bias=False)
-        self.w_1 = nn.Linear(dim_in, dim_ff, bias=False)
+        self.w_0 = nn.Linear(config.dim_model, config.dim_ff, bias=False)
+        self.w_1 = nn.Linear(config.dim_model, config.dim_ff, bias=False)
         self.act = torch.nn.GELU()
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor):
         """Transform an input tensor from one feature space to another via a nonlinear operation
 
         Args:
-            x (`torch.Tensor` of shape `(batch, seq_len, dim_in)`)
-        """  # noqa: E501
-        gate_score = self.act(self.w_0(x))
-        x = self.w_1(x)
+            hidden_states (`torch.Tensor` of shape `(batch, seq_len, dim_in)`)
+        """
+        gate_score = self.act(self.w_0(hidden_states))
+        hidden_states = self.w_1(hidden_states)
 
-        x = gate_score * x
-        return x
+        hidden_states = gate_score * hidden_states
+        return hidden_states
 
 
 class CPMAntFeedForward(nn.Module):
-    r"""FeedForward module
-
-    Args:
-        dim_in (int): input dimension.
-        dim_ff (int): middle dimension.
-        dim_out (int, optional): output dimension. Defaults to None, which means dim_in = dim_out.
-        bias (bool, optional):
-            whether to use bias term in fully-connected layers used in feed-forward module. Defaults to False.
-        activate_fn (str, optional): Defaults to `gated_gelu`.
-        dropout_p (int, optional): Defaults to 0.
-    """  # noqa: E501
-
-    def __init__(
-        self,
-        dim_model: int,
-        dim_ff: int,
-        dropout_p: Optional[float] = None,
-    ):
+    def __init__(self, config: CPMAntConfig):
         super().__init__()
-
-        self.w_in = DenseGatedACT(
-            dim_in=dim_model,
-            dim_ff=dim_ff,
-        )
-
-        if dropout_p is not None:
-            self.dropout = torch.nn.Dropout(dropout_p)
+        self.w_in = DenseGatedACT(config)
+        if config.dropout_p is not None:
+            self.dropout = torch.nn.Dropout(config.dropout_p)
         else:
             self.dropout = None
 
-        self.w_out = nn.Linear(dim_ff, dim_model, bias=False)
+        self.w_out = nn.Linear(config.dim_ff, config.dim_model, bias=False)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor):
         """
         Args:
-            x (`torch.Tensor` of shape `(batch, seq_len, dim_in)`)
-        """  # noqa: E501
-        x = self.w_in(x)
+            hidden_states (`torch.Tensor` of shape `(batch, seq_len, dim_in)`)
+        """
+        hidden_states = self.w_in(hidden_states)
 
         if self.dropout is not None:
-            x = self.dropout(x)
+            hidden_states = self.dropout(hidden_states)
 
-        x = self.w_out(x)
+        hidden_states = self.w_out(hidden_states)
 
-        return x
+        return hidden_states
 
 
 class CPMAntFFNBlock(nn.Module):
-    """The whole feed-forward block. A sequence of operation. Consists of layernorm, feed-forward and residual connection.
-
-    Args:
-        dim_model (int): Main dimension of modules in transformer blocks.
-        dim_ff (int): Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        eps (float, optional): The epsilon used by the layer normalization layers.
-        dropout_p (float, optional): Defaults to 0.
-    """  # noqa: E501
-
-    def __init__(
-        self,
-        dim_model: int,
-        dim_ff: int,
-        eps: float = 1e-6,
-        dropout_p: Optional[float] = 0,
-    ):
+    def __init__(self, config: CPMAntConfig):
         super().__init__()
-
-        self.layernorm_before_ffn = CPMAntLayerNorm(
-            dim_model,
-            eps=eps,
-        )
-
-        self.ffn = CPMAntFeedForward(
-            dim_model,
-            dim_ff,
-            dropout_p=dropout_p,
-        )
-
-        if dropout_p:
-            self.dropout = torch.nn.Dropout(dropout_p)
+        self.layernorm_before_ffn = CPMAntLayerNorm(config)
+        self.ffn = CPMAntFeedForward(config)
+        if config.dropout_p:
+            self.dropout = torch.nn.Dropout(config.dropout_p)
         else:
             self.dropout = None
 
@@ -438,179 +275,88 @@ class CPMAntFFNBlock(nn.Module):
         Args:
             hidden_states (`torch.Tensor` of shape `(batch, len_seq, dim_model)`):
                 Hidden states before feed forward layer.
-        """  # noqa: E501
-        x = self.layernorm_before_ffn(hidden_states)
-        x = self.ffn(x)
+        """
+        outputs = self.layernorm_before_ffn(hidden_states)
+        outputs = self.ffn(outputs)
         if self.dropout is not None:
-            x = self.dropout(x)
-        hidden_states = hidden_states + x
+            outputs = self.dropout(outputs)
+        hidden_states = hidden_states + outputs
         return hidden_states
 
 
 class CPMAntTransformerBlock(nn.Module):
-    """The whole transformer block. A sequence of operation. Consists of self-attention block[, cross-attention block] and
-    feed-forward block.
-
-        Args:
-            dim_model (int): Main dimension of modules in transformer blocks.
-            dim_ff (int): Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-            num_heads (int): Number of attention heads in the Transformer encoder.
-            dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
-            eps (float, optional): The epsilon used by the layer normalization layers.
-            dropout_p (float, optional): Defaults to 0.
-            use_cache (bool, optional): Whether to use cache.
-    """  # noqa: E501
-
-    def __init__(
-        self,
-        dim_model: int,
-        dim_ff: int,
-        num_heads: int,
-        dim_head: int,
-        eps: float = 1e-6,
-        dropout_p: Optional[float] = None,
-        use_cache: Optional[bool] = False,
-        mask_att: bool = False,
-        mask_ffn: bool = False,
-    ):
+    def __init__(self, config: CPMAntConfig):
         super().__init__()
-        self.mask_att = mask_att
-        self.mask_ffn = mask_ffn
-        self.use_cache = use_cache
-        if not self.mask_att:
-            self.self_att = CPMAntSelfAttentionBlock(
-                dim_model=dim_model,
-                num_heads=num_heads,
-                dim_head=dim_head,
-                eps=eps,
-                dropout_p=dropout_p,
-                use_cache=self.use_cache,
-            )
-
-        if not self.mask_ffn:
-            self.ffn = CPMAntFFNBlock(
-                dim_model=dim_model,
-                dim_ff=dim_ff,
-                eps=eps,
-                dropout_p=dropout_p,
-            )
+        self.self_att = CPMAntSelfAttentionBlock(config)
+        self.ffn = CPMAntFFNBlock(config)
 
     def forward(
         self,
-        self_hidden_states: torch.Tensor,
-        self_attention_mask: torch.Tensor,
-        self_position_bias: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_bias: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        use_cache: Optional[bool] = False,
     ):
         """
         Args:
-            self_hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_enc, dim_model)`
-            self_attention_mask (`torch.Tensor`):
-                Avoid invalid areas to participate in the calculation of shape `(batch, seq_enc, seq_enc)`
-            self_position_bias (`torch.Tensor`):
-                Provides position information to attention mechanism of shape `(num_heads, seq_enc, seq_enc)`
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-        """  # noqa: E501
-
+            hidden_states (`torch.Tensor`):
+                Input to the layer of shape `(batch, seq_len, dim_model)`
+            attention_mask (`torch.Tensor`):
+                Avoid invalid areas to participate in the calculation of shape `(batch, seq_len, seq_len)`
+            position_bias (`torch.Tensor`):
+                Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
+            past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
+                Cached past key and value projection states
+        """
         current_key_value = None
-        if not self.mask_att:
-            hidden_states = self.self_att(
-                self_hidden_states,
-                attention_mask=self_attention_mask,
-                position_bias=self_position_bias,
-                past_key_value=past_key_value,
-            )
-            if self.use_cache:
-                hidden_states, current_key_value = hidden_states
-        else:
-            hidden_states = self_hidden_states
+        hidden_states = self.self_att(
+            hidden_states,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+        )
+        if use_cache:
+            hidden_states, current_key_value = hidden_states
+        hidden_states = self.ffn(hidden_states)
 
-        # (batch, dim_model, len_seq)
-        if not self.mask_ffn:
-            hidden_states = self.ffn(hidden_states)
-
-        if self.use_cache:
+        if use_cache:
             return (hidden_states, current_key_value)
 
         return hidden_states
 
 
 class CPMAntEncoder(nn.Module):
-    """Layers of encoder transformer blocks plus an final layernorm.
-
-    Args:
-        num_layers (int): Number of layers.
-        dim_model (int): Main dimension of modules in transformer blocks.
-        dim_ff (int): Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_heads (int): Number of attention heads in the Transformer encoder.
-        dim_head (int): Dimension of attention heads for each attention layer in the Transformer encoder.
-        eps (float, optional): The epsilon used by the layer normalization layers.
-        dropout_p (float, optional): Defaults to 0.
-        use_cache (bool, optional): Whether to use cache.
-    """  # noqa: E501
-
-    def __init__(
-        self,
-        num_layers: int = 48,
-        dim_model: int = 4096,
-        dim_ff: int = 10240,
-        num_heads: int = 32,
-        dim_head: int = 128,
-        eps: float = 1e-6,
-        use_cache: Optional[bool] = False,
-        dropout_p: Optional[float] = 0.0,
-        mask_modules: Optional[List[Tuple[bool, bool]]] = None,
-    ):
+    def __init__(self, config: CPMAntConfig):
         super().__init__()
-        self.num_layers = num_layers
-        self.use_cache = use_cache
-        if mask_modules is not None:
-            if len(mask_modules) == num_layers:
-                raise ValueError("The total number of masks should equal to num_layers")
-            for mask_module in mask_modules:
-                if len(mask_module) != 2:
-                    raise ValueError("For encoder, each mask should be (mask_att, mask_ffn)")
-        else:
-            mask_modules = [(False, False)] * num_layers
+        self.num_layers = config.num_layers
+        self.layers = nn.ModuleList([CPMAntTransformerBlock(config) for ith in range(self.num_layers)])
 
-        self.layers = nn.ModuleList(
-            [
-                CPMAntTransformerBlock(
-                    dim_model=dim_model,
-                    dim_ff=dim_ff,
-                    num_heads=num_heads,
-                    dim_head=dim_head,
-                    eps=eps,
-                    dropout_p=dropout_p,
-                    mask_att=mask_modules[ith][0],
-                    mask_ffn=mask_modules[ith][1],
-                    use_cache=self.use_cache,
-                )
-                for ith in range(num_layers)
-            ]
-        )
-
-        self.output_layernorm = CPMAntLayerNorm(dim_norm=dim_model, eps=eps)
+        self.output_layernorm = CPMAntLayerNorm(config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor,
-        past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
+        past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        use_cache: Optional[bool] = False,
     ):
         """
         Args:
-            hidden_states (`torch.Tensor`): input to the layer of shape `(batch, seq_enc, dim_model)`
+            hidden_states (`torch.Tensor`):
+                Input to the layer of shape `(batch, seq_len, dim_model)`
             attention_mask (`torch.Tensor`):
-                Avoid invalid areas to participate in the calculation of shape `(batch, seq_enc, seq_enc)`
+                Avoid invalid areas to participate in the calculation of shape `(batch, seq_len, seq_len)`
             position_bias (`torch.Tensor`):
-                Provides position information to attention mechanism of shape `(num_heads, seq_enc, seq_enc)`
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
-        """  # noqa: E501
-        if not self.use_cache:
+                Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
+            past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
+                Cached past key and value projection states
+        """
+        if not use_cache:
             for layer in self.layers:
-                hidden_states = layer(hidden_states, attention_mask, position_bias)
+                hidden_states = layer(hidden_states, attention_mask, position_bias, None, use_cache)
             hidden_states = self.output_layernorm(hidden_states)
             return hidden_states
 
@@ -620,7 +366,8 @@ class CPMAntEncoder(nn.Module):
                 hidden_states,
                 attention_mask,
                 position_bias,
-                past_key_value=past_key_values[i] if past_key_values else None,
+                past_key_values=past_key_values[i] if past_key_values else None,
+                use_cache=use_cache,
             )
             current_key_values.append(hidden_states[1])
             hidden_states = hidden_states[0]
@@ -628,6 +375,7 @@ class CPMAntEncoder(nn.Module):
         return hidden_states, current_key_values
 
 
+# Copied from Bert
 class CPMAntIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -689,7 +437,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
             relative_position_bucket = self._segment_relative_position_bucket(query_segment, key_segment)
             relative_position_bucket = relative_position_bucket + self.num_buckets  # 与相对位置编码区间不重叠
 
-            # b*q*k
+            # (batch, len_q, len_k)
             absolute_position_bucket = self._position_bucket(
                 torch.arange(keylen, dtype=torch.int32, device=relative_position_bucket.device)[None, :]
                 - torch.arange(querylen, dtype=torch.int32, device=relative_position_bucket.device)[:, None],
@@ -735,6 +483,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         return relative_buckets
 
 
+# Copied from Bert
 class CPMAntOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -756,7 +505,6 @@ class CPMAntPreTrainedModel(PreTrainedModel):
     """
 
     config_class = CPMAntConfig
-    load_tf_weights = load_tf_weights_in_cpmant
     base_model_prefix = "cpmant"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -813,8 +561,17 @@ CPMANT_INPUTS_DOCSTRING = r"""
             A sequence of tokens that is processed together as a unit.
         span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
             A contiguous sequence of tokens within the input text.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -825,7 +582,7 @@ CPMANT_INPUTS_DOCSTRING = r"""
 class CPMAntModel(CPMAntPreTrainedModel):
     def __init__(self, config: CPMAntConfig):
         super().__init__(config)
-        self.encoder = CPMAntEncoder()
+        self.encoder = CPMAntEncoder(config)
         self.segment_embedding = nn.Embedding(config.segment_types, config.dim_model)
         self.input_embedding = nn.Embedding(
             config.vocab_size + config.prompt_types * config.prompt_length, config.dim_model
@@ -875,6 +632,9 @@ class CPMAntModel(CPMAntPreTrainedModel):
         position: Optional[torch.Tensor] = None,
         segment: Optional[torch.Tensor] = None,
         span: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = False,
         **kwargs,
     ):
@@ -901,10 +661,15 @@ class CPMAntModel(CPMAntPreTrainedModel):
                 A sequence of tokens that is processed together as a unit.
             span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 A contiguous sequence of tokens within the input text.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
         input_ids = input_ids.contiguous()
         hidden_states = self.input_embedding(input_ids)
         segment_states = self.segment_embedding(segment)
@@ -913,13 +678,17 @@ class CPMAntModel(CPMAntPreTrainedModel):
         attention_mask = self._prepare_attention_mask(input_ids, span, context, length)
         position_bias = self.position_bias(position, position, segment, segment)
 
-        hidden_states = self.encoder(hidden_states, attention_mask, position_bias)
+        hidden_states = self.encoder(hidden_states, attention_mask, position_bias, None, use_cache)
         logits = F.linear(hidden_states, self.input_embedding.weight)
 
         if not return_dict:
             return tuple(v for v in [logits, hidden_states] if v is not None)
 
-        return BaseModelOutput(hidden_states=hidden_states)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+        )
 
 
 @add_start_docstrings(
@@ -931,7 +700,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
 class CPMAntForCausalLM(CPMAntPreTrainedModel):
     def __init__(self, config: CPMAntConfig):
         super().__init__(config)
-        self.encoder = CPMAntEncoder(use_cache=config.use_cache)
+        self.encoder = CPMAntEncoder(config)
         self.segment_embedding = nn.Embedding(config.segment_types, config.dim_model)
         self.input_embedding = nn.Embedding(
             config.vocab_size + config.prompt_types * config.prompt_length, config.dim_model
@@ -957,9 +726,11 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         span: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
         use_cache: Optional[bool] = True,
-        return_dict: Optional[bool] = None,
+        output_attentions: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = True,
         **kwargs,
-    ):
+    ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
             input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
@@ -983,13 +754,13 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
                 A sequence of tokens that is processed together as a unit.
             span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 A contiguous sequence of tokens within the input text.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding.
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
-                Cached past key and value projection states.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         if past_key_values is None:
             past_length = 0
             past_key_values = tuple([None] * self.encoder.num_layers)
@@ -1010,9 +781,9 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         position_bias = position_bias[:, :, past_length:, :]
         hidden_states = hidden_states[:, past_length:, :]
 
-        self.encoder.use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        hidden_states, present_key_values = self.encoder(hidden_states, attention_mask, position_bias, past_key_values)
+        hidden_states, present_key_values = self.encoder(
+            hidden_states, attention_mask, position_bias, past_key_values, use_cache
+        )
         logits = self.lm_head(hidden_states)
 
         if not return_dict:

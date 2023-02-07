@@ -14,8 +14,6 @@
 # limitations under the License.
 """ CPMAnt model configuration"""
 
-from typing import List, Optional, Tuple
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -71,8 +69,6 @@ class CPMAntConfig(PretrainedConfig):
             The type of segment.
         use_cache (`bool`, *optional*, defaults to 32):
             Whether to use cache.
-        mask_modules (`List[Tuple[bool, bool]]`, *optional*, defaults to None):
-            Determine whether the module should be masked.
 
         Example:
 
@@ -106,7 +102,6 @@ class CPMAntConfig(PretrainedConfig):
         prompt_length: int = 32,
         segment_types: int = 32,
         use_cache: bool = True,
-        mask_modules: Optional[List[Tuple[bool, bool]]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -124,4 +119,3 @@ class CPMAntConfig(PretrainedConfig):
         self.eps = eps
         self.use_cache = use_cache
         self.vocab_size = vocab_size
-        self.mask_modules = mask_modules
