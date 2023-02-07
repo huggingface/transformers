@@ -1,11 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
-import io
-import json
-import os
-
 # coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
@@ -20,6 +12,9 @@ import os
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import io
+import json
+import os
 import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
@@ -406,7 +401,7 @@ def get_supported_tasks() -> List[str]:
 
 def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
     if is_offline_mode():
-        raise RuntimeError(f"You cannot infer task automatically within `pipeline` when using offline mode")
+        raise RuntimeError("You cannot infer task automatically within `pipeline` when using offline mode")
     try:
         info = model_info(model, token=use_auth_token)
     except Exception as e:
