@@ -105,6 +105,7 @@ This checks that:
 - All `__init__.py` files have the same content in their two sections (performed by `utils/check_inits.py`)
 - All code identified as a copy from another module is consistent with the original (performed by `utils/check_copies.py`)
 - All configuration classes have at least one valid checkpoint mentioned in their docstrings (performed by `utils/check_config_docstrings.py`)
+- All configuration classes only contain attributes that are used in corresponding modeling files (performed by `utils/check_config_attributes.py`)
 - The translations of the READMEs and the index of the doc have the same model list as the main README (performed by `utils/check_copies.py`)
 - The auto-generated tables in the documentation are up to date (performed by `utils/check_table.py`)
 - The library has all objects available even if not all optional dependencies are installed (performed by `utils/check_dummies.py`)
