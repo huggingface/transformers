@@ -441,8 +441,12 @@ class Trainer:
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
 
             self.forword_prefetch = False
-            if "forword_prefetch" in self.args.fsdp_config and self.backward_prefetch:
+            if self.args.fsdp_config.get("forword_prefect", False):
                 self.forword_prefetch = True
+
+            self.limit_all_gathers = False
+            if self.args.fsdp_config.get("limit_all_gathers", False):
+                self.limit_all_gathers = True
 
         # one place to sort out whether to place the model on device or not
         # postpone switching model to cuda when:
@@ -1462,6 +1466,7 @@ class Trainer:
                     device_id=self.args.device,
                     backward_prefetch=self.backward_prefetch,
                     forward_prefetch=self.forword_prefetch,
+                    limit_all_gathers=self.limit_all_gathers,
                 )
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
