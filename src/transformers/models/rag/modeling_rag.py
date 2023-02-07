@@ -1205,7 +1205,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         return self.rag.question_encoder
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
 
         def _reorder_stacked(hidden_states, new_order):
@@ -1216,7 +1216,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             return result
 
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             reordered_past += (tuple(_reorder_stacked(past_state, beam_idx) for past_state in layer_past),)
 
