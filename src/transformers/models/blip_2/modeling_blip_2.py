@@ -1263,7 +1263,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        input_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.FloatTensor,
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
