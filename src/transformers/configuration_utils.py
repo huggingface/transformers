@@ -313,7 +313,11 @@ class PretrainedConfig(PushToHubMixin):
         self.finetuning_task = kwargs.pop("finetuning_task", None)
         self.id2label = kwargs.pop("id2label", None)
         self.label2id = kwargs.pop("label2id", None)
+        if self.label2id is not None and not isinstance(self.label2id, dict):
+            raise TypeError("Argument label2id should be of type dict")
         if self.id2label is not None:
+            if not isinstance(self.id2label, dict):
+                raise TypeError("Argument id2label should be of type dict")
             num_labels = kwargs.pop("num_labels", None)
             if num_labels is not None and len(self.id2label) != num_labels:
                 logger.warning(
