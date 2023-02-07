@@ -664,9 +664,11 @@ class TFGenerationMixin:
             )
 
         # 4. Define model inputs
-        input_ids = self._prepare_model_inputs(input_ids, generation_config.bos_token_id)
+        inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
+            input_ids, generation_config.bos_token_id, model_kwargs
+        )
         # inputs_ids now has to be defined and cannot be None anymore
-        batch_size = shape_list(input_ids)[0]
+        batch_size = shape_list(inputs_tensor)[0]
 
         # 5. Prepare other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
@@ -678,23 +680,26 @@ class TFGenerationMixin:
 
         if model_kwargs.get("attention_mask", None) is None and requires_attention_mask and accepts_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                input_ids, generation_config.pad_token_id, generation_config.eos_token_id
+                inputs_tensor, generation_config.pad_token_id, generation_config.eos_token_id
             )
 
         # decoder-only models should use left-padding for generation
         if not self.config.is_encoder_decoder:
             if generation_config.pad_token_id is not None and tf.math.reduce_any(
-                input_ids[:, -1] == generation_config.pad_token_id
+                inputs_tensor[:, -1] == generation_config.pad_token_id
             ):
                 logger.warning(
                     "A decoder-only architecture is being used, but right-padding was detected! For correct "
                     "generation results, please set `padding_side='left'` when initializing the tokenizer."
                 )
+        if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
+            # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
+            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
+                inputs_tensor, model_kwargs, model_input_name
+            )
 
         # 6. Prepare model inputs which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
-            # if encoder-decoder, we create encoder_outputs and add to `model_kwargs`
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
             # if encoder-decoder then `input_ids` come from `decoder_start_token_id`
             input_ids = self._prepare_decoder_input_ids_for_generation(
                 batch_size,
@@ -702,6 +707,9 @@ class TFGenerationMixin:
                 bos_token_id=generation_config.bos_token_id,
                 model_kwargs=model_kwargs,
             )
+        else:
+            # if decoder-only then inputs_tensor has to be `input_ids`
+            input_ids = inputs_tensor
 
         # 7. Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
@@ -924,7 +932,9 @@ class TFGenerationMixin:
         else:
             return tf.ones(inputs.shape[:2], dtype=tf.int32)
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self, inputs_tensor: tf.Tensor, model_kwargs) -> Dict[str, Any]:
+    def _prepare_encoder_decoder_kwargs_for_generation(
+        self, inputs_tensor: tf.Tensor, model_kwargs, model_input_name: Optional[str] = None
+    ) -> Dict[str, Any]:
         # get encoder and store encoder outputs
         encoder = self.get_encoder()
 
@@ -938,7 +948,9 @@ class TFGenerationMixin:
 
         # vision models don't use `attention_mask`.
         encoder_kwargs["return_dict"] = True
-        encoder_kwargs[self.main_input_name] = inputs_tensor
+        encoder_kwargs[model_input_name] = inputs_tensor
+        if model_input_name != self.main_input_name:  # in Keras, the first input must always be passed
+            encoder_kwargs[self.main_input_name] = None
         encoder_outputs = encoder(**encoder_kwargs)
         model_kwargs["encoder_outputs"] = encoder_outputs
 
@@ -1007,19 +1019,79 @@ class TFGenerationMixin:
 
         return input_ids, model_kwargs
 
-    def _prepare_model_inputs(self, inputs: Optional[tf.Tensor] = None, bos_token_id: Optional[int] = None):
-        # TODO(Patrick) - adapt this function when making `generate` more flexible
-        # for all kinds of input types
-        if inputs is None:
-            # if no `inputs` are passed create prompt of size (1,1) filled with BOS token
-            if not isinstance(bos_token_id, int) or bos_token_id < 0:
-                raise ValueError(
-                    "you should either supply a context to complete as `input_ids` input "
-                    "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
-                )
-            return tf.cast(tf.fill((1, 1), bos_token_id), dtype=tf.int32)
+    def _prepare_model_inputs(
+        self,
+        inputs: Optional[tf.Tensor] = None,
+        bos_token_id: Optional[int] = None,
+        model_kwargs: Optional[Dict[str, tf.Tensor]] = None,
+    ) -> Tuple[tf.Tensor, Optional[str], Dict[str, tf.Tensor]]:
+        """
+        This function extracts the model-specific `inputs` for generation.
+        """
+        # 1. retrieve all kwargs that are non-None or non-model input related.
+        # some encoder-decoder models have different names for model and encoder
+        if (
+            self.config.is_encoder_decoder
+            and hasattr(self, "encoder")
+            and hasattr(self.encoder, "main_input_name")
+            and self.encoder.main_input_name != self.main_input_name
+        ):
+            input_name = self.encoder.main_input_name
+        else:
+            input_name = self.main_input_name
 
-        return inputs
+        model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None or k != input_name}
+
+        # 2. check whether model_input_name is passed as kwarg
+        # if yes and `inputs` is None use kwarg inputs
+        inputs_kwarg = model_kwargs.pop(input_name, None)
+        if inputs_kwarg is not None and inputs is not None:
+            raise ValueError(
+                f"`inputs`: {inputs}` were passed alongside {input_name} which is not allowed."
+                f"Make sure to either pass {inputs} or {input_name}=..."
+            )
+        elif inputs_kwarg is not None:
+            inputs = inputs_kwarg
+
+        # 3. In the presence of `inputs_embeds` for text models:
+        # - decoder-only models should complain if the user attempts to pass `inputs_embeds`, but the model
+        # doesn't have its forwarding implemented. `inputs_embeds` is kept in `model_kwargs` and can coexist with
+        # input_ids (`inputs_embeds` will be used in the 1st generation step, as opposed to `input_ids`)
+        # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
+        # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
+        if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
+            if not self.config.is_encoder_decoder:
+                has_inputs_embeds_forwarding = "inputs_embeds" in set(
+                    inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
+                )
+                if not has_inputs_embeds_forwarding:
+                    raise ValueError(
+                        f"You passed `inputs_embeds` to `.generate()`, but the model class {self.__class__.__name__} "
+                        "doesn't have its forwarding implemented. See the GPT2 implementation for an example "
+                        "(https://github.com/huggingface/transformers/pull/21405), and feel free to open a PR with it!"
+                    )
+            else:
+                if inputs is not None:
+                    raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
+                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
+
+        # 4. if `inputs` is still None, try to create `input_ids` from BOS token
+        if inputs is None:
+            inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
+
+        return inputs, input_name, model_kwargs
+
+    def _prepare_input_ids_for_generation(
+        self, bos_token_id: Optional[int], encoder_outputs: Optional[ModelOutput]
+    ) -> tf.Tensor:
+        if self.config.is_encoder_decoder and encoder_outputs is not None:
+            # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
+            shape = encoder_outputs.last_hidden_state.size()[:-1]
+            return tf.ones(shape, dtype=tf.int32) * -100
+
+        if bos_token_id is None:
+            raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
+        return tf.ones((1, 1), dtype=tf.int32) * bos_token_id
 
     @staticmethod
     def _extract_past_from_model_output(outputs: ModelOutput):
