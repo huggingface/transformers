@@ -391,6 +391,8 @@
         title: XLM-RoBERTa
       - local: model_doc/xlm-roberta-xl
         title: XLM-RoBERTa-XL
+      - local: model_doc/xlm-v
+        title: XLM-V
       - local: model_doc/xlnet
         title: XLNet
       - local: model_doc/yoso
