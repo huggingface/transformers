@@ -446,6 +446,14 @@ class Blip2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip(reason="There's no base Blip2Model")
+    def test_save_load_fast_init_from_base(self):
+        pass
+
+    @unittest.skip(reason="There's no base Blip2Model")
+    def test_save_load_fast_init_to_base(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -455,24 +463,8 @@ class Blip2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            if model.config.is_encoder_decoder:
-                expected_arg_names = [
-                    "input_ids",
-                    "attention_mask",
-                    "decoder_input_ids",
-                    "decoder_attention_mask",
-                ]
-                expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
-                    else ["encoder_outputs"]
-                )
-                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-            else:
-                expected_arg_names = (
-                    ["input_ids"] if model_class != Blip2ForConditionalGeneration else ["pixel_values"]
-                )
-                self.assertListEqual(arg_names[:1], expected_arg_names)
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_load_vision_qformer_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -488,14 +480,6 @@ class Blip2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             qformer_config = Blip2QFormerConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
-
-    @unittest.skip(reason="There's no base Blip2Model")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="There's no base Blip2Model")
-    def test_save_load_fast_init_to_base(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):
