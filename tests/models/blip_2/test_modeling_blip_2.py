@@ -422,7 +422,6 @@ class Blip2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
-    maxDiff = None
 
     def setUp(self):
         self.model_tester = Blip2ForConditionalGenerationModelTester(self)
@@ -475,70 +474,6 @@ class Blip2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
                 )
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_training(self):
-        if not self.model_tester.is_training:
-            return
-
-        for model_class in self.all_model_classes[:-1]:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-
-            # hardcode labels to be the same as input_ids
-            inputs["labels"] = inputs["input_ids"]
-
-            loss = model(**inputs).loss
-            loss.backward()
-
-    def test_training_gradient_checkpointing(self):
-        if not self.model_tester.is_training:
-            return
-
-        for model_class in self.all_model_classes[:-1]:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.gradient_checkpointing_enable()
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-
-            # hardcode labels to be the same as input_ids
-            inputs["labels"] = inputs["input_ids"]
-
-            loss = model(**inputs).loss
-            loss.backward()
-
-    # override as the `logit_scale` parameter initilization is different for Blip2
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     def test_load_vision_qformer_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -564,7 +499,7 @@ class Blip2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = Blip2ForConditionalGeneration.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
