@@ -13,11 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import warnings
 from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
-import math
 
 from transformers.image_utils import (
     ChannelDimension,
@@ -712,39 +712,25 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
 
 def bilinear_interpolation(image, y, x):
     """
-    A bilinear interpolation of the estimated values of the `image` at non integer indexes `y` and `x`. 
+    A bilinear interpolation of the estimated values of the `image` at non integer indexes `y` and `x`.
     
-    Original Image at                    Original Image at
-      x_1, y_1                             x_1, y_2 
-        +---+                               +---+       
-        | +-|-------------------------------|-+ |       
-        +---+                               +---+       
-            |                                   |         
-            |             Pixel at (x,y) where  |         
-            |             x and y non integers  |         
-            |                     +---+         |         
-            |                     |   |         |         
-            |                     +---+         |         
-        +---+                               +---+       
-        | +-|-------------------------------|-+ |       
-        +---+                               +---+       
+    Original Image at Original Image at
+      x_1, y_1 x_1, y_2
+        +---+ +---+ | +-|-------------------------------|-+ | +---+ +---+
+            | | | Pixel at (x,y) where | | x and y non integers | | +---+ | | | | | | +---+ |
+        +---+ +---+ | +-|-------------------------------|-+ | +---+ +---+
                                                         
-    Original Image at                    Original Image at
-      x_1, y_2                             x_2, y_2 
+    Original Image at Original Image at
+      x_1, y_2 x_2, y_2
     
-    The estimated value of the pixel is computed using the following equation : 
+    The estimated value of the pixel is computed using the following equation :
     
-    $$
-    \text{Image}_{x,y} = \frac{1}{(x_1 - x_2)(y_2-y_1)} 
-    \begin{bmatrix} x_2 - x &   x - x_1\end{bmatrix}  
-    \begin{bmatrix}
-    \text{Image}_{x_1,y_1} &   \text{Image}_{x_2,y_1}\\
-    \text{Image}_{x_1,y_2} &   \text{Image}_{x_2,y_2}\\
-    \end{bmatrix}
-    \begin{bmatrix} y_2 - y \\  y-y_2\end{bmatrix}  
-    $$
+    $$ \text{Image}_{x,y} = \frac{1}{(x_1 - x_2)(y_2-y_1)} \begin{bmatrix} x_2 - x & x - x_1\end{bmatrix}
+    \begin{bmatrix} \text{Image}_{x_1,y_1} & \text{Image}_{x_2,y_1}\\ \text{Image}_{x_1,y_2} & \text{Image}_{x_2,y_2}\\
+    \end{bmatrix} \begin{bmatrix} y_2 - y \\ y-y_2\end{bmatrix} $$
     
-    For more details about bilinear interplation, see [on the wikipedia page](https://en.wikipedia.org/wiki/Bilinear_interpolation)
+    For more details about bilinear interplation, see [on the wikipedia
+    page](https://en.wikipedia.org/wiki/Bilinear_interpolation)
     """
     height = image.shape[0]
     width = image.shape[1]
@@ -771,10 +757,10 @@ def bilinear_interpolation(image, y, x):
 
 def np_bilinear_resize(image, new_height, new_width):
     """
-    Taken from `[here](https://stackoverflow.com/questions/70024313/resize-using-bilinear-interpolation-in-python)` with the
-    torchvision.transforms.Resize(size=[chunk_frames, self.feature_size])
-    This function is not optimal in terms of performances, but has the same results as the `torchvision.transforms.resize` function
-    when called with the default `bilinear` interpolation.
+    Taken from `[here](https://stackoverflow.com/questions/70024313/resize-using-bilinear-interpolation-in-python)`
+    with the torchvision.transforms.Resize(size=[chunk_frames, self.feature_size]) This function is not optimal in
+    terms of performances, but has the same results as the `torchvision.transforms.resize` function when called with
+    the default `bilinear` interpolation.
     """
     new_image = np.zeros(
         (new_height, new_width), image.dtype

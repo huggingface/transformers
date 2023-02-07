@@ -22,8 +22,9 @@ import numpy as np
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
 from ...image_transforms import np_bilinear_resize
+from ...utils import TensorType, logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -40,11 +41,14 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
     Args:
         feature_size (`int`, defaults to 80):
-            The feature dimension of the extracted MEL spectrograms. This corresponds to the number of frequency bins (intervals) that are computer, for each fourrier step.
+            The feature dimension of the extracted MEL spectrograms. This corresponds to the number of frequency bins
+            (intervals) that are computer, for each fourrier step.
         sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz). This only serves to warn users if the audio fed to the feature extractor does not have the same sampling rate.
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz). This only serves
+            to warn users if the audio fed to the feature extractor does not have the same sampling rate.
         hop_length (`int`, defaults to 160):
-            Length of the overlaping windows for the STFT used to obtain the Mel Spectrogram. The audio will be split in smaller `frames` with a step of `hop_length` between each frame.
+            Length of the overlaping windows for the STFT used to obtain the Mel Spectrogram. The audio will be split
+            in smaller `frames` with a step of `hop_length` between each frame.
         chunk_length_s (`int`, defaults to 10):
             The maximum input lenght of the model in seconds. This is used to pad the audio.
         n_fft (`int`, defaults to 400):
@@ -58,11 +62,15 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         frequency_max (`float`, *optional*, 14_000):
             The highest frequency of interest. The STFT TODO (not sure) will not be computed for values above this.
         top_db (`float`, *optional*):
-            The highest decibel value used to convert the mel spectrogram to the log scale. For more details see the `SequenceFeatureExtractor._power_to_db` function
+            The highest decibel value used to convert the mel spectrogram to the log scale. For more details see the
+            `SequenceFeatureExtractor._power_to_db` function
         truncation (`str`, *optional*, `"fusions"`):
             Truncation pattern for long audio inputs. Two patterns are available:
-                - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and  a downsampled version of the entire mel spectrogram. These 4 spectrogram will have a dimension of `n_fft, feature_size`. TODO check this
-            If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy of the original mel obtained from the padded audio.
+                - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and a
+                  downsampled version of the entire mel spectrogram. These 4 spectrogram will have a dimension of
+                  `n_fft, feature_size`. TODO check this
+            If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy
+            of the original mel obtained from the padded audio.
                 - `rand_trunc` will select a random crop of the mel spectrogram.
         padding (`str`, *optional*, `"repeatpad"`):
             Padding pattern for shorter audio inputs. Three patterns were originaly implemented:
@@ -131,7 +139,8 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         Serializes this instance to a Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance, excpet for the mel filter banks, which do not need to be saved or printed as they are too long.
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance, excpet for the
+            mel filter banks, which do not need to be saved or printed as they are too long.
         """
         output = copy.deepcopy(self.__dict__)
         output["feature_extractor_type"] = self.__class__.__name__
@@ -276,8 +285,11 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
                 values, a list of numpy arrays or a list of list of float values.
             truncation (`str`, *optional*):
                 Truncation pattern for long audio inputs. Two patterns are available:
-                    - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and  a downsampled version of the entire mel spectrogram. These 4 spectrogram will have a dimension of `n_fft, feature_size`. TODO check this
-                If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy of the original mel obtained from the padded audio.
+                    - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and
+                      a downsampled version of the entire mel spectrogram. These 4 spectrogram will have a dimension of
+                      `n_fft, feature_size`. TODO check this
+                If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a
+                copy of the original mel obtained from the padded audio.
                     - `rand_trunc` will select a random crop of the mel spectrogram.
             padding (`str`, *optional*):
                 Padding pattern for shorter audio inputs. Three patterns were originaly implemented:
