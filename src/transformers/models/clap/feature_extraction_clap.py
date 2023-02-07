@@ -41,18 +41,35 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
     Args:
         feature_size (`int`, defaults to 80):
-            The feature dimension of the extracted features.
+            The feature dimension of the extracted MEL spectrograms. This corresponds to the number of frequency bins (intervals) that are computer, for each fourrier step.
         sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz). This only serves to warn users if the audio fed to the feature extractor does not have the same sampling rate.
         hop_length (`int`, defaults to 160):
-            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
-        chunk_length (`int`, defaults to 30):
-            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
-            sequences.
+            Length of the overlaping windows for the STFT used to obtain the Mel Spectrogram. The audio will be split in smaller `frames` with a step of `hop_length` between each frame.
+        chunk_length_s (`int`, defaults to 10):
+            The maximum input lenght of the model in seconds. This is used to pad the audio.
         n_fft (`int`, defaults to 400):
-            Size of the Fourier transform.
+            Size of the Fourier transform. TODO will properly explain this
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
+        return_attention_mask (`bool`, *optional*, False):
+            Whether or not the model should return the attention masks coresponding to the input.
+        frequency_min (`float`, *optional*, 0):
+            The lowest frequency of interest. The STFT TODO (not sure) will not be computed for values below this.
+        frequency_max (`float`, *optional*, 14_000):
+            The highest frequency of interest. The STFT TODO (not sure) will not be computed for values above this.
+        top_db (`float`, *optional*):
+            The highest decibel value used to convert the mel spectrogram to the log scale. For more details see the `SequenceFeatureExtractor._power_to_db` function
+        truncation (`str`, *optional*, `"fusions"`):
+            Truncation pattern for long audio inputs. Two patterns are available:
+                - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and  a downsampled version of the entire mel spectrogram. These 4 spectrogram will have a dimension of `n_fft, feature_size`. TODO check this
+            If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy of the original mel obtained from the padded audio. 
+                - `rand_trunc` will select a random crop of the mel spectrogram.
+        padding (`str`, *optional*, `"repeatpad"`):
+            Padding pattern for shorter audio inputs. Three patterns were originaly implemented: 
+                - `repeatpad`:
+                - `repeat`:
+                - `pad`:
     """
 
     model_input_names = ["input_features", "is_longer"]
@@ -62,15 +79,13 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         feature_size=80,
         sampling_rate=48_000,
         hop_length=480,
-        chunk_length=30,
+        chunk_length_s=10,
         n_fft=400,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
-        norm=None,
-        f_min: float = 0,
-        f_max: float = 14000,
+        frequency_min: float = 0,
+        frequency_max: float = 14_000,
         top_db: int = None,
-        max_length: int = 480_000,
         truncation: str = "fusion",
         padding: str = "repeatpad",
         **kwargs
@@ -82,21 +97,22 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
             **kwargs,
         )
-        self.max_length = max_length
+        self.top_db = top_db
+        self.truncation = truncation
+        self.padding = padding
         self.n_fft = n_fft
         self.hop_length = hop_length
-        self.chunk_length = chunk_length
-        self.n_samples = chunk_length * sampling_rate
-        self.nb_max_frames = self.n_samples // hop_length
+        self.chunk_length = chunk_length_s
+        self.nb_max_samples = chunk_length_s * sampling_rate
+        self.nb_max_frames = self.nb_max_samples // hop_length
         self.sampling_rate = sampling_rate
-        self.f_min = f_min  # should be in super and would initialized them
-        self.f_max = f_max  # should be in super and would initialized them
-        self.norm = norm  # should be in super and would initialized them
+        self.frequency_min = frequency_min
+        self.frequency_max = frequency_max
         self.mel_filters = self.get_mel_filter_banks(
             n_freqs=int(1 + n_fft // 2),
             n_mels=feature_size,
-            f_min=f_min,
-            f_max=f_max,
+            frequency_min=frequency_min,
+            frequency_max=frequency_max,
             sample_rate=sampling_rate,
             norm=None,
             mel_scale="htk",
@@ -104,20 +120,19 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         self.mel_filters_slaney = self.get_mel_filter_banks(
             n_freqs=int(1 + n_fft // 2),
             n_mels=feature_size,
-            f_min=f_min,
-            f_max=f_max,
+            frequency_min=frequency_min,
+            frequency_max=frequency_max,
             sample_rate=sampling_rate,
             norm="slaney",
             mel_scale="slaney",
         )
-        self.top_db = top_db
 
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
 
         Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance, excpet for the mel filter banks, which do not need to be saved or printed as they are too long.
         """
         output = copy.deepcopy(self.__dict__)
         output["feature_extractor_type"] = self.__class__.__name__
@@ -129,8 +144,8 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
-        Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
-        implementation with 1e-5 tolerance.
+        Compute the log-Mel spectrogram of the provided audio using the `hanning` window. Two different banks of filters were used:
+            - self.
         """
         window = np.hanning(self.n_fft + 1)[:-1]
 
@@ -194,7 +209,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], axis=0)
         return mel_fusion
 
-    def _get_audio_features(self, waveform: np.array, max_length, truncation, padding, pad_to_multiple_of) -> np.array:
+    def _get_audio_features(self, waveform: np.array, max_length, truncation, padding) -> np.array:
         """
         Possible cases :
             - wave > max_length
@@ -336,10 +351,9 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         padded_inputs = [
             self._get_audio_features(
                 waveform,
-                max_length if max_length else self.max_length,
+                max_length if max_length else self.nb_max_samples,
                 truncation,
-                padding,
-                pad_to_multiple_of,
+                padding
             )
             for waveform in raw_speech
         ]
