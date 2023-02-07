@@ -396,3 +396,34 @@ class GenerationIntegrationTestsMixin:
             outputs.sequences_scores = outputs.sequences_scores.cpu().numpy()
 
         self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores))
+
+    def test_encoder_decoder_generate_attention_mask(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        articles = ["Timberlake", "Jessica Biel, welcome to parenthood among other things"]
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        # need extreme generation values here to force this test
+        # to fail when `attention_mask` is not correctly treated in generate
+        model = model_cls.from_pretrained(
+            "hf-internal-testing/tiny-random-bart", max_length=50, num_beams=5, num_return_sequences=5
+        )
+        model.config.eos_token_id = None
+        input_ids = tokenizer(articles[0], return_tensors=return_tensors).input_ids
+        input_ids_batched = tokenizer(articles, padding=True, return_tensors=return_tensors).input_ids
+        if is_pt:
+            model = model.to(torch_device)
+            input_ids = input_ids.to(torch_device)
+            input_ids_batched = input_ids_batched.to(torch_device)
+
+        output_sequences_batched = model.generate(
+            input_ids=input_ids_batched, return_dict_in_generate=True, output_scores=True
+        )
+        output_sequences = model.generate(input_ids=input_ids, return_dict_in_generate=True, output_scores=True)
+
+        batched_out = output_sequences_batched.sequences_scores
+        out = output_sequences.sequences_scores
+
+        diff = np.abs(np.sum(batched_out[:5]) - np.sum(out))
+        self.assertTrue(diff < 1e-4)
