@@ -109,9 +109,8 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         self.padding = padding
         self.n_fft = n_fft
         self.hop_length = hop_length
-        self.chunk_length = chunk_length_s
+        self.chunk_length_s = chunk_length_s
         self.nb_max_samples = chunk_length_s * sampling_rate
-        self.nb_max_frames = self.nb_max_samples // hop_length
         self.sampling_rate = sampling_rate
         self.frequency_min = frequency_min
         self.frequency_max = frequency_max
