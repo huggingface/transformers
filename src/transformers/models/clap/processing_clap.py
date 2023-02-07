@@ -34,7 +34,7 @@ class CLAPProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
     feature_extractor_class = "CLAPFeatureExtractor"
-    tokenizer_class = ("PreTrainedTokenizer", "PreTrainedTokenizerFast")
+    tokenizer_class = ("RobertaTokenizer", "RobertaTokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
