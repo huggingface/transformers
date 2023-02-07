@@ -182,7 +182,7 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    For more information about tests, check out the
    [Testing](https://huggingface.co/docs/transformers/testing) guide.
 
-   🤗 Transformers relies on `black` and `isort` to format its source code
+   🤗 Transformers relies on `black` and `ruff` to format its source code
    consistently. After you make changes, apply automatic style corrections and code verifications
    that can't be automated in one go with:
 
@@ -199,7 +199,7 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    $ make style
    ```
 
-   🤗 Transformers also uses `flake8` and a few custom scripts to check for coding mistakes. Quality
+   🤗 Transformers also uses `ruff` and a few custom scripts to check for coding mistakes. Quality
    controls are run by the CI, but you can run the same checks with:
 
    ```bash

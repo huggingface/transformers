@@ -43,7 +43,7 @@ open-source contribution to Transformers. Along the way, you will:
 -   understand the design principles of one of the most popular NLP
     libraries
 -   learn how to do efficiently test large NLP models
--   learn how to integrate Python utilities like `black`, `isort`,
+-   learn how to integrate Python utilities like `black`, `ruff`,
     `make fix-copies` into a library to always ensure clean and readable
     code
 
