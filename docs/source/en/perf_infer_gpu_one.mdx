@@ -40,7 +40,7 @@ Below are some notes to help you use this module, or follow the demos on [Google
 
 ### Requirements
 
-- Make sure you run on NVIDIA GPUs that support 8-bit tensor cores (Turing, Ampere or newer architectures - e.g. T4, RTX20s RTX30s, A40-A100).
+- If you have `bitsandbytes<0.37.0`, make sure you run on NVIDIA GPUs that support 8-bit tensor cores (Turing, Ampere or newer architectures - e.g. T4, RTX20s RTX30s, A40-A100). For `bitsandbytes>=0.37.0`, all GPUs should be supported.
 - Install the correct version of `bitsandbytes` by running:
 `pip install bitsandbytes>=0.31.5`
 - Install `accelerate`
