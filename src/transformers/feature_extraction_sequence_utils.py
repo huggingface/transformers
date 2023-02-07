@@ -389,14 +389,14 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             return 2595.0 * math.log10(1.0 + (freq / 700.0))
 
         # Fill in the linear part
-        f_min = 0.0
+        frequency_min = 0.0
         f_sp = 200.0 / 3
 
-        mels = (freq - f_min) / f_sp
+        mels = (freq - frequency_min) / f_sp
 
         # Fill in the log-scale part
         min_log_hz = 1000.0
-        min_log_mel = (min_log_hz - f_min) / f_sp
+        min_log_mel = (min_log_hz - frequency_min) / f_sp
         logstep = math.log(6.4) / 27.0
 
         if freq >= min_log_hz:
@@ -423,13 +423,13 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             return 700.0 * (10.0 ** (mels / 2595.0) - 1.0)
 
         # Fill in the linear scale
-        f_min = 0.0
+        frequency_min = 0.0
         f_sp = 200.0 / 3
-        freqs = f_min + f_sp * mels
+        freqs = frequency_min + f_sp * mels
 
         # And now the nonlinear scale
         min_log_hz = 1000.0
-        min_log_mel = (min_log_hz - f_min) / f_sp
+        min_log_mel = (min_log_hz - frequency_min) / f_sp
         logstep = math.log(6.4) / 27.0
 
         log_t = mels >= min_log_mel
@@ -466,8 +466,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
     def get_mel_filter_banks(
         self,
         n_freqs: int,
-        f_min: float,
-        f_max: float,
+        frequency_min: float,
+        frequency_max: float,
         n_mels: int,
         sample_rate: int,
         norm: Optional[str] = None,
@@ -498,9 +498,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Args:
             n_freqs (int):
                 Number of frequencies to highlight/apply
-            f_min (float):
+            frequency_min (float):
                 Minimum frequency (Hz)
-            f_max (float):
+            frequency_max (float):
                 Maximum frequency (Hz)
             n_mels (int):
                 Number of mel filterbanks
@@ -526,8 +526,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         all_freqs = np.linspace(0, sample_rate // 2, n_freqs)
 
         # calculate mel freq bins
-        m_min = self.hz_to_mel(f_min, mel_scale=mel_scale)
-        m_max = self.hz_to_mel(f_max, mel_scale=mel_scale)
+        m_min = self.hz_to_mel(frequency_min, mel_scale=mel_scale)
+        m_max = self.hz_to_mel(frequency_max, mel_scale=mel_scale)
 
         m_pts = np.linspace(m_min, m_max, n_mels + 2)
         f_pts = self.mel_to_hz(m_pts, mel_scale=mel_scale)
