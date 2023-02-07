@@ -136,7 +136,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         apply_ocr: bool = True,
         ocr_lang: Optional[str] = None,
         tesseract_config: Optional[str] = "",
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
@@ -155,7 +155,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to `(size["height"], size["width"])`.

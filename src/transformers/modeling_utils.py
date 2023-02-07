@@ -962,7 +962,6 @@ class ModuleUtilsMixin:
 
 class BackboneMixin:
     def forward_with_filtered_kwargs(self, *args, **kwargs):
-
         signature = dict(inspect.signature(self.forward).parameters)
         filtered_kwargs = {k: v for k, v in kwargs.items() if k in signature}
 
@@ -2520,7 +2519,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 raise
         elif from_pt:
-
             # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)

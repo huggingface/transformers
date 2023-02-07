@@ -21,11 +21,10 @@ import warnings
 from functools import partial
 from typing import Any, Dict, Optional, Union
 
-import numpy as np
-
 import flax
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import lax
 
 from ..models.auto import (

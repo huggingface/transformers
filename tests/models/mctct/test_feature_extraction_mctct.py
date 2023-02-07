@@ -104,7 +104,6 @@ class MCTCTFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_torchaudio
 class MCTCTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-
     feature_extraction_class = MCTCTFeatureExtractor if is_speech_available() else None
 
     def setUp(self):

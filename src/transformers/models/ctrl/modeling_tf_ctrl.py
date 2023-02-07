@@ -269,7 +269,6 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFBaseModelOutputWithPast]:
-
         # If using past key value states, only the last tokens
         # should be given as an input
         if past_key_values is not None:
