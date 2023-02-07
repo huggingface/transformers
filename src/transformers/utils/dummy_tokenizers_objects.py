@@ -66,13 +66,6 @@ class CamembertTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
-class CLAPTokenizerFast(metaclass=DummyObject):
-    _backends = ["tokenizers"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tokenizers"])
-
-
 class CLIPTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 

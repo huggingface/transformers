@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-audio/Text processor class for CLAP
+Audio/Text processor class for CLAP
 """
 
 from ...processing_utils import ProcessorMixin
