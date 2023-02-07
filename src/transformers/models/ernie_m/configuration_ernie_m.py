@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ ErnieM model configuration"""
-# Copied from original paddlenlp repository.(https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/configuration.py)
+# Adapted from original paddlenlp repository.(https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/configuration.py)
 
 from __future__ import annotations
 
@@ -64,9 +64,7 @@ class ErnieMConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum value of the dimensionality of position encoding, which dictates the maximum supported length
             of an input sequence.
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids`.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         classifier_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the classification head.
@@ -92,7 +90,6 @@ class ErnieMConfig(PretrainedConfig):
         hidden_dropout_prob: float = 0.1,
         attention_probs_dropout_prob: float = 0.1,
         max_position_embeddings: int = 514,
-        type_vocab_size: int = 16,
         initializer_range: float = 0.02,
         pad_token_id: int = 1,
         layer_norm_eps: float = 1e-05,
@@ -111,7 +108,6 @@ class ErnieMConfig(PretrainedConfig):
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout = classifier_dropout
