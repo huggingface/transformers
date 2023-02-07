@@ -116,7 +116,6 @@ class CLAPFeatureExtractionTester(unittest.TestCase):
 @require_torchaudio
 # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest with Whisper->CLAP
 class CLAPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-
     feature_extraction_class = CLAPFeatureExtractor if is_speech_available() else None
 
     def setUp(self):
@@ -260,7 +259,6 @@ class CLAPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         for padding, EXPECTED_VALUES, idx_in_mel in zip(
             ["repeat", "repeatpad", None], EXPECTED_INPUT_FEATURES, MEL_BIN
         ):
-
             input_features = feaure_extractor(input_speech, return_tensors="pt", padding=padding).input_features
             self.assertTrue(torch.allclose(input_features[0, idx_in_mel], EXPECTED_VALUES, atol=1e-4))
 

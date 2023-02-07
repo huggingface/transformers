@@ -88,7 +88,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         top_db: int = None,
         truncation: str = "fusion",
         padding: str = "repeatpad",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             feature_size=feature_size,
@@ -275,7 +275,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: Optional[bool] = None,
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
