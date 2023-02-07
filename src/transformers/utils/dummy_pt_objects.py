@@ -7019,6 +7019,10 @@ def get_cosine_with_hard_restarts_schedule_with_warmup(*args, **kwargs):
     requires_backends(get_cosine_with_hard_restarts_schedule_with_warmup, ["torch"])
 
 
+def get_inverse_sqrt_schedule(*args, **kwargs):
+    requires_backends(get_inverse_sqrt_schedule, ["torch"])
+
+
 def get_linear_schedule_with_warmup(*args, **kwargs):
     requires_backends(get_linear_schedule_with_warmup, ["torch"])
 
