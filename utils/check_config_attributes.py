@@ -34,8 +34,19 @@ transformers = spec.loader.load_module()
 
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
+CASES_TO_ALLOW = {
+    "BioGptConfig": ["layer_norm_eps"],
+    "CvtConfig": ["layer_norm_eps"],
+    "DPRConfig": ["layer_norm_eps"],
+    "GLPNConfig": ["layer_norm_eps"],
+    "PerceiverConfig": ["layer_norm_eps"],
+    "RetriBertConfig": ["layer_norm_eps"],
+    "SegformerConfig": ["layer_norm_eps"],
+    "TrajectoryTransformerConfig": ["layer_norm_eps"],
+}
 
-def check_attribute_being_used(attributes, default_value, modeling_sources):
+
+def check_attribute_being_used(config_class, attributes, default_value, modeling_sources):
     """Check if any name in `attributes` is used in one of the strings in`modeling_sources`"""
 
     attribute_used = False
@@ -102,9 +113,9 @@ def check_attribute_being_used(attributes, default_value, modeling_sources):
             elif attribute.endswith("_token_id"):
                 case_allowed = True
 
-            # # configuration class specific cases
-            # if not case_allowed and check_fn is not None:
-            #     case_allowed = check_fn(attribute)
+            # configuration class specific cases
+            if not case_allowed:
+                case_allowed = attribute in CASES_TO_ALLOW[config_class.__name__]
 
     return attribute_used or case_allowed
 
@@ -143,7 +154,7 @@ def check_config_attributes_being_used(config_class):
         if config_param in reversed_attribute_map:
             attributes.append(reversed_attribute_map[config_param])
 
-        if not check_attribute_being_used(attributes, default_value, modeling_sources):
+        if not check_attribute_being_used(config_class, attributes, default_value, modeling_sources):
             unused_attributes.append(attributes[0])
 
     return sorted(unused_attributes)
