@@ -88,7 +88,7 @@ def round_filters(config: EfficientNetConfig, num_channels: int):
     """
     Round number of filters based on depth multiplier.
     """
-    divisor = config.divisor
+    divisor = config.depth_divisor
     num_channels *= config.width_coefficient
     new_dim = max(divisor, int(num_channels + divisor / 2) // divisor * divisor)
 
@@ -136,12 +136,13 @@ class EfficientNetDropPath(nn.Module):
 
 
 class EfficientNetEmbeddings(nn.Module):
-    def __init__(self, config: EfficientNetConfig, out_channels: int):
+    def __init__(self, config: EfficientNetConfig):
         super().__init__()
 
+        out_channels = round_filters(config, 32)
         self.padding = nn.ZeroPad2d(padding=3)
         self.convolution = nn.Conv2d(
-            config.num_channels, round_filters(config, 32), kernel_size=3, stride=2, padding="valid", bias=False
+            config.num_channels, out_channels, kernel_size=3, stride=2, padding="valid", bias=False
         )
         self.batchnorm = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[config.hidden_act]
@@ -244,7 +245,7 @@ class EfficientNetDepthwiseLayer(nn.Module):
 
         self.depthwise_conv_pad = nn.ZeroPad2d(padding=kernel_size)
         self.depthwise_conv = DepthwiseConv2d(
-            out_dim, kernel_size=kernel_size, strides=stride, padding=conv_pad, bias=False
+            out_dim, kernel_size=kernel_size, stride=stride, padding=conv_pad, bias=False
         )
         self.depthwise_norm = nn.BatchNorm2d(num_features=out_dim)
         self.depthwise_act = ACT2FN[config.hidden_act]
@@ -270,6 +271,7 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
 
     def __init__(self, config, dim, kernel_size):
         super().__init__()
+        self.dim = dim
         self.dim_se = max(1, int(dim * config.squeeze_expansion_ratio))
 
         self.squeeze = nn.AdaptiveAvgPool2d(output_size=1)
@@ -358,7 +360,7 @@ class EfficientNetBlock(nn.Module):
     ):
         super().__init__()
         out_dim = in_dim * expand_ratio
-        self.expansion = EfficientNetExpansionLayer(config=config, in_dim=in_dim, out_dim=out_dim, stide=stride)
+        self.expansion = EfficientNetExpansionLayer(config=config, in_dim=in_dim, out_dim=out_dim, stride=stride)
         self.depthwise_conv = EfficientNetDepthwiseLayer(
             config=config,
             in_dim=in_dim,
@@ -366,7 +368,7 @@ class EfficientNetBlock(nn.Module):
             stride=stride,
             kernel_size=kernel_size,
         )
-        self.squeeze_excite = EfficientNetSqueezeExciteLayer(config=config, in_dim=in_dim, kernel_size=kernel_size)
+        self.squeeze_excite = EfficientNetSqueezeExciteLayer(config=config, dim=in_dim, kernel_size=kernel_size)
         self.projection = EfficientNetFinalLayer(
             config=config,
             in_dim=in_dim,
@@ -405,7 +407,6 @@ class EfficientNetEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.depth_coefficient = config.depth_coefficient
-        self.blocks = []
 
         def round_repeats(repeats):
             # Round number of block repeats based on depth multiplier.
@@ -439,7 +440,7 @@ class EfficientNetEncoder(nn.Module):
                 blocks.append(block)
                 curr_block_num += 1
 
-        self.blocks.append(block)
+        self.blocks = nn.ModuleList(blocks)
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
         for block in self.blocks:
@@ -488,7 +489,7 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
         self.encoder = EfficientNetEncoder(config)
 
         # Final layernorm layer
-        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(config.hidden_dim, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(p=config.drop_rate)
         # Initialize weights and apply final processing
         self.post_init()
