@@ -17,10 +17,9 @@ import os
 from argparse import ArgumentParser, Namespace
 from importlib import import_module
 
+import huggingface_hub
 import numpy as np
 from packaging import version
-
-import huggingface_hub
 
 from .. import (
     FEATURE_EXTRACTOR_MAPPING,
@@ -145,7 +144,6 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
         # 2. For each output attribute, computes the difference
         def _find_pt_tf_differences(pt_out, tf_out, differences, attr_name=""):
-
             # If the current attribute is a tensor, it is a leaf and we make the comparison. Otherwise, we will dig in
             # recursivelly, keeping the name of the attribute.
             if isinstance(pt_out, torch.Tensor):
@@ -177,7 +175,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         no_pr: bool,
         push: bool,
         extra_commit_description: str,
-        *args
+        *args,
     ):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
         self._model_name = model_name
@@ -359,7 +357,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             commit_descrition = (
                 "Model converted by the [`transformers`' `pt_to_tf`"
                 " CLI](https://github.com/huggingface/transformers/blob/main/src/transformers/commands/pt_to_tf.py). "
-                "All converted model outputs and hidden layers were validated against its Pytorch counterpart.\n\n"
+                "All converted model outputs and hidden layers were validated against its PyTorch counterpart.\n\n"
                 f"Maximum crossload output difference={max_crossload_output_diff:.3e}; "
                 f"Maximum crossload hidden layer difference={max_crossload_hidden_diff:.3e};\n"
                 f"Maximum conversion output difference={max_conversion_output_diff:.3e}; "
@@ -391,5 +389,5 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 commit_description=commit_descrition,
                 repo_type="model",
                 create_pr=True,
-            )
+            ).pr_url
             self._logger.warning(f"PR open in {hub_pr_url}")

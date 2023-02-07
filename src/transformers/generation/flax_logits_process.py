@@ -171,15 +171,14 @@ class FlaxTopKLogitsWarper(FlaxLogitsWarper):
         if not isinstance(top_k, int) or top_k <= 0:
             raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
 
-        self.top_k = top_k
+        self.top_k = max(top_k, min_tokens_to_keep)
         self.filter_value = filter_value
-        self.min_tokens_to_keep = min_tokens_to_keep
 
     def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
         batch_size, vocab_size = scores.shape
         next_scores_flat = jnp.full(batch_size * vocab_size, self.filter_value)
 
-        topk = min(max(self.top_k, self.min_tokens_to_keep), scores.shape[-1])  # Safety check
+        topk = min(self.top_k, scores.shape[-1])  # Safety check
         topk_scores, topk_indices = lax.top_k(scores, topk)
         shift = jnp.broadcast_to((jnp.arange(batch_size) * vocab_size)[:, None], (batch_size, topk)).flatten()
         topk_scores_flat = topk_scores.flatten()
@@ -259,7 +258,6 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
         self.eos_token_id = eos_token_id
 
     def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
-
         # create boolean flag to decide if min length penalty should be applied
         apply_penalty = 1 - jnp.clip(cur_len - self.min_length, 0, 1)
 

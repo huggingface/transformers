@@ -115,7 +115,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         extra_ids=100,
         additional_special_tokens=None,
-        **kwargs
+        **kwargs,
     ):
         # Add extra_ids to the special token list
         if extra_ids > 0 and additional_special_tokens is None:
@@ -237,7 +237,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 
     def get_sentinel_tokens(self):
         return list(
-            set(filter(lambda x: bool(re.search("<extra_id_\d+>", x)) is not None, self.additional_special_tokens))
+            set(filter(lambda x: bool(re.search(r"<extra_id_\d+>", x)) is not None, self.additional_special_tokens))
         )
 
     def get_sentinel_token_ids(self):

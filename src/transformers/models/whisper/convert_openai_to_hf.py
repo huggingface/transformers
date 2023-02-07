@@ -50,7 +50,6 @@ WHISPER_MAPPING = {
     "mlp.0": "fc1",
     "mlp.2": "fc2",
     "mlp_ln": "final_layer_norm",
-    "blocks": "layers",
     ".attn.query": ".self_attn.q_proj",
     ".attn.key": ".self_attn.k_proj",
     ".attn.value": ".self_attn.v_proj",

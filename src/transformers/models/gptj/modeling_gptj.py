@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch GPT-J model."""
 
+import warnings
 from typing import Optional, Tuple, Union
 
 import torch
@@ -37,16 +38,8 @@ from .configuration_gptj import GPTJConfig
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "hf-internal-testing/tiny-random-gptj"
+_REAL_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
 _CONFIG_FOR_DOC = "GPTJConfig"
-_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
-
-_CHECKPOINT_FOR_QA = "ydshieh/tiny-random-gptj-for-question-answering"
-_QA_EXPECTED_OUTPUT = "' was Jim Henson?Jim Henson was a n'"
-_QA_EXPECTED_LOSS = 3.13
-
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ydshieh/tiny-random-gptj-for-sequence-classification"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.76
 
 
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -160,7 +153,6 @@ class GPTJAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
     ):
-
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
@@ -207,7 +199,6 @@ class GPTJAttention(nn.Module):
         Tuple[torch.Tensor, Tuple[torch.Tensor]],
         Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
     ]:
-
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
@@ -381,7 +372,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPTJTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -499,6 +490,13 @@ class GPTJModel(GPTJPreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`GPTJModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your"
+            " model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'h.0': 0, 'h.1': 1,"
+            " ...}",
+            FutureWarning,
+        )
         # Check validity of device_map
         self.device_map = (
             get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
@@ -518,6 +516,10 @@ class GPTJModel(GPTJPreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.model_parallel = False
         self.device_map = None
         self.first_device = "cpu"
@@ -536,10 +538,10 @@ class GPTJModel(GPTJPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
+        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,
@@ -635,7 +637,6 @@ class GPTJModel(GPTJPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-
             # Model parallel
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
@@ -651,7 +652,6 @@ class GPTJModel(GPTJPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -736,6 +736,13 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`GPTJForCausalLM.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
+            " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'transformer.h.0':"
+            " 0, 'transformer.h.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
             if device_map is None
@@ -748,6 +755,10 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.transformer.deparallelize()
         self.transformer = self.transformer.to("cpu")
         self.lm_head = self.lm_head.to("cpu")
@@ -760,10 +771,10 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
@@ -775,13 +786,13 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past:
+            if past_key_values:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
         return {
             "input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": kwargs.get("use_cache"),
             "position_ids": position_ids,
             "attention_mask": attention_mask,
@@ -790,10 +801,10 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
+        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,
@@ -867,7 +878,9 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         )
 
     @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+    def _reorder_cache(
+        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
         [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -875,7 +888,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         """
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
+            for layer_past in past_key_values
         )
 
 
@@ -912,12 +925,10 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
+        checkpoint="ydshieh/tiny-random-gptj-for-sequence-classification",
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
+        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,
@@ -1039,12 +1050,10 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_QA,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_QA_EXPECTED_OUTPUT,
-        expected_loss=_QA_EXPECTED_LOSS,
+        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
     )
     def forward(
         self,

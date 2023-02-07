@@ -79,6 +79,7 @@ else:
             ("blenderbot-small", ("BlenderbotSmallTokenizer", None)),
             ("blip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bloom", (None, "BloomTokenizerFast" if is_tokenizers_available() else None)),
+            ("bridgetower", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("byt5", ("ByT5Tokenizer", None)),
             (
                 "camembert",
@@ -208,6 +209,7 @@ else:
                     "AlbertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
             ("opt", ("GPT2Tokenizer", None)),
             ("owlvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
@@ -262,6 +264,7 @@ else:
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
+            ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
             ("splinter", ("SplinterTokenizer", "SplinterTokenizerFast")),
             (
                 "squeezebert",
@@ -641,6 +644,7 @@ class AutoTokenizer:
                 tokenizer_class = get_class_from_dynamic_module(
                     pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
                 )
+                tokenizer_class.register_for_auto_class()
 
             elif use_fast and not config_tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config_tokenizer_class}Fast"

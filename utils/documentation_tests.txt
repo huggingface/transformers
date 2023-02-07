@@ -67,6 +67,8 @@ src/transformers/models/deformable_detr/modeling_deformable_detr.py
 src/transformers/models/deit/configuration_deit.py
 src/transformers/models/deit/modeling_deit.py
 src/transformers/models/deit/modeling_tf_deit.py
+src/transformers/models/deta/configuration_deta.py
+src/transformers/models/deta/modeling_deta.py
 src/transformers/models/detr/configuration_detr.py
 src/transformers/models/detr/modeling_detr.py
 src/transformers/models/dinat/configuration_dinat.py
@@ -108,6 +110,8 @@ src/transformers/models/longformer/modeling_tf_longformer.py
 src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
+src/transformers/models/mask2former/configuration_mask2former.py
+src/transformers/models/mask2former/modeling_mask2former.py
 src/transformers/models/maskformer/configuration_maskformer.py
 src/transformers/models/maskformer/modeling_maskformer.py
 src/transformers/models/mbart/configuration_mbart.py
@@ -124,6 +128,8 @@ src/transformers/models/mobilevit/modeling_tf_mobilevit.py
 src/transformers/models/nat/configuration_nat.py
 src/transformers/models/nat/modeling_nat.py
 src/transformers/models/nezha/configuration_nezha.py
+src/transformers/models/oneformer/configuration_oneformer.py
+src/transformers/models/oneformer/modeling_oneformer.py
 src/transformers/models/openai/configuration_openai.py
 src/transformers/models/opt/configuration_opt.py
 src/transformers/models/opt/modeling_opt.py
@@ -163,6 +169,8 @@ src/transformers/models/speech_to_text/configuration_speech_to_text.py
 src/transformers/models/speech_to_text/modeling_speech_to_text.py
 src/transformers/models/speech_to_text_2/configuration_speech_to_text_2.py
 src/transformers/models/speech_to_text_2/modeling_speech_to_text_2.py
+src/transformers/models/speecht5/modeling_speecht5.py
+src/transformers/models/speecht5/tokenization_speecht5.py
 src/transformers/models/segformer/modeling_tf_segformer.py
 src/transformers/models/squeezebert/configuration_squeezebert.py
 src/transformers/models/swin/configuration_swin.py
@@ -179,6 +187,7 @@ src/transformers/models/trocr/modeling_trocr.py
 src/transformers/models/unispeech/configuration_unispeech.py
 src/transformers/models/unispeech/modeling_unispeech.py
 src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
+src/transformers/models/upernet/modeling_upernet.py
 src/transformers/models/van/modeling_van.py
 src/transformers/models/videomae/modeling_videomae.py
 src/transformers/models/vilt/modeling_vilt.py

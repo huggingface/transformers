@@ -130,7 +130,7 @@ class DebertaV2Config(PretrainedConfig):
         pos_att_type=None,
         pooler_dropout=0,
         pooler_hidden_act="gelu",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

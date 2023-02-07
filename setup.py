@@ -98,7 +98,7 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
-    "black==22.3",  # after updating to black 2023, also update Python version in pyproject.toml to 3.7
+    "black~=23.1",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
@@ -111,13 +111,12 @@ _deps = [
     "faiss-cpu",
     "fastapi",
     "filelock",
-    "flake8>=3.8.3",
     "flax>=0.4.1",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.10.0,<1.0",
+    "huggingface-hub>=0.11.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -150,6 +149,7 @@ _deps = [
     "requests",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
+    "ruff>=0.0.241",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.2.1",
@@ -168,6 +168,7 @@ _deps = [
     "tokenizers>=0.11.1,!=0.11.3,<0.14",
     "torch>=1.7,!=1.12.0",
     "torchaudio",
+    "torchvision",
     "pyctcdecode>=0.4.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
@@ -285,6 +286,7 @@ extras["tf-speech"] = extras["audio"]
 extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
+extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 extras["video"] = deps_list("decord")
@@ -319,7 +321,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 
-extras["quality"] = deps_list("black", "datasets", "isort", "flake8", "GitPython", "hf-doc-builder")
+extras["quality"] = deps_list("black", "datasets", "isort", "ruff", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
     extras["tf"]
@@ -331,6 +333,7 @@ extras["all"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
+    + extras["torch-vision"]
     + extras["codecarbon"]
     + extras["accelerate"]
     + extras["video"]
@@ -351,6 +354,7 @@ extras["dev-torch"] = (
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
+    + extras["torch-vision"]
     + extras["codecarbon"]
     + extras["quality"]
     + extras["ja"]
@@ -413,7 +417,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.26.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.27.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -424,7 +428,7 @@ setup(
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
     packages=find_packages("src"),
-    package_data={"transformers": ["py.typed", "*.cu", "*.cpp", "*.cuh", "*.h"]},
+    package_data={"transformers": ["py.typed", "*.cu", "*.cpp", "*.cuh", "*.h", "*.pyx"]},
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},

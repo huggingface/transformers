@@ -39,6 +39,9 @@ from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScor
 from .configuration_utils import GenerationConfig
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
+    EncoderRepetitionPenaltyLogitsProcessor,
+    EpsilonLogitsWarper,
+    EtaLogitsWarper,
     ExponentialDecayLengthPenalty,
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
@@ -48,6 +51,7 @@ from .logits_process import (
     LogitNormalization,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
+    MinNewTokensLengthLogitsProcessor,
     NoBadWordsLogitsProcessor,
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
@@ -465,19 +469,22 @@ class GenerationMixin:
 
     The class exposes [`~generation.GenerationMixin.generate`], which can be used for:
         - *greedy decoding* by calling [`~generation.GenerationMixin.greedy_search`] if `num_beams=1` and
-          `do_sample=False`.
+          `do_sample=False`
         - *contrastive search* by calling [`~generation.GenerationMixin.contrastive_search`] if `penalty_alpha>0` and
           `top_k>1`
         - *multinomial sampling* by calling [`~generation.GenerationMixin.sample`] if `num_beams=1` and
-          `do_sample=True`.
+          `do_sample=True`
         - *beam-search decoding* by calling [`~generation.GenerationMixin.beam_search`] if `num_beams>1` and
-          `do_sample=False`.
+          `do_sample=False`
         - *beam-search multinomial sampling* by calling [`~generation.GenerationMixin.beam_sample`] if `num_beams>1`
-          and `do_sample=True`.
+          and `do_sample=True`
         - *diverse beam-search decoding* by calling [`~generation.GenerationMixin.group_beam_search`], if `num_beams>1`
-          and `num_beam_groups>1`.
+          and `num_beam_groups>1`
         - *constrained beam-search decoding* by calling [`~generation.GenerationMixin.constrained_beam_search`], if
-          `constraints!=None` or `force_words_ids!=None`.
+          `constraints!=None` or `force_words_ids!=None`
+
+    You do not need to call any of the above methods directly. Pass custom parameter values to 'generate' instead. To
+    learn more about decoding strategies refer to the [text generation strategies guide](./generation_strategies).
     """
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
@@ -512,46 +519,39 @@ class GenerationMixin:
         inputs_kwarg = model_kwargs.pop(input_name, None)
         if inputs_kwarg is not None and inputs is not None:
             raise ValueError(
-                f"`inputs`: {inputs}` were passed alongside "
-                f"{input_name} which is not allowed."
+                f"`inputs`: {inputs}` were passed alongside {input_name} which is not allowed."
                 f"Make sure to either pass {inputs} or {input_name}=..."
             )
         elif inputs_kwarg is not None:
             inputs = inputs_kwarg
 
-        # 3. models with `input_ids` can also make use of `inputs_embeds`
-        if self._can_retrieve_inputs_from_name(inputs, "inputs_embeds", model_kwargs):
-            inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
+        # 3. In the presence of `inputs_embeds` for text models:
+        # - decoder-only models should complain if the user attempts to pass `inputs_embeds`, but the model
+        # doesn't have its forwarding implemented. `inputs_embeds` is kept in `model_kwargs` and can coexist with
+        # input_ids (`inputs_embeds` will be used in the 1st generation step, as opposed to `input_ids`)
+        # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
+        # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
+        if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
+            if not self.config.is_encoder_decoder:
+                has_inputs_embeds_forwarding = "inputs_embeds" in set(
+                    inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
+                )
+                if not has_inputs_embeds_forwarding:
+                    raise ValueError(
+                        f"You passed `inputs_embeds` to `.generate()`, but the model class {self.__class__.__name__} "
+                        "doesn't have its forwarding implemented. See the GPT2 implementation for an example "
+                        "(https://github.com/huggingface/transformers/pull/21405), and feel free to open a PR with it!"
+                    )
+            else:
+                if inputs is not None:
+                    raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
+                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
 
-        # 4. Only encoder-decoder models can have non `input_ids` input format
-        if not self.config.is_encoder_decoder and input_name != "input_ids":
-            raise ValueError(
-                f"If {input_name} is passed as model-specific keyword "
-                "input then model has to be an encoder-decoder and not a "
-                f"{self.__class__.__name__}."
-            )
-
-        # 5. if `inputs` is still None, try to create `input_ids` from BOS token
+        # 4. if `inputs` is still None, try to create `input_ids` from BOS token
         if inputs is None:
             inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
 
         return inputs, input_name, model_kwargs
-
-    def _can_retrieve_inputs_from_name(
-        self, inputs: Optional[torch.Tensor], name: str, model_kwargs: Dict[str, torch.Tensor]
-    ) -> torch.Tensor:
-        """
-        If `inputs` is None and `name` is in both forward function and keyword arguments, then inputs can be retrieved
-        from name
-        """
-        can_retrieve_inputs = model_kwargs.get(name, None) is not None and name in set(
-            inspect.signature(self.forward).parameters.keys()
-        )
-
-        if can_retrieve_inputs and inputs is not None:
-            raise ValueError(f"Cannot only pass one of {name} and {self.main_input_name}")
-
-        return can_retrieve_inputs
 
     def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         """
@@ -675,19 +675,19 @@ class GenerationMixin:
         return input_ids, model_kwargs
 
     def _extract_past_from_model_output(self, outputs: ModelOutput, standardize_cache_format: bool = False):
-        past = None
+        past_key_values = None
         if "past_key_values" in outputs:
-            past = outputs.past_key_values
+            past_key_values = outputs.past_key_values
         elif "mems" in outputs:
-            past = outputs.mems
+            past_key_values = outputs.mems
         elif "past_buckets_states" in outputs:
-            past = outputs.past_buckets_states
+            past_key_values = outputs.past_buckets_states
 
         # Bloom fix: standardizes the cache format when requested
         if standardize_cache_format and hasattr(self, "_convert_to_standard_cache"):
             batch_size = outputs.logits.shape[0]
-            past = self._convert_to_standard_cache(past, batch_size=batch_size)
-        return past
+            past_key_values = self._convert_to_standard_cache(past_key_values, batch_size=batch_size)
+        return past_key_values
 
     def _update_model_kwargs_for_generation(
         self,
@@ -696,8 +696,8 @@ class GenerationMixin:
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
-        # update past
-        model_kwargs["past"] = self._extract_past_from_model_output(
+        # update past_key_values
+        model_kwargs["past_key_values"] = self._extract_past_from_model_output(
             outputs, standardize_cache_format=standardize_cache_format
         )
 
@@ -724,7 +724,7 @@ class GenerationMixin:
 
         return model_kwargs
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         raise NotImplementedError(
             f"Make sure that a `_reorder_cache` function is correctly implemented in {self.__class__.__module__} to"
             f" enable beam search for {self.__class__}"
@@ -746,23 +746,22 @@ class GenerationMixin:
         # all samplers can be found in `generation_utils_samplers.py`
         if generation_config.temperature is not None and generation_config.temperature != 1.0:
             warpers.append(TemperatureLogitsWarper(generation_config.temperature))
+        min_tokens_to_keep = 2 if generation_config.num_beams > 1 else 1
         if generation_config.top_k is not None and generation_config.top_k != 0:
-            warpers.append(
-                TopKLogitsWarper(
-                    top_k=generation_config.top_k, min_tokens_to_keep=(2 if generation_config.num_beams > 1 else 1)
-                )
-            )
+            warpers.append(TopKLogitsWarper(top_k=generation_config.top_k, min_tokens_to_keep=min_tokens_to_keep))
         if generation_config.top_p is not None and generation_config.top_p < 1.0:
-            warpers.append(
-                TopPLogitsWarper(
-                    top_p=generation_config.top_p, min_tokens_to_keep=(2 if generation_config.num_beams > 1 else 1)
-                )
-            )
+            warpers.append(TopPLogitsWarper(top_p=generation_config.top_p, min_tokens_to_keep=min_tokens_to_keep))
         if generation_config.typical_p is not None and generation_config.typical_p < 1.0:
             warpers.append(
-                TypicalLogitsWarper(
-                    mass=generation_config.typical_p, min_tokens_to_keep=(2 if generation_config.num_beams > 1 else 1)
-                )
+                TypicalLogitsWarper(mass=generation_config.typical_p, min_tokens_to_keep=min_tokens_to_keep)
+            )
+        if generation_config.epsilon_cutoff is not None and 0.0 < generation_config.epsilon_cutoff < 1.0:
+            warpers.append(
+                EpsilonLogitsWarper(epsilon=generation_config.epsilon_cutoff, min_tokens_to_keep=min_tokens_to_keep)
+            )
+        if generation_config.eta_cutoff is not None and 0.0 < generation_config.eta_cutoff < 1.0:
+            warpers.append(
+                EtaLogitsWarper(epsilon=generation_config.eta_cutoff, min_tokens_to_keep=min_tokens_to_keep)
             )
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -794,6 +793,15 @@ class GenerationMixin:
                     num_beam_groups=generation_config.num_beam_groups,
                 )
             )
+        if (
+            generation_config.encoder_repetition_penalty is not None
+            and generation_config.encoder_repetition_penalty != 1.0
+        ):
+            processors.append(
+                EncoderRepetitionPenaltyLogitsProcessor(
+                    penalty=generation_config.encoder_repetition_penalty, encoder_input_ids=encoder_input_ids
+                )
+            )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
         if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
@@ -822,6 +830,16 @@ class GenerationMixin:
             and generation_config.min_length > 0
         ):
             processors.append(MinLengthLogitsProcessor(generation_config.min_length, generation_config.eos_token_id))
+        if (
+            generation_config.min_new_tokens is not None
+            and generation_config.eos_token_id is not None
+            and generation_config.min_new_tokens > 0
+        ):
+            processors.append(
+                MinNewTokensLengthLogitsProcessor(
+                    input_ids_seq_length, generation_config.min_new_tokens, generation_config.eos_token_id
+                )
+            )
         if prefix_allowed_tokens_fn is not None:
             processors.append(
                 PrefixConstrainedLogitsProcessor(
@@ -841,7 +859,7 @@ class GenerationMixin:
                 ExponentialDecayLengthPenalty(
                     generation_config.exponential_decay_length_penalty,
                     generation_config.eos_token_id,
-                    generation_config.input_ids_seq_length,
+                    input_ids_seq_length,
                 )
             )
         if generation_config.suppress_tokens is not None:
@@ -899,42 +917,124 @@ class GenerationMixin:
         default_list.extend(custom_list)
         return default_list
 
-    def compute_transition_beam_scores(
+    def compute_transition_scores(
         self,
         sequences: torch.Tensor,
         scores: Tuple[torch.Tensor],
-        beam_indices: torch.Tensor,
-        eos_token_id: Union[int, List[int]] = None,
-    ):
-        """compute the transition probabilities of sequences given generation
-        scores and beam indices"""
+        beam_indices: Optional[torch.Tensor] = None,
+        normalize_logits: bool = False,
+    ) -> torch.Tensor:
+        """
+        Computes the transition scores of sequences given the generation scores (and beam indices, if beam search was
+        used). This is a convenient method to quicky obtain the scores of the selected tokens at generation time.
 
-        # 1. reshape scores as [vocab_size * batch_size, # generation steps]
-        # with batch_size being 2 * vocab_size and # generation steps being
+        Parameters:
+            sequences (`torch.LongTensor`):
+                The generated sequences. The second dimension (sequence_length) is either equal to `max_length` or
+                shorter if all batches finished early due to the `eos_token_id`.
+            scores (`tuple(torch.FloatTensor)`):
+                Transition scores for each vocabulary token at each generation step. Beam transition scores consisting
+                of log probabilities of tokens conditioned on log softmax of previously generated tokens Tuple of
+                `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token), with
+                each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
+            beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*):
+                Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
+                `(batch_size*num_return_sequences, input_ids.shape[-1])`. Only required if a `num_beams>1` at
+                generate-time.
+            normalize_logits (`bool`, *optional*, defaults to `False`):
+                Whether to normalize the logits (which, for legacy reasons, may be unnormalized).
+
+        Return:
+            `torch.Tensor`: A `torch.Tensor` of shape `(batch_size*num_return_sequences, sequence_length)` containing
+                the transition scores (logits)
+
+        Examples:
+
+        ```python
+        >>> from transformers import GPT2Tokenizer, AutoModelForCausalLM
+        >>> import numpy as np
+
+        >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+        >>> tokenizer.pad_token_id = tokenizer.eos_token_id
+        >>> inputs = tokenizer(["Today is"], return_tensors="pt")
+
+        >>> # Example 1: Print the scores for each token generated with Greedy Search
+        >>> outputs = model.generate(**inputs, max_new_tokens=5, return_dict_in_generate=True, output_scores=True)
+        >>> transition_scores = model.compute_transition_scores(
+        ...     outputs.sequences, outputs.scores, normalize_logits=True
+        ... )
+        >>> # input_length is the length of the input prompt for decoder-only models, like the GPT family, and 1 for
+        >>> # encoder-decoder models, like BART or T5.
+        >>> input_length = 1 if model.config.is_encoder_decoder else inputs.input_ids.shape[1]
+        >>> generated_tokens = outputs.sequences[:, input_length:]
+        >>> for tok, score in zip(generated_tokens[0], transition_scores[0]):
+        ...     # | token | token string | logits | probability
+        ...     print(f"| {tok:5d} | {tokenizer.decode(tok):8s} | {score.numpy():.3f} | {np.exp(score.numpy()):.2%}")
+        |   262 |  the     | -1.414 | 24.33%
+        |  1110 |  day     | -2.609 | 7.36%
+        |   618 |  when    | -2.010 | 13.40%
+        |   356 |  we      | -1.859 | 15.58%
+        |   460 |  can     | -2.508 | 8.14%
+
+        >>> # Example 2: Reconstruct the sequence scores from Beam Search
+        >>> outputs = model.generate(
+        ...     **inputs,
+        ...     max_new_tokens=5,
+        ...     num_beams=4,
+        ...     num_return_sequences=4,
+        ...     return_dict_in_generate=True,
+        ...     output_scores=True,
+        ... )
+        >>> transition_scores = model.compute_transition_scores(
+        ...     outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False
+        ... )
+        >>> # If you sum the generated tokens' scores and apply the length penalty, you'll get the sequence scores.
+        >>> # Tip: recomputing the scores is only guaranteed to match with `normalize_logits=False`. Depending on the
+        >>> # use case, you might want to recompute it with `normalize_logits=True`.
+        >>> output_length = input_length + np.sum(transition_scores.numpy() < 0, axis=1)
+        >>> length_penalty = model.generation_config.length_penalty
+        >>> reconstructed_scores = transition_scores.sum(axis=1) / (output_length**length_penalty)
+        >>> print(np.allclose(outputs.sequences_scores, reconstructed_scores))
+        True
+        ```"""
+        # 1. In absence of `beam_indices`, we can assume that we come from e.g. greedy search, which is equivalent
+        # to a beam search approach were the first (and only) beam is always selected
+        if beam_indices is None:
+            beam_indices = torch.arange(scores[0].shape[0]).view(-1, 1).to(sequences.device)
+            beam_indices = beam_indices.expand(-1, len(scores))
+
+        # 2. reshape scores as [batch_size*vocab_size, # generation steps] with # generation steps being
         # seq_len - input_length
         scores = torch.stack(scores).reshape(len(scores), -1).transpose(0, 1)
 
-        # 2. cut beam_indices to longest beam length
+        # 3. Optionally normalize the logits (across the vocab dimension)
+        if normalize_logits:
+            scores = scores.reshape(-1, self.config.vocab_size, scores.shape[-1])
+            scores = torch.nn.functional.log_softmax(scores, dim=1)
+            scores = scores.reshape(-1, scores.shape[-1])
+
+        # 4. cut beam_indices to longest beam length
         beam_indices_mask = beam_indices < 0
         max_beam_length = (1 - beam_indices_mask.long()).sum(-1).max()
         beam_indices = beam_indices[:, :max_beam_length]
         beam_indices_mask = beam_indices_mask[:, :max_beam_length]
 
-        # 3. Set indices of beams that finished early to 0
+        # 5. Set indices of beams that finished early to 0
         # such indices will be masked correctly afterwards
         beam_indices[beam_indices_mask] = 0
 
-        # 4. multiply beam_indices with vocab size to gather correctly from scores
+        # 6. multiply beam_indices with vocab size to gather correctly from scores
         beam_sequence_indices = beam_indices * self.config.vocab_size
 
-        # 5. Define which indices contributed to scores
+        # 7. Define which indices contributed to scores
         cut_idx = sequences.shape[-1] - max_beam_length
         indices = sequences[:, cut_idx:] + beam_sequence_indices
 
-        # 6. Compute scores
+        # 8. Compute scores
         transition_scores = scores.gather(0, indices)
 
-        # 7. Mask out transition_scores of beams that stopped early
+        # 9. Mask out transition_scores of beams that stopped early
         transition_scores[beam_indices_mask] = 0
 
         return transition_scores
@@ -1007,10 +1107,10 @@ class GenerationMixin:
 
         Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
         model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
 
-        For a complete overview of generate, check the [following
-        guide](https://huggingface.co/docs/transformers/en/main_classes/text_generation).
+        For an overview of generation strategies and code examples, check out the [following
+        guide](./generation_strategies).
 
         </Tip>
 
@@ -1068,72 +1168,7 @@ class GenerationMixin:
                     - [`~generation.SampleEncoderDecoderOutput`],
                     - [`~generation.BeamSearchEncoderDecoderOutput`],
                     - [`~generation.BeamSampleEncoderDecoderOutput`]
-
-        Examples:
-
-        Greedy decoding, using the default generation configuration and ad hoc modifications:
-
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-
-        >>> prompt = "Today I believe we can finally"
-        >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-
-        >>> # Generate up to 30 tokens
-        >>> outputs = model.generate(input_ids, do_sample=False, max_length=30)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today I believe we can finally get to the point where we can make a difference in the lives of the people of the United States of America.\n']
-        ```
-
-        Multinomial sampling, modifying an existing generation configuration:
-
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-
-        >>> prompt = "Today I believe we can finally"
-        >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-
-        >>> # Sample up to 30 tokens
-        >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
-        >>> generation_config = GenerationConfig.from_pretrained("gpt2")
-        >>> generation_config.max_length = 30
-        >>> generation_config.do_sample = True
-        >>> outputs = model.generate(input_ids, generation_config=generation_config)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today I believe we can finally get rid of discrimination," said Rep. Mark Pocan (D-Wis.).\n\n"Just look at the']
-        ```
-
-        Beam-search decoding, using a freshly initialized generation configuration:
-
-        ```python
-        >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, GenerationConfig
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-        >>> model = AutoModelForSeq2SeqLM.from_pretrained("Helsinki-NLP/opus-mt-en-de")
-
-        >>> sentence = "Paris is one of the densest populated areas in Europe."
-        >>> input_ids = tokenizer(sentence, return_tensors="pt").input_ids
-
-        >>> generation_config = GenerationConfig(
-        ...     max_length=64,
-        ...     num_beams=5,
-        ...     bos_token_id=0,
-        ...     eos_token_id=0,
-        ...     decoder_start_token_id=58100,
-        ...     pad_token_id=58100,
-        ...     bad_words_ids=[[58100]],
-        ... )
-        >>> outputs = model.generate(input_ids, generation_config=generation_config)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
-        ```"""
+        """
         # 1. Handle `generation_config` and kwargs that might update it, and validate the `.generate()` call
         self._validate_model_class()
 
@@ -1155,6 +1190,7 @@ class GenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 2. Set generation parameters if not already defined
@@ -1232,21 +1268,21 @@ class GenerationMixin:
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
             warnings.warn(
-                "Neither `max_length` nor `max_new_tokens` has been set, `max_length` will default to"
-                f" {generation_config.max_length} (`generation_config.max_length`). Controlling `max_length` via the"
-                " config is deprecated and `max_length` will be removed from the config in v5 of Transformers -- we"
+                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
+                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
                 " recommend using `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,
             )
-        elif has_default_max_length and generation_config.max_new_tokens is not None:
+        elif generation_config.max_new_tokens is not None:
             generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
-        elif not has_default_max_length and generation_config.max_new_tokens is not None:
-            raise ValueError(
-                "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a"
-                " limit to the generated output length. Remove one of those arguments. Please refer to the"
-                " documentation for more information. "
-                "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
-            )
+            if not has_default_max_length:
+                logger.warn(
+                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
+                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
+                    "Please refer to the documentation for more information. "
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)",
+                    UserWarning,
+                )
 
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
             raise ValueError(
@@ -1362,7 +1398,6 @@ class GenerationMixin:
             )
 
         elif is_contrastive_search_gen_mode:
-
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
@@ -1424,6 +1459,7 @@ class GenerationMixin:
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
+                max_length=generation_config.max_length,
             )
             # 12. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -1459,6 +1495,7 @@ class GenerationMixin:
                 device=inputs_tensor.device,
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
+                max_length=generation_config.max_length,
             )
 
             # 13. interleave input_ids with `num_beams` additional sequences per batch
@@ -1502,12 +1539,12 @@ class GenerationMixin:
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
                 num_beams=generation_config.num_beams,
-                max_length=stopping_criteria.max_length,
                 device=inputs_tensor.device,
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
                 num_beam_groups=generation_config.num_beam_groups,
+                max_length=generation_config.max_length,
             )
             # 12. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -1595,6 +1632,7 @@ class GenerationMixin:
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
+                max_length=generation_config.max_length,
             )
             # 12. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -1638,6 +1676,14 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **contrastive search** and can
         be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.contrastive_search`] directly. Use
+        generate() instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
+
+        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1758,8 +1804,7 @@ class GenerationMixin:
 
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
-            if model_kwargs.get("past") is None:
-
+            if model_kwargs.get("past_key_values") is None:
                 # prepare inputs
                 model_kwargs["use_cache"] = True
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -1791,13 +1836,16 @@ class GenerationMixin:
                     expand_size=top_k, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
                 )
 
-                past = model_kwargs.get("past")
-                if past is None:
+                past_key_values = model_kwargs.get("past_key_values")
+                if past_key_values is None:
                     raise ValueError(
                         f"{self.__class__.__name__} does not support caching and therefore **can't** be used "
                         "for contrastive search."
                     )
-                elif not isinstance(past[0], (tuple, torch.Tensor)) or past[0][0].shape[0] != batch_size:
+                elif (
+                    not isinstance(past_key_values[0], (tuple, torch.Tensor))
+                    or past_key_values[0][0].shape[0] != batch_size
+                ):
                     raise ValueError(
                         f"{self.__class__.__name__} does not have a standard cache format and therefore **can't** be "
                         "used for contrastive search without further modifications."
@@ -1832,13 +1880,13 @@ class GenerationMixin:
 
             # Replicates the new past_key_values to match the `top_k` candidates
             new_key_values = []
-            for layer in model_kwargs["past"]:
+            for layer in model_kwargs["past_key_values"]:
                 items = []
                 # item is either the key or the value matrix
                 for item in layer:
                     items.append(item.repeat_interleave(top_k, dim=0))
                 new_key_values.append(items)
-            model_kwargs["past"] = new_key_values
+            model_kwargs["past_key_values"] = new_key_values
 
             # compute the candidate tokens by the language model and collects their hidden_states
             next_model_inputs = self.prepare_inputs_for_generation(top_k_ids.view(-1, 1), **model_kwargs)
@@ -1983,6 +2031,15 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **greedy decoding** and can be
         used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.greedy_search`] directly. Use generate()
+        instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
+
+        </Tip>
+
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2218,6 +2275,14 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **multinomial sampling** and
         can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.sample`] directly. Use generate() instead.
+        For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
+
+        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2477,6 +2542,14 @@ class GenerationMixin:
         Generates sequences of token ids for models with a language modeling head using **beam search decoding** and
         can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
 
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.beam_search`] directly. Use generate()
+        instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
+
+        </Tip>
+
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
@@ -2718,8 +2791,8 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-            if model_kwargs["past"] is not None:
-                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+            if model_kwargs["past_key_values"] is not None:
+                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -2792,6 +2865,14 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **beam search multinomial
         sampling** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.beam_sample`] directly. Use generate()
+        instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
+
+        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -3040,8 +3121,8 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-            if model_kwargs["past"] is not None:
-                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+            if model_kwargs["past_key_values"] is not None:
+                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3113,6 +3194,14 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **diverse beam search
         decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.group_beam_search`] directly. Use
+        generate() instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
+
+        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -3410,8 +3499,10 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-            if model_kwargs["past"] is not None:
-                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], reordering_indices)
+            if model_kwargs["past_key_values"] is not None:
+                model_kwargs["past_key_values"] = self._reorder_cache(
+                    model_kwargs["past_key_values"], reordering_indices
+                )
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -3481,6 +3572,14 @@ class GenerationMixin:
         r"""
         Generates sequences of token ids for models with a language modeling head using **constrained beam search
         decoding** and can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text models.
+
+        <Tip warning={true}>
+
+        In most cases, you do not need to call [`~generation.GenerationMixin.constrained_beam_search`] directly. Use
+        generate() instead. For an overview of generation strategies and code examples, check the [following
+        guide](./generation_strategies).
+
+        </Tip>
 
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -3732,8 +3831,8 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-            if model_kwargs["past"] is not None:
-                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+            if model_kwargs["past_key_values"] is not None:
+                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
 
             # increase cur_len
             cur_len = cur_len + 1

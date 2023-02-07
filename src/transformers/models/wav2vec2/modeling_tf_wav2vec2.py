@@ -50,7 +50,6 @@ _HIDDEN_STATES_START_POSITION = 2
 
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
-_TOKENIZER_FOR_DOC = "Wav2Vec2Tokenizer"
 
 TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/wav2vec2-base-960h",
@@ -262,13 +261,17 @@ def _compute_mask_indices(
     if mask_length < 1:
         raise ValueError("`mask_length` has to be bigger than 0.")
 
-    if mask_length > sequence_length:
-        raise ValueError(
+    tf.debugging.assert_less(
+        mask_length,
+        sequence_length,
+        message=(
             f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and"
             f" `sequence_length`: {sequence_length}`"
-        )
+        ),
+    )
+
     # compute number of masked spans in batch
-    num_masked_spans = mask_prob * sequence_length / mask_length + tf.random.uniform((1,))
+    num_masked_spans = mask_prob * tf.cast(sequence_length, tf.float32) / mask_length + tf.random.uniform((1,))
     num_masked_spans = tf.maximum(num_masked_spans, min_masks)
     num_masked_spans = tf.cast(num_masked_spans, tf.int32)
 
@@ -354,7 +357,6 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
         self._check_axis()
 
     def build(self, input_shape):
-
         self._check_if_input_shape_is_none(input_shape)
         self._set_number_of_groups_for_instance_norm(input_shape)
         self._check_size_of_dimensions(input_shape)
@@ -366,7 +368,6 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, inputs):
-
         input_shape = tf.keras.backend.int_shape(inputs)
         tensor_input_shape = tf.shape(inputs)
 
@@ -403,7 +404,6 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
         return input_shape
 
     def _reshape_into_groups(self, inputs, input_shape, tensor_input_shape):
-
         group_shape = [tensor_input_shape[i] for i in range(len(input_shape))]
         is_instance_norm = (input_shape[self.axis] // self.groups) == 1
         if not is_instance_norm:
@@ -416,7 +416,6 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
             return inputs, group_shape
 
     def _apply_normalization(self, reshaped_inputs, input_shape):
-
         group_shape = tf.keras.backend.int_shape(reshaped_inputs)
         group_reduction_axes = list(range(1, len(group_shape)))
         is_instance_norm = (input_shape[self.axis] // self.groups) == 1
@@ -468,7 +467,6 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
             self.groups = dim
 
     def _check_size_of_dimensions(self, input_shape):
-
         dim = input_shape[self.axis]
         if dim < self.groups:
             raise ValueError(
@@ -489,19 +487,16 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
             )
 
     def _check_axis(self):
-
         if self.axis == 0:
             raise ValueError(
                 "You are trying to normalize your batch axis. Do you want to use tf.layer.batch_normalization instead"
             )
 
     def _create_input_spec(self, input_shape):
-
         dim = input_shape[self.axis]
         self.input_spec = tf.keras.layers.InputSpec(ndim=len(input_shape), axes={self.axis: dim})
 
     def _add_gamma_weight(self, input_shape):
-
         dim = input_shape[self.axis]
         shape = (dim,)
 
@@ -517,7 +512,6 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
             self.gamma = None
 
     def _add_beta_weight(self, input_shape):
-
         dim = input_shape[self.axis]
         shape = (dim,)
 
@@ -1400,10 +1394,10 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
 
 WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
+        input_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1486,11 +1480,11 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import Wav2Vec2Processor, TFWav2Vec2Model
+        >>> from transformers import AutoProcessor, TFWav2Vec2Model
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+        >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
         >>> model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
 
 
@@ -1617,11 +1611,11 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import Wav2Vec2Processor, TFWav2Vec2ForCTC
+        >>> from transformers import AutoProcessor, TFWav2Vec2ForCTC
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
+        >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
         >>> model = TFWav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 
 
@@ -1681,7 +1675,6 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         logits = self.lm_head(hidden_states)
 
         if labels is not None:
-
             if tf.reduce_max(labels) >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 

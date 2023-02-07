@@ -50,7 +50,6 @@ from .configuration_mt5 import MT5Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MT5Config"
-_TOKENIZER_FOR_DOC = "MT5Tokenizer"
 _CHECKPOINT_FOR_DOC = "mt5-small"
 
 
@@ -118,7 +117,6 @@ class MT5LayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # MT5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -147,6 +145,8 @@ class MT5DenseActDense(nn.Module):
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
+        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
@@ -169,7 +169,8 @@ class MT5DenseGatedActDense(nn.Module):
 
         # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
         # See https://github.com/huggingface/transformers/issues/20287
-        if hidden_states.dtype != self.wo.weight.dtype:
+        # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
+        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
             hidden_states = hidden_states.to(self.wo.weight.dtype)
 
         hidden_states = self.wo(hidden_states)
@@ -527,7 +528,6 @@ class MT5Block(nn.Module):
         output_attentions=False,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -843,6 +843,13 @@ class MT5Stack(MT5PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`MT5Stack.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your model"
+            " with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'block.0': 0,"
+            " 'block.1': 1, ...}",
+            FutureWarning,
+        )
         # Check validity of device_map
         self.device_map = (
             get_device_map(len(self.block), range(torch.cuda.device_count())) if device_map is None else device_map
@@ -864,6 +871,10 @@ class MT5Stack(MT5PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.model_parallel = False
         self.device_map = None
         self.first_device = "cpu"
@@ -1118,7 +1129,7 @@ MT5_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. MT5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`MT5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1134,7 +1145,7 @@ MT5_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MT5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -1211,7 +1222,7 @@ MT5_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. MT5 is a model with relative position embeddings so you
             should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`MT5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             To know more on how to prepare `input_ids` for pretraining take a look a [MT5 Training](./mt5#training).
@@ -1260,10 +1271,10 @@ class MT5Model(MT5PreTrainedModel):
     Examples:
 
     ```python
-    >>> from transformers import MT5Model, MT5Tokenizer
+    >>> from transformers import MT5Model, AutoTokenizer
 
     >>> model = MT5Model.from_pretrained("google/mt5-small")
-    >>> tokenizer = MT5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
     >>> inputs = tokenizer(article, return_tensors="pt")
@@ -1314,6 +1325,13 @@ class MT5Model(MT5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5Model.parallelize
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`T5Model.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your model"
+            " with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'encoder.block.0':"
+            " 0, 'encoder.block.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
             if device_map is None
@@ -1327,6 +1345,10 @@ class MT5Model(MT5PreTrainedModel):
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5Model.deparallelize
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.encoder.deparallelize()
         self.decoder.deparallelize()
         self.encoder = self.encoder.to("cpu")
@@ -1389,9 +1411,9 @@ class MT5Model(MT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MT5Tokenizer, MT5Model
+        >>> from transformers import AutoTokenizer, MT5Model
 
-        >>> tokenizer = MT5Tokenizer.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
         >>> model = MT5Model.from_pretrained("mt5-small")
 
         >>> input_ids = tokenizer(
@@ -1484,10 +1506,10 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
     Examples:
 
     ```python
-    >>> from transformers import MT5ForConditionalGeneration, MT5Tokenizer
+    >>> from transformers import MT5ForConditionalGeneration, AutoTokenizer
 
     >>> model = MT5ForConditionalGeneration.from_pretrained("google/mt5-small")
-    >>> tokenizer = MT5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
     >>> inputs = tokenizer(article, text_target=summary, return_tensors="pt")
@@ -1539,6 +1561,13 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.parallelize
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`T5ForConditionalGeneration.parallelize` is deprecated and will be removed in v5 of Transformers, you"
+            " should load your model with `device_map='balanced'` in the call to `from_pretrained`. You can also"
+            " provide your own `device_map` but it needs to be a dictionary module_name to device, so for instance"
+            " {'encoder.block.0': 0, 'encoder.block.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
             if device_map is None
@@ -1553,6 +1582,10 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.deparallelize
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.encoder.deparallelize()
         self.decoder.deparallelize()
         self.encoder = self.encoder.to("cpu")
@@ -1621,9 +1654,9 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MT5Tokenizer, MT5ForConditionalGeneration
+        >>> from transformers import AutoTokenizer, MT5ForConditionalGeneration
 
-        >>> tokenizer = MT5Tokenizer.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
         >>> model = MT5ForConditionalGeneration.from_pretrained("mt5-small")
 
         >>> # training
@@ -1746,23 +1779,22 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         return {
             "decoder_input_ids": input_ids,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -1776,15 +1808,15 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         return self._shift_right(labels)
 
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration._reorder_cache
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
-        if past is None:
+        if past_key_values is None:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past
+            return past_key_values
 
         reordered_decoder_past = ()
-        for layer_past_states in past:
+        for layer_past_states in past_key_values:
             # get the correct batch idx from layer past batch dim
             # batch dim of `past` is at 2nd position
             reordered_layer_past_states = ()
@@ -1810,10 +1842,10 @@ class MT5EncoderModel(MT5PreTrainedModel):
     Examples:
 
     ```python
-    >>> from transformers import MT5EncoderModel, MT5Tokenizer
+    >>> from transformers import MT5EncoderModel, AutoTokenizer
 
     >>> model = MT5EncoderModel.from_pretrained("google/mt5-small")
-    >>> tokenizer = MT5Tokenizer.from_pretrained("google/mt5-small")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> input_ids = tokenizer(article, return_tensors="pt").input_ids
     >>> outputs = model(input_ids)
@@ -1850,6 +1882,13 @@ class MT5EncoderModel(MT5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.parallelize
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`T5EncoderModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
+            " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'block.0': 0,"
+            " 'block.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
             if device_map is None
@@ -1862,6 +1901,10 @@ class MT5EncoderModel(MT5PreTrainedModel):
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.deparallelize
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.encoder.deparallelize()
         self.encoder = self.encoder.to("cpu")
         self.model_parallel = False
@@ -1909,9 +1952,9 @@ class MT5EncoderModel(MT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MT5Tokenizer, MT5EncoderModel
+        >>> from transformers import AutoTokenizer, MT5EncoderModel
 
-        >>> tokenizer = MT5Tokenizer.from_pretrained("mt5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mt5-small")
         >>> model = MT5EncoderModel.from_pretrained("mt5-small")
         >>> input_ids = tokenizer(
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"

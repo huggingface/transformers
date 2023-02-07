@@ -113,7 +113,7 @@ class DonutSwinConfig(PretrainedConfig):
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

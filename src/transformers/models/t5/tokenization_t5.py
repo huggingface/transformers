@@ -120,7 +120,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         extra_ids=100,
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         # Add extra_ids to the special token list
         if extra_ids > 0 and additional_special_tokens is None:
@@ -214,7 +214,7 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def get_sentinel_tokens(self):
         return list(
-            set(filter(lambda x: bool(re.search("<extra_id_\d+>", x)) is not None, self.additional_special_tokens))
+            set(filter(lambda x: bool(re.search(r"<extra_id_\d+>", x)) is not None, self.additional_special_tokens))
         )
 
     def get_sentinel_token_ids(self):

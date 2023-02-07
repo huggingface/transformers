@@ -54,7 +54,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
 _CONFIG_FOR_DOC = "MarianConfig"
-_TOKENIZER_FOR_DOC = "MarianTokenizer"
 
 
 LARGE_NEGATIVE = -1e8
@@ -577,7 +576,7 @@ MARIAN_GENERATION_EXAMPLE = r"""
         Examples:
 
         ```python
-        >>> from transformers import MarianTokenizer, TFMarianMTModel
+        >>> from transformers import AutoTokenizer, TFMarianMTModel
         >>> from typing import List
 
         >>> src = "fr"  # source language
@@ -586,7 +585,7 @@ MARIAN_GENERATION_EXAMPLE = r"""
         >>> model_name = f"Helsinki-NLP/opus-mt-{src}-{trg}"
 
         >>> model = TFMarianMTModel.from_pretrained(model_name)
-        >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
+        >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
         >>> batch = tokenizer([sample_text], return_tensors="tf")
         >>> gen = model.generate(**batch)
         >>> tokenizer.batch_decode(gen, skip_special_tokens=True)
@@ -599,7 +598,7 @@ MARIAN_INPUTS_DOCSTRING = r"""
         input_ids (`tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -613,7 +612,7 @@ MARIAN_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -724,7 +723,7 @@ class TFMarianEncoder(tf.keras.layers.Layer):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -818,7 +817,6 @@ class TFMarianEncoder(tf.keras.layers.Layer):
 
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
-
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -902,7 +900,7 @@ class TFMarianDecoder(tf.keras.layers.Layer):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1134,9 +1132,8 @@ class TFMarianMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs
+        **kwargs,
     ):
-
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             use_cache = False
 
@@ -1217,7 +1214,6 @@ class TFMarianModel(TFMarianPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1241,7 +1237,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs
+        **kwargs,
     ):
         outputs = self.model(
             input_ids=input_ids,
@@ -1455,7 +1451,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         decoder_attention_mask=None,
         head_mask=None,
@@ -1463,24 +1459,23 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
-        # cut decoder_input_ids if past is used
-        if past is not None:
+        # cut decoder_input_ids if past_key_values is used
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         if decoder_attention_mask is not None:  # xla
             decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
-        elif past is not None:  # no xla + past
-            decoder_position_ids = past[0][0].shape[2]
-        else:  # no xla + no past
+        elif past_key_values is not None:  # no xla + past_key_values
+            decoder_position_ids = past_key_values[0][0].shape[2]
+        else:  # no xla + no past_key_values
             decoder_position_ids = tf.range(decoder_input_ids.shape[1])
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,

@@ -21,10 +21,10 @@ import unittest
 from typing import List, Tuple
 
 import numpy as np
-
-import transformers
 from huggingface_hub import HfFolder, delete_repo, set_access_token
 from requests.exceptions import HTTPError
+
+import transformers
 from transformers import BertConfig, is_flax_available, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
@@ -36,7 +36,7 @@ from transformers.testing_utils import (
     require_flax,
     torch_device,
 )
-from transformers.utils import logging
+from transformers.utils import CONFIG_NAME, GENERATION_CONFIG_NAME, logging
 from transformers.utils.generic import ModelOutput
 
 
@@ -48,6 +48,7 @@ if is_flax_available():
     from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
     from flax.serialization import from_bytes
     from flax.traverse_util import flatten_dict, unflatten_dict
+
     from transformers import (
         FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -275,7 +276,6 @@ class FlaxModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-
                 # Output all for aggressive testing
                 config.output_hidden_states = True
                 config.output_attentions = self.has_attentions
@@ -328,7 +328,6 @@ class FlaxModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-
                 # Output all for aggressive testing
                 config.output_hidden_states = True
                 config.output_attentions = self.has_attentions
@@ -395,6 +394,13 @@ class FlaxModelTesterMixin:
                 # verify that normal save_pretrained works as expected
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     model.save_pretrained(tmpdirname)
+
+                    # the config file (and the generation config file, if it can generate) should be saved
+                    self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
+                    self.assertEqual(
+                        model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                    )
+
                     model_loaded = model_class.from_pretrained(tmpdirname)
 
                 outputs_loaded = model_loaded(**prepared_inputs_dict).to_tuple()
@@ -562,7 +568,6 @@ class FlaxModelTesterMixin:
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-
                     self.assertEqual(jitted_output.shape, output.shape)
 
     def test_forward_signature(self):

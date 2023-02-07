@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/git-base"
 _CONFIG_FOR_DOC = "GitConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 GIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/git-base",
@@ -444,7 +443,6 @@ class GitEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -558,7 +556,7 @@ GIT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -578,7 +576,7 @@ GIT_INPUTS_DOCSTRING = r"""
 
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            [`CLIPImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -763,9 +761,9 @@ class GitVisionEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = GitVisionAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = GitVisionMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -916,7 +914,7 @@ GIT_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -936,9 +934,9 @@ class GitVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = GitVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = GitVisionEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(GIT_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=GitVisionConfig)
@@ -1049,7 +1047,8 @@ class GitProjection(nn.Module):
         super().__init__()
         self.config = config
         self.visual_projection = nn.Sequential(
-            nn.Linear(config.vision_config.hidden_size, config.hidden_size), nn.LayerNorm(config.hidden_size)
+            nn.Linear(config.vision_config.hidden_size, config.hidden_size),
+            nn.LayerNorm(config.hidden_size, eps=config.vision_config.layer_norm_eps),
         )
 
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
@@ -1263,6 +1262,11 @@ class GitModel(GitPreTrainedModel):
                 dtype=embedding_output.dtype,
                 device=embedding_output.device,
             )
+
+        # Repeat visual features to match embedding batch size.
+        projected_visual_features = projected_visual_features.repeat(
+            embedding_output.size(0) // projected_visual_features.size(0), 1, 1
+        )
 
         # concatenate patch token and text token embeddings
         hidden_states = torch.cat((projected_visual_features, embedding_output), dim=1)
@@ -1487,29 +1491,32 @@ class GitForCausalLM(GitPreTrainedModel):
         sequence_output = outputs[0]
         logits = self.output(sequence_output)
 
-        lm_loss = None
+        loss = None
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_logits = logits[:, :-1, :].contiguous()
+            num_image_tokens = self.git.encoder.layer[0].attention.self.image_patch_tokens
+            shifted_logits = logits[:, num_image_tokens:-1, :].contiguous()
             labels = labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_logits.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = loss_fct(shifted_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[1:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
+            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
-            loss=lm_loss,
+            loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=True, **kwargs):
-        # cut decoder_input_ids if past is used
-        if past is not None:
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
+        # cut decoder_input_ids if past_key_values is used
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1521,12 +1528,12 @@ class GitForCausalLM(GitPreTrainedModel):
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": kwargs.get("pixel_values", None),
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

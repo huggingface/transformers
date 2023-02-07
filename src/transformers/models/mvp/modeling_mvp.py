@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "RUCAIBox/mvp"
 _CONFIG_FOR_DOC = "MvpConfig"
-_TOKENIZER_FOR_DOC = "MvpTokenizer"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
@@ -601,7 +600,7 @@ MVP_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -615,7 +614,7 @@ MVP_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -697,9 +696,9 @@ MVP_CONDITIONAL_GENERATION_EXAMPLE = r"""
     Fine-tuning a model
     ```python
     >>> import torch
-    >>> from transformers import MvpTokenizer, MvpForConditionalGeneration
+    >>> from transformers import AutoTokenizer, MvpForConditionalGeneration
 
-    >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
     >>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp")
 
     >>> inputs = tokenizer(
@@ -727,10 +726,10 @@ MVP_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     Fine-tuning a model on `num_labels` classes
     ```python
     >>> import torch
-    >>> from transformers import MvpTokenizer, MvpForSequenceClassification
+    >>> from transformers import AutoTokenizer, MvpForSequenceClassification
 
     >>> num_labels = 2  # for example, this is a binary classification task
-    >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
     >>> model = MvpForSequenceClassification.from_pretrained("RUCAIBox/mvp", num_labels=num_labels)
 
     >>> inputs = tokenizer("Classify: Hello, my dog is cute", return_tensors="pt")
@@ -756,9 +755,9 @@ MVP_QUESTION_ANSWERING_SAMPLE = r"""
     using `BartForConditionalGeneration`
     ```python
     >>> import torch
-    >>> from transformers import MvpTokenizer, MvpForQuestionAnswering
+    >>> from transformers import AutoTokenizer, MvpForQuestionAnswering
 
-    >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
     >>> model = MvpForQuestionAnswering.from_pretrained("RUCAIBox/mvp")
 
     >>> inputs = tokenizer(
@@ -857,7 +856,7 @@ class MvpEncoder(MvpPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1078,7 +1077,7 @@ class MvpDecoder(MvpPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1212,7 +1211,6 @@ class MvpDecoder(MvpPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1239,7 +1237,6 @@ class MvpDecoder(MvpPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -1331,7 +1328,6 @@ class MvpModel(MvpPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MVP_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1355,7 +1351,6 @@ class MvpModel(MvpPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
-
         # different to other models, Mvp automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -1555,23 +1550,23 @@ class MvpForConditionalGeneration(MvpPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -1584,9 +1579,9 @@ class MvpForConditionalGeneration(MvpPreTrainedModel):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
@@ -1920,7 +1915,7 @@ class MvpForCausalLM(MvpPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1985,9 +1980,9 @@ class MvpForCausalLM(MvpPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MvpTokenizer, MvpForCausalLM
+        >>> from transformers import AutoTokenizer, MvpForCausalLM
 
-        >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+        >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
         >>> model = MvpForCausalLM.from_pretrained("RUCAIBox/mvp", add_cross_attention=False)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -2040,24 +2035,26 @@ class MvpForCausalLM(MvpPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

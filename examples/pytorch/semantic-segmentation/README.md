@@ -40,7 +40,7 @@ from datasets import Dataset, DatasetDict, Image
 
 # your images can of course have a different extension
 # semantic segmentation maps are typically stored in the png format
-image_paths_train = ["path/to/image_1.jpg/jpg", "path/to/image_2.jpg/jpg", ..., "path/to/image_n.jpg/jpg"] 
+image_paths_train = ["path/to/image_1.jpg/jpg", "path/to/image_2.jpg/jpg", ..., "path/to/image_n.jpg/jpg"]
 label_paths_train = ["path/to/annotation_1.png", "path/to/annotation_2.png", ..., "path/to/annotation_n.png"]
 
 # same for validation
@@ -52,7 +52,7 @@ def create_dataset(image_paths, label_paths):
                                 "label": sorted(label_paths)})
     dataset = dataset.cast_column("image", Image())
     dataset = dataset.cast_column("label", Image())
-    
+
     return dataset
 
 # step 1: create Dataset objects
@@ -91,7 +91,7 @@ You can easily upload this by clicking on "Add file" in the "Files and versions"
 
 ## PyTorch version, Trainer
 
-Based on the script [`run_semantic_segmentation.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/semantic-segmentation/run_semantic_segmentation.py). 
+Based on the script [`run_semantic_segmentation.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/semantic-segmentation/run_semantic_segmentation.py).
 
 The script leverages the [🤗 Trainer API](https://huggingface.co/docs/transformers/main_classes/trainer) to automatically take care of the training for you, running on distributed environments right away.
 
@@ -130,7 +130,7 @@ Note that you can replace the model and dataset by simply setting the `model_nam
 
 Based on the script [`run_semantic_segmentation_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/semantic-segmentation/run_semantic_segmentation.py).
 
-The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision. 
+The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision.
 
 First, run:
 
@@ -161,11 +161,11 @@ The resulting model can be seen here: https://huggingface.co/nielsr/segformer-fi
 This means that after training, you can easily load your trained model as follows:
 
 ```python
-from transformers import AutoFeatureExtractor, AutoModelForSemanticSegmentation
+from transformers import AutoImageProcessor, AutoModelForSemanticSegmentation
 
 model_name = "name_of_repo_on_the_hub_or_path_to_local_folder"
 
-feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
+image_processor = AutoImageProcessor.from_pretrained(model_name)
 model = AutoModelForSemanticSegmentation.from_pretrained(model_name)
 ```
 
@@ -180,7 +180,7 @@ url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 # prepare image for the model
-inputs = feature_extractor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt")
 
 with torch.no_grad():
     outputs = model(**inputs)

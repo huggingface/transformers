@@ -35,6 +35,7 @@ from typing import Iterator, List, Optional, Union
 from unittest import mock
 
 import huggingface_hub
+
 from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
@@ -51,6 +52,7 @@ from .utils import (
     is_apex_available,
     is_bitsandbytes_available,
     is_bs4_available,
+    is_cython_available,
     is_decord_available,
     is_detectron2_available,
     is_faiss_available,
@@ -83,11 +85,13 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_neuroncore_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
     is_torchdynamo_available,
+    is_torchvision_available,
     is_vision_available,
 )
 
@@ -305,6 +309,16 @@ def require_torch(test_case):
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
 
 
+def require_torchvision(test_case):
+    """
+    Decorator marking a test that requires Torchvision.
+
+    These tests are skipped when Torchvision isn't installed.
+
+    """
+    return unittest.skipUnless(is_torchvision_available(), "test requires Torchvision")(test_case)
+
+
 def require_torch_or_tf(test_case):
     """
     Decorator marking a test that requires PyTorch or TensorFlow.
@@ -498,6 +512,15 @@ def require_torch_tpu(test_case):
     Decorator marking a test that requires a TPU (in PyTorch).
     """
     return unittest.skipUnless(is_torch_tpu_available(check_device=False), "test requires PyTorch TPU")(test_case)
+
+
+def require_torch_neuroncore(test_case):
+    """
+    Decorator marking a test that requires NeuronCore (in PyTorch).
+    """
+    return unittest.skipUnless(is_torch_neuroncore_available(check_device=False), "test requires PyTorch NeuronCore")(
+        test_case
+    )
 
 
 if is_torch_available():
@@ -701,6 +724,13 @@ def require_jumanpp(test_case):
     return unittest.skipUnless(is_jumanpp_available(), "test requires jumanpp")(test_case)
 
 
+def require_cython(test_case):
+    """
+    Decorator marking a test that requires jumanpp
+    """
+    return unittest.skipUnless(is_cython_available(), "test requires cython")(test_case)
+
+
 def get_gpu_count():
     """
     Return the number of available gpus (regardless of whether torch, tf or jax is used)
@@ -748,6 +778,7 @@ def get_tests_dir(append_path=None):
 # Helper functions for dealing with testing text outputs
 # The original code came from:
 # https://github.com/fastai/fastai/blob/master/tests/utils/text.py
+
 
 # When any function contains print() calls that get overwritten, like progress bars,
 # a special care needs to be applied, since under pytest -s captured output (capsys
@@ -1661,7 +1692,7 @@ class RequestCounter:
         return self.old_request(method=method, **kwargs)
 
 
-def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
+def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, description: Optional[str] = None):
     """
     To decorate flaky tests. They will be retried on failures.
 
@@ -1670,6 +1701,9 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
             The maximum number of attempts to retry the flaky test.
         wait_before_retry (`float`, *optional*):
             If provided, will wait that number of seconds before retrying the test.
+        description (`str`, *optional*):
+            A string to describe the situation (what / where / why is flaky, link to GH issue/PR comments, errors,
+            etc.)
     """
 
     def decorator(test_func_ref):

@@ -50,7 +50,6 @@ from .configuration_blenderbot import BlenderbotConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BlenderbotConfig"
-_TOKENIZER_FOR_DOC = "BlenderbotTokenizer"
 _CHECKPOINT_FOR_DOC = "facebook/blenderbot-400M-distill"
 
 
@@ -519,11 +518,11 @@ BLENDERBOT_GENERATION_EXAMPLE = r"""
     Conversation example:
 
     ```python
-    >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
+    >>> from transformers import AutoTokenizer, BlenderbotForConditionalGeneration
 
     >>> mname = "facebook/blenderbot-400M-distill"
     >>> model = BlenderbotForConditionalGeneration.from_pretrained(mname)
-    >>> tokenizer = BlenderbotTokenizer.from_pretrained(mname)
+    >>> tokenizer = AutoTokenizer.from_pretrained(mname)
     >>> UTTERANCE = "My friends are cool but they eat too many carbs."
     >>> print("Human: ", UTTERANCE)
     Human:  My friends are cool but they eat too many carbs.
@@ -545,7 +544,7 @@ BLENDERBOT_GENERATION_EXAMPLE = r"""
     >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors="pt")
     >>> next_reply_ids = model.generate(**inputs)
     >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
-    Bot:   That's too bad. Have you tried encouraging them to change their eating habits?
+    Bot:   I see. Well, it's good that they're trying to change their eating habits.
     ```
 """
 
@@ -555,7 +554,7 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BlenderbotTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -569,7 +568,7 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BlenderbotTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -692,7 +691,7 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`BlenderbotTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -891,7 +890,7 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`BlenderbotTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1016,7 +1015,6 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1041,7 +1039,6 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -1161,10 +1158,10 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BlenderbotTokenizer, BlenderbotModel
+        >>> from transformers import AutoTokenizer, BlenderbotModel
 
         >>> model = BlenderbotModel.from_pretrained("facebook/blenderbot-400M-distill")
-        >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
         >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
@@ -1378,23 +1375,23 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -1404,9 +1401,9 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
@@ -1486,7 +1483,7 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`BlenderbotTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1551,9 +1548,9 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BlenderbotTokenizer, BlenderbotForCausalLM
+        >>> from transformers import AutoTokenizer, BlenderbotForCausalLM
 
-        >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
         >>> model = BlenderbotForCausalLM.from_pretrained(
         ...     "facebook/blenderbot-400M-distill", add_cross_attention=False
         ... )
@@ -1609,24 +1606,26 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_ids.shape)
 
-        if past:
+        if past_key_values:
             input_ids = input_ids[:, -1:]
         # first step, decoder_cached_states are empty
         return {
             "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

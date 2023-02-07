@@ -6,10 +6,9 @@ from functools import partial
 from typing import Dict, List, Optional, Set, Tuple, Type
 
 from datasets import Dataset
-from tqdm import tqdm
-
 from datasketch import MinHash, MinHashLSH
 from dpu_utils.utils.iterators import ThreadedIterator
+from tqdm import tqdm
 
 
 NON_ALPHA = re.compile("[^A-Za-z_0-9]")

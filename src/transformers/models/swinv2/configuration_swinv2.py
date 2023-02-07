@@ -118,7 +118,7 @@ class Swinv2Config(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         encoder_stride=32,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

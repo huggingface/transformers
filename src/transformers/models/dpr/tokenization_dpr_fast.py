@@ -231,7 +231,7 @@ class CustomDPRReaderTokenizerMixin:
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if titles is None and texts is None:
             return super().__call__(
