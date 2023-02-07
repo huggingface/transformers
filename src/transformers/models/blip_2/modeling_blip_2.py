@@ -87,8 +87,8 @@ class Blip2ForConditionalGenerationModelOutput(ModelOutput):
         )
 
 
+# Copied from transformers.models.blip.modeling_blip.BlipVisionEmbeddings with Blip->Blip2
 class Blip2VisionEmbeddings(nn.Module):
-    # Copied from transformers.models.blip.modeling_blip.BlipVisionEmbeddings.__init__ with Blip->Blip2
     def __init__(self, config: Blip2VisionConfig):
         super().__init__()
         self.config = config
@@ -111,12 +111,13 @@ class Blip2VisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
+        target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1)
+        class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        embeddings = embeddings + self.position_embedding[:, : embeddings.size(1), :]
+        embeddings = embeddings + self.position_embedding[:, : embeddings.size(1), :].to(target_dtype)
         return embeddings
 
 
@@ -476,7 +477,7 @@ class Blip2Encoder(nn.Module):
         )
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->Blip2
+# Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->Blip2, BLIP->BLIP_2
 class Blip2VisionModel(Blip2PreTrainedModel):
     main_input_name = "pixel_values"
     config_class = Blip2VisionConfig
