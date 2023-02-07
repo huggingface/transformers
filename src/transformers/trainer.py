@@ -349,11 +349,9 @@ class Trainer:
         else:
             if model_init is not None:
                 warnings.warn(
-                    (
-                        "`Trainer` requires either a `model` or `model_init` argument, but not both. `model_init` will"
-                        " overwrite your model when calling the `train` method. This will become a fatal error in the"
-                        " next release."
-                    ),
+                    "`Trainer` requires either a `model` or `model_init` argument, but not both. `model_init` will"
+                    " overwrite your model when calling the `train` method. This will become a fatal error in the next"
+                    " release.",
                     FutureWarning,
                 )
             self.model_init = model_init
@@ -444,11 +442,11 @@ class Trainer:
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
 
             self.forword_prefetch = False
-            if "forword_prefetch" in self.args.fsdp_config and self.forword_prefetch:
+            if self.args.fsdp_config.get("forword_prefect", False):
                 self.forword_prefetch = True
 
             self.limit_all_gathers = False
-            if "limit_all_gathers" in self.args.fsdp_config and self.limit_all_gathers:
+            if self.args.fsdp_config.get("limit_all_gathers", False):
                 self.limit_all_gathers = True
 
         # one place to sort out whether to place the model on device or not
@@ -1553,9 +1551,8 @@ class Trainer:
         # Model re-init
         model_reloaded = False
         if self.model_init is not None:
-            (  # Seed must be set before instantiating the model when using model_init.
-                enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
-            )
+            # Seed must be set before instantiating the model when using model
+            enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
             self.model = self.call_model_init(trial)
             model_reloaded = True
             # Reinitializes optimizer and scheduler
