@@ -306,7 +306,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-BLIP_START_DOCSTRING = r"""
+BLIP_2_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -316,32 +316,16 @@ BLIP_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`BlipConfig`]): Model configuration class with all the parameters of the model.
+        config ([`Blip2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-BLIP_TEXT_INPUTS_DOCSTRING = r"""
+BLIP_2_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoProcessor`]. See [`BlipProcessor.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`Blip2Processor`]. See [`Blip2Processor.__call__`] for
+            details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -352,28 +336,17 @@ BLIP_TEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-BLIP_VISION_INPUTS_DOCSTRING = r"""
+BLIP_2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`BlipImageProcessor`]. See [`BlipImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
+            Pixel values. Pixel values can be obtained using [`Blip2Processor`]. See [`Blip2Processor.__call__`] for
+            details.
+        
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary of the language model. Input tokens can optionally be
+            provided to serve as text prompt, which the language model can continue.
 
-BLIP_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoProcessor`]. See [`BlipProcessor.__call__`] for details.
+            Indices can be obtained using [`Blip2Processor`]. See [`Blip2Processor.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -383,16 +356,20 @@ BLIP_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
 
-            [What are position IDs?](../glossary#position-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`BlipImageProcessor`]. See [`BlipImageProcessor.__call__`] for details.
-        return_loss (`bool`, *optional*):
-            Whether or not to return the contrastive loss.
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary of the language model. Only relevant in case an
+            encoder-decoder language model (like T5) is used.
+            
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details. [What are decoder input IDs?](../glossary#decoder-input-ids)
+        
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            Only relevant in case an encoder-decoder language model (like T5) is used.
+
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -515,7 +492,7 @@ class Blip2VisionModel(Blip2PreTrainedModel):
 
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BLIP_2_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Blip2VisionConfig)
     def forward(
         self,
@@ -1243,13 +1220,13 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    BLIP-2 Model for image captioning. The model consists of a vision encoder, Querying Transformer (Q-Former) and a
-    language model.
+    BLIP-2 Model for generating text given an image and an optional text prompt. The model consists of a vision
+    encoder, Querying Transformer (Q-Former) and a language model.
 
     One can optionally pass `input_ids` to the model, which serve as a text prompt, to make the language model continue
     the prompt. Otherwise, the language model starts generating text from the [BOS] (beginning-of-sequence) token.
     """,
-    BLIP_START_DOCSTRING,
+    BLIP_2_START_DOCSTRING,
 )
 class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
     config_class = Blip2Config
@@ -1276,7 +1253,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BLIP_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Blip2ForConditionalGenerationModelOutput, config_class=Blip2VisionConfig)
     def forward(
         self,
@@ -1298,9 +1275,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, Blip2ForConditionalGeneration
+        >>> from transformers import Blip2Processor, Blip2ForConditionalGeneration
 
-        >>> processor = AutoProcessor.from_pretrained("nielsr/blip2-opt-2.7b")
+        >>> processor = Blip2Processor.from_pretrained("nielsr/blip2-opt-2.7b")
         >>> model = Blip2ForConditionalGeneration.from_pretrained("nielsr/blip2-opt-2.7b")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1308,7 +1285,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
+        >>> generated_ids = model.generate(**inputs)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
