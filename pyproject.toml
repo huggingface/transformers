@@ -12,6 +12,7 @@ line-length = 119
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["E402", "F401", "F403", "F811"]
 "src/transformers/file_utils.py" = ["F401"]
+"src/transformers/utils/dummy_*.py" = ["F401"]
 
 [tool.ruff.isort]
 lines-after-imports = 2
