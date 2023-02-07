@@ -35,13 +35,39 @@ transformers = spec.loader.load_module()
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 SPECIAL_CASES_TO_ALLOW = {
+    # used as `self.bert_model = BertModel(config, ...)`
+    "DPRConfig": True,
+    # not used in modeling files, but it's an important information
+    "FSMTConfig": ["langs"],
+    # used internally in the configuration class file
+    "GPTNeoConfig": ["attention_types"],
+    # used internally in the configuration class file
+    "EsmConfig": ["is_folding_model"],
+    # used during training (despite we don't have training script for these models yet)
+    "Mask2FormerConfig": ["ignore_value"],
+    # used during training (despite we don't have training script for these models yet)
+    "OneFormerConfig": ["ignore_value"],
+    # used during preprocessing and collation, see `collating_graphormer.py`
+    "GraphormerConfig": ["spatial_pos_max"],
+    # used internally in the configuration class file
+    "T5Config": ["feed_forward_proj"],
+    # used internally in the configuration class file
+    "LongT5Config": ["feed_forward_proj"],
+    # used internally in the configuration class file
+    "SwitchTransformersConfig": ["feed_forward_proj"],
+    # having default values other than `1e-5` - we can't fix them without breaking
     "BioGptConfig": ["layer_norm_eps"],
-    "CvtConfig": ["layer_norm_eps"],
-    "DPRConfig": ["layer_norm_eps"],
+    # having default values other than `1e-5` - we can't fix them without breaking
     "GLPNConfig": ["layer_norm_eps"],
-    "PerceiverConfig": ["layer_norm_eps"],
-    "RetriBertConfig": ["layer_norm_eps"],
+    # having default values other than `1e-5` - we can't fix them without breaking
     "SegformerConfig": ["layer_norm_eps"],
+    # having default values other than `1e-5` - we can't fix them without breaking
+    "CvtConfig": ["layer_norm_eps"],
+    # having default values other than `1e-5` - we can't fix them without breaking
+    "PerceiverConfig": ["layer_norm_eps"],
+    # having default values other than `1e-5` - we can't fix them without breaking
+    "RetriBertConfig": ["layer_norm_eps"],
+    # having default values other than `1e-5` - we can't fix them without breaking
     "TrajectoryTransformerConfig": ["layer_norm_eps"],
 }
 
@@ -126,7 +152,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
 
             # configuration class specific cases
             if not case_allowed:
-                case_allowed = attribute in SPECIAL_CASES_TO_ALLOW.get(config_class.__name__, [])
+                allowed_cases = SPECIAL_CASES_TO_ALLOW.get(config_class.__name__, [])
+                case_allowed = allowed_cases is True or attribute in allowed_cases
 
     return attribute_used or case_allowed
 
