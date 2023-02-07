@@ -153,7 +153,7 @@ class LayoutLMv3Config(PretrainedConfig):
         num_channels=3,
         patch_size=16,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -191,7 +191,6 @@ class LayoutLMv3Config(PretrainedConfig):
 
 
 class LayoutLMv3OnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.12")
 
     @property

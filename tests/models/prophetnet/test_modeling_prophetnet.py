@@ -70,7 +70,6 @@ class ProphetNetModelTester:
         disable_ngram_loss=False,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length

@@ -98,7 +98,7 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
-    "black==22.3",  # after updating to black 2023, also update Python version in pyproject.toml to 3.7
+    "black~=23.1",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
@@ -111,7 +111,6 @@ _deps = [
     "faiss-cpu",
     "fastapi",
     "filelock",
-    "flake8>=3.8.3",
     "flax>=0.4.1",
     "ftfy",
     "fugashi>=1.0",
@@ -150,6 +149,7 @@ _deps = [
     "requests",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
+    "ruff>=0.0.241",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.2.1",
@@ -321,7 +321,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"] + extras["sentencepiece"]
 
-extras["quality"] = deps_list("black", "datasets", "isort", "flake8", "GitPython", "hf-doc-builder")
+extras["quality"] = deps_list("black", "datasets", "isort", "ruff", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
     extras["tf"]

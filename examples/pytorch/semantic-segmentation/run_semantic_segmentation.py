@@ -21,17 +21,17 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
+import evaluate
 import numpy as np
 import torch
 from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from torch import nn
 from torchvision import transforms
 from torchvision.transforms import functional
 
-import evaluate
 import transformers
-from huggingface_hub import hf_hub_download
 from transformers import (
     AutoConfig,
     AutoImageProcessor,

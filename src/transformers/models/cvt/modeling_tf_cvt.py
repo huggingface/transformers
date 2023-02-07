@@ -109,7 +109,7 @@ class TFCvtEmbeddings(tf.keras.layers.Layer):
         stride: int,
         padding: int,
         dropout_rate: float,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.convolution_embeddings = TFCvtConvEmbeddings(
@@ -211,7 +211,7 @@ class TFCvtSelfAttentionProjection(tf.keras.layers.Layer):
         stride: int,
         padding: int,
         projection_method: str = "dw_bn",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         if projection_method == "dw_bn":
@@ -246,7 +246,7 @@ class TFCvtSelfAttention(tf.keras.layers.Layer):
         qkv_bias: bool,
         attention_drop_rate: float,
         with_cls_token: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.scale = embed_dim**-0.5
@@ -470,7 +470,7 @@ class TFCvtLayer(tf.keras.layers.Layer):
         mlp_ratio: float,
         drop_path_rate: float,
         with_cls_token: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.attention = TFCvtAttention(

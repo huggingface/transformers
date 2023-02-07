@@ -30,6 +30,7 @@ from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
+from utils_mmimdb import ImageEncoder, JsonlDataset, collate_fn, get_image_transforms, get_mmimdb_labels
 
 import transformers
 from transformers import (
@@ -43,7 +44,6 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 from transformers.trainer_utils import is_main_process
-from utils_mmimdb import ImageEncoder, JsonlDataset, collate_fn, get_image_transforms, get_mmimdb_labels
 
 
 try:

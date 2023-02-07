@@ -31,9 +31,9 @@ import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 import pandas as pd
 from datasets import load_dataset
+from filelock import FileLock
 
 import transformers
-from filelock import FileLock
 from transformers import (
     AutoConfig,
     BartForConditionalGeneration,

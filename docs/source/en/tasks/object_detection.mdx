@@ -213,7 +213,6 @@ The `image_processor` expects the annotations to be in the following format: `{'
 
 ```py
 >>> def formatted_anns(image_id, category, area, bbox):
-
 ...     annotations = []
 ...     for i in range(0, len(category)):
 ...         new_ann = {
@@ -398,6 +397,7 @@ First, prepare the `cppe5["test"]` set: format the annotations and save the data
 
 ```py
 >>> import json
+
 
 >>> # format annotations the same as for training, no need for data augmentation
 >>> def val_formatted_anns(image_id, objects):

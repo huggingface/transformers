@@ -185,7 +185,6 @@ class FNetBasicFourierTransform(nn.Module):
             self.fourier_transform = fftn
 
     def forward(self, hidden_states):
-
         # NOTE: We do not use torch.vmap as it is not integrated into PyTorch stable versions.
         # Interested users can modify the code to use vmap from the nightly versions, getting the vmap from here:
         # https://pytorch.org/docs/master/generated/torch.vmap.html. Note that fourier transform methods will need

@@ -118,7 +118,7 @@ mypy-extensions==0.4.3
 nltk==3.7
 numba==0.55.1
 numpy==1.22.3
-oauthlib==3.2.1
+oauthlib==3.2.2
 onnx==1.13.0
 onnxconverter-common==1.9.0
 opt-einsum==3.3.0
