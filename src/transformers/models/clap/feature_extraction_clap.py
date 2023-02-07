@@ -209,7 +209,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], axis=0)
         return mel_fusion
 
-    def _get_audio_features(self, waveform: np.array, max_length, truncation, padding) -> np.array:
+    def _get_input_mel(self, waveform: np.array, max_length, truncation, padding) -> np.array:
         """
         Possible cases :
             - wave > max_length
@@ -229,7 +229,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
                 overflow = len(waveform) - max_length
                 idx = np.random.randint(0, overflow + 1)
                 waveform = waveform[idx : idx + max_length]
-                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
+                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)[None,:]
             elif truncation == "fusion":
                 mel = self._np_extract_fbank_features(waveform, self.mel_filters)
                 chunk_frames = max_length // self.hop_length + 1  # the +1 related to how the spectrogram is computed
@@ -261,7 +261,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
                 input_mel = self._np_extract_fbank_features(waveform, self.mel_filters)
                 input_mel = np.stack([input_mel, input_mel, input_mel, input_mel], axis=0)
             else:
-                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)
+                input_mel = self._np_extract_fbank_features(waveform, self.mel_filters_slaney)[None, :]
 
         return input_mel, longer
 
@@ -270,11 +270,9 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         truncation: str = "fusion",
         padding: Optional[str] = "repeatpad",
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -284,26 +282,16 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-            truncation (`bool`, *optional*, default to `True`):
-                Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            pad_to_multiple_of (`int`, *optional*, defaults to None):
-                If set will pad the sequence to a multiple of the provided value.
-
-                This is especially useful to enable the use of np.array Cores on NVIDIA hardware with compute
-                capability `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of
-                128.
-            return_attention_mask (`bool`, *optional*):
-                Whether to return the attention mask. If left to the default, will return the attention mask according
-                to the specific feature_extractor's default.
-
-                [What are attention masks?](../glossary#attention-mask)
-
-                <Tip>
-
-                For CLAP models, `attention_mask` should always be passed for batched inference, to avoid subtle bugs.
-
-                </Tip>
-
+            truncation (`str`, *optional*):
+                Truncation pattern for long audio inputs. Two patterns are available:
+                    - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and  a downsampled version of the entire mel spectrogram. These 4 spectrogram will have a dimension of `n_fft, feature_size`. TODO check this
+                If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy of the original mel obtained from the padded audio. 
+                    - `rand_trunc` will select a random crop of the mel spectrogram.
+            padding (`str`, *optional*):
+                Padding pattern for shorter audio inputs. Three patterns were originaly implemented: 
+                    - `repeatpad`: the audio is repeated, and then padded to fit the `max_length`.
+                    - `repeat`: the audio is repeated and then cut to fit the `max_length`
+                    - `pad`: the audio is padded.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -314,10 +302,10 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
                 pipeline.
-            padding_value (`float`, defaults to 0.0):
-                The value that is used to fill the padding values / vectors.
         """
-
+        truncation = truncation if truncation is not None else self.truncation
+        padding = padding if padding else self.padding
+        
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
@@ -347,9 +335,9 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [np.asarray(raw_speech)]
 
-        # convert into correct format for padding
+        # convert to mel spectrogram, truncate and pad if needed.
         padded_inputs = [
-            self._get_audio_features(
+            self._get_input_mel(
                 waveform,
                 max_length if max_length else self.nb_max_samples,
                 truncation,
@@ -370,7 +358,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             is_longer[rand_idx] = True
 
         if isinstance(input_mel[0], List):
-            input_mel = [np.asarray(mel, dtype=np.float64) for feature in input_mel]
+            input_mel = [np.asarray(feature, dtype=np.float64) for feature in input_mel]
 
         input_features = {"input_features": input_mel, "is_longer": is_longer}
         input_features = BatchFeature(input_features)
