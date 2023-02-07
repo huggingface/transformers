@@ -17,6 +17,7 @@ import warnings
 from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
+import math
 
 from transformers.image_utils import (
     ChannelDimension,
@@ -707,3 +708,97 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
 
     image = image.convert("RGB")
     return image
+
+
+def bilinear_interpolation(image, y, x):
+    """
+    A bilinear interpolation of the estimated values of the `image` at non integer indexes `y` and `x`. 
+    
+    Original Image at                    Original Image at
+      x_1, y_1                             x_1, y_2 
+        +---+                               +---+       
+        | +-|-------------------------------|-+ |       
+        +---+                               +---+       
+            |                                   |         
+            |             Pixel at (x,y) where  |         
+            |             x and y non integers  |         
+            |                     +---+         |         
+            |                     |   |         |         
+            |                     +---+         |         
+        +---+                               +---+       
+        | +-|-------------------------------|-+ |       
+        +---+                               +---+       
+                                                        
+    Original Image at                    Original Image at
+      x_1, y_2                             x_2, y_2 
+    
+    The estimated value of the pixel is computed using the following equation : 
+    
+    $$
+    \text{Image}_{x,y} = \frac{1}{(x_1 - x_2)(y_2-y_1)} 
+    \begin{bmatrix} x_2 - x &   x - x_1\end{bmatrix}  
+    \begin{bmatrix}
+    \text{Image}_{x_1,y_1} &   \text{Image}_{x_2,y_1}\\
+    \text{Image}_{x_1,y_2} &   \text{Image}_{x_2,y_2}\\
+    \end{bmatrix}
+    \begin{bmatrix} y_2 - y \\  y-y_2\end{bmatrix}  
+    $$
+    
+    For more details about bilinear interplation, see [on the wikipedia page](https://en.wikipedia.org/wiki/Bilinear_interpolation)
+    """
+    height = image.shape[0]
+    width = image.shape[1]
+
+    x1 = max(min(math.floor(x), width - 1), 0)
+    y1 = max(min(math.floor(y), height - 1), 0)
+    x2 = max(min(math.ceil(x), width - 1), 0)
+    y2 = max(min(math.ceil(y), height - 1), 0)
+
+    a = image[y1, x1]
+    b = image[y2, x1]
+    c = image[y1, x2]
+    d = image[y2, x2]
+
+    dx = x - x1
+    dy = y - y1
+
+    new_pixel = a * (1 - dx) * (1 - dy)
+    new_pixel += b * dy * (1 - dx)
+    new_pixel += c * dx * (1 - dy)
+    new_pixel += d * dx * dy
+    return new_pixel
+
+def resize(image, new_height, new_width):
+    """
+    Taken from `[here](https://stackoverflow.com/questions/70024313/resize-using-bilinear-interpolation-in-python)` with the 
+    torchvision.transforms.Resize(size=[chunk_frames, self.feature_size])
+    This function is not optimal in terms of performances, but has the same results as the `torchvision.transforms.resize` function
+    when called with the default `bilinear` interpolation.
+    """
+    new_image = np.zeros((new_height, new_width), image.dtype)  # new_image = [[0 for _ in range(new_width)] for _ in range(new_height)]
+
+    orig_height = image.shape[0]
+    orig_width = image.shape[1]
+
+    # Compute center column and center row
+    x_orig_center = (orig_width-1) / 2
+    y_orig_center = (orig_height-1) / 2
+
+    # Compute center of resized image
+    x_scaled_center = (new_width-1) / 2
+    y_scaled_center = (new_height-1) / 2
+
+    # Compute the scale in both axes
+    scale_x = orig_width / new_width;
+    scale_y = orig_height / new_height;
+
+    for y in range(new_height):
+        for x in range(new_width):
+            # compute the coordinates of the `new pixel` at `(x, y)` in the original image.
+            x_ = (x - x_scaled_center) * scale_x + x_orig_center
+            y_ = (y - y_scaled_center) * scale_y + y_orig_center
+
+            # compute the coordinates of the 4 neighboring points and then compute the bilinear estimate.
+            new_image[y, x] = bilinear_interpolation(image, y_, x_)
+
+    return new_image
