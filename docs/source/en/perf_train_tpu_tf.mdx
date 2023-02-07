@@ -81,7 +81,7 @@ In many cases, your code is probably XLA-compatible already! However, there are 
 
 </Tip>
 
-**XLA Rule #1: Your code cannot have “data-dependent conditionals”**
+#### XLA Rule #1: Your code cannot have “data-dependent conditionals”
 
 What that means is that any `if` statement cannot depend on values inside a `tf.Tensor`. For example, this code block cannot be compiled with XLA!
 
@@ -99,7 +99,7 @@ tensor = tensor / (1.0 + sum_over_10)
 
 This code has exactly the same effect as the code above, but by avoiding a conditional, we ensure it will compile with XLA without problems!
 
-**XLA Rule #2: Your code cannot have “data-dependent shapes”**
+#### XLA Rule #2: Your code cannot have “data-dependent shapes”
 
 What this means is that the shape of all of the `tf.Tensor` objects in your code cannot depend on their values. For example, the function `tf.unique` cannot be compiled with XLA, because it returns a `tensor` containing one instance of each unique value in the input. The shape of this output will obviously be different depending on how repetitive the input `Tensor` was, and so XLA refuses to handle it!
 
@@ -124,7 +124,7 @@ mean_loss = tf.reduce_sum(loss) / tf.reduce_sum(label_mask)
 
 Here, we avoid data-dependent shapes by computing the loss for every position, but zeroing out the masked positions in both the numerator and denominator when we calculate the mean, which yields exactly the same result as the first block while maintaining XLA compatibility. Note that we use the same trick as in rule #1 - converting a `tf.bool` to `tf.float32` and using it as an indicator variable. This is a really useful trick, so remember it if you need to convert your own code to XLA!
 
-**XLA Rule #3: XLA will need to recompile your model for every different input shape it sees**
+XLA Rule #3: XLA will need to recompile your model for every different input shape it sees**
 
 This is the big one. What this means is that if your input shapes are very variable, XLA will have to recompile your model over and over, which will create huge performance problems. This commonly arises in NLP models, where input texts have variable lengths after tokenization. In other modalities, static shapes are more common and this rule is much less of a problem.
 
