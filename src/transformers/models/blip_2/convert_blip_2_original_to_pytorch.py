@@ -33,6 +33,7 @@ from transformers import (
     Blip2Config,
     Blip2ForConditionalGeneration,
     Blip2Processor,
+    Blip2VisionConfig,
     BlipImageProcessor,
     OPTConfig,
     T5Config,
@@ -89,6 +90,9 @@ def rename_key(dct, old, new):
 
 
 def get_blip2_config(model_name, eos_token_id):
+    image_size = 364 if "coco" in model_name else 224
+    vision_config = Blip2VisionConfig(image_size=image_size).to_dict()
+
     # make sure the models have proper bos_token_id and eos_token_id set (important for generation)
     # seems like flan-T5 models don't have bos_token_id properly set?
     if "opt-2.7b" in model_name:
@@ -100,9 +104,9 @@ def get_blip2_config(model_name, eos_token_id):
     elif "t5-xxl" in model_name:
         text_config = T5Config.from_pretrained("google/flan-t5-xxl", dense_act_fn="gelu", bos_token_id=1).to_dict()
 
-    config = Blip2Config(text_config=text_config)
+    config = Blip2Config(vision_config=vision_config, text_config=text_config)
 
-    return config
+    return config, image_size
 
 
 @torch.no_grad()
@@ -116,7 +120,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         else AutoTokenizer.from_pretrained("google/flan-t5-xl")
     )
     eos_token_id = tokenizer("\n", add_special_tokens=False).input_ids[0]
-    config = get_blip2_config(model_name, eos_token_id=eos_token_id)
+    config, image_size = get_blip2_config(model_name, eos_token_id=eos_token_id)
 
     hf_model = Blip2ForConditionalGeneration(config).eval()
 
@@ -134,7 +138,6 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     # load original model
     print("Loading original model...")
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
     device = "cpu"
     original_model, vis_processors, _ = load_model_and_preprocess(
         name=name, model_type=type, is_eval=True, device=device
@@ -176,7 +179,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     # create processor
     image_processor = BlipImageProcessor(
-        size={"height": 224, "width": 224}, image_mean=OPENAI_CLIP_MEAN, image_std=OPENAI_CLIP_STD
+        size={"height": image_size, "width": image_size}, image_mean=OPENAI_CLIP_MEAN, image_std=OPENAI_CLIP_STD
     )
     processor = Blip2Processor(image_processor=image_processor, tokenizer=tokenizer)
     pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(device)
@@ -207,6 +210,10 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
             [[-41.5850, -4.4440, -8.9922], [-47.4322, -5.9143, -1.7340]], device=device
         )
         assert torch.allclose(logits[0, :3, :3], expected_slice_logits, atol=1e-4)
+    elif model_name == "blip2-flan-t5-xl-coco":
+        expected_slice_logits = torch.tensor(
+            [[-57.0109, -9.8967, -12.6280], [-68.6578, -12.7191, -10.5065]], device=device
+        )
     else:
         # cast to same type
         target_dtype = logits.dtype
