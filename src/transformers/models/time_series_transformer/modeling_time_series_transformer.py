@@ -2005,7 +2005,9 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         repeated_loc = loc.repeat_interleave(repeats=num_parallel_samples, dim=0)
         repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
-        repeated_past_values = past_values.repeat_interleave(repeats=num_parallel_samples, dim=0) / repeated_scale
+        repeated_past_values = (
+            past_values.repeat_interleave(repeats=num_parallel_samples, dim=0) - repeated_loc
+        ) / repeated_scale
 
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, future_time_features.shape[1], -1)
         features = torch.cat((expanded_static_feat, future_time_features), dim=-1)
