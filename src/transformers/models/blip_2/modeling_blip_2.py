@@ -46,10 +46,10 @@ from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionCo
 logger = logging.get_logger(__name__)
 
 # TODO update organization
-_CHECKPOINT_FOR_DOC = "Salesforce/blip2-opt-2.7b"
+_CHECKPOINT_FOR_DOC = "nielsr/blip2-opt-2.7b"
 
 BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Salesforce/blip2-opt-2.7b",
+    "nielsr/blip2-opt-2.7b",
     # See all BLIP-2 models at https://huggingface.co/models?filter=blip
 ]
 
@@ -280,7 +280,11 @@ class Blip2PreTrainedModel(PreTrainedModel):
     config_class = Blip2Config
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [
+        r"position_ids",
+        r"language_model.encoder.embed_tokens.weight",
+        r"language_model.decoder.embed_tokens.weight",
+    ]
 
     def _init_weights(self, module):
         """Initialize the weights"""
