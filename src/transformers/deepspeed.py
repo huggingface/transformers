@@ -198,7 +198,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
                     "The model's config file has neither `hidden_size` nor `hidden_sizes` entry, "
                     "therefore it's not possible to automatically fill out the following `auto` entries "
                     f"in the DeepSpeed config file: {hidden_size_auto_keys}. You can fix that by replacing "
-                    "`auto` values for these keys with a integer value of your choice."
+                    "`auto` values for these keys with an integer value of your choice."
                 )
 
             self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
