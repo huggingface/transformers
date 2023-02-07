@@ -13,7 +13,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 
 <Tip>
 
-If you don't need long explanations and just want TPU code samples to get started with, check out [our TPU tutorial notebook!](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb)
+If you don't need long explanations and just want TPU code samples to get started with, check out [our TPU example notebook!](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb)
 
 </Tip>
 
@@ -45,7 +45,7 @@ If you can fit all your data in memory as `np.ndarray` or `tf.Tensor`, then you 
 
 The second way to access a TPU is via a **TPU VM.** When using a TPU VM, you connect directly to the machine that the TPU is attached to, much like training on a GPU VM. TPU VMs are generally easier to work with, particularly when it comes to your data pipeline. All of the above warnings do not apply to TPU VMs!
 
-This is an opinionated document, so here’s our opinion: **Avoid using TPU Node if possible.** It is more confusing and more difficult to debug than TPU VMs. It is also likely to be unsupported in future - Google’s latest TPU, TPUv4, can only be accessed as a TPU VM, which suggests that TPU Nodes are increasingly going to become a “legacy” access method. However, we understand that the only free TPU access is on Colab and Kaggle Kernels, which uses TPU Node - so we’ll try to explain how to handle it if you have to! Check the [TPU example notebook]((https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) for code samples that explain this in more detail.
+This is an opinionated document, so here’s our opinion: **Avoid using TPU Node if possible.** It is more confusing and more difficult to debug than TPU VMs. It is also likely to be unsupported in future - Google’s latest TPU, TPUv4, can only be accessed as a TPU VM, which suggests that TPU Nodes are increasingly going to become a “legacy” access method. However, we understand that the only free TPU access is on Colab and Kaggle Kernels, which uses TPU Node - so we’ll try to explain how to handle it if you have to! Check the [TPU example notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) for code samples that explain this in more detail.
 
 ### What sizes of TPU are available?
 
@@ -81,7 +81,7 @@ In many cases, your code is probably XLA-compatible already! However, there are 
 
 </Tip>
 
-**XLA Rule #1: Your code cannot have “data-dependent conditionals”**
+#### XLA Rule #1: Your code cannot have “data-dependent conditionals”
 
 What that means is that any `if` statement cannot depend on values inside a `tf.Tensor`. For example, this code block cannot be compiled with XLA!
 
@@ -99,7 +99,7 @@ tensor = tensor / (1.0 + sum_over_10)
 
 This code has exactly the same effect as the code above, but by avoiding a conditional, we ensure it will compile with XLA without problems!
 
-**XLA Rule #2: Your code cannot have “data-dependent shapes”**
+#### XLA Rule #2: Your code cannot have “data-dependent shapes”
 
 What this means is that the shape of all of the `tf.Tensor` objects in your code cannot depend on their values. For example, the function `tf.unique` cannot be compiled with XLA, because it returns a `tensor` containing one instance of each unique value in the input. The shape of this output will obviously be different depending on how repetitive the input `Tensor` was, and so XLA refuses to handle it!
 
@@ -124,7 +124,7 @@ mean_loss = tf.reduce_sum(loss) / tf.reduce_sum(label_mask)
 
 Here, we avoid data-dependent shapes by computing the loss for every position, but zeroing out the masked positions in both the numerator and denominator when we calculate the mean, which yields exactly the same result as the first block while maintaining XLA compatibility. Note that we use the same trick as in rule #1 - converting a `tf.bool` to `tf.float32` and using it as an indicator variable. This is a really useful trick, so remember it if you need to convert your own code to XLA!
 
-**XLA Rule #3: XLA will need to recompile your model for every different input shape it sees**
+#### XLA Rule #3: XLA will need to recompile your model for every different input shape it sees
 
 This is the big one. What this means is that if your input shapes are very variable, XLA will have to recompile your model over and over, which will create huge performance problems. This commonly arises in NLP models, where input texts have variable lengths after tokenization. In other modalities, static shapes are more common and this rule is much less of a problem.
 
@@ -148,10 +148,10 @@ There was a lot in here, so let’s summarize with a quick checklist you can fol
 
 - Make sure your code follows the three rules of XLA
 - Compile your model with `jit_compile=True` on CPU/GPU and confirm that you can train it with XLA
-- Either load your dataset into memory or use a TPU-compatible dataset loading approach (see [notebook]((https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
+- Either load your dataset into memory or use a TPU-compatible dataset loading approach (see [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
 - Migrate your code either to Colab (with accelerator set to “TPU”) or a TPU VM on Google Cloud
-- Add TPU initializer code (see [notebook]((https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
-- Create your `TPUStrategy` and make sure dataset loading and model creation are inside the `strategy.scope()` (see [notebook]((https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
+- Add TPU initializer code (see [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
+- Create your `TPUStrategy` and make sure dataset loading and model creation are inside the `strategy.scope()` (see [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
 - Don’t forget to take `jit_compile=True` out again when you move to TPU!
 - 🙏🙏🙏🥺🥺🥺
 - Call model.fit()
