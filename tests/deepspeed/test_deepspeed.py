@@ -21,8 +21,8 @@ import unittest
 from copy import deepcopy
 
 import datasets
-
 from parameterized import parameterized
+
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
 from transformers.deepspeed import HfDeepSpeedConfig, is_deepspeed_available, unset_hf_deepspeed_config
@@ -271,7 +271,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
     # --- These tests are enough to run on one of zero stages --- #
 
     def test_hf_ds_config_mismatch(self):
-
         ds_config = self.get_config_dict(ZERO2)
 
         # Purposefully configure these values to mismatch TrainingArguments values.
@@ -383,7 +382,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
     @require_optuna
     def test_hyperparameter_search(self):
         with mockenv_context(**self.dist_env_1_gpu):
-
             ds_config_zero3_dict = self.get_config_dict(ZERO3)
 
             # hyperparameter_search requires model_init() to recreate the model for each trial
@@ -599,7 +597,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
     def test_can_resume_training_errors(self, stage, dtype):
-
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_dict = self.get_config_dict(stage)
             output_dir = self.get_auto_remove_tmp_dir()
@@ -765,7 +762,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         ds_config_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
 
         with mockenv_context(**self.dist_env_1_gpu):
-
             args_dict = {
                 "per_gpu_train_batch_size": 1,
                 "per_gpu_eval_batch_size": 1,
@@ -938,7 +934,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         )
 
     def do_checks(self, output_dir, do_train=True, do_eval=True, quality_checks=True):
-
         if do_train:
             train_metrics = load_json(os.path.join(output_dir, "train_results.json"))
             self.assertIn("train_samples_per_second", train_metrics)
@@ -966,7 +961,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         extra_args_str: str = None,
         remove_args_str: str = None,
     ):
-
         # we are doing quality testing so using a small real model
         output_dir = self.run_trainer(
             stage=stage,

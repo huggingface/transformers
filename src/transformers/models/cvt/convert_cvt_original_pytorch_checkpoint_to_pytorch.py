@@ -22,8 +22,8 @@ import json
 from collections import OrderedDict
 
 import torch
-
 from huggingface_hub import cached_download, hf_hub_url
+
 from transformers import AutoFeatureExtractor, CvtConfig, CvtForImageClassification
 
 

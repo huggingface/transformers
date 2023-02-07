@@ -115,7 +115,7 @@ class MobileNetV2Config(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=0.001,
         semantic_loss_ignore_index=255,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -140,7 +140,6 @@ class MobileNetV2Config(PretrainedConfig):
 
 
 class MobileNetV2OnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

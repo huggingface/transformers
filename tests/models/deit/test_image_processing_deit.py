@@ -82,7 +82,6 @@ class DeiTImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class DeiTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = DeiTImageProcessor if is_vision_available() else None
     test_cast_dtype = True
 

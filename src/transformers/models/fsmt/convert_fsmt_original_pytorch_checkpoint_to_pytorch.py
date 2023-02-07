@@ -88,7 +88,6 @@ def rewrite_dict_keys(d):
 
 
 def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder_path):
-
     # prep
     assert os.path.exists(fsmt_checkpoint_path)
     os.makedirs(pytorch_dump_folder_path, exist_ok=True)

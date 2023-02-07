@@ -1769,7 +1769,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         if global_attention_mask is not None:
             attention_mask = attention_mask * tf.cast((global_attention_mask + 1), dtype=attention_mask.dtype)
 
-        (padding_len, input_ids, attention_mask, inputs_embeds,) = self._pad_to_window_size(
+        padding_len, input_ids, attention_mask, inputs_embeds = self._pad_to_window_size(
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
@@ -1809,7 +1809,6 @@ class TFLEDEncoder(tf.keras.layers.Layer):
 
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
-
             if output_hidden_states:
                 hidden_states_to_add = self.compute_hidden_states(hidden_states, padding_len)
                 encoder_states = encoder_states + (hidden_states_to_add,)
@@ -2188,9 +2187,8 @@ class TFLEDMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs
+        **kwargs,
     ):
-
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             use_cache = False
 
@@ -2290,9 +2288,8 @@ class TFLEDModel(TFLEDPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs
+        **kwargs,
     ):
-
         outputs = self.led(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -2516,7 +2513,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         decoder_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:

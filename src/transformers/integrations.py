@@ -354,6 +354,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import sigopt
+
     from transformers.utils.versions import importlib_metadata
 
     if trainer.args.process_index == 0:
@@ -723,7 +724,6 @@ class WandbCallback(TrainerCallback):
                     init_args["name"] = args.run_name
 
             if self._wandb.run is None:
-
                 self._wandb.init(
                     project=os.getenv("WANDB_PROJECT", "huggingface"),
                     **init_args,
@@ -1053,7 +1053,7 @@ class MLflowCallback(TrainerCallback):
 
 class DagsHubCallback(MLflowCallback):
     """
-    A [`TrainerCallback`] that logs to [DagsHub](https://dagshub.com/).
+    A [`TrainerCallback`] that logs to [DagsHub](https://dagshub.com/). Extends [`MLflowCallback`]
     """
 
     def __init__(self):
@@ -1070,7 +1070,7 @@ class DagsHubCallback(MLflowCallback):
         Setup the DagsHub's Logging integration.
 
         Environment:
-            HF_DAGSHUB_LOG_ARTIFACTS (`str`, *optional*):
+        - **HF_DAGSHUB_LOG_ARTIFACTS** (`str`, *optional*):
                 Whether to save the data and model artifacts for the experiment. Default to `False`.
         """
 
@@ -1158,7 +1158,7 @@ class NeptuneCallback(TrainerCallback):
         run: Optional["Run"] = None,
         log_parameters: bool = True,
         log_checkpoints: Optional[str] = None,
-        **neptune_run_kwargs
+        **neptune_run_kwargs,
     ):
         if not is_neptune_available():
             raise ValueError(

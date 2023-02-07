@@ -22,6 +22,7 @@ import unittest
 from importlib import import_module
 
 import requests
+
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from transformers.testing_utils import require_tf, require_vision, slow
 from transformers.utils import is_tf_available, is_vision_available
@@ -396,7 +397,6 @@ class TFCLIPTextModelTester:
 
 @require_tf
 class TFCLIPTextModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (TFCLIPTextModel,) if is_tf_available() else ()
     test_pruning = False
     test_head_masking = False

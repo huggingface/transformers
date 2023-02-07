@@ -129,7 +129,6 @@ class WhisperPositionalEmbedding(nn.Embedding):
         super().__init__(num_positions, embedding_dim)
 
     def forward(self, input_ids, past_key_values_length=0):
-
         return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[-1]]
 
 
@@ -932,7 +931,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache ="
@@ -958,7 +956,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
                     None,  # past_key_value
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -1305,7 +1302,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         task=None,
         language=None,
         is_multilingual=None,
-        **kwargs
+        **kwargs,
     ):
         """
 
@@ -1444,7 +1441,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         use_cache=None,
         encoder_outputs=None,
         attention_mask=None,
-        **kwargs
+        **kwargs,
     ):
         # import pdb; pdb.set_trace()
         # cut decoder_input_ids if past is used
@@ -1461,8 +1458,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
     #
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

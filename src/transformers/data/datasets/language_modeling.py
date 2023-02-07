@@ -21,9 +21,8 @@ import warnings
 from typing import Dict, List, Optional
 
 import torch
-from torch.utils.data import Dataset
-
 from filelock import FileLock
+from torch.utils.data import Dataset
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -72,7 +71,6 @@ class TextDataset(Dataset):
         # and the others will use the cache.
         lock_path = cached_features_file + ".lock"
         with FileLock(lock_path):
-
             if os.path.exists(cached_features_file) and not overwrite_cache:
                 start = time.time()
                 with open(cached_features_file, "rb") as handle:

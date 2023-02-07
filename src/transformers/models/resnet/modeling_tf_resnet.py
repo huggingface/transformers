@@ -171,7 +171,7 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
         stride: int = 1,
         activation: str = "relu",
         reduction: int = 4,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         should_apply_shortcut = in_channels != out_channels or stride != 1
