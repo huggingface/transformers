@@ -237,12 +237,12 @@ def get_inverse_sqrt_schedule(
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
-    Note: this implementation is adapted from
-    https://github.com/google-research/big_vision/blob/f071ce68852d56099437004fd70057597a95f6ef/big_vision/utils.py#L930
-
     Return:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
+    # Note: this implementation is adapted from
+    # https://github.com/google-research/big_vision/blob/f071ce68852d56099437004fd70057597a95f6ef/big_vision/utils.py#L930
+
     if timescale is None:
         timescale = num_warmup_steps
 
