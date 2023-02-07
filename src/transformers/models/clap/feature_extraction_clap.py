@@ -195,9 +195,9 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             # if the audio is too short, we just use the first chunk
             ranges[2] = [0]
         # randomly choose index for each part
-        idx_front = np.random.choice(ranges[0])  #172
-        idx_middle = np.random.choice(ranges[1]) #508
-        idx_back = np.random.choice(ranges[2])   #1039
+        idx_front = np.random.choice(ranges[0])  # 172
+        idx_middle = np.random.choice(ranges[1])  # 508
+        idx_back = np.random.choice(ranges[2])  # 1039
         # select mel
         mel_chunk_front = mel[idx_front : idx_front + chunk_frames, :]
         mel_chunk_middle = mel[idx_middle : idx_middle + chunk_frames, :]
