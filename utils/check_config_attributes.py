@@ -34,7 +34,7 @@ transformers = spec.loader.load_module()
 
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
-CASES_TO_ALLOW = {
+SPECIAL_CASES_TO_ALLOW = {
     "BioGptConfig": ["layer_norm_eps"],
     "CvtConfig": ["layer_norm_eps"],
     "DPRConfig": ["layer_norm_eps"],
@@ -46,12 +46,23 @@ CASES_TO_ALLOW = {
 }
 
 
-def check_attribute_being_used(config_class, attributes, default_value, modeling_sources):
-    """Check if any name in `attributes` is used in one of the strings in `modeling_sources`"""
+def check_attribute_being_used(config_class, attributes, default_value, source_strings):
+    """Check if any name in `attributes` is used in one of the strings in `source_strings`
 
+    Args:
+        config_class (`type`):
+            The configuration class for which the arguments in its `__init__` will be checked.
+        attributes (`List[str]`):
+            The name of an argument (or attribute) and its variant names if any.
+        default_value (`Any`):
+            A default value for the attribute in `attributes` assigned in the `__init__` of `config_class`.
+        source_strings (`List[str]`):
+            The python source code strings in the same modeling directory where `config_class` is defined. The file
+            containing the definition of `config_class` should be excluded.
+    """
     attribute_used = False
     for attribute in attributes:
-        for modeling_source in modeling_sources:
+        for modeling_source in source_strings:
             # check if we can find `config.xxx`, `getattr(config, "xxx", ...)` or `getattr(self.config, "xxx", ...)`
             if (
                 f"config.{attribute}" in modeling_source
@@ -115,12 +126,18 @@ def check_attribute_being_used(config_class, attributes, default_value, modeling
 
             # configuration class specific cases
             if not case_allowed:
-                case_allowed = attribute in CASES_TO_ALLOW.get(config_class.__name__, [])
+                case_allowed = attribute in SPECIAL_CASES_TO_ALLOW.get(config_class.__name__, [])
 
     return attribute_used or case_allowed
 
 
 def check_config_attributes_being_used(config_class):
+    """Check the arguments in `__init__` of `config_class` are used in python files in the same modeling directory
+
+    Args:
+        config_class (`type`):
+            The configuration class for which the arguments in its `__init__` will be checked.
+    """
     # Get the parameters in `__init__` of the configuration class, and the default values if any
     signature = dict(inspect.signature(config_class.__init__).parameters)
     parameter_names = [x for x in list(signature.keys()) if x not in ["self", "kwargs"]]
@@ -161,6 +178,7 @@ def check_config_attributes_being_used(config_class):
 
 
 def check_config_attributes():
+    """Check the arguments in `__init__` of all configuration classes are used in  python files"""
     configs_with_unused_attributes = {}
     for config_class in list(CONFIG_MAPPING.values()):
         unused_attributes = check_config_attributes_being_used(config_class)
