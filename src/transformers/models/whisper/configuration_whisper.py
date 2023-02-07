@@ -211,6 +211,7 @@ class WhisperConfig(PretrainedConfig):
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
         self.condition_on_previous_text = condition_on_previous_text
+        self.ts_start_token_id = ts_start_token_id
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
