@@ -47,7 +47,7 @@ CASES_TO_ALLOW = {
 
 
 def check_attribute_being_used(config_class, attributes, default_value, modeling_sources):
-    """Check if any name in `attributes` is used in one of the strings in`modeling_sources`"""
+    """Check if any name in `attributes` is used in one of the strings in `modeling_sources`"""
 
     attribute_used = False
     for attribute in attributes:
@@ -84,7 +84,7 @@ def check_attribute_being_used(config_class, attributes, default_value, modeling
         if attribute_used:
             break
 
-    # common and important attributes, although not always appear in the modeling files
+    # common and important attributes, even if they do not always appear in the modeling files
     attributes_to_allow = [
         "bos_index",
         "eos_index",
