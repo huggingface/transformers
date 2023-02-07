@@ -549,6 +549,7 @@ class FlaxCLIPVisionPreTrainedModel(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["flax"])
 
+
 class FlaxConvNextForImageClassification(metaclass=DummyObject):
     _backends = ["flax"]
 

@@ -119,7 +119,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_convnext import FlaxConvNextForImageClassification, FlaxConvNextModel, FlaxConvNextPreTrainedModel
+        from .modeling_flax_convnext import (
+            FlaxConvNextForImageClassification,
+            FlaxConvNextModel,
+            FlaxConvNextPreTrainedModel,
+        )
 
 
 else:

@@ -35,11 +35,11 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import add_start_docstrings
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from .configuration_convnext import ConvNextConfig
 
 
-# Flax compitable code initially copied from transformers.models.beit.modeling_beit.BeitDropPath
+# Flax compitable code initially copied from transformers.models.convnext.modeling_convnext.drop_path
 class FlaxConvNextDropPath(nn.Module):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -102,8 +102,7 @@ class FlaxConvNextLayer(nn.Module):
     There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
     H, W) (2) [DwConv, Permute to (N, H, W, C), LayerNorm (channels_last), Linear, GELU, Linear]; Permute back
 
-    The authors used (2) as they find it slightly faster in PyTorch.
-    This Flax implementation is based on (1)
+    The authors used (2) as they find it slightly faster in PyTorch. This Flax implementation is based on (1)
 
     Args:
         config ([`ConvNextConfig`]): Model configuration class.
@@ -126,7 +125,7 @@ class FlaxConvNextLayer(nn.Module):
         self.act = ACT2FN[self.config.hidden_act]
         self.pwconv2 = nn.Dense(self.dim, dtype=self.dtype)
 
-        layer_scale_parameter_init = jax.nn.initializers.constant(self.config.layer_scale_init_value, dtype=self.dtype)
+        layer_scale_parameter_init = jax.nn.initializers.constant(self.config.layer_scale_init_value)
         self.layer_scale_parameter = (
             self.param("layer_scale_parameter", layer_scale_parameter_init, (self.dim))
             if self.config.layer_scale_init_value > 0
@@ -203,9 +202,11 @@ class FlaxConvNextEncoder(nn.Module):
     config: ConvNextConfig
     dtype: jnp.dtype = jnp.float32
 
-    def setup_drop_path_rates(self):
-        # NOTE: Using Jax causes error, still investigating, Abstract tracer value encountered where concrete value is expected
-        sections = (np.cumsum(np.array(self.config.depths)) - np.array(self.config.depths))[1:]
+    def setup(self):
+        stages = []
+
+        # np.split requires list with entries indicating where along axis the array is split
+        sections = (np.cumsum(self.config.depths) - self.config.depths)[1:]
 
         drop_path_rates = [
             x.tolist()
@@ -214,13 +215,6 @@ class FlaxConvNextEncoder(nn.Module):
                 sections,
             )
         ]
-
-        return drop_path_rates
-
-    def setup(self):
-        stages = []
-
-        drop_path_rates = self.setup_drop_path_rates()
 
         prev_chs = self.config.hidden_sizes[0]
         for i in range(self.config.num_stages):
@@ -349,18 +343,18 @@ CONVNEXT_START_DOCSTRING = r"""
 
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
-    
+
     This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
     subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
     general usage and behavior.
-    
+
     Finally, this model supports inherent JAX features such as:
-    
+
     - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
     - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
     - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
     - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
-    
+
     Parameters:
         config ([`ConvNextConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -368,12 +362,13 @@ CONVNEXT_START_DOCSTRING = r"""
         dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
             The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
             `jax.numpy.bfloat16` (on TPUs).
-    
+
             This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
             specified all the computation will be performed with the given `dtype`.
+
             **Note that this only specifies the dtype of the computation and does not influence the dtype of model
             parameters.**
-    
+
             If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
             [`~FlaxPreTrainedModel.to_bf16`].
 """
@@ -403,6 +398,7 @@ class FlaxConvNextModule(nn.Module):
         # final layernorm layer
         self.layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
+    @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     def __call__(
         self,
         pixel_values: jnp.ndarray = None,
@@ -460,10 +456,13 @@ FLAX_VISION_MODEL_DOCSTRING = """
     >>> from transformers import AutoImageProcessor, FlaxConvNextModel
     >>> from PIL import Image
     >>> import requests
+
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
+
     >>> image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
     >>> model = FlaxConvNextModel.from_pretrained("facebook/convnext-tiny-224")
+
     >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
     >>> last_hidden_states = outputs.last_hidden_state
@@ -492,6 +491,7 @@ class FlaxConvNextForImageClassificationModule(nn.Module):
         else:
             self.classifier = None
 
+    @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     def __call__(
         self,
         pixel_values=None,
@@ -537,17 +537,21 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import AutoImageProcessor, FlaxConvNextForImageClassification 
+    >>> from transformers import AutoImageProcessor, FlaxConvNextForImageClassification
     >>> from PIL import Image
     >>> import jax
     >>> import requests
+
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
+
     >>> image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
     >>> model = FlaxConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224")
+
     >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
     >>> logits = outputs.logits
+
     >>> # model predicts one of the 1000 ImageNet classes
     >>> predicted_class_idx = jax.numpy.argmax(logits, axis=-1)
     >>> print("Predicted class:", model.config.id2label[predicted_class_idx.item()])

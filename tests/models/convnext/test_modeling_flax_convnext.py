@@ -87,18 +87,25 @@ class FlaxConvNextModelTester(unittest.TestCase):
             is_decoder=False,
             initializer_range=self.initializer_range,
             out_features=self.out_features,
-            num_labels=self.num_labels, 
+            num_labels=self.num_labels,
         )
 
     def create_and_check_model(self, config, pixel_values):
         model = FlaxConvNextModel(config=config)
         result = model(pixel_values)
 
-        # NOTE: Should the size shape be (b, h, w, c) or (b, c, h, w) ?
+        # Output shape (b, c, h, w)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size,  self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
         )
+
+        # test greyscale images
+        config.num_channels = 1
+        model = FlaxConvNextForImageClassification(config)
+
+        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        result = model(pixel_values)
 
     def create_and_check_for_image_classification(self, config, pixel_values):
         config.num_labels = self.num_labels
@@ -121,9 +128,7 @@ class FlaxConvNextModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (FlaxConvNextModel, FlaxConvNextForImageClassification) if is_flax_available() else ()
 
-    test_head_masking = False
     has_attentions = False
-    is_encoder_decoder = False
 
     def setUp(self) -> None:
         self.model_tester = FlaxConvNextModelTester(self)
@@ -201,7 +206,7 @@ class FlaxConvNextModelTest(FlaxModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-    
+
     # https://github.com/huggingface/transformers/blob/main/tests/models/vit/test_modeling_flax_vit.py#L160
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
