@@ -902,7 +902,6 @@ _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("altclip", "AltCLIPModel"),
         ("blip", "BlipModel"),
         ("chinese_clip", "ChineseCLIPModel"),
-        ("clap", "CLAPModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
     ]
