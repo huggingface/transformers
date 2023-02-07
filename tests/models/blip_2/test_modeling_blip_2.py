@@ -29,6 +29,7 @@ from transformers.utils import is_torch_available, is_vision_available
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
+    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -735,6 +736,23 @@ class Blip2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
         for model_name in BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = Blip2ForConditionalGeneration.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    # override from common to deal with nested configurations (`vision_config`, `text_config` and `qformer_config`)
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for key in ["vision_config", "qformer_config", "text_config"]:
+            setattr(configs_no_init, key, _config_zero_init(getattr(configs_no_init, key)))
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
 
 # We will verify our results on an image of cute cats
