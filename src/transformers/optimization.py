@@ -228,20 +228,20 @@ def get_inverse_sqrt_schedule(
     warmup period which increases lr linearly from 0 to the initial lr set in the optimizer.
 
     Args:
-        optimizer ([*~torch.optim.Optimizer*]):
+        optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
-        num_warmup_steps (*int*):
+        num_warmup_steps (`int`):
             The number of steps for the warmup phase.
-        timescale (*int*, *optional*, defaults to `num_warmup_steps`):
+        timescale (`int`, *optional*, defaults to `num_warmup_steps`):
             Time scale.
-        last_epoch (*int*, *optional*, defaults to -1):
+        last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
     Note: this implementation is adapted from
     https://github.com/google-research/big_vision/blob/f071ce68852d56099437004fd70057597a95f6ef/big_vision/utils.py#L930
 
     Return:
-        *torch.optim.lr_scheduler.LambdaLR* with the appropriate schedule.
+        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
     if timescale is None:
         timescale = num_warmup_steps
