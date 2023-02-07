@@ -1037,7 +1037,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.data2vec_vision(
+        outputs = self.beit(
             pixel_values=pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -1472,11 +1472,11 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
     DATA2VEC_VISION_START_DOCSTRING,
 )
 class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
-    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForSemanticSegmentation.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION
+    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForSemanticSegmentation.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=False, name="beit")
+        self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=False, name="data2vec_vision")
 
         # FPNs
         self.fpn1 = [
@@ -1565,7 +1565,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.data2vec_vision(
+        outputs = self.beit(
             pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
