@@ -322,8 +322,9 @@ class Trainer:
             logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
             args = TrainingArguments(output_dir=output_dir)
         self.args = args
-        # Seed must be set before instantiating the model when using model
-        enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
+        (  # Seed must be set before instantiating the model when using model
+            enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
+        )
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
@@ -348,9 +349,11 @@ class Trainer:
         else:
             if model_init is not None:
                 warnings.warn(
-                    "`Trainer` requires either a `model` or `model_init` argument, but not both. `model_init` will"
-                    " overwrite your model when calling the `train` method. This will become a fatal error in the next"
-                    " release.",
+                    (
+                        "`Trainer` requires either a `model` or `model_init` argument, but not both. `model_init` will"
+                        " overwrite your model when calling the `train` method. This will become a fatal error in the"
+                        " next release."
+                    ),
                     FutureWarning,
                 )
             self.model_init = model_init
@@ -1420,8 +1423,9 @@ class Trainer:
         # Distributed training using PyTorch FSDP
         elif self.fsdp is not None:
             # PyTorch FSDP!
-            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, MixedPrecision
+            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+            from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
             from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
             if FSDPOption.OFFLOAD in self.args.fsdp:
@@ -1466,7 +1470,7 @@ class Trainer:
                     device_id=self.args.device,
                     backward_prefetch=self.backward_prefetch,
                     forward_prefetch=self.forword_prefetch,
-                    limit_all_gathers=self.limit_all_gathers
+                    limit_all_gathers=self.limit_all_gathers,
                 )
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
@@ -1535,8 +1539,10 @@ class Trainer:
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
             warnings.warn(
-                "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
-                "instead.",
+                (
+                    "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
+                    "instead."
+                ),
                 FutureWarning,
             )
         if len(kwargs) > 0:
@@ -1548,8 +1554,9 @@ class Trainer:
         # Model re-init
         model_reloaded = False
         if self.model_init is not None:
-            # Seed must be set before instantiating the model when using model_init.
-            enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
+            (  # Seed must be set before instantiating the model when using model_init.
+                enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
+            )
             self.model = self.call_model_init(trial)
             model_reloaded = True
             # Reinitializes optimizer and scheduler
