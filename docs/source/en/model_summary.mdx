@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # The Transformer model family
 
-Since its introduction in 2017, the [original Transformer](https://arxiv.org/abs/1706.03762) model has inspired many new and exciting models that extend beyond natural language processing (NLP) tasks. There are models for [predicting the folded structure of proteins](https://huggingface.co/blog/deep-learning-with-proteins), [training a cheetah to run](https://huggingface.co/blog/train-decision-transformers), and [time series forecasting](https://huggingface.co/blog/time-series-transformers). It can be easy to miss the bigger picture with all the Transformer models out there, but what all these models have in common is that they are based on the original Transformer architecture. Some models only use one of the Transformer architecture components - the encoder or decoder - while others use both, just like the original Transformer. This provides a useful framework to categorize and examine the high-level differences and broader trends within the Transformer family.
+Since its introduction in 2017, the [original Transformer](https://arxiv.org/abs/1706.03762) model has inspired many new and exciting models that extend beyond natural language processing (NLP) tasks. There are models for [predicting the folded structure of proteins](https://huggingface.co/blog/deep-learning-with-proteins), [training a cheetah to run](https://huggingface.co/blog/train-decision-transformers), and [time series forecasting](https://huggingface.co/blog/time-series-transformers). It can be easy to miss the bigger picture with all the Transformer models out there, but what all these models have in common is that they are based on the original Transformer architecture. Some models only use one of the Transformer architecture components - the encoder or decoder - while others use both. This provides a useful framework to categorize and examine the high-level differences within the Transformer family, and it'll help you understand Transformer models you haven't encountered before.
 
 If you aren't familiar with the original Transformer model or need a refresher, check out the [How do Transformers work](https://huggingface.co/course/chapter1/4?fw=pt) chapter from the Hugging Face course.
 
@@ -26,19 +26,25 @@ If you aren't familiar with the original Transformer model or need a refresher, 
 
 <iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="1000" height="450" src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2FacQBpeFBVvrDUlzFlkejoz%2FModelscape-timeline%3Fnode-id%3D0%253A1%26t%3Dm0zJ7m2BQ9oe0WtO-1" allowfullscreen></iframe> 
 
+### Convolutional network
+
+For a long time, convolutional networks (CNNs) were the dominant paradigm for computer vision tasks until the Vision Transformer demonstrated it was more scalable. Even then, some of a CNN's best qualities are so powerful - especially for certain tasks - that some Transformers incorporate convolutions in their architecture. [ConvNeXT](model_doc/convnext) flipped this idea around and borrowed design choices from Transformers to modernize a CNN. For example, ConvNeXT uses non-overlapping sliding windows to patchify an image and a larger kernel to increase its global receptive field. ConvNeXT also makes several layer design choices to be more memory-efficient and improve performance so it competes favorably with Transformers!
+
 ### Encoder[[cv-encoder]]
 
-The [Vision Transformer (ViT)](model_doc/vit) explored the possibility of performing computer vision tasks without convolutions. ViT uses a standard Transformer encoder, but its main breakthrough was splitting an image into fixed-size patches and using these to create an embedding just like how a sentence is split into tokens. ViT was soon followed by models that could also handle dense vision tasks like segmentation in addition to classification.
+The [Vision Transformer (ViT)](model_doc/vit) opened the door to doing computer vision tasks without using convolutions. ViT uses a standard Transformer encoder, but its main breakthrough was in how it treated an image. It split an image into fixed-size patches and uses them to create an embedding just like how a sentence is split into tokens. Taking advantage of the Transformers highly-efficient and parallelized structure, ViT did just as well as traditional convolutional networks while requiring less resources to train. ViT was soon followed by other vision models that could also handle dense vision tasks like segmentation in addition to classification.
 
-[Swin](model_doc/swin) constructed hierarchical feature maps (not unlike convnets 👀) from smaller-sized patches and merged them with neighboring patches in deeper layers. Attention is only computed within a local window, and in between attention layers, the window is shifted to introduce cross-window attention to provide connections and help the model learn better. The [SegFormer](model_doc/segformer) also uses a Transformer encoder to generate a hierarchical feature map, but it adds a multilayer perceptron (MLP) decoder on top to combine all the feature maps and make a prediction.
+One of these models is the [Swin](model_doc/swin) Transformer. It builds hierarchical feature maps (not unlike a CNN 👀) from smaller-sized patches and merges them with neighboring patches in deeper layers. Attention is only computed within a local window, and in between attention layers, the window is shifted to create connections to help the model learn better. The [SegFormer](model_doc/segformer) also uses a Transformer encoder to build hierarchical feature maps, but it adds a simple multilayer perceptron (MLP) decoder on top to combine all the feature maps and make a prediction.
 
-Meanwhile, BeIT and ViTMAE focus on the pretraining objective instead of generating hierarchical features. [BeIT](model_doc/beit) is pretrained by *masked image modeling (MIM)* in which image patches are randomly masked, and the image is also tokenized into visual tokens. BeIT has to predict the image's visual tokens that correspond to the masked patches. The [ViTMAE](model_doc/vitmae) pretraining objective slightly differs in that it must predict the pixels (instead of visual tokens) and 75% of the image patches are masked. The mask tokens are introduced after the encoder and combined with the encoded patches, which are fed to a decoder to reconstruct the pixels. After pretraining, the decoder is thrown away, and the encoder is used for downstream tasks.
-
-### Convolutional network
+Other vision models, like BeIT and ViTMAE, drew inspiration from BERT's pretraining objective. [BeIT](model_doc/beit) is pretrained by *masked image modeling (MIM)*, the image patches are randomly masked, and the image is also tokenized into visual tokens. BeIT has to predict the visual tokens that correspond to the masked patches. [ViTMAE](model_doc/vitmae) has a similar pretraining objective except it must predict the pixels (instead of visual tokens) where 75% of the image patches are masked. The mask tokens are added after the encoder and combined with the encoded patches, from which the decoder has to reconstruct the pixels. After pretraining, the decoder is thrown away and the encoder is used for downstream tasks.
 
 ### Decoder[[cv-decoder]]
 
+Decoder-only vision models aren't as common because most vision models rely on an encoder to learn an image representation. But for use-cases like image generation, the decoder is a natural fit as we've seen from text generation models like GPT-2. [ImageGPT](model_doc/imagegpt) uses the same architecture as GPT-2, but instead of predicting the next token in a sequence, it predicts the next pixel in an image. In addition to image generation, ImageGPT could also be finetuned for image classification.
+
 ### Encoder-decoder[[cv-encoder-decoder]]
+
+Vision models commonly use an encoder (also known as a backbone) to extract useful image features before passing them to a Transformer decoder. [DETR](model_doc/detr) has a pretrained backbone, but it also uses the full Transformer encoder-decoder architecture for object detection. The encoder learns image representations, and they are combined with object queries (each object query is a learned embedding that focuses on a region or object in an image) in the decoder. For each object query, DETR predicts the bounding box coordinates and the class label.
 
 ## Natural language processing
 
@@ -54,7 +60,13 @@ Except for DistilBERT, most Transformer models continued to trend towards more p
 
 ### Decoder[[nlp-decoder]]
 
+[GPT-2](model_doc/gpt2) is a decoder-only Transformer that predicts the next word in the sequence. It masks tokens to the right so the model can't "cheat" by looking ahead. By pretraining on a very large body of text, GPT-2 became really good at generating text even if the text isn't accurate or true. But GPT-2 lacked the bidirectional context from BERT's pretraining which made it unsuitable for certain tasks. [XLNET](model_doc/xlnet) combines the best of both BERT and GPT-2's pretraining objectives by using a permutation language modeling objective (PLM) that allows it to learn bidirectionally.
+
+After GPT-2, language models continued to grow even bigger and these became known as *large language models (LLMs). LLMs demonstrate few- or even zero-shot learning if pretrained on a large enough dataset. [GPT-J](model_doc/gptj) is a LLM with 6B parameters and trained on 400B tokens. GPT-J was followed by [OPT](model_doc/opt), a family of decoder-only models, the largest of which is 175B and trained on 180B tokens. Around the same time, [BLOOM](model_doc/bloom) was released and the largest model in the family has 176B parameters and trained on 366B tokens in 46 languages and 13 programming languages.
+
 ### Encoder-decoder[[nlp-encoder-decoder]]
+
+[BART](model_doc/bart) keeps the original Transformer architecture, but it modifies the pretraining objective with *text infilling* corruption, where a number of text spans are replaced with a single `mask` token. The decoder predicts the uncorrupted tokens (future tokens are masked), and it uses the encoder hidden states to help it. [Pegasus](model_doc/pegasus) is similar to BART, but Pegasus masks entire sentences instead of text spans. In addition to masked language modeling, Pegasus is also pretrained on gap sentence generation (GSG). The GSG objective masks whole sentences that are important to a document, and they're replaced by a `mask` token. The decoder must generate the output from the remaining sentences. [T5](model_doc/t5) is a more unique model that casts all NLP tasks into a text-to-text problem by using specific prefixes. For example, the prefix `Summarize:` indicates a summarization task. T5 is pretrained on supervised (GLUE and SuperGLUE) training, and self-supervised training (randomly sample and drop out 15% of tokens).
 
 ## Audio
 
@@ -62,11 +74,15 @@ Except for DistilBERT, most Transformer models continued to trend towards more p
 
 ### Encoder[[audio-encoder]]
 
-In the same year, [Wav2Vec2](model_doc/wav2vec2) was introduced for speech and audio processing, and it used a Transformer encoder to learn speech representations from raw audio waveforms. It was improved upon by [HuBERT](model_doc/hubert), which created target labels by assigning segments of similar audio to a cluster that becomes a target label (or hidden unit). The hidden unit is mapped to an embedding used to make predictions.
+[Wav2Vec2](model_doc/wav2vec2) uses a Transformer encoder to learn speech representations directly from raw audio waveforms. It is pretrained with a contrastive task to determine the true speech representation from a set of false ones. [HuBERT](model_doc/hubert) is similar to Wav2Vec2, but it has a different training process. Target labels are created by a clustering step in which segments of similar audio are assigned to a cluster which becomes a hidden unit. The hidden unit is mapped to an embedding to make a prediction.
 
 ### Encoder-decoder[[audio-encoder-decoder]]
 
+[Speech2Text](model_doc/speech_to_text) is a speech model designed for automatic speech recognition (ASR) and speech translation. The model accepts log mel-filter bank features which are extracted from the audio waveform, and pretrained autoregressively to generate a transcript or translation. [Whisper](model_doc/whisper) is also an ASR model, but unlike many other speech models, it is pretrained on a huge amount of ✨ labeled audio ✨ transcription data for zero-shot performance. A large chunk of the dataset also contains non-English languages which means Whisper can also be used for low-resource languages. Structurally, Whisper is similar to Speech2Text. The audio signal is converted to a log-mel spectrogram which is encoded by the encoder. The decoder generates the transcript autoregressively from the encoder hidden states and the previous tokens.
+
 ## Multimodal
+
+<iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="1000" height="450" src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2FcX125FQHXJS2gxeICiY93p%2Fmultimodal%3Fnode-id%3D0%253A1%26t%3DhPQwdx3HFPWJWnVf-1" allowfullscreen></iframe>
 
 ### Encoder[[mm-encoder]]
 
@@ -76,6 +92,12 @@ In the same year, [Wav2Vec2](model_doc/wav2vec2) was introduced for speech and a
 
 ### Encoder-decoder[[mm-encoder-decoder]]
 
+Optical character recognition (OCR) is a long-standing task in text recognition that typically involved several components to understand the image and generate the text. [TrOCR](model_doc/trocr) simplifies the process by using an end-to-end Transformer. The encoder is a ViT-style model for image understanding and processes the image as fixed-size patches. The decoder accepts the encoder hidden states and autoregressively generates text. [Donut](model_doc/donut) is a more general visual document understanding model that doesn't rely on OCR-based approaches. It uses a Swin Transformer as the encoder, and multilingual BART as the decoder. Donut is pretrained to read text by predicting the next word based on the image and text annotations. The decoder generates a token sequence given a prompt. The prompt is represented by a special token for each downstream task. For example, document parsing has a special `parsing` token that it'll combine with the encoder hidden states to parse the document into a structured output format (JSON).
+
 ## Reinforcement learning
 
-### Encoder-decoder[[rl-encoder-decoder]]
+<iframe style="border: 1px solid rgba(0, 0, 0, 0.1);" width="1000" height="450" src="https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Ffile%2FiB3Y6RvWYki7ZuKO6tNgZq%2Freinforcement-learning%3Fnode-id%3D0%253A1%26t%3DhPQwdx3HFPWJWnVf-1" allowfullscreen></iframe>
+
+### Decoder[[rl-decoder]]
+
+The Decision and Trajectory Transformer casts the state, action, and reward as a sequence modeling problem. The [Decision Transformer](model_doc/decision_transformer) generates a series of actions that lead to a future desired return, based on returns-to-go, past states, and actions. For the last *K* timesteps, each of the three modalities are converted into token embeddings and processed by a GPT-like model to predict a future action token. [Trajectory Transformer](model_doc/trajectory_transformer) also tokenizes the states, actions, and rewards and processes them with a GPT architecture. Unlike the Decision Transformer which is focused on reward conditioning, the Trajectory Transformer generates future actions with beam search.
