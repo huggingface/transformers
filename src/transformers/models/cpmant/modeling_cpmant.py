@@ -41,6 +41,8 @@ CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openbmb/cpm-ant-10b",
     # See all CPMAnt models at https://huggingface.co/models?filter=cpmant
 ]
+
+
 # Adapted from Bert
 def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch"""
