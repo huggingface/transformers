@@ -196,7 +196,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
 
 
 def check_config_attributes_being_used(config_class):
-    """Check the arguments in `__init__` of `config_class` are used in python files in the same modeling directory
+    """Check the arguments in `__init__` of `config_class` are used in the modeling files in the same directory
 
     Args:
         config_class (`type`):
