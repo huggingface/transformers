@@ -25,11 +25,11 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 import datasets
-from datasets import load_dataset
-
 import evaluate
-import transformers
+from datasets import load_dataset
 from trainer_seq2seq_qa import QuestionAnsweringSeq2SeqTrainer
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,

@@ -26,14 +26,14 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import datasets
+import evaluate
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 import tensorflow as tf
 from datasets import load_dataset
-
-import evaluate
-import transformers
 from filelock import FileLock
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoTokenizer,

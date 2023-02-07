@@ -105,7 +105,7 @@ class LevitConfig(PretrainedConfig):
         mlp_ratio=[2, 2, 2],
         attention_ratio=[2, 2, 2],
         initializer_range=0.02,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.image_size = image_size
@@ -130,7 +130,6 @@ class LevitConfig(PretrainedConfig):
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
 class LevitOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

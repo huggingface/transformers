@@ -66,7 +66,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         self,
         image: Union[str, "Image.Image", List[Dict[str, Any]]],
         candidate_labels: Union[str, List[str]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
@@ -168,7 +168,6 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.1, top_k=None):
-
         results = []
         for model_output in model_outputs:
             label = model_output["candidate_label"]

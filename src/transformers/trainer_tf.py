@@ -23,10 +23,13 @@ from .utils import ENV_VARS_TRUE_VALUES
 
 
 # Integrations must be imported before ML frameworks:
-from .integrations import (  # isort: split
+# isort: off
+from .integrations import (
     is_comet_available,
     is_wandb_available,
 )
+
+# isort: on
 
 import numpy as np
 import tensorflow as tf
@@ -462,7 +465,6 @@ class TFTrainer:
 
     @tf.function
     def distributed_prediction_steps(self, batch):
-
         nb_instances_in_batch = self._compute_nb_instances(batch)
         inputs = self._get_step_inputs(batch, nb_instances_in_batch)
 
@@ -516,7 +518,6 @@ class TFTrainer:
             epochs_trained = 0
             steps_trained_in_current_epoch = 0
             if self.model.ckpt_manager.latest_checkpoint:
-
                 logger.info(
                     f"Checkpoint file {self.model.ckpt_manager.latest_checkpoint} found and restoring from checkpoint"
                 )
@@ -560,7 +561,6 @@ class TFTrainer:
                     self._past = None
 
                 for step, batch in enumerate(train_ds):
-
                     # Skip past any already trained steps if resuming training
                     if steps_trained_in_current_epoch > 0:
                         steps_trained_in_current_epoch -= 1
@@ -704,7 +704,6 @@ class TFTrainer:
     @tf.function
     def distributed_training_steps(self, batch):
         with self.args.strategy.scope():
-
             nb_instances_in_batch = self._compute_nb_instances(batch)
             inputs = self._get_step_inputs(batch, nb_instances_in_batch)
 
@@ -712,7 +711,6 @@ class TFTrainer:
 
     @staticmethod
     def _compute_nb_instances(batch):
-
         labels = batch[-1]
         if isinstance(labels, PerReplica):
             labels = tf.concat(labels.values, axis=0)
@@ -723,7 +721,6 @@ class TFTrainer:
 
     @staticmethod
     def _get_step_inputs(batch, nb_instances):
-
         features, labels = batch
 
         if isinstance(labels, PerReplica):
