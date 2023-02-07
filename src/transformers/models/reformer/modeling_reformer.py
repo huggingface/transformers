@@ -970,7 +970,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         return indices
 
-    def _len_and_dim_norm(self, vectors, sqrt_num)
+    def _len_and_dim_norm(self, vectors, sqrt_num):
         """
         length and attention head size dim normalization
         """
