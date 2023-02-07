@@ -737,7 +737,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         right_stride_start = None
 
         all_special_ids = set(self.all_special_ids)
-        all_special_ids.add(50256)
+        # - iterate over all outputs
         for chunk_id, output in enumerate(model_outputs):
             # We can drop everything to Python list, it's going to make
             # our lives easier
@@ -775,6 +775,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
             current_tokens = []
 
+            # - all tokens within output
             for i, token in enumerate(token_ids):
                 # 4 possible states for each token
                 # - 1/ Language code
@@ -799,6 +800,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
                             chunks.append(chunk)
 
                             # Flush all our temporary context
+                            print("Flushing previous tokens (LANGUAGE)")
                             previous_tokens = []
                             current_tokens = []
                             chunk = new_chunk()
@@ -842,6 +844,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
                             chunks.append(chunk)
 
                             # Flush all our temporary context
+                            # print("Flushing previous tokens (TIMESTAMP)")
                             previous_tokens = []
                             current_tokens = []
                             chunk = new_chunk()
@@ -857,7 +860,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             # Leftover tokens
             if current_tokens:
                 previous_tokens.append(current_tokens)
-            elif any(p for p in previous_tokens):
+            elif not (any(p for p in previous_tokens)):
+                # print("Flushing previous tokens (END)")
                 chunk = new_chunk()
                 previous_tokens = []
                 current_tokens = []
@@ -872,6 +876,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 )
             # Happens when we don't use timestamps
             resolved_tokens = _find_longest_common_sequence(previous_tokens)
+            # print("Flushing previous tokens (FINAL)")
             resolved_text = self.decode(resolved_tokens)
             chunk["text"] = resolved_text
             chunks.append(chunk)
@@ -949,7 +954,11 @@ def _find_longest_common_sequence(sequences):
             right = np.array(right_sequence[right_start:right_stop])
 
             # We can only match subsequences of the same size.
-            assert len(left) == len(right)
+            if len(left) != len(right):
+                raise RuntimeError(
+                    "There is a bug within whisper `decode_asr` function, please report it. Dropping to prevent bad inference."
+                )
+
             matches = np.sum(left == right)
             matching = matches / i + eps
             if matches > 1 and matching > max_:

@@ -29,7 +29,7 @@ from transformers import (
     WhisperForConditionalGeneration,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.pipelines.audio_utils import chunk_bytes_iter
+from transformers.pipelines.audio_utils import chunk_bytes_iter, ffmpeg_read
 from transformers.pipelines.automatic_speech_recognition import chunk_iter
 from transformers.testing_utils import (
     is_torch_available,
@@ -400,9 +400,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         dataset = load_dataset("Narsil/asr_dummy")
         third_item = dataset["test"][3]
         filename = third_item["file"]
-
-        # sp_audio = librosa.load(filename, sr=speech_recognizer.feature_extractor.sampling_rate)[0]
-        from transformers.pipelines.audio_utils import ffmpeg_read
 
         with open(filename, "rb") as f:
             inputs = f.read()
