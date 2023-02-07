@@ -357,15 +357,11 @@ class ModelTesterMixin:
             model.gradient_checkpointing_disable()
             self.assertFalse(model.is_gradient_checkpointing)
 
-    def _mock_init_weights(self, module):
-        if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
-        if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
-
     @is_flaky()
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # We will use this to make the init deterministic
+        config_no_init = _config_zero_init(config)
         base_class = MODEL_MAPPING[config.__class__]
 
         if isinstance(base_class, tuple):
@@ -374,6 +370,8 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             if model_class == base_class:
                 continue
+
+            model_class.__bases__[0]
 
             # make a copy of model class to not break future tests
             # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
@@ -384,10 +382,6 @@ class ModelTesterMixin:
 
             # make sure that all keys are expected for test
             model_class_copy._keys_to_ignore_on_load_missing = []
-
-            # make init deterministic, but make sure that
-            # non-initialized weights throw errors nevertheless
-            model_class_copy._init_weights = self._mock_init_weights
 
             model = base_class(config)
             state_dict = model.state_dict()
@@ -402,15 +396,18 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
-                model_fast_init = model_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
+                # We use the no init config to make the initialization the same at 1e-10
+                model_fast_init = model_class_copy.from_pretrained(tmpdirname, config=config_no_init)
+                model_slow_init = model_class_copy.from_pretrained(tmpdirname, config=config_no_init, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
                     max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+                    self.assertLessEqual(max_diff, 1e-5, msg=f"{key} not identical")
 
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # We will use this to make the init deterministic
+        config_no_init = _config_zero_init(config)
         base_class = MODEL_MAPPING[config.__class__]
 
         if isinstance(base_class, tuple):
@@ -430,10 +427,6 @@ class ModelTesterMixin:
             # make sure that all keys are expected for test
             base_class_copy._keys_to_ignore_on_load_missing = []
 
-            # make init deterministic, but make sure that
-            # non-initialized weights throw errors nevertheless
-            base_class_copy._init_weights = self._mock_init_weights
-
             model = model_class(config)
             state_dict = model.state_dict()
 
@@ -447,14 +440,15 @@ class ModelTesterMixin:
                 model.config.save_pretrained(tmpdirname)
                 torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
-                model_fast_init = base_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
+                # We use the no init config to make the initialization the same at 1e-10
+                model_fast_init = base_class_copy.from_pretrained(tmpdirname, config=config_no_init)
+                model_slow_init = base_class_copy.from_pretrained(tmpdirname, config=config_no_init, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
                     max_diff = torch.max(
                         torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
                     ).item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+                    self.assertLessEqual(max_diff, 1e-5, msg=f"{key} not identical")
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
