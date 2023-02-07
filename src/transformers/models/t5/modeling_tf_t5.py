@@ -56,7 +56,6 @@ from .configuration_t5 import T5Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
-_TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "t5-small",
@@ -548,7 +547,6 @@ class TFT5Block(tf.keras.layers.Layer):
         output_attentions=False,
         training=False,
     ):
-
         if past_key_value is not None:
             assert self.is_decoder, "Only decoder can use `past_key_values`"
             expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
@@ -664,7 +662,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ) -> Tuple:
-
         if input_ids is not None and inputs_embeds is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(
@@ -1081,7 +1078,7 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on the right or the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             To know more on how to prepare `inputs` for pre-training take a look at [T5 Training](./t5#training).
@@ -1182,9 +1179,9 @@ class TFT5Model(TFT5PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import T5Tokenizer, TFT5Model
+        >>> from transformers import AutoTokenizer, TFT5Model
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
         >>> model = TFT5Model.from_pretrained("t5-small")
 
         >>> input_ids = tokenizer(
@@ -1366,9 +1363,9 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         Examples:
 
         ```python
-        >>> from transformers import T5Tokenizer, TFT5ForConditionalGeneration
+        >>> from transformers import AutoTokenizer, TFT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
         >>> model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
 
         >>> # training
@@ -1506,9 +1503,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         decoder_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
@@ -1576,9 +1572,9 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import T5Tokenizer, TFT5EncoderModel
+        >>> from transformers import AutoTokenizer, TFT5EncoderModel
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        >>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
         >>> model = TFT5EncoderModel.from_pretrained("t5-small")
 
         >>> input_ids = tokenizer(

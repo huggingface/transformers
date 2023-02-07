@@ -45,12 +45,16 @@ PRIVATE_MODELS = [
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
     "MaskFormerSwinPreTrainedModel",
+    "BridgeTowerTextModel",
+    "BridgeTowerVisionModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "DetaEncoder",  # Building part of bigger (tested) model.
+    "DetaDecoder",  # Building part of bigger (tested) model.
     "GraphormerEncoder",  # Building part of bigger (tested) model.
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "CLIPSegDecoder",  # Building part of bigger (tested) model.
@@ -127,6 +131,20 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFSegformerDecodeHead",  # Not a regular model.
     "AltRobertaModel",  # Building part of bigger (tested) model.
     "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
+    "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
+    "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
+    "SpeechT5Decoder",  # Building part of bigger (tested) model.
+    "SpeechT5DecoderWithoutPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5DecoderWithSpeechPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5DecoderWithTextPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5Encoder",  # Building part of bigger (tested) model.
+    "SpeechT5EncoderWithoutPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5EncoderWithSpeechPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5EncoderWithTextPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5SpeechDecoder",  # Building part of bigger (tested) model.
+    "SpeechT5SpeechEncoder",  # Building part of bigger (tested) model.
+    "SpeechT5TextDecoder",  # Building part of bigger (tested) model.
+    "SpeechT5TextEncoder",  # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -163,6 +181,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BlipTextLMHeadModel",
     "BlipTextModel",
     "Swin2SRForImageSuperResolution",
+    "BridgeTowerForImageAndTextRetrieval",
+    "BridgeTowerForMaskedLM",
     "CLIPSegForImageSegmentation",
     "CLIPSegVisionModel",
     "CLIPSegTextModel",
@@ -261,6 +281,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPTextModel",
     "AltCLIPVisionModel",
     "AltRobertaModel",
+    "SpeechT5ForSpeechToSpeech",
+    "SpeechT5ForTextToSpeech",
+    "SpeechT5HifiGan",
 ]
 
 # Update this list for models that have multiple model types for the same
@@ -370,6 +393,8 @@ def is_a_private_model(model):
         return True
     if model.endswith("Decoder"):
         return True
+    if model.endswith("Prenet"):
+        return True
     return False
 
 
@@ -420,7 +445,7 @@ def get_model_test_files():
             path = os.path.join(target_dir, file_or_dir)
             if os.path.isfile(path):
                 filename = os.path.split(path)[-1]
-                if "test_modeling" in filename and not os.path.splitext(filename)[0] in _ignore_files:
+                if "test_modeling" in filename and os.path.splitext(filename)[0] not in _ignore_files:
                     file = os.path.join(*path.split(os.sep)[1:])
                     test_files.append(file)
 

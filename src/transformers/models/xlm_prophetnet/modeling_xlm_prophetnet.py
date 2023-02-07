@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 
 _CONFIG_FOR_DOC = "XLMProphetNetConfig"
-_TOKENIZER_FOR_DOC = "XLMProphetNetTokenizer"
 
 XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/xprophetnet-large-wiki100-cased",
@@ -77,7 +76,7 @@ XLM_PROPHETNET_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`XLMProphetNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -91,7 +90,7 @@ XLM_PROPHETNET_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`XLMProphetNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -152,7 +151,7 @@ XLM_PROPHETNET_STANDALONE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`XLMProphetNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -682,7 +681,6 @@ class XLMProphetNetAttention(nn.Module):
         past_key_value: Optional[Tuple[Tensor]] = None,
         output_attentions: bool = False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
-
         batch_size, tgt_len, hidden_size = hidden_states.size()
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -1326,10 +1324,10 @@ class XLMProphetNetEncoder(XLMProphetNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import XLMProphetNetTokenizer, XLMProphetNetEncoder
+        >>> from transformers import AutoTokenizer, XLMProphetNetEncoder
         >>> import torch
 
-        >>> tokenizer = XLMProphetNetTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
+        >>> tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
         >>> model = XLMProphetNetEncoder.from_pretrained("patrickvonplaten/prophetnet-large-uncased-standalone")
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1504,10 +1502,10 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import XLMProphetNetTokenizer, XLMProphetNetDecoder
+        >>> from transformers import AutoTokenizer, XLMProphetNetDecoder
         >>> import torch
 
-        >>> tokenizer = XLMProphetNetTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
+        >>> tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
         >>> model = XLMProphetNetDecoder.from_pretrained(
         ...     "patrickvonplaten/xprophetnet-large-uncased-standalone", add_cross_attention=False
         ... )
@@ -1613,7 +1611,6 @@ class XLMProphetNetDecoder(XLMProphetNetPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1853,9 +1850,9 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import XLMProphetNetTokenizer, XLMProphetNetModel
+        >>> from transformers import AutoTokenizer, XLMProphetNetModel
 
-        >>> tokenizer = XLMProphetNetTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
+        >>> tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
         >>> model = XLMProphetNetModel.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
 
         >>> input_ids = tokenizer(
@@ -1982,9 +1979,9 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import XLMProphetNetTokenizer, XLMProphetNetForConditionalGeneration
+        >>> from transformers import AutoTokenizer, XLMProphetNetForConditionalGeneration
 
-        >>> tokenizer = XLMProphetNetTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
+        >>> tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
         >>> model = XLMProphetNetForConditionalGeneration.from_pretrained(
         ...     "patrickvonplaten/xprophetnet-large-uncased-standalone"
         ... )
@@ -2120,9 +2117,9 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
 
     @staticmethod
     # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration._reorder_cache
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
@@ -2233,10 +2230,10 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import XLMProphetNetTokenizer, XLMProphetNetForCausalLM
+        >>> from transformers import AutoTokenizer, XLMProphetNetForCausalLM
         >>> import torch
 
-        >>> tokenizer = XLMProphetNetTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
+        >>> tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
         >>> model = XLMProphetNetForCausalLM.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -2245,13 +2242,11 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         >>> logits = outputs.logits
 
         >>> # Model can also be used with EncoderDecoder framework
-        >>> from transformers import BertTokenizer, EncoderDecoderModel, XLMProphetNetTokenizer
+        >>> from transformers import BertTokenizer, EncoderDecoderModel, AutoTokenizer
         >>> import torch
 
         >>> tokenizer_enc = BertTokenizer.from_pretrained("bert-large-uncased")
-        >>> tokenizer_dec = XLMProphetNetTokenizer.from_pretrained(
-        ...     "patrickvonplaten/xprophetnet-large-uncased-standalone"
-        ... )
+        >>> tokenizer_dec = AutoTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
         >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
         ...     "bert-large-uncased", "patrickvonplaten/xprophetnet-large-uncased-standalone"
         ... )
@@ -2369,9 +2364,9 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
 
     @staticmethod
     # Copied from transformers.models.bart.modeling_bart.BartForCausalLM._reorder_cache
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 

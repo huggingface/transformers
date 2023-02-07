@@ -113,7 +113,7 @@ class SplinterTokenizerFast(PreTrainedTokenizerFast):
         question_token="[QUESTION]",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,

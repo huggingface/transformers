@@ -30,10 +30,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from pplm_classification_head import ClassificationHead
 from torch import nn
 from tqdm import trange
 
-from pplm_classification_head import ClassificationHead
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 from transformers.file_utils import cached_path
 
@@ -345,7 +345,7 @@ def full_text_generation(
     gm_scale=0.9,
     kl_scale=0.01,
     repetition_penalty=1.0,
-    **kwargs
+    **kwargs,
 ):
     classifier, class_id = get_classifier(discrim, class_label, device)
 
@@ -463,7 +463,6 @@ def generate_text_pplm(
     unpert_discrim_loss = 0
     loss_in_time = []
     for i in trange(length, ascii=True):
-
         # Get past/probs for current output, except for last word
         # Note that GPT takes 2 inputs: past + current_token
 
@@ -547,7 +546,6 @@ def generate_text_pplm(
 
         # Fuse the modified model and original model
         if perturb:
-
             unpert_probs = nn.functional.softmax(unpert_logits[:, -1, :], dim=-1)
 
             pert_probs = (pert_probs**gm_scale) * (unpert_probs ** (1 - gm_scale))  # + SMALL_CONST

@@ -21,17 +21,17 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
+import evaluate
 import numpy as np
 import torch
 from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from torch import nn
 from torchvision import transforms
 from torchvision.transforms import functional
 
-import evaluate
 import transformers
-from huggingface_hub import hf_hub_download
 from transformers import (
     AutoConfig,
     AutoImageProcessor,
@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.26.0.dev0")
+check_min_version("4.27.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
 

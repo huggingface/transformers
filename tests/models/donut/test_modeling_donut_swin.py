@@ -144,7 +144,6 @@ class DonutSwinModelTester:
 
 @require_torch
 class DonutSwinModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (DonutSwinModel,) if is_torch_available() else ()
     fx_compatible = True
 

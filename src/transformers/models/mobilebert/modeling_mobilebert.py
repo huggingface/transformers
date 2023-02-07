@@ -984,10 +984,10 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MobileBertTokenizer, MobileBertForPreTraining
+        >>> from transformers import AutoTokenizer, MobileBertForPreTraining
         >>> import torch
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = MobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)
@@ -1035,7 +1035,6 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top.""", MOBILEBERT_START_DOCSTRING)
 class MobileBertForMaskedLM(MobileBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [
         "cls.predictions.decoder.weight",
@@ -1179,10 +1178,10 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MobileBertTokenizer, MobileBertForNextSentencePrediction
+        >>> from transformers import AutoTokenizer, MobileBertForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/mobilebert-uncased")
         >>> model = MobileBertForNextSentencePrediction.from_pretrained("google/mobilebert-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
@@ -1349,7 +1348,6 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
 )
 # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->MobileBert all-casing
 class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1553,7 +1551,6 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
 )
 # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->MobileBert all-casing
 class MobileBertForTokenClassification(MobileBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):

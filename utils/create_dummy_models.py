@@ -15,6 +15,7 @@
 
 import argparse
 import collections.abc
+import copy
 import importlib
 import inspect
 import json
@@ -24,13 +25,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-from datasets import load_dataset
-
 from check_config_docstrings import get_checkpoint_from_config_class
+from datasets import load_dataset
 from huggingface_hub import Repository, create_repo, upload_folder
+
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
+    IMAGE_PROCESSOR_MAPPING,
     PROCESSOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoTokenizer,
@@ -74,29 +76,36 @@ def get_processor_types_from_config_class(config_class, allowed_mappings=None):
 
     We use `tuple` here to include (potentially) both slow & fast tokenizers.
     """
+
+    # To make a uniform return type
+    def _to_tuple(x):
+        if not isinstance(x, collections.abc.Sequence):
+            x = (x,)
+        else:
+            x = tuple(x)
+        return x
+
     if allowed_mappings is None:
-        allowed_mappings = ["processor", "tokenizer", "feature_extractor"]
+        allowed_mappings = ["processor", "tokenizer", "image_processor", "feature_extractor"]
 
     processor_types = ()
 
-    # Check first if a model has `ProcessorMixin`. Otherwise, check if it has tokenizers or a feature extractor.
+    # Check first if a model has `ProcessorMixin`. Otherwise, check if it has tokenizers, and/or an image processor or
+    # a feature extractor
     if config_class in PROCESSOR_MAPPING and "processor" in allowed_mappings:
-        processor_types = PROCESSOR_MAPPING[config_class]
-    elif config_class in TOKENIZER_MAPPING and "tokenizer" in allowed_mappings:
-        processor_types = TOKENIZER_MAPPING[config_class]
-    elif config_class in FEATURE_EXTRACTOR_MAPPING and "feature_extractor" in allowed_mappings:
-        processor_types = FEATURE_EXTRACTOR_MAPPING[config_class]
+        processor_types = _to_tuple(PROCESSOR_MAPPING[config_class])
     else:
-        # Some configurations have no processor at all. For example, generic composite models like
-        # `EncoderDecoderModel` is used for any (compatible) text models. Also, `DecisionTransformer` doesn't
-        # require any processor.
-        pass
+        if config_class in TOKENIZER_MAPPING and "tokenizer" in allowed_mappings:
+            processor_types = TOKENIZER_MAPPING[config_class]
 
-    # make a uniform return type
-    if not isinstance(processor_types, collections.abc.Sequence):
-        processor_types = (processor_types,)
-    else:
-        processor_types = tuple(processor_types)
+        if config_class in IMAGE_PROCESSOR_MAPPING and "image_processor" in allowed_mappings:
+            processor_types += _to_tuple(IMAGE_PROCESSOR_MAPPING[config_class])
+        elif config_class in FEATURE_EXTRACTOR_MAPPING and "feature_extractor" in allowed_mappings:
+            processor_types += _to_tuple(FEATURE_EXTRACTOR_MAPPING[config_class])
+
+    # Remark: some configurations have no processor at all. For example, generic composite models like
+    # `EncoderDecoderModel` is used for any (compatible) text models. Also, `DecisionTransformer` doesn't
+    # require any processor.
 
     # We might get `None` for some tokenizers - remove them here.
     processor_types = tuple(p for p in processor_types if p is not None)
@@ -154,7 +163,7 @@ def get_config_class_from_processor_class(processor_class):
     return new_config_class
 
 
-def build_processor(config_class, processor_class):
+def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     """Create a processor for `processor_class`.
 
     If a processor is not able to be built with the original arguments, this method tries to change the arguments and
@@ -264,6 +273,18 @@ def build_processor(config_class, processor_class):
             if config_class_from_processor_class != config_class:
                 processor = build_processor(config_class_from_processor_class, processor_class)
 
+    # Try to create an image processor or a feature extractor without any checkpoint
+    if (
+        processor is None
+        and allow_no_checkpoint
+        and (issubclass(processor_class, BaseImageProcessor) or issubclass(processor_class, FeatureExtractionMixin))
+    ):
+        try:
+            processor = processor_class()
+        except Exception as e:
+            logger.error(e)
+            pass
+
     # validation
     if processor is not None:
         if not (isinstance(processor, processor_class) or processor_class.__name__.startswith("Auto")):
@@ -329,7 +350,6 @@ def get_tiny_config(config_class, **model_tester_kwargs):
 
 
 def convert_tokenizer(tokenizer_fast: PreTrainedTokenizerFast):
-
     new_tokenizer = tokenizer_fast.train_new_from_iterator(training_ds["text"], TARGET_VOCAB_SIZE, show_progress=False)
 
     # Make sure it at least runs
@@ -340,7 +360,6 @@ def convert_tokenizer(tokenizer_fast: PreTrainedTokenizerFast):
 
 
 def convert_feature_extractor(feature_extractor, tiny_config):
-
     to_convert = False
     kwargs = {}
     if hasattr(tiny_config, "image_size"):
@@ -458,6 +477,18 @@ def convert_processors(processors, tiny_config, output_folder, result):
         result["warnings"].append(f"Failed to convert feature extractors: {e}")
         feature_extractors = []
 
+    if hasattr(tiny_config, "max_position_embeddings") and tiny_config.max_position_embeddings > 0:
+        if fast_tokenizer is not None:
+            if fast_tokenizer.__class__.__name__ in ["RobertaTokenizerFast", "XLMRobertaTokenizerFast"]:
+                fast_tokenizer.model_max_length = tiny_config.max_position_embeddings - 2
+            else:
+                fast_tokenizer.model_max_length = tiny_config.max_position_embeddings
+        if slow_tokenizer is not None:
+            if slow_tokenizer.__class__.__name__ in ["RobertaTokenizer", "XLMRobertaTokenizer"]:
+                slow_tokenizer.model_max_length = tiny_config.max_position_embeddings - 2
+            else:
+                slow_tokenizer.model_max_length = tiny_config.max_position_embeddings
+
     processors = [fast_tokenizer, slow_tokenizer] + feature_extractors
     processors = [p for p in processors if p is not None]
     for p in processors:
@@ -490,6 +521,12 @@ def build_model(model_arch, tiny_config, output_dir):
     # copy the (same set of) processors (for a model type) to the model arch. specific folder
     if os.path.isdir(processor_output_dir):
         shutil.copytree(processor_output_dir, checkpoint_dir, dirs_exist_ok=True)
+
+    tiny_config = copy.deepcopy(tiny_config)
+
+    if any([model_arch.__name__.endswith(x) for x in ["ForCausalLM", "LMHeadModel"]]):
+        tiny_config.is_encoder_decoder = False
+        tiny_config.is_decoder = True
 
     model = model_arch(config=tiny_config)
     model.save_pretrained(checkpoint_dir)
@@ -535,7 +572,6 @@ def upload_model(model_dir, organization):
         raise ValueError(error)
 
     with tempfile.TemporaryDirectory() as tmpdir:
-
         repo = Repository(local_dir=tmpdir, clone_from=f"{organization}/{repo_name}")
         repo.git_pull()
         shutil.copytree(model_dir, tmpdir, dirs_exist_ok=True)
@@ -560,7 +596,6 @@ def upload_model(model_dir, organization):
 
 
 def build_composite_models(config_class, output_dir):
-
     import tempfile
 
     from transformers import (
@@ -629,7 +664,6 @@ def build_composite_models(config_class, output_dir):
         tf_model_class = None
 
     with tempfile.TemporaryDirectory() as tmpdir:
-
         try:
             # build encoder
             models_to_create = {"processor": encoder_processor, "pytorch": (encoder_class,), "tensorflow": []}
@@ -722,7 +756,6 @@ def get_token_id_from_tokenizer(token_id_name, tokenizer, original_token_id):
 
 
 def get_config_overrides(config_class, processors):
-
     config_overrides = {}
 
     # Check if there is any tokenizer (prefer fast version if any)
@@ -819,7 +852,7 @@ def build(config_class, models_to_create, output_dir):
 
     for processor_class in processor_classes:
         try:
-            processor = build_processor(config_class, processor_class)
+            processor = build_processor(config_class, processor_class, allow_no_checkpoint=True)
             if processor is not None:
                 result["processor"][processor_class] = processor
         except Exception as e:
@@ -951,7 +984,6 @@ def build(config_class, models_to_create, output_dir):
 
 
 def build_failed_report(results, include_warning=True):
-
     failed_results = {}
     for config_name in results:
         if "error" in results[config_name]:
@@ -982,7 +1014,6 @@ def build_failed_report(results, include_warning=True):
 
 
 def build_simple_report(results):
-
     text = ""
     failed_text = ""
     for config_name in results:
@@ -1001,7 +1032,6 @@ def build_simple_report(results):
 
 
 if __name__ == "__main__":
-
     clone_path = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
     if os.getcwd() != clone_path:
         raise ValueError(f"This script should be run from the root of the clone of `transformers` {clone_path}")
