@@ -33,9 +33,9 @@ if is_torch_available():
         get_constant_schedule_with_warmup,
         get_cosine_schedule_with_warmup,
         get_cosine_with_hard_restarts_schedule_with_warmup,
+        get_inverse_sqrt_schedule,
         get_linear_schedule_with_warmup,
         get_polynomial_decay_schedule_with_warmup,
-        get_inverse_sqrt_schedule
     )
 
 
@@ -149,8 +149,8 @@ class ScheduleInitTest(unittest.TestCase):
             ),
             get_inverse_sqrt_schedule: (
                 {"num_warmup_steps": 2},
-                [0.0, 5.0, 10.0, 8.165, 7.071, 6.325, 5.774, 5.345, 5.0, 4.714]
-            )
+                [0.0, 5.0, 10.0, 8.165, 7.071, 6.325, 5.774, 5.345, 5.0, 4.714],
+            ),
         }
 
         for scheduler_func, data in scheds.items():

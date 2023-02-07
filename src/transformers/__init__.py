@@ -2592,9 +2592,9 @@ else:
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
         "get_cosine_with_hard_restarts_schedule_with_warmup",
+        "get_inverse_sqrt_schedule",
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
-        "get_inverse_sqrt_schedule",
         "get_scheduler",
     ]
     _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward", "prune_layer"]
@@ -5664,9 +5664,9 @@ if TYPE_CHECKING:
             get_constant_schedule_with_warmup,
             get_cosine_schedule_with_warmup,
             get_cosine_with_hard_restarts_schedule_with_warmup,
+            get_inverse_sqrt_schedule,
             get_linear_schedule_with_warmup,
             get_polynomial_decay_schedule_with_warmup,
-            get_inverse_sqrt_schedule,
             get_scheduler,
         )
         from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
