@@ -19,12 +19,11 @@ import copy
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
-import torchvision
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
-from ...image_utils import resize
+from ...image_transforms import np_bilinear_resize
 
 logger = logging.get_logger(__name__)
 
@@ -198,7 +197,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         mel_chunk_middle = mel[idx_middle : idx_middle + chunk_frames, :]
         mel_chunk_back = mel[idx_back : idx_back + chunk_frames, :]
 
-        mel_shrink = resize(mel, chunk_frames, self.feature_size)  # current flags are probalby wrong
+        mel_shrink = np_bilinear_resize(mel, chunk_frames, self.feature_size)  # current flags are probalby wrong
         mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], axis=0)
         return mel_fusion
 

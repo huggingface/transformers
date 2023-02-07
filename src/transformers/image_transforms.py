@@ -768,7 +768,7 @@ def bilinear_interpolation(image, y, x):
     new_pixel += d * dx * dy
     return new_pixel
 
-def resize(image, new_height, new_width):
+def np_bilinear_resize(image, new_height, new_width):
     """
     Taken from `[here](https://stackoverflow.com/questions/70024313/resize-using-bilinear-interpolation-in-python)` with the 
     torchvision.transforms.Resize(size=[chunk_frames, self.feature_size])
