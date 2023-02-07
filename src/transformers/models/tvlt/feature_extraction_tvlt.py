@@ -66,7 +66,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         hop_length_to_sampling_rate=86,
         n_fft=2048,
         padding_value=0.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             feature_size=feature_size,
@@ -230,7 +230,7 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: Optional[int] = None,
         resample: bool = False,
         mask_audio: bool = False,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to prepare one or several audio(s) for the model.

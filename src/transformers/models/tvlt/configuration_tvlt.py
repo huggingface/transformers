@@ -143,7 +143,7 @@ class TvltConfig(PretrainedConfig):
         task_matching=True,
         task_mae=True,
         loss_type="classification",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

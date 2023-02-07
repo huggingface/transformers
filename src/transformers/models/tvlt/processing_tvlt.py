@@ -51,7 +51,7 @@ class TvltProcessor(ProcessorMixin):
         mask_audio=False,
         mask_pixel=False,
         *args,
-        **kwargs
+        **kwargs,
     ):
         """
         Forwards the `images` argument to TvltImageProcessor's [`~TvltImageProcessor.preprocess`] and the `audio`
