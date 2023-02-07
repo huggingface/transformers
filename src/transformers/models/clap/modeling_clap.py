@@ -213,7 +213,7 @@ class CLAPAudioModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->CLAP vision->audio
+# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->CLAP,vision->audio,Vision->Audio
 class CLAPOutput(ModelOutput):
     """
     Args:

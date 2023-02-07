@@ -30,6 +30,7 @@ _import_structure = {
     ],
     "feature_extraction_clap": ["CLAPFeatureExtractor"],
     "processing_clap": ["CLAPProcessor"],
+    "tokenization_clap": ["CLAPTokenizer"],
 }
 
 try:
