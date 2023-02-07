@@ -20,22 +20,24 @@ paper by Davis Liang, Hila Gonen, Yuning Mao, Rui Hou, Naman Goyal, Marjan Ghazv
 
 From the abstract of the XLM-V paper:
 
-> Large multilingual language models typically rely on a single vocabulary shared across 100+ languages.
-> As these models have increased in parameter count and depth, vocabulary size has remained largely unchanged.
-> This vocabulary bottleneck limits the representational capabilities of multilingual models like XLM-R.
-> In this paper, we introduce a new approach for scaling to very large multilingual vocabularies by
-> de-emphasizing token sharing between languages with little lexical overlap and assigning vocabulary capacity
-> to achieve sufficient coverage for each individual language. Tokenizations using our vocabulary are typically
-> more semantically meaningful and shorter compared to XLM-R. Leveraging this improved vocabulary, we train XLM-V,
-> a multilingual language model with a one million token vocabulary. XLM-V outperforms XLM-R on every task we
-> tested on ranging from natural language inference (XNLI), question answering (MLQA, XQuAD, TyDiQA), and
-> named entity recognition (WikiAnn) to low-resource tasks (Americas NLI, MasakhaNER).
+*Large multilingual language models typically rely on a single vocabulary shared across 100+ languages.
+As these models have increased in parameter count and depth, vocabulary size has remained largely unchanged.
+This vocabulary bottleneck limits the representational capabilities of multilingual models like XLM-R.
+In this paper, we introduce a new approach for scaling to very large multilingual vocabularies by
+de-emphasizing token sharing between languages with little lexical overlap and assigning vocabulary capacity
+to achieve sufficient coverage for each individual language. Tokenizations using our vocabulary are typically
+more semantically meaningful and shorter compared to XLM-R. Leveraging this improved vocabulary, we train XLM-V,
+a multilingual language model with a one million token vocabulary. XLM-V outperforms XLM-R on every task we
+tested on ranging from natural language inference (XNLI), question answering (MLQA, XQuAD, TyDiQA), and
+named entity recognition (WikiAnn) to low-resource tasks (Americas NLI, MasakhaNER).*
 
 Tips:
 
 - XLM-V is compatible with the XLM-RoBERTa model architecture, only model weights from [`fairseq`](https://github.com/facebookresearch/fairseq)
   library had to be converted.
 - The `XLMTokenizer` implementation is used to load the vocab and performs tokenization.
+
+A XLM-V (base size) model is available under the [`facebook/xlm-v-base`](https://huggingface.co/facebook/xlm-v-base) identifier.
 
 This model was contributed by [stefan-it](https://huggingface.co/stefan-it), including detailed experiments with XLM-V on downstream tasks.
 The experiments repository can be found [here](https://github.com/stefan-it/xlm-v-experiments).
