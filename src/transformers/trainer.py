@@ -322,9 +322,8 @@ class Trainer:
             logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
             args = TrainingArguments(output_dir=output_dir)
         self.args = args
-        (  # Seed must be set before instantiating the model when using model
-            enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
-        )
+        # Seed must be set before instantiating the model when using model
+        enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
         self.hp_name = None
         self.deepspeed = None
         self.is_in_train = False
@@ -1536,10 +1535,8 @@ class Trainer:
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
             warnings.warn(
-                (
-                    "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
-                    "instead."
-                ),
+                "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
+                "instead.",
                 FutureWarning,
             )
         if len(kwargs) > 0:
