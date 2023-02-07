@@ -177,8 +177,6 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
 
         cls_tokens = tf.tile(self.cls_token, (batch_size, 1, 1))
 
-        print("____________________________", bool_masked_pos)
-
         if bool_masked_pos is not None:
             mask_tokens = tf.broadcast_to(self.mask_token, (batch_size, seq_len, projection_dim))
             # replace the masked visual tokens by mask_tokens
