@@ -93,7 +93,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
-        **kwargs
+        **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it and
         # is included in the raw text, there should be a match in a non-normalized sentence.
@@ -125,7 +125,6 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         normalized_text, char_mapping = "", []
 
         for i, ch in enumerate(text):
-
             if ch in self.SP_CHAR_MAPPING:
                 ch = self.SP_CHAR_MAPPING.get(ch)
             else:

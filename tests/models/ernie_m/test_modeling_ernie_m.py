@@ -222,7 +222,6 @@ class ErnieMModelTester:
 
 @require_torch
 class ErnieMModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             ErnieMModel,

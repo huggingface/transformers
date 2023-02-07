@@ -99,7 +99,7 @@ class ErnieMConfig(PretrainedConfig):
         classifier_dropout=None,
         is_decoder=False,
         act_dropout=0.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
         self.vocab_size = vocab_size

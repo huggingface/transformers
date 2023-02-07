@@ -140,7 +140,6 @@ class ErnieMEncoder(nn.Module):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
-
         hidden_states = () if output_hidden_states else None
         attentions = () if output_attentions else None
 
@@ -536,7 +535,6 @@ class ErnieMModel(ErnieMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time.")
 
