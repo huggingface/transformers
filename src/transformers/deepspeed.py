@@ -190,7 +190,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         if len(hidden_size_auto_keys) > 0:
             if hasattr(model.config, "hidden_size"):
                 hidden_size = model.config.hidden_size
-            elif hasattr(model.config, "hidden_size"):
+            elif hasattr(model.config, "hidden_sizes"):
                 # if there are many hidden sizes pick the largest one
                 hidden_size = max(model.config.hidden_sizes)
             else:
