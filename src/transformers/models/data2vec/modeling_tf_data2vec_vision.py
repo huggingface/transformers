@@ -177,6 +177,8 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
 
         cls_tokens = tf.tile(self.cls_token, (batch_size, 1, 1))
 
+        print("____________________________", bool_masked_pos)
+
         if bool_masked_pos is not None:
             mask_tokens = tf.broadcast_to(self.mask_token, (batch_size, seq_len, projection_dim))
             # replace the masked visual tokens by mask_tokens
@@ -1037,7 +1039,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.beit(
+        outputs = self.data2vec_vision(
             pixel_values=pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -1476,7 +1478,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.beit = TFData2VecVisionMainLayer(config, add_pooling_layer=False, name="beit")
+        self.data2vec_vision = TFData2VecVisionMainLayer(config, add_pooling_layer=False, name="beit")
 
         # FPNs
         self.fpn1 = [
@@ -1565,7 +1567,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.beit(
+        outputs = self.data2vec_vision(
             pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,

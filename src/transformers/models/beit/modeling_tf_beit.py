@@ -169,6 +169,8 @@ class TFBeitEmbeddings(tf.keras.layers.Layer):
 
         cls_tokens = tf.tile(self.cls_token, (batch_size, 1, 1))
 
+        print("______________________________", bool_masked_pos)
+
         if bool_masked_pos is not None:
             mask_tokens = tf.broadcast_to(self.mask_token, (batch_size, seq_len, projection_dim))
             # replace the masked visual tokens by mask_tokens
@@ -925,13 +927,13 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
     def __init__(self, config: BeitConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.num_labels = config.num_labels
+        self.vocab_size = config.vocab_size
         self.beit = TFBeitMainLayer(config, add_pooling_layer=False, name="beit")
 
         # Classifier head
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         self.lm_head = tf.keras.layers.Dense(
-            units=config.num_labels,
+            units=config.vocab_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="classifier",
         )
