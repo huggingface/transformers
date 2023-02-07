@@ -17,9 +17,8 @@ import os
 from typing import TYPE_CHECKING, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
-from packaging import version
-
 import requests
+from packaging import version
 
 from .utils import (
     ExplicitEnum,

@@ -17,12 +17,11 @@
 from functools import partial
 from typing import Optional, Tuple, Union
 
-import numpy as np
-
 import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
@@ -663,7 +662,6 @@ class FlaxWav2Vec2StableLayerNormEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
-
         if attention_mask is not None:
             # make sure padded tokens are not attended to
             hidden_states = jnp.where(
@@ -1034,7 +1032,6 @@ class FlaxWav2Vec2Module(nn.Module):
     def _get_feature_vector_attention_mask(
         self, feature_vector_length: int, attention_mask: jnp.ndarray, add_adapter=None
     ):
-
         # Effectively attention_mask.sum(-1), but not inplace to be able to run
         # on inference mode.
         non_padded_lengths = attention_mask.cumsum(axis=-1)[:, -1]

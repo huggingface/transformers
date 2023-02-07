@@ -112,7 +112,7 @@ class LayoutLMConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         max_2d_position_embeddings=1024,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
         self.vocab_size = vocab_size

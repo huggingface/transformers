@@ -344,7 +344,6 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
     deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
 
     if resume_from_checkpoint is not None:
-
         # it's possible that the user is trying to resume from model_path, which doesn't necessarily
         # contain a deepspeed checkpoint. e.g. examples just check if the dir exists and assume it's
         # a resume from a checkpoint and not just a local pretrained weight. So we check here if the
