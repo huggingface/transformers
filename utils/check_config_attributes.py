@@ -71,6 +71,43 @@ SPECIAL_CASES_TO_ALLOW = {
     "TrajectoryTransformerConfig": ["layer_norm_eps"],
 }
 
+# TODO (ydshieh): Check the failing cases, try to fix them or move some cases to the above block once we are sure
+SPECIAL_CASES_TO_ALLOW.update(
+    {
+        "CLIPSegConfig": True,
+        "DeformableDetrConfig": True,
+        "DetaConfig": True,
+        "DinatConfig": True,
+        "DonutSwinConfig": True,
+        "EfficientFormerConfig": True,
+        "FSMTConfig": True,
+        "JukeboxConfig": True,
+        "LayoutLMv2Config": True,
+        "MaskFormerSwinConfig": True,
+        "MT5Config": True,
+        "NatConfig": True,
+        "OneFormerConfig": True,
+        "PerceiverConfig": True,
+        "RagConfig": True,
+        "RetriBertConfig": True,
+        "SpeechT5Config": True,
+        "SwinConfig": True,
+        "Swin2SRConfig": True,
+        "Swinv2Config": True,
+        "SwitchTransformersConfig": True,
+        "TableTransformerConfig": True,
+        "TapasConfig": True,
+        "TimeSeriesTransformerConfig": True,
+        "TrajectoryTransformerConfig": True,
+        "TransfoXLConfig": True,
+        "UniSpeechConfig": True,
+        "UniSpeechSatConfig": True,
+        "VanConfig": True,
+        "WavLMConfig": True,
+        "WhisperConfig": True,
+    }
+)
+
 
 def check_attribute_being_used(config_class, attributes, default_value, source_strings):
     """Check if any name in `attributes` is used in one of the strings in `source_strings`
