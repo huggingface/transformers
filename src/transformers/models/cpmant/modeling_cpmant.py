@@ -135,6 +135,9 @@ class CPMAntLayerNorm(nn.Module):
         init_var: float = 1.0,
     ):
         super().__init__()
+        self.eps = config.eps
+        self.dim_norm = config.dim_model
+        self.weight = torch.nn.parameter.Parameter(torch.full((config.dim_model,), init_var))
 
         self.eps = config.eps
         self.dim_norm = config.dim_model
@@ -240,7 +243,7 @@ class CPMAntAttention(nn.Module):
 
         score = self.attention_out(score)
 
-        if self.use_cache:
+        if use_cache:
             return score, (key, value)
 
         return score
@@ -591,7 +594,6 @@ class CPMAntPreTrainedModel(PreTrainedModel):
     """
 
     config_class = CPMAntConfig
-    load_tf_weights = load_tf_weights_in_cpmant
     base_model_prefix = "cpmant"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
