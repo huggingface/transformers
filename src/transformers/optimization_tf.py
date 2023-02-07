@@ -176,7 +176,7 @@ class AdamWeightDecay(Adam):
     with the m and v parameters in strange ways as shown in [Decoupled Weight Decay
     Regularization](https://arxiv.org/abs/1711.05101).
 
-    Instead we want ot decay the weights in a manner that doesn't interact with the m/v parameters. This is equivalent
+    Instead we want to decay the weights in a manner that doesn't interact with the m/v parameters. This is equivalent
     to adding the square of the weights to the loss with plain (non-momentum) SGD.
 
     Args:
