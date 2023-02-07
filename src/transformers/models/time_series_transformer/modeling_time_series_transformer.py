@@ -258,8 +258,8 @@ class FeatureEmbedder(nn.Module):
 
 class StdScaler(nn.Module):
     """
-    Standardize features by calculating the mean and scaling along some given dimension `dim`, and then
-    normalizes it by subtracting from the mean and dividing by the standard deviation.
+    Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
+    by subtracting from the mean and dividing by the standard deviation.
 
     Args:
         dim (`int`):
