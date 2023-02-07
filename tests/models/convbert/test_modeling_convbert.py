@@ -246,7 +246,6 @@ class ConvBertModelTester:
 
 @require_torch
 class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             ConvBertModel,
@@ -419,7 +418,6 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_torchscript_device_change(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-
             # ConvBertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == ConvBertForMultipleChoice:
                 return
@@ -440,7 +438,7 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_for_input_embeds(self):
         batch_size = 2
         seq_length = 10
-        inputs_embeds = torch.rand([batch_size, seq_length, 768])
+        inputs_embeds = torch.rand([batch_size, seq_length, 768], device=torch_device)
         config = self.model_tester.get_config()
         model = ConvBertModel(config=config)
         model.to(torch_device)

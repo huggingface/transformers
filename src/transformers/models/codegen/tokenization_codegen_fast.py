@@ -126,7 +126,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -187,7 +187,7 @@ class CodeGenTokenizerFast(PreTrainedTokenizerFast):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         truncate_before_pattern: Optional[List[str]] = None,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special

@@ -95,6 +95,8 @@
       title: Training on many CPUs
     - local: perf_train_tpu
       title: Training on TPUs
+    - local: perf_train_tpu_tf
+      title: Training on TPU with TensorFlow
     - local: perf_train_special
       title: Training on Specialized Hardware
     - local: perf_infer_cpu
@@ -146,6 +148,8 @@
     title: Glossary
   - local: task_summary
     title: What 🤗 Transformers can do
+  - local: tasks_explained
+    title: How 🤗 Transformers solve tasks
   - local: model_summary
     title: Summary of the models
   - local: tokenizer_summary
@@ -489,6 +493,8 @@
         title: Speech2Text
       - local: model_doc/speech_to_text_2
         title: Speech2Text2
+      - local: model_doc/speecht5
+        title: SpeechT5
       - local: model_doc/unispeech
         title: UniSpeech
       - local: model_doc/unispeech-sat

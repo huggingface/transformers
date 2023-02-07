@@ -780,7 +780,7 @@ class GenerationTesterMixin:
                 forced_eos_token_id=model.config.forced_eos_token_id,
                 max_length=max_length,
             )
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
+            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=2)
 
             # check `generate()` and `sample()` are equal
             output_sample, output_generate = self._sample_generate(
@@ -1413,7 +1413,6 @@ class GenerationTesterMixin:
     def test_contrastive_generate(self):
         # check `generate()` and `contrastive_search()` are equal
         for model_class in self.all_generative_model_classes:
-
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
@@ -1435,7 +1434,6 @@ class GenerationTesterMixin:
 
     def test_contrastive_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
-
             # won't fix: FSMT and Reformer have a different cache variable type (and format).
             if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
                 return
@@ -1661,7 +1659,6 @@ class GenerationTesterMixin:
 
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
-
     # tests whether the top_k_top_p function behaves as expected
     def test_top_k_top_p_filtering(self):
         logits = torch.tensor(
@@ -1792,17 +1789,19 @@ class UtilsFunctionsTest(unittest.TestCase):
 
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMixin):
-
     # setting framework_dependent_parameters needs to be gated, just like its contents' imports
     if is_torch_available():
         framework_dependent_parameters = {
             "AutoModelForSeq2SeqLM": AutoModelForSeq2SeqLM,
+            "LogitsProcessorList": LogitsProcessorList,
+            "MinLengthLogitsProcessor": MinLengthLogitsProcessor,
             "create_tensor_fn": torch.tensor,
             "return_tensors": "pt",
         }
 
     @slow
     def test_diverse_beam_search(self):
+        # PT-only test: TF doesn't have a diverse beam search implementation
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood.
         The celebrity couple announced the arrival of their son, Silas Randall Timberlake, in statements to People.
         "Silas was the middle name of Timberlake's maternal grandfather Bill Bomar, who died in 2012, while Randall is the musician's own middle name, as well as his father's first," People reports.
@@ -1836,6 +1835,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         )
 
     def test_max_length_backward_compat_greedy(self):
+        # PT-only test: TF doesn't have StoppingCriteria
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
@@ -1862,6 +1862,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             )
 
     def test_max_length_backward_compat_sample(self):
+        # PT-only test: TF doesn't have StoppingCriteria
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
@@ -1888,6 +1889,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
                 )
 
     def test_max_length_backward_compat_beam_search(self):
+        # PT-only test: TF doesn't have StoppingCriteria
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
@@ -1918,6 +1920,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             )
 
     def test_max_length_backward_compat_group_beam_search(self):
+        # PT-only test: TF doesn't have StoppingCriteria & group beam search
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
@@ -1952,6 +1955,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             )
 
     def test_max_length_warning_if_different(self):
+        # PT-only test: TF doesn't have StoppingCriteria
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
@@ -2034,60 +2038,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
                 **model_kwargs,
             )
 
-    def test_beam_search_warning_if_max_length_is_passed(self):
-        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
-        bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
-            torch_device
-        )
-
-        batch_size = 1
-        num_beams = 3
-
-        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-        input_ids = input_ids.expand(num_beams, -1)
-        model_kwargs = bart_model._prepare_encoder_decoder_kwargs_for_generation(input_ids, {})
-
-        # pretend decoder_input_ids correspond to first encoder input id
-        decoder_input_ids = input_ids[:, :1]
-
-        stopping_criteria_max_length = 18
-        stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=stopping_criteria_max_length)])
-
-        with self.assertWarns(UserWarning):
-            beam_scorer = BeamSearchScorer(
-                batch_size=batch_size,
-                num_beams=num_beams,
-                device=torch_device,
-                max_length=10,
-            )
-
-        generated_ids = bart_model.beam_search(
-            decoder_input_ids,
-            num_beams=num_beams,
-            stopping_criteria=stopping_criteria,
-            beam_scorer=beam_scorer,
-            **model_kwargs,
-        )
-
-        beam_scorer_no_max_len = BeamSearchScorer(
-            batch_size=batch_size,
-            num_beams=num_beams,
-            device=torch_device,
-        )
-
-        generated_ids_no_max_len = bart_model.beam_search(
-            decoder_input_ids,
-            num_beams=num_beams,
-            stopping_criteria=stopping_criteria,
-            beam_scorer=beam_scorer_no_max_len,
-            **model_kwargs,
-        )
-
-        # BeamSearchScorer max_length should not influence "real" max_length
-        self.assertEqual(generated_ids.tolist(), generated_ids_no_max_len.tolist())
-
     def test_custom_stopping_criteria_overload_error(self):
+        # PT-only test: TF doesn't have StoppingCriteria
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
         bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
@@ -2101,6 +2053,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=32)
 
     def test_custom_stopping_criteria(self):
+        # PT-only test: TF doesn't have StoppingCriteria
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
         bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
@@ -2123,7 +2076,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         )
 
     def test_stop_sequence_stopping_criteria(self):
-
+        # PT-only test: TF doesn't have StoppingCriteria
         prompt = """Hello I believe in"""
         generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
         output = generator(prompt)
@@ -2140,23 +2093,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         output = generator(prompt, stop_sequence=" number")
         self.assertEqual(output, [{"generated_text": "Hello I believe in in in number"}])
-
-    def test_custom_logits_processor(self):
-        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
-        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
-        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random", min_length=1).to(
-            torch_device
-        )
-        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        logits_processor = LogitsProcessorList()
-        logits_processor.append(MinLengthLogitsProcessor(min_length=10, eos_token_id=0))
-        # it should not be allowed to both define `min_length` via config and `logits_processor` list
-        with self.assertRaises(ValueError):
-            bart_model.generate(input_ids, logits_processor=logits_processor)
-
-        bart_model.config.min_length = None
-        bart_model.generate(input_ids, logits_processor=logits_processor)
 
     def test_max_new_tokens_encoder_decoder(self):
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""

@@ -597,7 +597,6 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ):
-
         if training and use_mems is None:
             use_mems = self.use_mems_train
         else:

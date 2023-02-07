@@ -368,7 +368,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         encoder_pretrained_model_name_or_path: str = None,
         decoder_pretrained_model_name_or_path: str = None,
         *model_args,
-        **kwargs
+        **kwargs,
     ) -> PreTrainedModel:
         r"""
         Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model

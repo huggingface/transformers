@@ -686,7 +686,7 @@ class BloomModel(BloomPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **deprecated_arguments
+        **deprecated_arguments,
     ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutputWithPastAndCrossAttentions]:
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
@@ -752,12 +752,10 @@ class BloomModel(BloomPreTrainedModel):
         )
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -842,7 +840,8 @@ class BloomForCausalLM(BloomPreTrainedModel):
         input_ids: torch.LongTensor,
         past_key_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        **kwargs
+        inputs_embeds: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> dict:
         # only last token for input_ids if past is not None
         if past_key_values:
@@ -852,12 +851,20 @@ class BloomForCausalLM(BloomPreTrainedModel):
             if past_key_values[0][0].shape[0] == input_ids.shape[0]:
                 past_key_values = self._convert_to_bloom_cache(past_key_values)
 
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "attention_mask": attention_mask,
-        }
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+            }
+        )
+        return model_inputs
 
     @add_start_docstrings_to_model_forward(BLOOM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -877,7 +884,7 @@ class BloomForCausalLM(BloomPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **deprecated_arguments
+        **deprecated_arguments,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1007,7 +1014,7 @@ class BloomForSequenceClassification(BloomPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **deprecated_arguments
+        **deprecated_arguments,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1143,7 +1150,7 @@ class BloomForTokenClassification(BloomPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **deprecated_arguments
+        **deprecated_arguments,
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):

@@ -42,8 +42,8 @@ from test_module.custom_configuration import CustomConfig  # noqa E402
 
 if is_torch_available():
     import torch
-
     from test_module.custom_modeling import CustomModel
+
     from transformers import (
         AutoConfig,
         AutoModel,
@@ -394,7 +394,6 @@ class AutoModelTest(unittest.TestCase):
             self.assertEqual(counter.other_request_count, 0)
 
     def test_attr_not_existing(self):
-
         from transformers.models.auto.auto_factory import _LazyAutoMapping
 
         _CONFIG_MAPPING_NAMES = OrderedDict([("bert", "BertConfig")])

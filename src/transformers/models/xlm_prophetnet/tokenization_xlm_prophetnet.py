@@ -141,7 +141,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         cls_token="[CLS]",
         mask_token="[MASK]",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 

@@ -66,7 +66,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         self,
         image: Union[str, "Image.Image", List[Dict[str, Any]]],
         candidate_labels: Union[str, List[str]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
@@ -148,7 +148,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         target_size = torch.tensor([[image.height, image.width]], dtype=torch.int32)
         for i, candidate_label in enumerate(candidate_labels):
             text_inputs = self.tokenizer(candidate_label, return_tensors=self.framework)
-            image_features = self.feature_extractor(image, return_tensors=self.framework)
+            image_features = self.image_processor(image, return_tensors=self.framework)
             yield {
                 "is_last": i == len(candidate_labels) - 1,
                 "target_size": target_size,
@@ -168,12 +168,11 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.1, top_k=None):
-
         results = []
         for model_output in model_outputs:
             label = model_output["candidate_label"]
             model_output = BaseModelOutput(model_output)
-            outputs = self.feature_extractor.post_process_object_detection(
+            outputs = self.image_processor.post_process_object_detection(
                 outputs=model_output, threshold=threshold, target_sizes=model_output["target_size"]
             )[0]
 

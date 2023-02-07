@@ -532,6 +532,7 @@ class TFGenerationMixin:
         self,
         input_ids: Optional[tf.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
+        logits_processor: Optional[TFLogitsProcessorList] = None,
         seed=None,
         **kwargs,
     ) -> Union[TFGenerateOutput, tf.Tensor]:
@@ -560,6 +561,10 @@ class TFGenerationMixin:
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
+            logits_processor (`LogitsProcessorList`, *optional*):
+                Custom logits processors that complement the default logits processors built from arguments and
+                generation config. If a logit processor is passed that is already created with the arguments or a
+                generation config an error is thrown. This feature is intended for advanced users.
             seed (`List[int]`, *optional*):
                 Random seed to control sampling, containing two integers, used when `do_sample` is `True`. See the
                 `seed` argument from stateless functions in `tf.random`.
@@ -611,6 +616,7 @@ class TFGenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 2. Cast input dtypes to tf.int32 unless they're floats (which happens for some image models)
@@ -637,6 +643,8 @@ class TFGenerationMixin:
                 model_kwargs["decoder_input_ids"] = tf.cast(model_kwargs["decoder_input_ids"], tf.int32)
 
         # 3. Set generation parameters if not already defined
+        logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
+
         if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
             if model_kwargs.get("attention_mask") is None:
                 logger.warning(
@@ -754,6 +762,7 @@ class TFGenerationMixin:
         logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
+            logits_processor=logits_processor,
         )
 
         # 10. go into different generation modes
@@ -942,7 +951,6 @@ class TFGenerationMixin:
         bos_token_id: int = None,
         model_kwargs: Optional[Dict[str, tf.Tensor]] = None,
     ) -> tf.Tensor:
-
         # prepare `input_ids` for decoder if model is encoder-decoder
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
             return model_kwargs.pop("decoder_input_ids")
@@ -1193,6 +1201,7 @@ class TFGenerationMixin:
         self,
         generation_config: GenerationConfig,
         input_ids_seq_length: int,
+        logits_processor: Optional[TFLogitsProcessorList],
     ) -> TFLogitsProcessorList:
         """
         This class returns a [`TFLogitsProcessorList`] list object that contains all relevant [`TFLogitsProcessor`]
@@ -1239,7 +1248,30 @@ class TFGenerationMixin:
             )
         if generation_config.forced_decoder_ids is not None:
             processors.append(TFForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
+
+        processors = self._merge_criteria_processor_list(processors, logits_processor)
         return processors
+
+    def _merge_criteria_processor_list(
+        self,
+        default_list: TFLogitsProcessorList,
+        custom_list: TFLogitsProcessorList,
+    ) -> TFLogitsProcessorList:
+        if len(custom_list) == 0:
+            return default_list
+        for default in default_list:
+            for custom in custom_list:
+                if type(custom) is type(default):
+                    object_type = "logits processor"
+                    raise ValueError(
+                        f"A custom {object_type} of type {type(custom)} with values {custom} has been passed to"
+                        f" `generate`, but it has already been created with the values {default}. {default} has been"
+                        " created by passing the corresponding arguments to generate or by the model's config default"
+                        f" values. If you just want to change the default values of {object_type} consider passing"
+                        f" them as arguments to `generate` instead of using a custom {object_type}."
+                    )
+        default_list.extend(custom_list)
+        return default_list
 
     def greedy_search(
         self,
@@ -1808,7 +1840,7 @@ class TFGenerationMixin:
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         length_penalty: Optional[float] = None,
-        early_stopping: Optional[bool] = None,
+        early_stopping: Optional[Union[bool, str]] = None,
         logits_processor: Optional[TFLogitsProcessorList] = None,
         logits_warper: Optional[TFLogitsProcessorList] = None,
         num_return_sequences: Optional[int] = None,
@@ -1838,8 +1870,12 @@ class TFGenerationMixin:
                 to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
                 the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
                 while `length_penalty` < 0.0 encourages shorter sequences.
-            early_stopping (`bool`, *optional*, defaults to `False`):
-                Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
+            early_stopping (`bool` or `str`, *optional*, defaults to `False`):
+                Controls the stopping condition for beam-based methods, like beam-search. It accepts the following
+                values: `True`, where the generation stops as soon as there are `num_beams` complete candidates;
+                `False`, where an heuristic is applied and the generation stops when is it very unlikely to find better
+                candidates; `"never"`, where the beam search procedure only stops when there cannot be better
+                candidates (canonical beam search algorithm).
             logits_processor (`[TFLogitsProcessorList]`, *optional*):
                 An instance of [`TFLogitsProcessorList`]. List of instances of class derived from [`TFLogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
@@ -2009,16 +2045,24 @@ class TFGenerationMixin:
             not_max_length_yet = cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = running_scores[:, :1] / (max_length**length_penalty)
+            # early_stopping == False -> apply heuristic = always get the best score from `cur_len`. See the discussion
+            # below for more details.
+            # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+            # early_stopping == "never" -> compute the best score from max_length or cur_len, depending on the sign of
+            #   length_penalty. Positive length_penalty favors longer sequences, thus we use max_length there.
+            if early_stopping == "never" and length_penalty > 0.0:
+                best_running_score = running_scores[:, :1] / (max_length**length_penalty)
+            else:
+                best_running_score = running_scores[:, :1] / (tf.cast(cur_len, dtype=tf.float32) ** length_penalty)
             worst_finished_score = tf.where(
                 is_sent_finished, tf.math.reduce_min(scores, axis=1, keepdims=True), -1.0e9
             )
-            improvement_still_possible = tf.math.reduce_all(worst_finished_score < best_running_score)
+            improvement_still_possible = tf.math.reduce_any(best_running_score > worst_finished_score)
 
             # 3. is there still a beam that has not finished?
-            still_open_beam = ~(tf.math.reduce_all(is_sent_finished) & early_stopping)
+            still_open_beam = ~(tf.math.reduce_all(is_sent_finished) & (early_stopping is True))
 
-            return not_max_length_yet & (still_open_beam | improvement_still_possible)
+            return not_max_length_yet & still_open_beam & improvement_still_possible
 
         def beam_search_body_fn(
             cur_len,
@@ -2140,12 +2184,9 @@ class TFGenerationMixin:
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
             topk_log_probs = topk_log_probs / (tf.cast(cur_len, dtype=tf.float32) ** length_penalty)
-            beams_in_batch_are_full = (
-                tf.broadcast_to(
-                    tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), shape_list(did_topk_just_finished)
-                )
-                & early_stopping
-            )
+            beams_in_batch_are_full = tf.broadcast_to(
+                tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), shape_list(did_topk_just_finished)
+            ) & (early_stopping is True)
             add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
             topk_log_probs += tf.cast(add_penalty, tf.float32) * -1.0e9
 
@@ -2239,7 +2280,7 @@ class TFGenerationMixin:
         sequences = tf.where(none_finished[:, None, None], sequences, running_sequences)
         scores = tf.where(none_finished[:, None], scores, running_scores)
 
-        # Take best beams for each batch (the score is sorted in ascending order)
+        # Take best beams for each batch (the score is sorted in descending order)
         sequences = flatten_beam_dim(sequences[:, :num_return_sequences, :])
         scores = flatten_beam_dim(scores[:, :num_return_sequences])
 
@@ -2417,7 +2458,6 @@ class TFGenerationMixin:
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
             if model_kwargs.get("past_key_values") is None:
-
                 # prepare inputs
                 model_inputs = self.prepare_inputs_for_generation(
                     generated[:, :cur_len], use_cache=use_cache, **model_kwargs
@@ -2634,7 +2674,13 @@ class TFGenerationMixin:
             generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables
         ):
             maximum_iterations = max_length - cur_len
-            generated, _, cur_len, _, _, = tf.while_loop(
+            (
+                generated,
+                _,
+                cur_len,
+                _,
+                _,
+            ) = tf.while_loop(
                 contrastive_search_cond_fn,
                 contrastive_search_body_fn,
                 (generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables),

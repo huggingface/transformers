@@ -465,8 +465,8 @@ class LEDEncoderSelfAttention(nn.Module):
         query = query.transpose(1, 2).reshape(batch_size * num_heads, seq_len, head_dim)
         key = key.transpose(1, 2).reshape(batch_size * num_heads, seq_len, head_dim)
 
-        query = self._chunk(query, window_overlap, self.config.__dict__.get("onnx_export", False))
-        key = self._chunk(key, window_overlap, self.config.__dict__.get("onnx_export", False))
+        query = self._chunk(query, window_overlap, getattr(self.config, "onnx_export", False))
+        key = self._chunk(key, window_overlap, getattr(self.config, "onnx_export", False))
 
         # matrix multiplication
         # bcxd: batch_size * num_heads x chunks x 2window_overlap x head_dim
@@ -2135,7 +2135,6 @@ class LEDDecoder(LEDPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."

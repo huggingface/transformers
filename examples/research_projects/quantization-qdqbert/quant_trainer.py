@@ -16,10 +16,9 @@
 import logging
 import re
 
-import torch
-
 import pytorch_quantization
 import pytorch_quantization.nn as quant_nn
+import torch
 from pytorch_quantization import calib
 from pytorch_quantization.tensor_quant import QuantDescriptor
 
