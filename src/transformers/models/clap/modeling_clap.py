@@ -775,7 +775,6 @@ class CLAPAudioStage(nn.Module):
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
-
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             layer_outputs = layer_module(
@@ -954,7 +953,6 @@ class CLAPAudioEncoder(nn.Module):
         always_partition: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, CLAPAudioModelOutput]:
-
         input_features = input_features.transpose(1, 3)
         hidden_states = self.bn0(input_features)
         hidden_states = hidden_states.transpose(1, 3)
@@ -1671,7 +1669,6 @@ class CLAPTextEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1772,18 +1769,19 @@ class CLAPAudioModel(CLAPPreTrainedModel):
 
     def __init__(self, config: CLAPAudioConfig):
         super().__init__(config)
-        self.audio_model = CLAPAudioEncoder(config)
+        self.audio_encoder = CLAPAudioEncoder(config)
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.audio_model.embeddings.patch_embedding
+        return self.audio_encoder.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLAPAudioConfig)
     def forward(
         self,
         input_features: Optional[torch.FloatTensor] = None,
+        is_longer: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1811,8 +1809,9 @@ class CLAPAudioModel(CLAPPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        return self.audio_model(
+        return self.audio_encoder(
             input_features=input_features,
+            is_longer=is_longer,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

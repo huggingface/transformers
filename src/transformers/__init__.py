@@ -207,8 +207,8 @@ _import_structure = {
         "CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLAPAudioConfig",
         "CLAPConfig",
+        "CLAPFeatureExtractor",
         "CLAPProcessor",
-        "CLAPFeatureExtractor"
         "CLAPTextConfig",
     ],
     "models.clip": [

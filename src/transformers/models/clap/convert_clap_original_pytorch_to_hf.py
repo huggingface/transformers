@@ -16,8 +16,8 @@
 import argparse
 
 import torch
-
 from clap import load
+
 from transformers import CLAPConfig, CLAPModel
 
 

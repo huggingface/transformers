@@ -120,7 +120,7 @@ class CLAPTextConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -144,7 +144,6 @@ class CLAPTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from CLAPConfig
@@ -244,7 +243,7 @@ class CLAPAudioConfig(PretrainedConfig):
         aff_block_r=4,
         enable_patch_fusion=False,
         layer_norm_eps=1e-5,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.window_size = window_size
@@ -279,7 +278,6 @@ class CLAPAudioConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from CLAPConfig
@@ -352,7 +350,7 @@ class CLAPConfig(PretrainedConfig):
         fusion_num_hidden_layers=2,
         projection_dim=512,
         projection_hidden_act="relu",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
