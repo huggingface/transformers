@@ -131,7 +131,7 @@ class Blip2VisionConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from Blip2Config
-        if config_dict.get("model_type") == "blip_2":
+        if config_dict.get("model_type") == "blip-2":
             config_dict = config_dict["vision_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:

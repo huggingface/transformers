@@ -16,6 +16,7 @@
 
 
 import inspect
+import tempfile
 import unittest
 
 import numpy as np
@@ -539,20 +540,20 @@ class Blip2ForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    # def test_load_vision_qformer_text_config(self):
-    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    def test_load_vision_qformer_text_config(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    #     # Save Blip2Config and check if we can load Blip2VisionConfig from it
-    #     with tempfile.TemporaryDirectory() as tmp_dir_name:
-    #         config.save_pretrained(tmp_dir_name)
-    #         vision_config = Blip2VisionConfig.from_pretrained(tmp_dir_name)
-    #         self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+        # Save Blip2Config and check if we can load Blip2VisionConfig from it
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            vision_config = Blip2VisionConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
 
-    #     # Save Blip2Config and check if we can load Blip2QFormerConfig from it
-    #     with tempfile.TemporaryDirectory() as tmp_dir_name:
-    #         config.save_pretrained(tmp_dir_name)
-    #         qformer_config = Blip2QFormerConfig.from_pretrained(tmp_dir_name)
-    #         self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
+        # Save Blip2Config and check if we can load Blip2QFormerConfig from it
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            qformer_config = Blip2QFormerConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
 
     @unittest.skip(reason="There's no base Blip2Model")
     def test_save_load_fast_init_from_base(self):
