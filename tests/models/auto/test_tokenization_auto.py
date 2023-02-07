@@ -230,8 +230,6 @@ class AutoTokenizerTest(unittest.TestCase):
 
         # Check the class of the tokenizer was properly saved (note that it always saves the slow class).
         self.assertEqual(config["tokenizer_class"], "BertTokenizer")
-        # Check other keys just to make sure the config was properly saved /reloaded.
-        self.assertEqual(config["name_or_path"], SMALL_MODEL_IDENTIFIER)
 
     def test_new_tokenizer_registration(self):
         try:

@@ -2153,6 +2153,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if self._auto_class is not None:
             custom_object_save(self, save_directory, config=tokenizer_config)
 
+        # remove private information
+        if "name_or_path" in tokenizer_config:
+            tokenizer_config.pop("name_or_path")
+
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
             f.write(out_str)
