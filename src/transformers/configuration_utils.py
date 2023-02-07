@@ -314,7 +314,7 @@ class PretrainedConfig(PushToHubMixin):
         self.id2label = kwargs.pop("id2label", None)
         self.label2id = kwargs.pop("label2id", None)
         if self.label2id is not None and not isinstance(self.label2id, dict):
-            raise TypeError("Argument label2id should be a dictionary.")
+            raise ValueError("Argument label2id should be a dictionary.")
         if self.id2label is not None:
             if not isinstance(self.id2label, dict):
                 raise ValueError("Argument id2label should be a dictionary.")
