@@ -156,11 +156,9 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             - self.
         """
         window = np.hanning(self.n_fft + 1)[:-1]
-
         frames = self._fram_wave(waveform)
         stft = self._stft(frames, window=window)
 
-        # if the imaginary parts are taken : (real, imag) = stftl; real ** 2 + imag ** 2
         magnitudes = np.abs(stft) ** 2
         mel_spec = np.matmul(mel_filters.T, magnitudes)
         log_mel_spec = self._power_to_db(mel_spec)
@@ -198,9 +196,9 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             # if the audio is too short, we just use the first chunk
             ranges[2] = [0]
         # randomly choose index for each part
-        idx_front = np.random.choice(ranges[0])
-        idx_middle = np.random.choice(ranges[1])
-        idx_back = np.random.choice(ranges[2])
+        idx_front = np.random.choice(ranges[0])  #172
+        idx_middle = np.random.choice(ranges[1]) #508
+        idx_back = np.random.choice(ranges[2])   #1039
         # select mel
         mel_chunk_front = mel[idx_front : idx_front + chunk_frames, :]
         mel_chunk_middle = mel[idx_middle : idx_middle + chunk_frames, :]
