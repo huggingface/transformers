@@ -129,6 +129,8 @@ class WhisperConfig(PretrainedConfig):
             Begin of stream token id.
         eos_token_id (`int`, *optional*, defaults to 50257):
             End of stream token id.
+        ts_start_token_id (`int`, *optional*, defaults to 50363)
+            Begin timestamp token id
         suppress_tokens (`List[int]`, *optional*):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
             function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI each correspond to the `english-only` and the
@@ -136,7 +138,8 @@ class WhisperConfig(PretrainedConfig):
         begin_suppress_tokens (`List[int]`, *optional*, defaults to `[220,50256]`):
             A list containing tokens that will be supressed at the beginning of the sampling process. Initialized as
             the token for `" "` (`blank_token_id`) and the `eos_token_id`
-
+        condition_on_previous_text (`bool`, *optional*):
+            If True, provide the previous output of the model as a prompt for the next window; disabling may make the text inconsistent across windows, but the model becomes less prone to getting stuck in a failure loop
 
     Example:
 
@@ -186,7 +189,7 @@ class WhisperConfig(PretrainedConfig):
         ts_start_token_id=50363,
         suppress_tokens=None,
         begin_suppress_tokens=[220, 50256],
-        condition_on_previous_text=False,
+        condition_on_previous_text=True,
         **kwargs
     ):
         self.vocab_size = vocab_size
