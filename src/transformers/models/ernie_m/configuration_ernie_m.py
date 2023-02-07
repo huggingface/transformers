@@ -30,59 +30,53 @@ ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ErnieMConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [*ErnieMModel*]. It is used to instantiate a ERNIEM
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ERNIE-M architecture. Configuration objects inherit from
-    [*PretrainedConfig*] and can be used to control the model outputs. Read the documentation from [*PretrainedConfig*]
-    for more information. [susnato/ernie-m-base_pytorch](https://huggingface.co/susnato/ernie-m-base_pytorch)
+    This is the configuration class to store the configuration of a [`ErnieMModel]. It is used to instantiate a
+    `ERNIEM` model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the `ERNIE-M` architecture. Configuration objects
+    inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
+    [`PretrainedConfig`] for more information.
+    [susnato/ernie-m-base_pytorch](https://huggingface.co/susnato/ernie-m-base_pytorch)
 
     Args:
-            vocab_size (int, *optional*):
-                Vocabulary size of *inputs_ids* in *ErnieMModel*. Also is the vocab size of token embedding matrix.
-                Defines the number of different tokens that can be represented by the *inputs_ids* passed when calling
-                *ErnieMModel*. Defaults to `250002`
-            hidden_size (int, *optional*):
-                Dimensionality of the embedding layer, encoder layers and pooler layer. Defaults to *768*.
-            num_hidden_layers (int, *optional*):
-                Number of hidden layers in the Transformer encoder. Defaults to *12*.
-            num_attention_heads (int, *optional*):
-                Number of attention heads for each attention layer in the Transformer encoder. Defaults to *12*.
-            intermediate_size (int, *optional*):
-                Dimensionality of the feed-forward (ff) layer in the encoder. Input tensors to feed-forward layers are
-                firstly projected from *hidden_size* to *intermediate_size*, and then projected back to *hidden_size*.
-                Typically *intermediate_size* is larger than *hidden_size*. Defaults to *3072*.
-            hidden_act (str, *optional*):
-                The non-linear activation function in the feed-forward layer. `"gelu"`, `"relu"` and any other paddle
-                supported activation functions are supported. Defaults to *"gelu"*.
-            hidden_dropout_prob (float, *optional*):
-                The dropout probability for all fully connected layers in the embeddings and encoder. Defaults to
-                *0.1*.
-            attention_probs_dropout_prob (float, *optional*):
-                The dropout probability used in MultiHeadAttention in all encoder layers to drop some attention target.
-                Defaults to *0.1*.
-            act_dropout (float, *optional*):
-                This dropout probability is used in ErnieMEncoderLayer after activation Defaults to *0.0*
-            max_position_embeddings (int, *optional*):
-                The maximum value of the dimensionality of position encoding, which dictates the maximum supported
-                length of an input sequence. Defaults to *512*.
-            type_vocab_size (int, *optional*):
-                The vocabulary size of the *token_type_ids*. Defaults to *2*.
-            layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-                The epsilon used by the layer normalization layers.
-            classifier_dropout (`float`, *optional*):
-                The dropout ratio for the classification head.
-            initializer_range (float, *optional*):
-                The standard deviation of the normal initializer for initializing all weight matrices. Defaults to
-    *0.02*. .. note:
+        vocab_size (`int`, *optional*, defaults to 250002):
+            Vocabulary size of `inputs_ids` in `ErnieMModel`. Also is the vocab size of token embedding matrix. Defines
+            the number of different tokens that can be represented by the `inputs_ids` passed when calling
+            `ErnieMModel`.
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the embedding layer, encoder layers and pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the feed-forward (ff) layer in the encoder. Input tensors to feed-forward layers are
+            firstly projected from hidden_size to intermediate_size, and then projected back to hidden_size. Typically
+            intermediate_size is larger than hidden_size.
+        hidden_act (`str`, *optional*, defaults to "gelu"):
+            The non-linear activation function in the feed-forward layer. `"gelu"`, `"relu"` and any other torch
+            supported activation functions are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings and encoder.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probability used in `MultiHeadAttention` in all encoder layers to drop some attention target.
+        act_dropout (`float`, *optional*, defaults to 0.0):
+            This dropout probability is used in `ErnieMEncoderLayer` after activation.
+        max_position_embeddings (`int`, *optional*, defaults to 512):
+            The maximum value of the dimensionality of position encoding, which dictates the maximum supported length
+            of an input sequence.
+        type_vocab_size (`int`, *optional*, defaults to 2):
+            The vocabulary size of the `token_type_ids`.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
+        classifier_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the classification head.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the normal initializer for initializing all weight matrices.
+        pad_token_id(`int`, *optional*, defaults to 1):
+            The index of padding token in the token vocabulary.
 
-    ```
     A normal_initializer initializes weight matrices as normal distributions. See
-    [`ErnieMPretrainedModel._init_weights()`] for how weights are initialized in *ErnieMModel*.
-    ```
-
-                pad_token_id(int, *optional*):
-                    The index of padding token in the token vocabulary. Defaults to *1*.
-            Examples:
+    [`ErnieMPretrainedModel._init_weights()`] for how weights are initialized in `ErnieMModel`.
     """
     model_type = "ernie_m"
     attribute_map: Dict[str, str] = {"dropout": "classifier_dropout", "num_classes": "num_labels"}

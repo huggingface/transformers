@@ -48,7 +48,7 @@ else:
         "ErnieMForTokenClassification",
         "ErnieMModel",
         "ErnieMPreTrainedModel",
-        "ErnieMUIEM",
+        "ErnieMForInformationExtraction",
     ]
 
 
@@ -72,13 +72,13 @@ if TYPE_CHECKING:
     else:
         from .modeling_ernie_m import (
             ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ErnieMForInformationExtraction,
             ErnieMForMultipleChoice,
             ErnieMForQuestionAnswering,
             ErnieMForSequenceClassification,
             ErnieMForTokenClassification,
             ErnieMModel,
             ErnieMPreTrainedModel,
-            ErnieMUIEM,
         )
 
 

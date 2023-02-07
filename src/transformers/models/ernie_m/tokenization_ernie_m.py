@@ -33,27 +33,28 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "sentencepiece_model_ckpt": "sen
 
 class ErnieMTokenizer(PreTrainedTokenizer):
     r"""
-    Args:
     Constructs a ErnieM tokenizer. It uses the `sentencepiece` tools to cut the words to sub-words.
-        vocab_file (str):
+
+    Args:
+        vocab_file (`str`):
             The file path of the vocabulary.
-        sentencepiece_model_file (str):
+        sentencepiece_model_file (`str`):
             The file path of sentencepiece model.
-        do_lower_case (str, optional):
-            Whether or not to lowercase the input when tokenizing. Defaults to`True`.
-        unk_token (str, optional):
-            A special token representing the *unknown (out-of-vocabulary)* token. An unknown token is set to be
-            `unk_token` inorder to be converted to an ID. Defaults to "[UNK]".
-        sep_token (str, optional):
-            A special token separating two different sentences in the same input. Defaults to "[SEP]".
-        pad_token (str, optional):
-            A special token used to make arrays of tokens the same size for batching purposes. Defaults to "[PAD]".
-        cls_token (str, optional):
+        do_lower_case (`str`, *optional*, defaults to True):
+            Whether or not to lowercase the input when tokenizing.
+        unk_token (`str`, *optional*, defaults to "[UNK]"):
+            A special token representing the `unknown (out-of-vocabulary)` token. An unknown token is set to be
+            `unk_token` inorder to be converted to an ID.
+        sep_token (`str`, *optional*, defaults to "[SEP]"):
+            A special token separating two different sentences in the same input.
+        pad_token (`str`, *optional*, defaults to "[PAD]"):
+            A special token used to make arrays of tokens the same size for batching purposes.
+        cls_token (`str`, *optional*, defaults to "[CLS]"):
             A special token used for sequence classification. It is the last token of the sequence when built with
-            special tokens. Defaults to "[CLS]".
-        mask_token (str, optional):
+            special tokens.
+        mask_token (`str`, *optional*, defaults to "[MASK]"):
             A special token representing a masked token. This is the token used in the masked language modeling task
-            which the model tries to predict the original unmasked ones. Defaults to "[MASK]".
+            which the model tries to predict the original unmasked ones.
     """
     resource_files_names = {
         "sentencepiece_model_file": "sentencepiece.bpe.model",
@@ -223,12 +224,12 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         - pair of sequences: `[CLS] A [SEP] [SEP] B [SEP]`
 
         Args:
-            token_ids_0 (List[int]):
+            token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
-            token_ids_1 (List[int], optional):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs. Defaults to *None*.
         Returns:
-            List[int]: List of input_id with the appropriate special tokens.
+            `List[int]`: List of input_id with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -244,12 +245,12 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         - pair of sequences: `(0,0) A (0,0) (0,0) B (0,0)`
 
         Args:
-            offset_mapping_ids_0 (List[tuple]):
+            offset_mapping_ids_0 (`List[tuple]`):
                 List of char offsets to which the special tokens will be added.
-            offset_mapping_ids_1 (List[tuple], optional):
-                Optional second list of wordpiece offsets for offset mapping pairs. Defaults to *None*.
+            offset_mapping_ids_1 (`List[tuple]`, *optional*):
+                Optional second list of wordpiece offsets for offset mapping pairs.
         Returns:
-            List[tuple]: List of wordpiece offsets with the appropriate offsets of special tokens.
+            `List[tuple]`: List of wordpiece offsets with the appropriate offsets of special tokens.
         """
         if offset_mapping_1 is None:
             return [(0, 0)] + offset_mapping_0 + [(0, 0)]

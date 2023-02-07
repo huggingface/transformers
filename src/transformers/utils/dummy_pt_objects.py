@@ -2418,6 +2418,13 @@ class ErniePreTrainedModel(metaclass=DummyObject):
 ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class ErnieMForInformationExtraction(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ErnieMForMultipleChoice(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -2454,13 +2461,6 @@ class ErnieMModel(metaclass=DummyObject):
 
 
 class ErnieMPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class ErnieMUIEM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

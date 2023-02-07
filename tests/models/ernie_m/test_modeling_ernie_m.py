@@ -28,12 +28,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        ErnieMForInformationExtraction,
         ErnieMForMultipleChoice,
         ErnieMForQuestionAnswering,
         ErnieMForSequenceClassification,
         ErnieMForTokenClassification,
         ErnieMModel,
-        ErnieMUIEM,
     )
     from transformers.models.ernie_m.modeling_ernie_m import ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -152,7 +152,7 @@ class ErnieMModelTester:
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_for_uiem(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
-        model = ErnieMUIEM(config=config)
+        model = ErnieMForInformationExtraction(config=config)
         model.to(torch_device)
         model.eval()
         sequence_labels = torch.ones_like(input_ids, dtype=torch.float32)

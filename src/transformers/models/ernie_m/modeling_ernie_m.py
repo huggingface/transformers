@@ -442,7 +442,7 @@ ERNIE_M_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`~ErnieMConfig`]): Model configuration class with all the parameters of the model.
+        config ([`ErnieMConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -971,14 +971,14 @@ class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
 
 
 @add_start_docstrings(
-    """ErnieMUIEM is a Ernie-M Model with two linear layer on top of the hidden-states output to
+    """ErnieMForInformationExtraction is a Ernie-M Model with two linear layer on top of the hidden-states output to
     compute `start_prob` and `end_prob`, designed for Universal Information Extraction.""",
     ERNIE_M_START_DOCSTRING,
 )
 # Copied from paddlenlp.transformers.ernie_m.modeling.UIEM
-class ErnieMUIEM(ErnieMPreTrainedModel):
+class ErnieMForInformationExtraction(ErnieMPreTrainedModel):
     def __init__(self, config):
-        super(ErnieMUIEM, self).__init__(config)
+        super(ErnieMForInformationExtraction, self).__init__(config)
         self.ernie_m = ErnieMModel(config)
         self.linear_start = nn.Linear(config.hidden_size, 1)
         self.linear_end = nn.Linear(config.hidden_size, 1)
