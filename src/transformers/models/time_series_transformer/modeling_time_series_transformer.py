@@ -314,7 +314,7 @@ class MeanScaler(nn.Module):
         self.register_buffer("default_scale", torch.tensor(default_scale))
 
     @torch.no_grad()
-    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # shape: (N, [C], T=1)
         ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
         num_observed = observed_indicator.sum(self.dim, keepdim=True)
