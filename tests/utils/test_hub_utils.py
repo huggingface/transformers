@@ -19,6 +19,7 @@ import unittest.mock as mock
 from pathlib import Path
 
 from requests.exceptions import HTTPError
+
 from transformers.utils import (
     CONFIG_NAME,
     FLAX_WEIGHTS_NAME,

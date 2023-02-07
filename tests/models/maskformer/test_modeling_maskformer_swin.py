@@ -163,7 +163,6 @@ class MaskFormerSwinModelTester:
 
 @require_torch
 class MaskFormerSwinModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             MaskFormerSwinModel,

@@ -37,7 +37,8 @@ from tqdm.auto import tqdm
 
 
 # Integrations must be imported before ML frameworks:
-from .integrations import (  # isort: split
+# isort: off
+from .integrations import (
     default_hp_search_backend,
     get_reporting_integration_callbacks,
     hp_params,
@@ -52,15 +53,16 @@ from .integrations import (  # isort: split
     run_hp_search_wandb,
 )
 
+# isort: on
+
 import numpy as np
 import torch
 import torch.distributed as dist
+from huggingface_hub import Repository, create_repo
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
-
-from huggingface_hub import Repository, create_repo
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -1414,9 +1416,8 @@ class Trainer:
         # Distributed training using PyTorch FSDP
         elif self.fsdp is not None:
             # PyTorch FSDP!
-            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
+            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, MixedPrecision
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-            from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
             from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
             if FSDPOption.OFFLOAD in self.args.fsdp:
@@ -1797,8 +1798,10 @@ class Trainer:
                 self._load_rng_state(resume_from_checkpoint)
 
             rng_to_sync = False
+            steps_skipped = 0
             if skip_first_batches is not None and steps_trained_in_current_epoch > 0:
                 epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
+                steps_skipped = steps_trained_in_current_epoch
                 steps_trained_in_current_epoch = 0
                 rng_to_sync = True
 
@@ -1906,7 +1909,7 @@ class Trainer:
 
                     model.zero_grad()
                     self.state.global_step += 1
-                    self.state.epoch = epoch + (step + 1) / steps_in_epoch
+                    self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
                     self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
@@ -2004,7 +2007,6 @@ class Trainer:
         return run_dir
 
     def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
-
         if model is None:
             model = self.model
 
@@ -2071,7 +2073,6 @@ class Trainer:
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path):
             if self.deepspeed:
-
                 if self.model_wrapped is not None:
                     # this removes the pre-hooks from the previous engine
                     self.model_wrapped.destroy()
@@ -2127,7 +2128,6 @@ class Trainer:
             )
 
     def _issue_warnings_after_load(self, load_result):
-
         if len(load_result.missing_keys) != 0:
             if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
                 self.model._keys_to_ignore_on_save
@@ -2684,7 +2684,6 @@ class Trainer:
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
         elif self.deepspeed:
-
             # this takes care of everything as long as we aren't under zero3
             if self.args.should_save:
                 self._save(output_dir)
@@ -2983,7 +2982,6 @@ class Trainer:
 
         # if eval is called w/o train init deepspeed here
         if args.deepspeed and not self.deepspeed:
-
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
             deepspeed_engine, _, _ = deepspeed_init(

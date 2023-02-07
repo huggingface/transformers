@@ -45,6 +45,7 @@ if is_flax_available():
     import jax.numpy as jnp
     import optax
     from flax.traverse_util import flatten_dict
+
     from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Processor
     from transformers.models.wav2vec2.modeling_flax_wav2vec2 import (
         FlaxWav2Vec2ForCTC,
@@ -58,6 +59,7 @@ if is_flax_available():
 
 if is_pyctcdecode_available():
     import pyctcdecode.decoder
+
     from transformers import Wav2Vec2ProcessorWithLM
     from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
@@ -67,7 +69,6 @@ if is_librosa_available():
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -276,7 +277,6 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-
                     self.assertEqual(jitted_output.shape, output.shape)
 
     def test_freeze_feature_encoder(self):

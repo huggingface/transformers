@@ -142,9 +142,8 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
             tokenizer.convert_ids_to_tokens(g, skip_special_tokens=True) for g in summary_ids_beam1
         ]
         EXPECTED_TITLE_EN_BEAM1_TOK = "▁Microsoft ▁to ▁end ▁free ▁support ▁for ▁Windows ▁7".split(" ")
-        EXPECTED_TITLE_RU_BEAM1_TOK = (
-            "▁Microsoft ▁намерен а ▁прекрати ть ▁бес плат ную ▁поддержку ▁Windows ▁7 ▁после ▁14 ▁января ▁2020 ▁года"
-            .split(" ")
+        EXPECTED_TITLE_RU_BEAM1_TOK = "▁Microsoft ▁намерен а ▁прекрати ть ▁бес плат ную ▁поддержку ▁Windows ▁7 ▁после ▁14 ▁января ▁2020 ▁года".split(
+            " "
         )
         EXPECTED_TITLE_ZH_BEAM1_TOK = "微软 公司 打算 终止 对 Windows ▁7 操作 系统的 免费 支持".split(" ")
         self.assertListEqual(

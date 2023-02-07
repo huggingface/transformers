@@ -29,7 +29,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class GPTNeoXJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = GPTNeoXJapaneseTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"do_clean_text": False, "add_prefix_space": False}
