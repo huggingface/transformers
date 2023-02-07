@@ -183,8 +183,10 @@ class WhisperConfig(PretrainedConfig):
         pad_token_id=50256,
         bos_token_id=50257,
         eos_token_id=50256,
+        ts_start_token_id=50363,
         suppress_tokens=None,
         begin_suppress_tokens=[220, 50256],
+        condition_on_previous_text=False,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -208,6 +210,7 @@ class WhisperConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
+        self.condition_on_previous_text = condition_on_previous_text
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

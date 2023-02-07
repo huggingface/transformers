@@ -81,6 +81,33 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
         mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
+# To only condition from certain indexes
+def _make_variable_start_mask(input_ids_shape: torch.Size, dtype: torch.dtype, per_sample_start: torch.tensor,
+                            past_key_values_length: int = 0):
+    """
+    Make causal mask used for bi-directional self-attention.
+    """
+    bsz, tgt_len = input_ids_shape
+
+    if input_ids_shape[0] != per_sample_start.shape[0]:
+        raise ValueError(f"Per sample start should be (b,n) where b is batch size {input_ids_shape[0]}, not {per_sample_start.shape[0]}")
+    # print(past_key_values_length)
+    # import pdb; pdb.set_trace()
+    bsz, tgt_len = input_ids_shape
+    mask = torch.full((bsz, tgt_len, past_key_values_length), torch.tensor(torch.finfo(dtype).min)).to(per_sample_start.device)
+    mask_cond = torch.arange(mask.size(-1)).to(per_sample_start.device)
+    mask.masked_fill_((mask_cond > per_sample_start).unsqueeze(1), 0)
+    # mask = mask.unsqueeze(1)
+    # mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
+    # mask_cond = torch.arange(mask.size(-1))
+    mask = mask.to(dtype)
+
+    # if past_key_values_length > 0:
+        # mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
+    mask = torch.cat([mask, torch.zeros_like(mask[:,:,:1])], dim=-1).unsqueeze(1)
+    return mask
+    # return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
@@ -749,7 +776,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length, condition_start_idx):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
@@ -765,7 +792,14 @@ class WhisperDecoder(WhisperPreTrainedModel):
             combined_attention_mask = (
                 expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
             )
-
+        
+        if condition_start_idx is not None and condition_start_idx.sum() > 1:
+            expanded_attn_mask = _make_variable_start_mask(input_shape, inputs_embeds.dtype, condition_start_idx, past_key_values_length)
+            combined_attention_mask = (
+                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+            )
+        # print(input_shape)
+        # import pdb; pdb.set_trace()
         return combined_attention_mask
 
     def forward(
@@ -781,6 +815,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        condition_start_idx=None,
     ):
         r"""
         Args:
@@ -864,7 +899,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
+            attention_mask, input_shape, inputs_embeds, past_key_values_length, condition_start_idx
         )
 
         # embed positions
@@ -1019,6 +1054,7 @@ class WhisperModel(WhisperPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        condition_start_idx: Optional[torch.IntTensor] = None,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
         r"""
         Returns:
@@ -1075,6 +1111,7 @@ class WhisperModel(WhisperPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            condition_start_idx=condition_start_idx
         )
 
         if not return_dict:
@@ -1112,6 +1149,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         self.model = WhisperModel(config)
         self.proj_out = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
+        # Keep track of last input ids when condition_on_previous_text=False
+        self.last_is_timestamp = None
+        self.condition_start_idx = None
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1188,6 +1228,26 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+
+        if self.config.condition_on_previous_text or torch.all(decoder_input_ids == self.config.decoder_start_token_id):
+            self.condition_start_idx = torch.zeros_like(decoder_input_ids).int()
+            self.last_is_timestamp = None
+
+        if not self.config.condition_on_previous_text:
+            timestamp_tokens: torch.Tensor = decoder_input_ids.ge(self.config.ts_start_token_id)
+            if self.last_is_timestamp is not None:
+                consecutive = torch.logical_and(timestamp_tokens, self.last_is_timestamp)
+                if torch.any(consecutive):
+                    past_key_values_len = past_key_values[0][0].shape[2]
+                    self.condition_start_idx[consecutive] = past_key_values_len
+            else:
+                self.condition_start_idx = torch.zeros_like(decoder_input_ids).int()
+            self.last_is_timestamp = timestamp_tokens
+        
+
         if labels is not None:
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
@@ -1208,6 +1268,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            condition_start_idx=self.condition_start_idx
         )
         lm_logits = self.proj_out(outputs[0])
 
@@ -1385,6 +1446,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         attention_mask=None,
         **kwargs
     ):
+        # import pdb; pdb.set_trace()
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
