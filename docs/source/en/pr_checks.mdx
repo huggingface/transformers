@@ -71,13 +71,13 @@ If you're interested in building or previewing the documentation locally, take a
 
 ## Code and documentation style
 
-Code formatting is applied to all the source files, the examples and the tests using `black` and `isort`. We also have a custom tool taking care of the formatting of docstrings and `rst` files (`utils/style_doc.py`), as well as the order of the lazy imports performed in the Transformers `__init__.py` files (`utils/custom_init_isort.py`). All of this can be launched by executing
+Code formatting is applied to all the source files, the examples and the tests using `black` and `ruff`. We also have a custom tool taking care of the formatting of docstrings and `rst` files (`utils/style_doc.py`), as well as the order of the lazy imports performed in the Transformers `__init__.py` files (`utils/custom_init_isort.py`). All of this can be launched by executing
 
 ```bash
 make style
 ```
 
-The CI checks those have been applied inside the `ci/circleci: check_code_quality` check. It also runs `flake8`, that will have a basic look at your code and will complain if it finds an undefined variable, or one that is not used. To run that check locally, use
+The CI checks those have been applied inside the `ci/circleci: check_code_quality` check. It also runs `ruff`, that will have a basic look at your code and will complain if it finds an undefined variable, or one that is not used. To run that check locally, use
 
 ```bash
 make quality

@@ -17,7 +17,6 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports
 from ...file_utils import _LazyModule
 
 

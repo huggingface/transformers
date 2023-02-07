@@ -17,7 +17,6 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available
 
 
