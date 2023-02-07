@@ -533,6 +533,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xlm-prophetnet", "XLM-ProphetNet"),
         ("xlm-roberta", "XLM-RoBERTa"),
         ("xlm-roberta-xl", "XLM-RoBERTa-XL"),
+        ("xlm-v", "XLM-V"),
         ("xlnet", "XLNet"),
         ("xls_r", "XLS-R"),
         ("xlsr_wav2vec2", "XLSR-Wav2Vec2"),
