@@ -33,9 +33,9 @@ From the abstract of the XLM-V paper:
 
 Tips:
 
-- XLM-V is compatible with the XLM-RoBERTa model architecture, so only model weights had to be converted.
-
-
+- XLM-V is compatible with the XLM-RoBERTa model architecture, only model weights from [`fairseq`](https://github.com/facebookresearch/fairseq)
+  library had to be converted.
+- The `XLMTokenizer` implementation is used to load the vocab and performs tokenization.
 
 This model was contributed by [stefan-it](https://huggingface.co/stefan-it), including detailed experiments with XLM-V on downstream tasks.
 The experiments repository can be found [here](https://github.com/stefan-it/xlm-v-experiments).
