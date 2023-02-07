@@ -2298,9 +2298,9 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
         return inputs_dict
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reord_past_buckets_states = []
-        for layer_past in past:
+        for layer_past in past_key_values:
             # buckets
             if layer_past[0] is not None:
                 reord_buckets = layer_past[0].index_select(0, beam_idx)
