@@ -12,18 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import shutil
 import tempfile
 import unittest
 
-import numpy as np
-import pytest
-
-from transformers import CLAPTokenizer, CLAPTokenizerFast
+from transformers import RobertaTokenizer
+from transformers.testing_utils import require_sentencepiece, require_torchaudio
 from transformers.utils import is_torchvision_available
-from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
+
 from .test_feature_extraction_clap import floats_list
 
 
@@ -35,7 +31,6 @@ TRANSCRIBE = 50358
 NOTIMESTAMPS = 50362
 
 
-
 @require_torchaudio
 @require_sentencepiece
 class CLAPProcessorTest(unittest.TestCase):
@@ -44,7 +39,7 @@ class CLAPProcessorTest(unittest.TestCase):
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
-        return CLAPTokenizer.from_pretrained(self.checkpoint, **kwargs)
+        return RobertaTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
         return CLAPFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
@@ -62,7 +57,7 @@ class CLAPProcessorTest(unittest.TestCase):
         processor = CLAPProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, CLAPTokenizer)
+        self.assertIsInstance(processor.tokenizer, RobertaTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, CLAPFeatureExtractor)
@@ -79,7 +74,7 @@ class CLAPProcessorTest(unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, CLAPTokenizer)
+        self.assertIsInstance(processor.tokenizer, RobertaTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, CLAPFeatureExtractor)
