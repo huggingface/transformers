@@ -15,17 +15,13 @@
 import copy
 import logging
 import os
-import random
 import sys
 import tempfile
 import unittest
-from abc import abstractmethod
 from pathlib import Path
-from unittest import skipIf
 
 import datasets
 import numpy as np
-import requests
 from huggingface_hub import HfFolder, Repository, create_repo, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 
@@ -214,121 +210,6 @@ def validate_test_components(test_case, model, tokenizer, processor):
                 f" {len(tokenizer)} tokens which is greater than `config_vocab_size`"
                 f" ({config_vocab_size}). Something is wrong."
             )
-
-
-class PipelineTestCaseMeta(type):
-    def __new__(mcs, name, bases, dct):
-        def gen_test(repo_name, model_architecture, tokenizer_name, processor_name):
-            @skipIf(
-                tokenizer_name is None and processor_name is None,
-                f"Ignore {model_architecture.__name__}: no processor class is provided (tokenizer, image processor,"
-                " feature extractor, etc)",
-            )
-            def test(self):
-                repo_id = f"hf-internal-testing/{repo_name}"
-
-                tokenizer = None
-                if tokenizer_name is not None:
-                    tokenizer_class = getattr(transformers_module, tokenizer_name)
-                    tokenizer = tokenizer_class.from_pretrained(repo_id)
-
-                processor = None
-                if processor_name is not None:
-                    processor_class = getattr(transformers_module, processor_name)
-                    # If the required packages (like `Pillow`) are not installed, this will fail.
-                    try:
-                        processor = processor_class.from_pretrained(repo_id)
-                    except Exception:
-                        self.skipTest(f"Ignore {model_architecture.__name__}: could not load the model from {repo_id}")
-
-                try:
-                    model = model_architecture.from_pretrained(repo_id)
-                except Exception:
-                    self.skipTest(f"Ignore {model_architecture.__name__}: could not load the model from {repo_id}")
-
-                # validate
-                validate_test_components(self, model, tokenizer, processor)
-
-                if hasattr(model, "eval"):
-                    model = model.eval()
-
-                pipeline, examples = self.get_test_pipeline(model, tokenizer, processor)
-                if pipeline is None:
-                    # The test can disable itself, but it should be very marginal
-                    # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
-                    self.skipTest(f"Ignore {model_architecture.__name__}: could not create the pipeline")
-                self.run_pipeline_test(pipeline, examples)
-
-                def run_batch_test(pipeline, examples):
-                    # Need to copy because `Conversation` are stateful
-                    if pipeline.tokenizer is not None and pipeline.tokenizer.pad_token_id is None:
-                        return  # No batching for this and it's OK
-
-                    # 10 examples with batch size 4 means there needs to be a unfinished batch
-                    # which is important for the unbatcher
-                    def data(n):
-                        for _ in range(n):
-                            # Need to copy because Conversation object is mutated
-                            yield copy.deepcopy(random.choice(examples))
-
-                    out = []
-                    for item in pipeline(data(10), batch_size=4):
-                        out.append(item)
-                    self.assertEqual(len(out), 10)
-
-                run_batch_test(pipeline, examples)
-
-            return test
-
-        # Download tiny model summary (used to avoid requesting from Hub too many times)
-        url = "https://huggingface.co/datasets/hf-internal-testing/tiny-random-model-summary/raw/main/processor_classes.json"
-        tiny_model_summary = requests.get(url).json()
-
-        for prefix, key in [("pt", "model_mapping"), ("tf", "tf_model_mapping")]:
-            mapping = dct.get(key, {})
-            if mapping:
-                for config_class, model_architectures in mapping.items():
-                    if not isinstance(model_architectures, tuple):
-                        model_architectures = (model_architectures,)
-
-                    for model_architecture in model_architectures:
-                        model_arch_name = model_architecture.__name__
-                        # Get the canonical name
-                        for _prefix in ["Flax", "TF"]:
-                            if model_arch_name.startswith(_prefix):
-                                model_arch_name = model_arch_name[len(_prefix) :]
-                                break
-
-                        tokenizer_names = []
-                        processor_names = []
-                        if model_arch_name in tiny_model_summary:
-                            tokenizer_names = tiny_model_summary[model_arch_name]["tokenizer_classes"]
-                            processor_names = tiny_model_summary[model_arch_name]["processor_classes"]
-                        # Adding `None` (if empty) so we can generate tests
-                        tokenizer_names = [None] if len(tokenizer_names) == 0 else tokenizer_names
-                        processor_names = [None] if len(processor_names) == 0 else processor_names
-
-                        repo_name = f"tiny-random-{model_arch_name}"
-                        for tokenizer_name in tokenizer_names:
-                            for processor_name in processor_names:
-                                if is_test_to_skip(
-                                    name, config_class, model_architecture, tokenizer_name, processor_name
-                                ):
-                                    continue
-                                test_name = f"test_{prefix}_{config_class.__name__}_{model_architecture.__name__}_{tokenizer_name}_{processor_name}"
-                                dct[test_name] = gen_test(
-                                    repo_name, model_architecture, tokenizer_name, processor_name
-                                )
-
-        @abstractmethod
-        def inner(self):
-            raise NotImplementedError("Not implemented test")
-
-        # Force these 2 methods to exist
-        dct["test_small_model_pt"] = dct.get("test_small_model_pt", inner)
-        dct["test_small_model_tf"] = dct.get("test_small_model_tf", inner)
-
-        return type.__new__(mcs, name, bases, dct)
 
 
 class CommonPipelineTest(unittest.TestCase):

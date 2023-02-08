@@ -32,7 +32,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -48,7 +48,7 @@ else:
 @require_vision
 @require_timm
 @require_torch
-class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ObjectDetectionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
