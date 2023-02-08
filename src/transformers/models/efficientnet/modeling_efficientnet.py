@@ -226,7 +226,6 @@ class EfficientNetDepthwiseLayer(nn.Module):
     Args:
         config ([`EfficientNetConfig`]): Model configuration class.
         in_dim (`int`): Number of input channels.
-        out_dim (`int`): Number of output channels.
         stride (`int`): Stride size.
         drop_rate (`float`): Dropout rate to be used.
     """
@@ -235,7 +234,6 @@ class EfficientNetDepthwiseLayer(nn.Module):
         self,
         config: EfficientNetConfig,
         in_dim: int,
-        out_dim: int,
         stride: int,
         kernel_size: int,
     ):
@@ -245,9 +243,9 @@ class EfficientNetDepthwiseLayer(nn.Module):
 
         self.depthwise_conv_pad = nn.ZeroPad2d(padding=kernel_size)
         self.depthwise_conv = DepthwiseConv2d(
-            out_dim, kernel_size=kernel_size, stride=stride, padding=conv_pad, bias=False
+            in_dim, kernel_size=kernel_size, stride=stride, padding=conv_pad, bias=False
         )
-        self.depthwise_norm = nn.BatchNorm2d(num_features=out_dim)
+        self.depthwise_norm = nn.BatchNorm2d(num_features=in_dim)
         self.depthwise_act = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
@@ -269,10 +267,10 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
         dim (`int`): Number of input channels.
     """
 
-    def __init__(self, config, dim):
+    def __init__(self, config: EfficientNetConfig, in_dim: int, expand_dim: int, expand: bool = False):
         super().__init__()
-        self.dim = dim
-        self.dim_se = max(1, int(dim * config.squeeze_expansion_ratio))
+        self.dim = expand_dim if expand else in_dim
+        self.dim_se = max(1, int(in_dim * config.squeeze_expansion_ratio))
 
         self.squeeze = nn.AdaptiveAvgPool2d(output_size=1)
         self.reduce = nn.Conv2d(
@@ -291,7 +289,7 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
         self.act_expand = nn.Sigmoid()
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
-        input = hidden_states
+        inputs = hidden_states
         hidden_states = self.squeeze(hidden_states)
         hidden_states = hidden_states.reshape((1, 1, self.dim))
 
@@ -300,8 +298,8 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
 
         hidden_states = self.expand(hidden_states)
         hidden_states = self.act_expand(hidden_states)
-        x = torch.mul(input, hidden_states)
-        return x
+        hidden_states = torch.mul(inputs, hidden_states)
+        return hidden_states
 
 
 class EfficientNetFinalLayer(nn.Module):
@@ -361,19 +359,27 @@ class EfficientNetBlock(nn.Module):
     ):
         super().__init__()
         self.expand_ratio = expand_ratio
-        if self.expand_ratio != 1:
-            self.expansion = EfficientNetExpansionLayer(config=config, in_dim=in_dim, out_dim=out_dim, stride=stride)
+        self.expand = True if self.expand_ratio != 1 else False
+        expand_in_dim = in_dim * expand_ratio
+
+        if self.expand:
+            self.expansion = EfficientNetExpansionLayer(
+                config=config, 
+                in_dim=in_dim, 
+                out_dim=expand_in_dim, 
+                stride=stride
+            )
+            
         self.depthwise_conv = EfficientNetDepthwiseLayer(
             config=config,
-            in_dim=in_dim,
-            out_dim=in_dim * expand_ratio,
+            in_dim=expand_in_dim if self.expand else in_dim,
             stride=stride,
             kernel_size=kernel_size,
         )
-        self.squeeze_excite = EfficientNetSqueezeExciteLayer(config=config, dim=in_dim)
+        self.squeeze_excite = EfficientNetSqueezeExciteLayer(config=config, in_dim=in_dim, expand_dim=expand_in_dim, expand=self.expand)
         self.projection = EfficientNetFinalLayer(
             config=config,
-            in_dim=in_dim,
+            in_dim=expand_in_dim if self.expand else in_dim,
             out_dim=out_dim,
             stride=stride,
             drop_rate=drop_rate,
@@ -485,15 +491,15 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     EFFICIENTNET_START_DOCSTRING,
 )
 class EfficientNetModel(EfficientNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: EfficientNetConfig):
         super().__init__(config)
         self.config = config
         self.embeddings = EfficientNetEmbeddings(config)
         self.encoder = EfficientNetEncoder(config)
 
-        # Final layernorm layer
-        self.layernorm = nn.LayerNorm(config.hidden_dim, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(p=config.drop_rate)
+        # Final pooling layer
+        self.pooler = nn.AvgPool2d(config.hidden_dim)
+        
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -530,8 +536,7 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
         last_hidden_state = encoder_outputs[0]
 
         # Global average pooling, (N, C, H, W) -> (N, C)
-        pooled_output = self.layernorm(last_hidden_state.mean([-2, -1]))
-        pooled_output = self.dropout(pooled_output)
+        pooled_output = self.pooler(last_hidden_state)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -557,6 +562,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
 
         self.efficientnet = EfficientNetModel(config)
         # Classifier head
+        self.dropout = nn.Dropout(p=config.drop_rate)
         self.classifier = nn.Linear(config.hidden_sizes[-1], num_labels) if num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
@@ -587,7 +593,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         outputs = self.efficientnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
+        pooled_output = self.dropout(p=config.drop_rate)
         logits = self.classifier(pooled_output)
 
         loss = None
@@ -612,6 +618,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
+
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
