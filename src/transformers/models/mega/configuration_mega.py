@@ -30,7 +30,7 @@ MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 
-class MegaConfig(PretrainedConfig):
+class MegaConfigNew(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MegaModel`] or a [`TFMegaModel`]. It is
     used to instantiate a Mega model according to the specified arguments, defining the model architecture.
@@ -153,3 +153,53 @@ class MegaOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+
+# The config class I put together in my Colab implementation
+class MegaConfig:
+  "We'll need tokenizer configs too"
+  def __init__(
+      self,
+      embed_dim,
+      zdim,
+      hdim,
+      ndim,
+      dropout_prob=0.0, # applied to EMA output and `h`
+      attention_dropout_prob=0.0, # applied to attention weights
+      hidden_dropout_prob=0.0, # applied to attention values
+      activation='silu',
+      attention_activation='softmax',
+      bidirectional=True,
+      chunk_size=-1,
+      truncation=None,
+      norm_type='layernorm',
+      prenorm=True,
+      norm_affine=True,
+      feature_dropout=False,
+      rel_pos_bias='rotary',
+      max_positions=1024,
+      ffn_hidden_size=256,
+      ffn_activation_dropout_prob=0.0,
+      normalize_before_ffn = True
+  ):
+    self.embed_dim = embed_dim 
+    self.zdim = zdim
+    self.hdim = hdim 
+    self.ndim = ndim
+    self.dropout_prob = dropout_prob
+    self.attention_dropout_prob = attention_dropout_prob
+    self.hidden_dropout_prob = hidden_dropout_prob
+    self.activation = activation 
+    self.attention_activation = attention_activation
+    self.bidirectional = bidirectional 
+    self.chunk_size = chunk_size 
+    self.truncation = truncation 
+    self.norm_type = norm_type 
+    self.prenorm = prenorm 
+    self.norm_affine = norm_affine 
+    self.feature_dropout = feature_dropout 
+    self.rel_pos_bias = rel_pos_bias 
+    self.max_positions = max_positions
+    self.ffn_hidden_size = ffn_hidden_size
+    self.ffn_activation_dropout_prob = ffn_activation_dropout_prob
+    self.normalize_before_ffn = normalize_before_ffn
