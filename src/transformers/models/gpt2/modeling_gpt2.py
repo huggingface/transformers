@@ -17,6 +17,7 @@
 
 import math
 import os
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -689,6 +690,13 @@ class GPT2Model(GPT2PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         # Check validity of device_map
+        warnings.warn(
+            "`GPT2Model.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your"
+            " model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'h.0': 0, 'h.1': 1,"
+            " ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
         )
@@ -708,6 +716,10 @@ class GPT2Model(GPT2PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.model_parallel = False
         self.device_map = None
         self.first_device = "cpu"
@@ -844,7 +856,6 @@ class GPT2Model(GPT2PreTrainedModel):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-
             # Model parallel
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
@@ -860,7 +871,6 @@ class GPT2Model(GPT2PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -957,6 +967,13 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`GPT2LMHeadModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
+            " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'transformer.h.0':"
+            " 0, 'transformer.h.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
             if device_map is None
@@ -969,6 +986,10 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.transformer.deparallelize()
         self.transformer = self.transformer.to("cpu")
         self.lm_head = self.lm_head.to("cpu")
@@ -981,7 +1002,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
@@ -1000,14 +1021,23 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-            "position_ids": position_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids,
+            }
+        )
+        return model_inputs
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1087,7 +1117,9 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         )
 
     @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+    def _reorder_cache(
+        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -1095,7 +1127,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         """
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
+            for layer_past in past_key_values
         )
 
 
@@ -1127,6 +1159,13 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`GPT2DoubleHeadsModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should"
+            " load your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your"
+            " own `device_map` but it needs to be a dictionary module_name to device, so for instance"
+            " {'transformer.h.0': 0, 'transformer.h.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
             if device_map is None
@@ -1140,6 +1179,10 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.transformer.deparallelize()
         self.transformer = self.transformer.to("cpu")
         self.lm_head = self.lm_head.to("cpu")
@@ -1295,7 +1338,9 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         )
 
     @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+    def _reorder_cache(
+        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -1303,7 +1348,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         """
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
+            for layer_past in past_key_values
         )
 
 

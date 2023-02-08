@@ -172,7 +172,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
-        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds, past_key_values_length):
         """
@@ -1054,7 +1054,6 @@ class M2M100Decoder(M2M100PreTrainedModel):
                 past_key_value = past_key_values[idx] if past_key_values is not None else None
 
                 if self.gradient_checkpointing and self.training:
-
                     if use_cache:
                         logger.warning(
                             "`use_cache=True` is incompatible with gradient checkpointing. Setting"
@@ -1080,7 +1079,6 @@ class M2M100Decoder(M2M100PreTrainedModel):
                         None,
                     )
                 else:
-
                     layer_outputs = decoder_layer(
                         hidden_states,
                         attention_mask=combined_attention_mask,
@@ -1397,8 +1395,8 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

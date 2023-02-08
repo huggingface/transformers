@@ -22,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # pcqm4mv1 now deprecated
-    "graphormer-base": "https://huggingface.co/graphormer-base-pcqm4mv2/resolve/main/config.json",
+    "graphormer-base": "https://huggingface.co/clefourrier/graphormer-base-pcqm4mv2/resolve/main/config.json",
     # See all Graphormer models at https://huggingface.co/models?filter=graphormer
 }
 
@@ -39,8 +39,8 @@ class GraphormerConfig(PretrainedConfig):
 
 
     Args:
-        num_classes (`int`, *optional*, defaults to 2):
-            Number of target classes or labels, set to 1 if the task is a regression task.
+        num_classes (`int`, *optional*, defaults to 1):
+            Number of target classes or labels, set to n for binary classification of n tasks.
         num_atoms (`int`, *optional*, defaults to 512*9):
             Number of node types in the graphs.
         num_edges (`int`, *optional*, defaults to 512*3):
@@ -79,8 +79,6 @@ class GraphormerConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the attention weights.
-        activation_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability after activation in the FFN.
         layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
@@ -134,7 +132,7 @@ class GraphormerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_classes: int = 2,
+        num_classes: int = 1,
         num_atoms: int = 512 * 9,
         num_edges: int = 512 * 3,
         num_in_degree: int = 512,
@@ -152,7 +150,6 @@ class GraphormerConfig(PretrainedConfig):
         num_attention_heads: int = 32,
         dropout: float = 0.1,
         attention_dropout: float = 0.1,
-        activation_dropout: float = 0.1,
         layerdrop: float = 0.0,
         encoder_normalize_before: bool = False,
         pre_layernorm: bool = False,
@@ -191,7 +188,6 @@ class GraphormerConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.dropout = dropout
         self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
         self.layerdrop = layerdrop
         self.encoder_normalize_before = encoder_normalize_before
         self.pre_layernorm = pre_layernorm

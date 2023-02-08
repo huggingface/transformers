@@ -147,7 +147,6 @@ class CodeGenAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
     ):
-
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length]
@@ -193,7 +192,6 @@ class CodeGenAttention(nn.Module):
         Tuple[torch.Tensor, Tuple[torch.Tensor]],
         Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
     ]:
-
         qkv = self.qkv_proj(hidden_states)
         # TODO(enijkamp): factor out number of logical TPU-v4 cores or make forward pass agnostic
         mp_num = 4
@@ -545,12 +543,10 @@ class CodeGenModel(CodeGenPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
@@ -731,7 +727,9 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
         )
 
     @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+    def _reorder_cache(
+        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
         [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -739,5 +737,5 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
         """
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
+            for layer_past in past_key_values
         )

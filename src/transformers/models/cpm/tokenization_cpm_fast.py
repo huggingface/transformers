@@ -53,7 +53,7 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         cls_token="<cls>",
         mask_token="<mask>",
         additional_special_tokens=["<eop>", "<eod>"],
-        **kwargs
+        **kwargs,
     ):
         """
         Construct a CPM tokenizer. Based on [Jieba](https://pypi.org/project/jieba/) and

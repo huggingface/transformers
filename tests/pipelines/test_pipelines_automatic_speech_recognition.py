@@ -17,8 +17,8 @@ import unittest
 import numpy as np
 import pytest
 from datasets import load_dataset
-
 from huggingface_hub import snapshot_download
+
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
@@ -60,7 +60,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         + (MODEL_FOR_CTC_MAPPING.items() if MODEL_FOR_CTC_MAPPING else [])
     }
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         if tokenizer is None:
             # Side effect of no Fast Tokenizer class for these model, so skipping
             # But the slow tokenizer test should still run as they're quite small
@@ -69,7 +69,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             # return None, None
 
         speech_recognizer = AutomaticSpeechRecognitionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+            model=model, tokenizer=tokenizer, feature_extractor=processor
         )
 
         # test with a raw waveform
@@ -133,7 +133,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
             )
         else:
             # Non CTC models cannot use return_timestamps
-            with self.assertRaisesRegex(ValueError, "^We cannot return_timestamps yet on non-ctc models !$"):
+            with self.assertRaisesRegex(
+                ValueError, "^We cannot return_timestamps yet on non-ctc models apart from Whisper !$"
+            ):
                 outputs = speech_recognizer(audio, return_timestamps="char")
 
     @require_torch
@@ -275,7 +277,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     @slow
     def test_torch_large(self):
-
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="facebook/wav2vec2-base-960h",
@@ -643,7 +644,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     @require_torchaudio
     def test_simple_s2t(self):
-
         model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-mustc-en-it-st")
         tokenizer = AutoTokenizer.from_pretrained("facebook/s2t-small-mustc-en-it-st")
         feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/s2t-small-mustc-en-it-st")

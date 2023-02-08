@@ -767,7 +767,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import PerceiverConfig, AutoTokenizer, PerceiverImageProcessor, PerceiverModel
+        >>> from transformers import PerceiverConfig, PerceiverTokenizer, PerceiverImageProcessor, PerceiverModel
         >>> from transformers.models.perceiver.modeling_perceiver import (
         ...     PerceiverTextPreprocessor,
         ...     PerceiverImagePreprocessor,
@@ -793,7 +793,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         >>> model = PerceiverModel(config, input_preprocessor=preprocessor, decoder=decoder)
 
         >>> # you can then do a forward pass as follows:
-        >>> tokenizer = AutoTokenizer()
+        >>> tokenizer = PerceiverTokenizer()
         >>> text = "hello world"
         >>> inputs = tokenizer(text, return_tensors="pt").input_ids
 
@@ -2442,7 +2442,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         output_num_channels: int,
         min_padding_size: Optional[int] = 2,
         subsampled_index_dims: Optional[Dict[str, PerceiverAbstractDecoder]] = None,
-        **decoder_kwargs
+        **decoder_kwargs,
     ) -> None:
         super().__init__()
         self.modalities = nn.ModuleDict(modalities)

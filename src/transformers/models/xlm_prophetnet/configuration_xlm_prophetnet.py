@@ -134,7 +134,7 @@ class XLMProphetNetConfig(PretrainedConfig):
         pad_token_id: Optional[int] = 0,
         bos_token_id: Optional[int] = 1,
         eos_token_id: Optional[int] = 2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

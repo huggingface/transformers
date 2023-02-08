@@ -195,7 +195,6 @@ class GroupViTAssignAttention(nn.Module):
         self.assign_eps = config.assign_eps
 
     def get_attn(self, attn, gumbel=True, hard=True):
-
         if gumbel and self.training:
             attn = gumbel_softmax(attn, dim=-2, hard=hard)
         else:
@@ -714,9 +713,9 @@ class GroupViTEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = GroupViTAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = GroupViTMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -931,7 +930,6 @@ class GroupViTVisionEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1076,7 +1074,7 @@ class GroupViTTextTransformer(nn.Module):
         embed_dim = config.hidden_size
         self.embeddings = GroupViTTextEmbeddings(config)
         self.encoder = GroupViTTextEncoder(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim)
+        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(GROUPVIT_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=GroupViTTextConfig)
@@ -1219,7 +1217,7 @@ class GroupViTVisionTransformer(nn.Module):
 
         self.embeddings = GroupViTVisionEmbeddings(config)
         self.encoder = GroupViTVisionEncoder(config)
-        self.layernorm = nn.LayerNorm(embed_dim)
+        self.layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(GROUPVIT_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=GroupViTVisionConfig)

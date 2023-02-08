@@ -156,7 +156,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -243,7 +243,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -262,6 +262,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             word_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
+
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
@@ -396,9 +397,8 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
@@ -462,7 +462,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Tokenize and prepare for the model a sequence or a pair of sequences. .. warning:: This method is deprecated,
@@ -534,7 +534,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
-
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
 
@@ -687,9 +686,8 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         # make it a batched input
         # 2 options:
         # 1) only text, in case text must be a list of str

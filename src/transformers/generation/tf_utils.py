@@ -532,6 +532,7 @@ class TFGenerationMixin:
         self,
         input_ids: Optional[tf.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
+        logits_processor: Optional[TFLogitsProcessorList] = None,
         seed=None,
         **kwargs,
     ) -> Union[TFGenerateOutput, tf.Tensor]:
@@ -560,6 +561,10 @@ class TFGenerationMixin:
                 priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
                 configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
                 default values, whose documentation should be checked to parameterize generation.
+            logits_processor (`LogitsProcessorList`, *optional*):
+                Custom logits processors that complement the default logits processors built from arguments and
+                generation config. If a logit processor is passed that is already created with the arguments or a
+                generation config an error is thrown. This feature is intended for advanced users.
             seed (`List[int]`, *optional*):
                 Random seed to control sampling, containing two integers, used when `do_sample` is `True`. See the
                 `seed` argument from stateless functions in `tf.random`.
@@ -611,6 +616,7 @@ class TFGenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 2. Cast input dtypes to tf.int32 unless they're floats (which happens for some image models)
@@ -637,6 +643,8 @@ class TFGenerationMixin:
                 model_kwargs["decoder_input_ids"] = tf.cast(model_kwargs["decoder_input_ids"], tf.int32)
 
         # 3. Set generation parameters if not already defined
+        logits_processor = logits_processor if logits_processor is not None else TFLogitsProcessorList()
+
         if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
             if model_kwargs.get("attention_mask") is None:
                 logger.warning(
@@ -656,9 +664,11 @@ class TFGenerationMixin:
             )
 
         # 4. Define model inputs
-        input_ids = self._prepare_model_inputs(input_ids, generation_config.bos_token_id)
+        inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
+            input_ids, generation_config.bos_token_id, model_kwargs
+        )
         # inputs_ids now has to be defined and cannot be None anymore
-        batch_size = shape_list(input_ids)[0]
+        batch_size = shape_list(inputs_tensor)[0]
 
         # 5. Prepare other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
@@ -670,23 +680,26 @@ class TFGenerationMixin:
 
         if model_kwargs.get("attention_mask", None) is None and requires_attention_mask and accepts_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                input_ids, generation_config.pad_token_id, generation_config.eos_token_id
+                inputs_tensor, generation_config.pad_token_id, generation_config.eos_token_id
             )
 
         # decoder-only models should use left-padding for generation
         if not self.config.is_encoder_decoder:
             if generation_config.pad_token_id is not None and tf.math.reduce_any(
-                input_ids[:, -1] == generation_config.pad_token_id
+                inputs_tensor[:, -1] == generation_config.pad_token_id
             ):
                 logger.warning(
                     "A decoder-only architecture is being used, but right-padding was detected! For correct "
                     "generation results, please set `padding_side='left'` when initializing the tokenizer."
                 )
+        if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
+            # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
+            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
+                inputs_tensor, model_kwargs, model_input_name
+            )
 
         # 6. Prepare model inputs which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
-            # if encoder-decoder, we create encoder_outputs and add to `model_kwargs`
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
             # if encoder-decoder then `input_ids` come from `decoder_start_token_id`
             input_ids = self._prepare_decoder_input_ids_for_generation(
                 batch_size,
@@ -694,27 +707,30 @@ class TFGenerationMixin:
                 bos_token_id=generation_config.bos_token_id,
                 model_kwargs=model_kwargs,
             )
+        else:
+            # if decoder-only then inputs_tensor has to be `input_ids`
+            input_ids = inputs_tensor
 
         # 7. Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
             warnings.warn(
-                "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to"
-                f" {generation_config.max_length} (`generation_config.max_length`). Controlling `max_length` via the"
-                " config is deprecated and `max_length` will be removed from the config in v5 of Transformers -- we"
+                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
+                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
                 " recommend using `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,
             )
-        elif has_default_max_length and generation_config.max_new_tokens is not None:
+        elif generation_config.max_new_tokens is not None:
             generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
-        elif not has_default_max_length and generation_config.max_new_tokens is not None:
-            raise ValueError(
-                "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a"
-                " limit to the generated output length. Remove one of those arguments. Please refer to the"
-                " documentation for more information. "
-                "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
-            )
+            if not has_default_max_length:
+                logger.warn(
+                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
+                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
+                    "Please refer to the documentation for more information. "
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)",
+                    UserWarning,
+                )
 
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
             raise ValueError(
@@ -754,6 +770,7 @@ class TFGenerationMixin:
         logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_seq_length,
+            logits_processor=logits_processor,
         )
 
         # 10. go into different generation modes
@@ -915,7 +932,9 @@ class TFGenerationMixin:
         else:
             return tf.ones(inputs.shape[:2], dtype=tf.int32)
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self, inputs_tensor: tf.Tensor, model_kwargs) -> Dict[str, Any]:
+    def _prepare_encoder_decoder_kwargs_for_generation(
+        self, inputs_tensor: tf.Tensor, model_kwargs, model_input_name: Optional[str] = None
+    ) -> Dict[str, Any]:
         # get encoder and store encoder outputs
         encoder = self.get_encoder()
 
@@ -929,7 +948,9 @@ class TFGenerationMixin:
 
         # vision models don't use `attention_mask`.
         encoder_kwargs["return_dict"] = True
-        encoder_kwargs[self.main_input_name] = inputs_tensor
+        encoder_kwargs[model_input_name] = inputs_tensor
+        if model_input_name != self.main_input_name:  # in Keras, the first input must always be passed
+            encoder_kwargs[self.main_input_name] = None
         encoder_outputs = encoder(**encoder_kwargs)
         model_kwargs["encoder_outputs"] = encoder_outputs
 
@@ -942,7 +963,6 @@ class TFGenerationMixin:
         bos_token_id: int = None,
         model_kwargs: Optional[Dict[str, tf.Tensor]] = None,
     ) -> tf.Tensor:
-
         # prepare `input_ids` for decoder if model is encoder-decoder
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
             return model_kwargs.pop("decoder_input_ids")
@@ -999,19 +1019,79 @@ class TFGenerationMixin:
 
         return input_ids, model_kwargs
 
-    def _prepare_model_inputs(self, inputs: Optional[tf.Tensor] = None, bos_token_id: Optional[int] = None):
-        # TODO(Patrick) - adapt this function when making `generate` more flexible
-        # for all kinds of input types
-        if inputs is None:
-            # if no `inputs` are passed create prompt of size (1,1) filled with BOS token
-            if not isinstance(bos_token_id, int) or bos_token_id < 0:
-                raise ValueError(
-                    "you should either supply a context to complete as `input_ids` input "
-                    "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
-                )
-            return tf.cast(tf.fill((1, 1), bos_token_id), dtype=tf.int32)
+    def _prepare_model_inputs(
+        self,
+        inputs: Optional[tf.Tensor] = None,
+        bos_token_id: Optional[int] = None,
+        model_kwargs: Optional[Dict[str, tf.Tensor]] = None,
+    ) -> Tuple[tf.Tensor, Optional[str], Dict[str, tf.Tensor]]:
+        """
+        This function extracts the model-specific `inputs` for generation.
+        """
+        # 1. retrieve all kwargs that are non-None or non-model input related.
+        # some encoder-decoder models have different names for model and encoder
+        if (
+            self.config.is_encoder_decoder
+            and hasattr(self, "encoder")
+            and hasattr(self.encoder, "main_input_name")
+            and self.encoder.main_input_name != self.main_input_name
+        ):
+            input_name = self.encoder.main_input_name
+        else:
+            input_name = self.main_input_name
 
-        return inputs
+        model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None or k != input_name}
+
+        # 2. check whether model_input_name is passed as kwarg
+        # if yes and `inputs` is None use kwarg inputs
+        inputs_kwarg = model_kwargs.pop(input_name, None)
+        if inputs_kwarg is not None and inputs is not None:
+            raise ValueError(
+                f"`inputs`: {inputs}` were passed alongside {input_name} which is not allowed."
+                f"Make sure to either pass {inputs} or {input_name}=..."
+            )
+        elif inputs_kwarg is not None:
+            inputs = inputs_kwarg
+
+        # 3. In the presence of `inputs_embeds` for text models:
+        # - decoder-only models should complain if the user attempts to pass `inputs_embeds`, but the model
+        # doesn't have its forwarding implemented. `inputs_embeds` is kept in `model_kwargs` and can coexist with
+        # input_ids (`inputs_embeds` will be used in the 1st generation step, as opposed to `input_ids`)
+        # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
+        # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
+        if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
+            if not self.config.is_encoder_decoder:
+                has_inputs_embeds_forwarding = "inputs_embeds" in set(
+                    inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
+                )
+                if not has_inputs_embeds_forwarding:
+                    raise ValueError(
+                        f"You passed `inputs_embeds` to `.generate()`, but the model class {self.__class__.__name__} "
+                        "doesn't have its forwarding implemented. See the GPT2 implementation for an example "
+                        "(https://github.com/huggingface/transformers/pull/21405), and feel free to open a PR with it!"
+                    )
+            else:
+                if inputs is not None:
+                    raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
+                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
+
+        # 4. if `inputs` is still None, try to create `input_ids` from BOS token
+        if inputs is None:
+            inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
+
+        return inputs, input_name, model_kwargs
+
+    def _prepare_input_ids_for_generation(
+        self, bos_token_id: Optional[int], encoder_outputs: Optional[ModelOutput]
+    ) -> tf.Tensor:
+        if self.config.is_encoder_decoder and encoder_outputs is not None:
+            # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
+            shape = encoder_outputs.last_hidden_state.size()[:-1]
+            return tf.ones(shape, dtype=tf.int32) * -100
+
+        if bos_token_id is None:
+            raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
+        return tf.ones((1, 1), dtype=tf.int32) * bos_token_id
 
     @staticmethod
     def _extract_past_from_model_output(outputs: ModelOutput):
@@ -1193,6 +1273,7 @@ class TFGenerationMixin:
         self,
         generation_config: GenerationConfig,
         input_ids_seq_length: int,
+        logits_processor: Optional[TFLogitsProcessorList],
     ) -> TFLogitsProcessorList:
         """
         This class returns a [`TFLogitsProcessorList`] list object that contains all relevant [`TFLogitsProcessor`]
@@ -1239,7 +1320,30 @@ class TFGenerationMixin:
             )
         if generation_config.forced_decoder_ids is not None:
             processors.append(TFForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
+
+        processors = self._merge_criteria_processor_list(processors, logits_processor)
         return processors
+
+    def _merge_criteria_processor_list(
+        self,
+        default_list: TFLogitsProcessorList,
+        custom_list: TFLogitsProcessorList,
+    ) -> TFLogitsProcessorList:
+        if len(custom_list) == 0:
+            return default_list
+        for default in default_list:
+            for custom in custom_list:
+                if type(custom) is type(default):
+                    object_type = "logits processor"
+                    raise ValueError(
+                        f"A custom {object_type} of type {type(custom)} with values {custom} has been passed to"
+                        f" `generate`, but it has already been created with the values {default}. {default} has been"
+                        " created by passing the corresponding arguments to generate or by the model's config default"
+                        f" values. If you just want to change the default values of {object_type} consider passing"
+                        f" them as arguments to `generate` instead of using a custom {object_type}."
+                    )
+        default_list.extend(custom_list)
+        return default_list
 
     def greedy_search(
         self,
@@ -1808,7 +1912,7 @@ class TFGenerationMixin:
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
         length_penalty: Optional[float] = None,
-        early_stopping: Optional[bool] = None,
+        early_stopping: Optional[Union[bool, str]] = None,
         logits_processor: Optional[TFLogitsProcessorList] = None,
         logits_warper: Optional[TFLogitsProcessorList] = None,
         num_return_sequences: Optional[int] = None,
@@ -1838,8 +1942,12 @@ class TFGenerationMixin:
                 to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
                 the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
                 while `length_penalty` < 0.0 encourages shorter sequences.
-            early_stopping (`bool`, *optional*, defaults to `False`):
-                Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
+            early_stopping (`bool` or `str`, *optional*, defaults to `False`):
+                Controls the stopping condition for beam-based methods, like beam-search. It accepts the following
+                values: `True`, where the generation stops as soon as there are `num_beams` complete candidates;
+                `False`, where an heuristic is applied and the generation stops when is it very unlikely to find better
+                candidates; `"never"`, where the beam search procedure only stops when there cannot be better
+                candidates (canonical beam search algorithm).
             logits_processor (`[TFLogitsProcessorList]`, *optional*):
                 An instance of [`TFLogitsProcessorList`]. List of instances of class derived from [`TFLogitsProcessor`]
                 used to modify the prediction scores of the language modeling head applied at each generation step.
@@ -2009,16 +2117,24 @@ class TFGenerationMixin:
             not_max_length_yet = cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = running_scores[:, :1] / (max_length**length_penalty)
+            # early_stopping == False -> apply heuristic = always get the best score from `cur_len`. See the discussion
+            # below for more details.
+            # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+            # early_stopping == "never" -> compute the best score from max_length or cur_len, depending on the sign of
+            #   length_penalty. Positive length_penalty favors longer sequences, thus we use max_length there.
+            if early_stopping == "never" and length_penalty > 0.0:
+                best_running_score = running_scores[:, :1] / (max_length**length_penalty)
+            else:
+                best_running_score = running_scores[:, :1] / (tf.cast(cur_len, dtype=tf.float32) ** length_penalty)
             worst_finished_score = tf.where(
                 is_sent_finished, tf.math.reduce_min(scores, axis=1, keepdims=True), -1.0e9
             )
-            improvement_still_possible = tf.math.reduce_all(worst_finished_score < best_running_score)
+            improvement_still_possible = tf.math.reduce_any(best_running_score > worst_finished_score)
 
             # 3. is there still a beam that has not finished?
-            still_open_beam = ~(tf.math.reduce_all(is_sent_finished) & early_stopping)
+            still_open_beam = ~(tf.math.reduce_all(is_sent_finished) & (early_stopping is True))
 
-            return not_max_length_yet & (still_open_beam | improvement_still_possible)
+            return not_max_length_yet & still_open_beam & improvement_still_possible
 
         def beam_search_body_fn(
             cur_len,
@@ -2140,12 +2256,9 @@ class TFGenerationMixin:
             # - make sure no scores can be added anymore if beam is full
             # - make sure still running sequences cannot be chosen as finalized beam
             topk_log_probs = topk_log_probs / (tf.cast(cur_len, dtype=tf.float32) ** length_penalty)
-            beams_in_batch_are_full = (
-                tf.broadcast_to(
-                    tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), shape_list(did_topk_just_finished)
-                )
-                & early_stopping
-            )
+            beams_in_batch_are_full = tf.broadcast_to(
+                tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), shape_list(did_topk_just_finished)
+            ) & (early_stopping is True)
             add_penalty = ~did_topk_just_finished | beams_in_batch_are_full
             topk_log_probs += tf.cast(add_penalty, tf.float32) * -1.0e9
 
@@ -2239,7 +2352,7 @@ class TFGenerationMixin:
         sequences = tf.where(none_finished[:, None, None], sequences, running_sequences)
         scores = tf.where(none_finished[:, None], scores, running_scores)
 
-        # Take best beams for each batch (the score is sorted in ascending order)
+        # Take best beams for each batch (the score is sorted in descending order)
         sequences = flatten_beam_dim(sequences[:, :num_return_sequences, :])
         scores = flatten_beam_dim(scores[:, :num_return_sequences])
 
@@ -2417,7 +2530,6 @@ class TFGenerationMixin:
             # if the first step in the loop, encode all the prefix and obtain: (1) past_key_values;
             # (2) last_hidden_states; (3) logit_for_next_step; (4) update model kwargs for the next step
             if model_kwargs.get("past_key_values") is None:
-
                 # prepare inputs
                 model_inputs = self.prepare_inputs_for_generation(
                     generated[:, :cur_len], use_cache=use_cache, **model_kwargs
@@ -2634,7 +2746,13 @@ class TFGenerationMixin:
             generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables
         ):
             maximum_iterations = max_length - cur_len
-            generated, _, cur_len, _, _, = tf.while_loop(
+            (
+                generated,
+                _,
+                cur_len,
+                _,
+                _,
+            ) = tf.while_loop(
                 contrastive_search_cond_fn,
                 contrastive_search_body_fn,
                 (generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables),

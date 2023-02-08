@@ -54,7 +54,9 @@
       - local: tasks/question_answering
         title: Question answering
       - local: tasks/language_modeling
-        title: Language modeling
+        title: Causal language modeling
+      - local: tasks/masked_language_modeling
+        title: Masked language modeling
       - local: tasks/translation
         title: Translation
       - local: tasks/summarization
@@ -93,6 +95,8 @@
       title: Training on many CPUs
     - local: perf_train_tpu
       title: Training on TPUs
+    - local: perf_train_tpu_tf
+      title: Training on TPU with TensorFlow
     - local: perf_train_special
       title: Training on Specialized Hardware
     - local: perf_infer_cpu
@@ -144,6 +148,8 @@
     title: Glossary
   - local: task_summary
     title: What 🤗 Transformers can do
+  - local: tasks_explained
+    title: How 🤗 Transformers solve tasks
   - local: model_summary
     title: Summary of the models
   - local: tokenizer_summary
@@ -293,12 +299,8 @@
         title: I-BERT
       - local: model_doc/jukebox
         title: Jukebox
-      - local: model_doc/layoutlm
-        title: LayoutLM
       - local: model_doc/led
         title: LED
-      - local: model_doc/lilt
-        title: LiLT
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -375,8 +377,6 @@
         title: T5
       - local: model_doc/t5v1.1
         title: T5v1.1
-      - local: model_doc/tapas
-        title: TAPAS
       - local: model_doc/tapex
         title: TAPEX
       - local: model_doc/transfo-xl
@@ -393,6 +393,8 @@
         title: XLM-RoBERTa
       - local: model_doc/xlm-roberta-xl
         title: XLM-RoBERTa-XL
+      - local: model_doc/xlm-v
+        title: XLM-V
       - local: model_doc/xlnet
         title: XLNet
       - local: model_doc/yoso
@@ -414,6 +416,8 @@
         title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
+      - local: model_doc/deta
+        title: DETA
       - local: model_doc/detr
         title: DETR
       - local: model_doc/dinat
@@ -493,6 +497,8 @@
         title: Speech2Text
       - local: model_doc/speech_to_text_2
         title: Speech2Text2
+      - local: model_doc/speecht5
+        title: SpeechT5
       - local: model_doc/unispeech
         title: UniSpeech
       - local: model_doc/unispeech-sat
@@ -536,12 +542,16 @@
         title: GIT
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/layoutlm
+        title: LayoutLM
       - local: model_doc/layoutlmv2
         title: LayoutLMV2
       - local: model_doc/layoutlmv3
         title: LayoutLMV3
       - local: model_doc/layoutxlm
         title: LayoutXLM
+      - local: model_doc/lilt
+        title: LiLT
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/oneformer
@@ -552,6 +562,8 @@
         title: Perceiver
       - local: model_doc/speech-encoder-decoder
         title: Speech Encoder Decoder Models
+      - local: model_doc/tapas
+        title: TAPAS
       - local: model_doc/trocr
         title: TrOCR
       - local: model_doc/vilt

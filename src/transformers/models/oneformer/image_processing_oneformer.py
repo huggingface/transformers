@@ -19,8 +19,8 @@ import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
+
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from transformers.image_transforms import (
     PaddingMode,
@@ -38,7 +38,7 @@ from transformers.image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
+    make_list_of_images,
     valid_images,
 )
 from transformers.utils import (
@@ -403,7 +403,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         repo_path: str = "shi-labs/oneformer_demo",
         class_info_file: str = None,
         num_text: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ):
         if "max_size" in kwargs:
             self._max_size = kwargs.pop("max_size")
@@ -443,7 +443,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format=None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image to the given size. Size can be min_size (scalar) or `(height, width)` tuple. If size is an
@@ -507,7 +507,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
-        **kwargs
+        **kwargs,
     ):
         reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
@@ -619,7 +619,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             warnings.warn(
@@ -676,9 +676,9 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        if not is_batched(images):
-            images = [images]
-            segmentation_maps = [segmentation_maps] if segmentation_maps is not None else None
+        images = make_list_of_images(images)
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if segmentation_maps is not None and len(images) != len(segmentation_maps):
             raise ValueError("Images and segmentation maps must have the same length.")
@@ -881,7 +881,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
