@@ -800,7 +800,7 @@ class Pipeline(_ScikitCompat):
                 else:
                     main_device = [d for d in hf_device_map.values() if d not in ["cpu", "disk"]][0]
                     accelerate_device = torch.device(f"cuda:{main_device}")
-                
+
                 self.device = accelerate_device
             else:
                 self.device = torch.device("cpu")
@@ -1071,8 +1071,10 @@ class Pipeline(_ScikitCompat):
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
             warnings.warn(
-                "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please use a"
-                " dataset",
+                (
+                    "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please"
+                    " use a dataset"
+                ),
                 UserWarning,
             )
 
