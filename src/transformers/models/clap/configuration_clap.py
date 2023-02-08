@@ -112,6 +112,7 @@ class CLAPTextConfig(PretrainedConfig):
         max_position_embeddings=514,
         type_vocab_size=1,
         initializer_range=0.02,
+        initializer_factor=1.0,
         layer_norm_eps=1e-12,
         projection_hidden_size=768,
         pad_token_id=1,
@@ -136,6 +137,7 @@ class CLAPTextConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
+        self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
@@ -223,7 +225,6 @@ class CLAPAudioConfig(PretrainedConfig):
         patch_stride=(4, 4),
         num_classes=527,
         hidden_size=96,
-        embed_dim=96,
         projection_hidden_size=768,
         depths=[2, 2, 6, 2],
         num_heads=[4, 8, 16, 32],
@@ -242,7 +243,9 @@ class CLAPAudioConfig(PretrainedConfig):
         mlp_ratio=4.0,
         aff_block_r=4,
         enable_patch_fusion=False,
+        projection_hidden_act="relu",
         layer_norm_eps=1e-5,
+        initializer_factor=1.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -253,7 +256,6 @@ class CLAPAudioConfig(PretrainedConfig):
         self.patch_stride = patch_stride
         self.num_classes = num_classes
         self.hidden_size = hidden_size
-        self.embed_dim = embed_dim
         self.depths = depths
         self.num_heads = num_heads
         self.window_size = window_size
@@ -275,6 +277,8 @@ class CLAPAudioConfig(PretrainedConfig):
         self.aff_block_r = aff_block_r
         self.enable_patch_fusion = enable_patch_fusion
         self.layer_norm_eps = layer_norm_eps
+        self.initializer_factor = initializer_factor
+        self.projection_hidden_act = projection_hidden_act
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -350,6 +354,7 @@ class CLAPConfig(PretrainedConfig):
         fusion_num_hidden_layers=2,
         projection_dim=512,
         projection_hidden_act="relu",
+        initializer_factor=1.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -387,7 +392,7 @@ class CLAPConfig(PretrainedConfig):
         self.hidden_size = self.text_config.hidden_size
 
         self.logit_scale_init_value = logit_scale_init_value
-        self.initializer_factor = 1.0
+        self.initializer_factor = initializer_factor
 
     @classmethod
     def from_text_audio_configs(cls, text_config: CLAPTextConfig, audio_config: CLAPAudioConfig, **kwargs):
