@@ -269,7 +269,7 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
         dim (`int`): Number of input channels.
     """
 
-    def __init__(self, config, dim, kernel_size):
+    def __init__(self, config, dim):
         super().__init__()
         self.dim = dim
         self.dim_se = max(1, int(dim * config.squeeze_expansion_ratio))
@@ -284,7 +284,7 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
         self.expand = nn.Conv2d(
             in_channels=self.dim_se,
             out_channels=self.dim,
-            kernel_size=kernel_size,
+            kernel_size=1,
             padding="same",
         )
         self.act_reduce = ACT2FN[config.hidden_act]
@@ -325,12 +325,12 @@ class EfficientNetFinalLayer(nn.Module):
             padding="same",
             bias=False,
         )
-        self.batchnorm = nn.BatchNorm2d(num_features=out_dim)
+        self.project_bn = nn.BatchNorm2d(num_features=out_dim)
         self.dropout = nn.Dropout(p=drop_rate)
 
     def forward(self, inputs: torch.FloatTensor, hidden_states: torch.FloatTensor) -> torch.Tensor:
         hidden_states = self.project_conv(hidden_states)
-        hidden_states = self.batchnorm(hidden_states)
+        hidden_states = self.project_bn(hidden_states)
 
         if self.apply_dropout:
             hidden_states = self.dropout(hidden_states)
@@ -353,22 +353,24 @@ class EfficientNetBlock(nn.Module):
         self,
         config: EfficientNetConfig,
         in_dim: int,
+        out_dim: int,
         stride: int,
         expand_ratio: int,
         kernel_size: int,
         drop_rate: float,
     ):
         super().__init__()
-        out_dim = in_dim * expand_ratio
-        self.expansion = EfficientNetExpansionLayer(config=config, in_dim=in_dim, out_dim=out_dim, stride=stride)
+        self.expand_ratio = expand_ratio
+        if self.expand_ratio != 1:
+            self.expansion = EfficientNetExpansionLayer(config=config, in_dim=in_dim, out_dim=out_dim, stride=stride)
         self.depthwise_conv = EfficientNetDepthwiseLayer(
             config=config,
             in_dim=in_dim,
-            out_dim=out_dim,
+            out_dim=in_dim * expand_ratio,
             stride=stride,
             kernel_size=kernel_size,
         )
-        self.squeeze_excite = EfficientNetSqueezeExciteLayer(config=config, dim=in_dim, kernel_size=kernel_size)
+        self.squeeze_excite = EfficientNetSqueezeExciteLayer(config=config, dim=in_dim)
         self.projection = EfficientNetFinalLayer(
             config=config,
             in_dim=in_dim,
@@ -432,6 +434,7 @@ class EfficientNetEncoder(nn.Module):
                 block = EfficientNetBlock(
                     config=config,
                     in_dim=in_dim,
+                    out_dim=out_dim,
                     stride=stride,
                     kernel_size=kernel_size,
                     expand_ratio=expand_ratio,
