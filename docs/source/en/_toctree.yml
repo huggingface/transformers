@@ -83,6 +83,10 @@
       title: Object detection
     title: Computer Vision
   - sections:
+    - local: tasks/image_captioning
+      title: Image captioning
+    title: Multimodal
+  - sections:
     - local: performance
       title: Overview
     - local: perf_train_gpu_one
