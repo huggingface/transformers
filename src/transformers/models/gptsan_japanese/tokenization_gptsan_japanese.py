@@ -47,7 +47,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-# Copied from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese
+# Copied from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese.load_vocab_and_emoji
 def load_vocab_and_emoji(vocab_file, emoji_file):
     """Loads a vocabulary file and emoji file into a dictionary."""
     with open(emoji_file, "r", encoding="utf-8") as f:
@@ -121,7 +121,6 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
-    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.__init__
     def __init__(
         self,
         vocab_file,
@@ -265,8 +264,10 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
             json.dump(self.emoji, writer)
         return vocab_file, emoji_file
 
+    def prepare_for_tokenization(self, text, prefix_text="", **kwargs):
+        return ("<|startoftext|>" + prefix_text + "<|segmenter|>" + text, kwargs)
 
-# Copied from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese
+
 class SubWordJapaneseTokenizer(object):
     """
     This tokenizer is based on GPTNeoXJapaneseTokenizer and has the following modifications

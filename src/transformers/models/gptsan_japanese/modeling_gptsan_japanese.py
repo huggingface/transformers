@@ -26,9 +26,8 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...generation import GenerationConfig, LogitsProcessorList, TopKLogitsWarper
 from ...modeling_outputs import (
-    CausalLMOutputWithPast,
+    MoECausalLMOutputWithPast,
     MoEModelOutputWithPastAndCrossAttentions,
-    Seq2SeqMoEOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -59,8 +58,7 @@ GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.router_z_loss_func with SwitchTransformers->GPTSANJapanese
+# Copied from transformers.models.switch_transformers.modeling_switch_transformers.router_z_loss_func
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
     Compute the router z-loss implemented in PyTorch.
@@ -78,7 +76,7 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     return torch.sum(z_loss) / (num_groups * tokens_per_group)
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.load_balancing_loss_func with SwitchTransformers->GPTSANJapanese
+# Copied from transformers.models.switch_transformers.modeling_switch_transformers.load_balancing_loss_func
 def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -583,11 +581,12 @@ class GPTSANJapaneseLayerSelfAttention(nn.Module):
         hidden = hidden_states + self.norm(attention_output)
 
         if use_cache:
-            outputs = (hidden,atten_out[2])  # hidden, present, (attentions)
+            outputs = (hidden, atten_out[2])  # hidden, present, (attentions)
         else:
             outputs = (hidden,)  # hidden, (attentions)
 
         return outputs + attn_weights
+
 
 class GPTSANJapaneseBlock(nn.Module):
     """
@@ -698,14 +697,12 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
             module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "extra_position_embeddings") and module.extra_position_embeddings is not None:
                 module.extra_position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, GPTSANJapaneseForConditionalGeneration):
-            print("GPTSANJapaneseForConditionalGeneration init")
+        elif isinstance(module, (GPTSANJapaneseModel, GPTSANJapaneseForConditionalGeneration)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.final_logits_bias.data.normal_(mean=0.0, std=factor * 1.0)
-            module.lm_head.weight.data.zero_()
-            if hasattr(module.lm_head, "bias") and module.lm_head.bias is not None:
-                module.lm_head.bias.data.zero_()
+            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, GPTSANJapaneseDenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
@@ -740,17 +737,15 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
         if isinstance(module, (GPTSANJapaneseAttention,)):
             module.gradient_checkpointing = value
 
-    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right with T5->GPTSANJapanese
+    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right
     def _shift_right(self, input_ids):
-        print("run _shift_right")
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
 
-        if decoder_start_token_id is None:
-            raise ValueError(
-                "self.model.config.decoder_start_token_id has to be defined. In GPTSANJapanese it is usually set"
-                " to the pad_token_id. See GPTSANJapanese docs for more information"
-            )
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id."
+            " See T5 docs for more information"
+        )
 
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):
@@ -762,8 +757,7 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
             shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
             shifted_input_ids[..., 0] = decoder_start_token_id
 
-        if pad_token_id is None:
-            raise ValueError("self.model.config.pad_token_id has to be defined.")
+        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -791,10 +785,6 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. GPTSAN_JAPANESE is a model that generates sentence
             continuations or predicts tokens at mask positions. Special tokens required for inputs to the model are
             automatically appended.
-        num_precontext (`torch.LongTensor` of shape `(batch_size,1)`):
-            length of `hybrid` input tokens in the input. Tokens up to this length refer to both front and back like
-            BERT, tokens after that refer only to front like GPT. see also:
-            https://github.com/tanreinama/GPTSAN/blob/main/report/model.md
         squad (`torch.Tensor` of shape `(batch_size, config.d_spout)`):
                 This vector is transformed through an 8-layer FFN and can be used instead of `past_key_values`.
         past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
@@ -830,25 +820,80 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
 """
 
 
-def make_attention_mask_torch(total_seq, output_seq, input_len):
-    device = input_len.device
-    i = torch.arange(total_seq)[:, None].to(device)
-    j = torch.arange(output_seq).to(device)
-    m = i >= j - output_seq + total_seq
+# Create a mask to be used when making the prefix Input length of Prefix-LM variable
+# When prefix_area_len=0, it is equivalent to regular causal mask
+# When prefix_area_len=total_seq, it is equivalent to no mask
+# Otherwise, no mask at token positions from 0 to prefix_area_len, and regular causal mask thereafter.
+#
+# ex, total_seq=6, output_seq=6;
+# prefix_area_len=0  prefix_area_len=3  prefix_area_len=5
+# | 0 1 1 1 1 1 |    | 0 0 0 1 1 1 |    | 0 0 0 0 0 1 |
+# | 0 0 1 1 1 1 |    | 0 0 0 1 1 1 |    | 0 0 0 0 0 1 |
+# | 0 0 0 1 1 1 |    | 0 0 0 1 1 1 |    | 0 0 0 0 0 1 |
+# | 0 0 0 0 1 1 |    | 0 0 0 0 1 1 |    | 0 0 0 0 0 1 |
+# | 0 0 0 0 0 1 |    | 0 0 0 0 0 1 |    | 0 0 0 0 0 1 |
+# | 0 0 0 0 0 0 |    | 0 0 0 0 0 0 |    | 0 0 0 0 0 0 |
+#
+# Normally, the length of the prefix is set according to the position of the separator_token inserted by the tokenizer.
+# Since the prefix part refers back and forth, it can also work as an MLM. The part after that can be used for text generation as LM.
+#
+# ex;
+# input tokens are: x_token = tokenizer.encode("ぁぃぅぇ")
+# mask is;
+# SOT | 0 1 1 1 1 1 |
+# SEG | 0 0 1 1 1 1 |
+# ぁ  | 0 0 0 1 1 1 |
+# ぃ  | 0 0 0 0 1 1 |
+# ぅ  | 0 0 0 0 0 1 |
+# ぇ  | 0 0 0 0 0 0 |
+#
+# input tokens are: x_token = tokenizer.encode("", prefix_text="ぁぃぅぇ")
+# mask is;
+# SOT | 0 0 0 0 0 1 |
+# ぁ  | 0 0 0 0 0 1 |
+# ぃ  | 0 0 0 0 0 1 |
+# ぅ  | 0 0 0 0 0 1 |
+# ぇ  | 0 0 0 0 0 1 |
+# SEG | 0 0 0 0 0 0 |
+#
+# input tokens are: x_token = tokenizer.encode("ぅぇ", prefix_text="ぁぃ")
+# mask is;
+# SOT | 0 0 0 1 1 1 |
+# ぁ  | 0 0 0 1 1 1 |
+# ぃ  | 0 0 0 1 1 1 |
+# SEG | 0 0 0 0 1 1 |
+# ぅ  | 0 0 0 0 0 1 |
+# ぇ  | 0 0 0 0 0 0 |
+def make_variable_prefix_area_mask(total_seq, output_seq, prefix_area_len):
+    r"""
+    Args:
+        total_seq (`int`) :
+            inputs to token length.
+        output_seq (`int`) :
+            inputs to output token length.
+        prefix_area_len (`torch.Tensor` of shape [batch_size]) :
+            inputs to prefix area length of each batch.
+    Returns:
+        torch.Tensor[batch_size, 1, total_seq, output_seq]
+    """
+    device = prefix_area_len.device
+    inp_index = torch.arange(total_seq)[:, None].to(device)
+    out_index = torch.arange(output_seq).to(device)
+    m = inp_index >= out_index - output_seq + total_seq
     lm_mask = m.float()  # language model mask
     lm_mask = torch.reshape(lm_mask, [total_seq, output_seq])
     # lm_mask shuld be [sequence, sequence]
-    weight = torch.transpose(torch.arange(output_seq)[:, None].to(device) < input_len, 1, 0)
-    weight = weight.float()  # Masked language model mask
+    weight = torch.transpose(torch.arange(output_seq)[:, None].to(device) < prefix_area_len, 1, 0)
+    weight = weight.float()  # mask for prefix area
     # weight shuld be [batch, sequence]
     mlm_mask = torch.reshape(weight, [1, -1, output_seq]).float()
     mlm_ones = torch.ones(size=[total_seq, 1, 1], dtype=torch.float32).to(device)
     mlm_mask = mlm_ones * mlm_mask
     mlm_mask = torch.transpose(mlm_mask, 1, 0)
     # mlm_mask shuld be [batch, sequence, sequence]
-    mask = ((lm_mask + mlm_mask) > 0).float()
+    mask = ((lm_mask + mlm_mask) > 0).float()  # marge prefix area to causal mask
     # mask shuld be [batch, sequence, sequence]
-    return (1 - mask.unsqueeze(dim=1)) * -10000.0 # [batch, 1, sequence, sequence]
+    return 1 - mask.unsqueeze(dim=1)  # [batch, 1, sequence, sequence]
 
 
 @add_start_docstrings(
@@ -861,6 +906,8 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
         self.config = copy.deepcopy(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
+        self.last_project = nn.Linear(config.d_model, config.d_model, bias=True)
+        self.act = ACT2FN["swish"]
 
         self.blocks = torch.nn.ModuleList([])
         for _ in range(config.num_switch_layers):
@@ -891,26 +938,32 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        num_precontext: Optional[torch.LongTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
+        num_precontext: Optional[torch.LongTensor] = None,
     ) -> Union[MoEModelOutputWithPastAndCrossAttentions, Tuple[torch.FloatTensor]]:
         r"""
+        num_precontext (`torch.LongTensor` of shape `(batch_size,1)`):
+            length of `hybrid` input tokens in the input. Tokens up to this length refer to both front and back like
+            BERT, tokens after that refer only to front like GPT. see also:
+            https://github.com/tanreinama/GPTSAN/blob/main/report/model.md
+
         Returns:
-            `ModelOutput` or `namedtuple` if `return_dict` returns ModelOutput insted of namedtuple
+            `MoEModelOutputWithPastAndCrossAttentions` or `tuple`
+            if `return_dict` returns MoEModelOutputWithPastAndCrossAttentions insted of tuple
         ```"""
-        return_dict = return_dict or self.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         device = self.position_embeddings.weight.device
         if input_ids is None:
-            input_ids = torch.zeros([1, 1]).int()
+            input_ids = torch.zeros([1, 1]).int().to(device)
         num_pasts_contexts = 0
         num_batch = input_ids.shape[0]
         pasts_or_squad_value = None
@@ -948,21 +1001,29 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
                     self.config.d_model // self.config.num_heads,
                 ],
             )
-            pasts_or_squad_value = torch.split(pasts_or_squad_value, [1]*self.config.num_layers, dim=1)
-            pasts_or_squad_value = tuple(torch.split(a.squeeze(1), [1,1], dim=1).squeeze(1) for a in pasts_or_squad_value)
+            pasts_or_squad_value = torch.split(pasts_or_squad_value, [1] * self.config.num_layers, dim=1)
+            pasts_or_squad_value = tuple(
+                torch.split(a.squeeze(1), [1, 1], dim=1).squeeze(1) for a in pasts_or_squad_value
+            )
         else:
             pasts_or_squad_value = [None] * self.config.num_layers
 
         token_position = torch.arange(num_input_contexts).to(device) + num_pasts_contexts
         token_position = torch.clip(token_position, num_pasts_contexts, self.config.max_position_embeddings - 1)
 
-        gather_position = (torch.zeros((self.config.d_model, num_input_contexts)).to(device) + token_position).transpose(0, 1).long()
+        gather_position = (
+            (torch.zeros((self.config.d_model, num_input_contexts)).to(device) + token_position).transpose(0, 1).long()
+        )
         hidden_states += torch.gather(self.position_embeddings.weight, dim=0, index=gather_position)
 
-        attention_mask = make_attention_mask_torch(num_input_contexts, num_output_contexts, num_precontext)
+        attention_mask = (
+            make_variable_prefix_area_mask(num_input_contexts, num_output_contexts, num_precontext) * -10000.0
+        )
 
         if self.config.num_ext_layers > 0:
-            extra_position_embedding = torch.gather(self.extra_position_embeddings.weight, dim=0, index=gather_position)
+            extra_position_embedding = torch.gather(
+                self.extra_position_embeddings.weight, dim=0, index=gather_position
+            )
         del gather_position
 
         # Prepare head mask if needed
@@ -1008,6 +1069,9 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
                 router_tuple = block_output[outpos]
                 all_router_probs.append(router_tuple[0])
 
+        hidden_states = self.last_project(hidden_states)
+        hidden_states = self.act(hidden_states)
+
         ret = collections.OrderedDict()
         ret["last_hidden_state"] = hidden_states
         if self.config.use_cache or use_cache:
@@ -1024,36 +1088,40 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
 
         return MoEModelOutputWithPastAndCrossAttentions(**ret)
 
+
 @add_start_docstrings(
     "The bare GPTSAN_JAPANESE Model with a language modeling head.",
     GPTSAN_JAPANESE_START_DOCSTRING,
 )
 class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        r"lm_head.weight",
+    ]
 
     def __init__(self, config: GPTSANJapaneseConfig):
         super().__init__(config)
         self.model = GPTSANJapaneseModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros([config.vocab_size]))
-        self.lm_head = nn.Linear(config.d_model, config.d_model, bias=True)
-        self.act = ACT2FN["swish"]
+        self.register_buffer("final_logits_bias", torch.zeros([1, config.vocab_size]))
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+        if not self.config.torchscript:
+            self.lm_head.weight = self.model.embed_tokens.weight
 
     @add_start_docstrings_to_model_forward(GPTSAN_JAPANESE_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        num_precontext: Optional[torch.LongTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], MoECausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification loss. Indices should be in `[-100, 0, ...,
@@ -1061,45 +1129,90 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
             labels in `[0, ..., config.vocab_size]`
 
         Returns:
-            `ModelOutput` or `namedtuple` if `return_dict` returns ModelOutput insted of namedtuple
+            `MoECausalLMOutputWithPast` or `tuple`
+            if `return_dict` returns MoECausalLMOutputWithPast insted of tuple
 
         Example:
 
+        Text Generation with regular LM Model
         ```python
-        from transformers import AutoModel, AutoTokenizer
+        from transformers import AutoModel, AutoTokenizer, trainer_utils
 
-        model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese")
+        device = "cuda"
+        model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
         tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
-        x_tok = tokenizer.encode("武田信玄は、", return_tensors="pt")
-        model = model.cuda()
-        c = model.generate(x_tok.cuda(), max_new_tokens=50, random_seed=63)
-        tokenizer.decode(c[0])
-        "武田信玄は、戦国の頃より「智勇兼備」した英雄として織田信長に比されてきた戦国武将であり、..."
+        x_token = tokenizer.encode("織田信長は、", return_tensors="pt").to(device)
+        trainer_utils.set_seed(30)
+        gen_token = model.generate(x_token, max_new_tokens=50)
+        tokenizer.decode(gen_token[0])
+        "織田信長は、政治・軍事の中枢まで掌握した政治家であり、日本史上類を見ない驚異的な軍事侵攻を続け..."
+        ```
+
+        Text Generation with Prefix-LM Model
+        ```python
+        from transformers import AutoModel, AutoTokenizer, trainer_utils
+
+        device = "cuda"
+        model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
+        tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        x_token = tokenizer.encode("", prefix_text="織田信長は、", return_tensors="pt").to(device)
+        trainer_utils.set_seed(30)
+        gen_token = model.generate(x_token, max_new_tokens=50)
+        tokenizer.decode(gen_token[0])
+        "織田信長は、政治・外交で数々の戦果を上げるが、1568年からは、いわゆる本能寺の変で細川晴元に暗殺される..."
+        ```
+
+        Simultaneously Text Generation And Masked Language Model
+        ```python
+        from transformers import AutoModel, AutoTokenizer, trainer_utils
+
+        device = "cuda"
+        model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
+        tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        x_token = tokenizer.encode("", prefix_text="武田信玄は、<|inputmask|>時代ファンならぜひ押さえ<|inputmask|>きたい名将の一人。", return_tensors="pt").to(device)
+        trainer_utils.set_seed(30)
+        out_lm_token = model.generate(x_token, max_new_tokens=50)
+        out_mlm_token = model(x_token).logits.argmax(axis=-1)
+        tokenizer.decode(out_mlm_token[0])
+        "武田信玄は、戦国時代ファンならぜひ押さえておきたい名将の一人。"
+        tokenizer.decode(out_lm_token[0][x_token.shape[1]:])
+        "武田氏の三代に渡った武田家のひとり\n甲斐市に住む、日本史上最大の戦国大名。..."
         ```"""
         SEP_TOKEN = self.config.pad_token_id
         NOT_TOKEN = self.config.unk_token_id
+        SEG_TOKEN = self.config.separator_token_id
         use_cache = use_cache or self.config.use_cache
-        return_dict = return_dict or self.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         model_return_dict = True
         model_output_hidden_states = True
+        num_precontext = None
+        if input_ids is not None:
+            num_batch = input_ids.shape[0]
+            num_precontext = torch.zeros([num_batch]).int().to(input_ids.device)
+            where_separators = torch.where(input_ids == SEG_TOKEN)
+            num_precontext[where_separators[0]] += where_separators[1]
+            num_precontext = num_precontext.unsqueeze(1)
 
-        outputs = self.model(input_ids,
-                            num_precontext,
-                            spout,
-                            past_key_values,
-                            head_mask,
-                            use_cache,
-                            inputs_embeds,
-                            decoder_inputs_embeds,
-                            output_attentions,
-                            model_output_hidden_states,
-                            model_return_dict,
-                            output_router_logits)
+        outputs = self.model(
+            input_ids,
+            spout,
+            past_key_values,
+            head_mask,
+            use_cache,
+            inputs_embeds,
+            decoder_inputs_embeds,
+            output_attentions,
+            model_output_hidden_states,
+            model_return_dict,
+            output_router_logits,
+            num_precontext,
+        )
 
-        hidden_states = self.lm_head(outputs[0])
-        hidden_states = self.act(hidden_states)
-
-        lm_logits = torch.einsum("bsc,vc->bsv", hidden_states, self.model.embed_tokens.weight)
+        lm_logits = self.lm_head(outputs[0])
         if lm_logits.shape[-1] == self.final_logits_bias.shape[-1]:
             lm_logits = lm_logits + self.final_logits_bias
 
@@ -1112,9 +1225,7 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
 
             if output_router_logits:
                 # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
-                router_logits, expert_indexes = self._unpack_router_logits(
-                    encoder_outputs.router_probs
-                )
+                router_logits, expert_indexes = self._unpack_router_logits(encoder_outputs.router_probs)
                 z_loss = router_z_loss_func(encoder_router_logits)
                 router_probs = nn.Softmax(dim=-1)(encoder_router_logits)
                 aux_loss = load_balancing_loss_func(encoder_router_probs, encoder_expert_indexes)
@@ -1122,87 +1233,56 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
         # Ignore the two tokens when generating
-        lm_logits[:, :, SEP_TOKEN] = -1e10
-        lm_logits[:, :, NOT_TOKEN] = -1e10
+        if SEP_TOKEN < lm_logits.shape[2]:
+            lm_logits[:, :, SEP_TOKEN] = -1e10
+        if NOT_TOKEN < lm_logits.shape[2]:
+            lm_logits[:, :, NOT_TOKEN] = -1e10
+
+        ret = collections.OrderedDict()
+        if loss is not None:
+            ret["loss"] = loss
+        if lm_logits is not None:
+            ret["logits"] = lm_logits
+        if self.config.use_cache or use_cache:
+            ret["past_key_values"] = outputs.past_key_values
+        if output_hidden_states:
+            ret["hidden_states"] = outputs.hidden_states
+        if output_attentions:
+            ret["attentions"] = outputs.attentions
+        if self.config.output_router_logits or output_router_logits:
+            ret["router_logits"] = outputs.router_probs
+        if z_loss is not None:
+            ret["z_loss"] = z_loss
+        if aux_loss is not None:
+            ret["aux_loss"] = aux_loss
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    loss,
-                    lm_logits,
-                    #z_loss,
-                    #aux_loss,
-                    outputs.past_key_values,
-                    #outputs.last_hidden_state,
-                    outputs.hidden_states,
-                    outputs.attentions,
-                    #outputs.router_probs,
-                ]
-                if v is not None
-            )
+            return tuple(list(ret.values()))
 
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=lm_logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-        #return Seq2SeqMoEOutput(
-        #    loss=loss,
-        #    logits=lm_logits,
-        #    encoder_z_loss=z_loss,
-        #    encoder_aux_loss=aux_loss,
-        #    past_key_values=outputs.past_key_values,
-        #    encoder_last_hidden_state=outputs.last_hidden_state,
-        #    encoder_hidden_states=outputs.hidden_states,
-        #    encoder_attentions=outputs.attentions,
-        #    encoder_router_logits=outputs.router_probs,
-        #)
+        return MoECausalLMOutputWithPast(**ret)
 
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        connected_inputs: Optional[torch.LongTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         **kwargs
     ):
         if past_key_values is not None:
             return {
-                "input_ids": input_ids[:,-1:],
-                "num_precontext": connected_inputs,
+                "input_ids": input_ids[:, -1:],
                 "spout": None,
                 "past_key_values": past_key_values,
             }
-        SOT_TOKEN = self.config.bos_token_id
-        SEG_TOKEN = self.config.separator_token_id
-        if connected_inputs is None:
-            connected_inputs = torch.zeros(input_ids.shape[0]).int().to(input_ids.device)
-        pre_input = torch.stack(
-            [
-                torch.tensor(
-                    [SOT_TOKEN]
-                    + input_ids[i, : connected_inputs[i]].cpu().numpy().tolist()
-                    + [SEG_TOKEN]
-                    + input_ids[i, connected_inputs[i] :].cpu().numpy().tolist()
-                )
-                for i in range(input_ids.shape[0])
-            ]
-        )
-        pre_input = pre_input.to(input_ids.device)
-        connected_inputs = connected_inputs + 1
-        connected_inputs = torch.unsqueeze(connected_inputs, dim=1)
         return {
-            "input_ids": pre_input,
-            "num_precontext": connected_inputs,
+            "input_ids": input_ids,
             "spout": spout,
-            "past_key_values": past_key_values,
+            "past_key_values": None,
         }
 
+    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration.prepare_decoder_input_ids_from_labels with SwitchTransformers->GPTSANJapanese
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return labels
+        return self._shift_right(labels)
 
     # Copied from transformers.models.mbart.modeling_mbart.MBartForConditionalGeneration.resize_token_embeddings with MBart->GPTSANJapanese
     def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
@@ -1221,7 +1301,7 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         self.register_buffer("final_logits_bias", new_bias)
 
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.model.get_input_embeddings()
 
     def set_input_embeddings(self, new_embeddings):
         self.model.set_input_embeddings(new_embeddings)

@@ -122,6 +122,7 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         initializer_factor=0.002,
         output_router_logits=False,
         use_cache=True,
+        separator_token_id=35998,
         pad_token_id=35995,
         eos_token_id=35999,
         unk_token_id=35996,
@@ -152,6 +153,7 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         super().__init__(
+            separator_token_id=separator_token_id,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             unk_token_id=unk_token_id,
