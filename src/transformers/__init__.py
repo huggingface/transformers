@@ -4362,6 +4362,8 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
+
+        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -4791,8 +4793,6 @@ if TYPE_CHECKING:
             ErnieModel,
             ErniePreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.ernie_m import (
             ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST,
             ErnieMForInformationExtraction,

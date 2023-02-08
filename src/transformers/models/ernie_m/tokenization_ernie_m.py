@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for ErnieM."""
+"""Tokenization classes for Ernie-M."""
 
 # Some of the code is Copied from original paddlenlp repository.(https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/tokenizer.py)
 # and Albert directory.(https://github.com/huggingface/transformers/blob/main/src/transformers/models/albert/tokenization_albert.py)
@@ -25,62 +25,75 @@ import sentencepiece as spm
 from ...tokenization_utils import PreTrainedTokenizer
 
 
-__all__ = ["ErnieMTokenizer"]
-
 SPIECE_UNDERLINE = "▁"
+
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "sentencepiece_model_ckpt": "sentencepiece.bpe.model"}
+
+RESOURCE_FILES_NAMES = {
+    "sentencepiece_model_file": "sentencepiece.bpe.model",
+    "vocab_file": "vocab.txt",
+}
+
+PRETRAINED_RESOURCE_FILES_MAP = {
+    "vocab_file": {
+        "ernie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
+        "ernie-m-large": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
+    },
+    "sentencepiece_model_file": {
+        "ernie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/sentencepiece.bpe.model",
+        "ernie-m-large": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/sentencepiece.bpe.model",
+    },
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "ernie-m-base": 514,
+    "ernie-m-large": 514,
+    "uie-m-base": 514,
+    "uie-m-large": 514,
+}
+
+PRETRAINED_INIT_CONFIGURATION = {
+    "ernie-m-base": {"do_lower_case": False},
+    "ernie-m-large": {"do_lower_case": False},
+    "uie-m-base": {"do_lower_case": False},
+    "uie-m-large": {"do_lower_case": False},
+}
 
 
 class ErnieMTokenizer(PreTrainedTokenizer):
     r"""
-    Constructs a ErnieM tokenizer. It uses the `sentencepiece` tools to cut the words to sub-words.
+    Constructs a Ernie-M tokenizer. It uses the `sentencepiece` tools to cut the words to sub-words.
 
     Args:
         vocab_file (`str`):
             The file path of the vocabulary.
         sentencepiece_model_file (`str`):
             The file path of sentencepiece model.
-        do_lower_case (`str`, *optional*, defaults to True):
+        do_lower_case (`str`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
-        unk_token (`str`, *optional*, defaults to "[UNK]"):
+        unk_token (`str`, *optional*, defaults to `"[UNK]"`):
             A special token representing the `unknown (out-of-vocabulary)` token. An unknown token is set to be
             `unk_token` inorder to be converted to an ID.
-        sep_token (`str`, *optional*, defaults to "[SEP]"):
+        sep_token (`str`, *optional*, defaults to `"[SEP]"`):
             A special token separating two different sentences in the same input.
-        pad_token (`str`, *optional*, defaults to "[PAD]"):
+        pad_token (`str`, *optional*, defaults to `"[PAD]"`):
             A special token used to make arrays of tokens the same size for batching purposes.
-        cls_token (`str`, *optional*, defaults to "[CLS]"):
+        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
             A special token used for sequence classification. It is the last token of the sequence when built with
             special tokens.
-        mask_token (`str`, *optional*, defaults to "[MASK]"):
+        mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             A special token representing a masked token. This is the token used in the masked language modeling task
             which the model tries to predict the original unmasked ones.
     """
-    resource_files_names = {
-        "sentencepiece_model_file": "sentencepiece.bpe.model",
-        "vocab_file": "vocab.txt",
-    }  # for save_pretrained
-    pretrained_resource_files_map = {
-        "vocab_file": {
-            "ernie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
-            "ernie-m-large": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
-        },
-        "sentencepiece_model_file": {
-            "ernie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/sentencepiece.bpe.model",
-            "ernie-m-large": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/sentencepiece.bpe.model",
-        },
-    }
-    pretrained_init_configuration = {
-        "ernie-m-base": {"do_lower_case": False},
-        "ernie-m-large": {"do_lower_case": False},
-        "uie-m-base": {"do_lower_case": False},
-        "uie-m-large": {"do_lower_case": False},
-    }
-    max_model_input_sizes = {"ernie-m-base": 514, "ernie-m-large": 514, "uie-m-base": 514, "uie-m-large": 514}
+
     # Ernie-M model doesn't have token_type embedding.
     model_input_names: List[str] = ["input_ids"]
 
     vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_resource_files_map = PRETRAINED_RESOURCE_FILES_MAP
+    resource_files_names = RESOURCE_FILES_NAMES
 
     def __init__(
         self,
@@ -151,10 +164,6 @@ class ErnieMTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        r"""
-        Return the size of vocabulary. Returns:
-            int: The size of vocabulary.
-        """
         return self.sp_model.vocab_size()
 
     def get_vocab(self):
@@ -218,7 +227,8 @@ class ErnieMTokenizer(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         r"""
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An ERNIE-M sequence has the following format:
+        adding special tokens. An ErnieM sequence has the following format:
+
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] [SEP] B [SEP]`
 
@@ -226,7 +236,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
             token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs. Defaults to *None*.
+                Optional second list of IDs for sequence pairs.
         Returns:
             `List[int]`: List of input_id with the appropriate special tokens.
         """
@@ -238,8 +248,9 @@ class ErnieMTokenizer(PreTrainedTokenizer):
 
     def build_offset_mapping_with_special_tokens(self, offset_mapping_0, offset_mapping_1=None):
         r"""
-        Build offset map from a pair of offset map by concatenating and adding offsets of special tokens. An ERNIE-M
+        Build offset map from a pair of offset map by concatenating and adding offsets of special tokens. An Ernie-M
         offset_mapping has the following format:
+
         - single sequence: `(0,0) X (0,0)`
         - pair of sequences: `(0,0) A (0,0) (0,0) B (0,0)`
 
@@ -258,18 +269,18 @@ class ErnieMTokenizer(PreTrainedTokenizer):
 
     def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
         r"""
-        Args:
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `encode` methods.
-            token_ids_0 (List[int]):
+        special tokens using the tokenizer `encode` method.
+
+        Args:
+            token_ids_0 (`List[int]`):
                 List of ids of the first sequence.
-            token_ids_1 (List[int], optinal):
-                Optional second list of IDs for sequence pairs. Defaults to *None*.
-            already_has_special_tokens (str, optional):
-                Whether or not the token list is already formatted with special tokens for the model. Defaults to
-                *False*.
+            token_ids_1 (`List[int]`, *optinal*):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (`str`, *optional*):
+                Whether or not the token list is already formatted with special tokens for the model.
         Returns:
-            List[int]:
+            `List[int]`:
                 The list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
@@ -289,10 +300,11 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Args:
         Create the token type IDs corresponding to the sequences passed. [What are token type
-        IDs?](../glossary#token-type-ids) Should be overridden in a subclass if the model has a special way of building:
-        those.
+        IDs?](../glossary#token-type-ids) Should be overridden in a subclass if the model has a special way of
+        building: those.
+
+        Args:
             token_ids_0 (`List[int]`): The first tokenized sequence. token_ids_1 (`List[int]`, *optional*): The second
             tokenized sequence.
         Returns:

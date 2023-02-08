@@ -30,18 +30,20 @@ ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ErnieMConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ErnieMModel]. It is used to instantiate a
-    `ERNIEM` model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the `ERNIE-M` architecture. Configuration objects
-    inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
-    [`PretrainedConfig`] for more information.
-    [susnato/ernie-m-base_pytorch](https://huggingface.co/susnato/ernie-m-base_pytorch)
+    This is the configuration class to store the configuration of a [`ErnieMModel`]. It is used to instantiate a
+    Ernie-M model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the `Ernie-M`
+    [susnato/ernie-m-base_pytorch](https://huggingface.co/susnato/ernie-m-base_pytorch) architecture.
+
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 250002):
-            Vocabulary size of `inputs_ids` in `ErnieMModel`. Also is the vocab size of token embedding matrix. Defines
-            the number of different tokens that can be represented by the `inputs_ids` passed when calling
-            `ErnieMModel`.
+            Vocabulary size of `inputs_ids` in [`ErnieMModel`]. Also is the vocab size of token embedding matrix.
+            Defines the number of different tokens that can be represented by the `inputs_ids` passed when calling
+            [`ErnieMModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the embedding layer, encoder layers and pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -74,7 +76,7 @@ class ErnieMConfig(PretrainedConfig):
             The index of padding token in the token vocabulary.
 
     A normal_initializer initializes weight matrices as normal distributions. See
-    [`ErnieMPretrainedModel._init_weights()`] for how weights are initialized in `ErnieMModel`.
+    `ErnieMPretrainedModel._init_weights()` for how weights are initialized in `ErnieMModel`.
     """
     model_type = "ernie_m"
     attribute_map: Dict[str, str] = {"dropout": "classifier_dropout", "num_classes": "num_labels"}
