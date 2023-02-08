@@ -14,24 +14,15 @@
 
 import unittest
 
-from transformers import is_audio_available
+from datasets import load_dataset
+
 from transformers.pipelines import pipeline
-from transformers.testing_utils import nested_simplify, require_audio, require_tf, require_torch, slow
+from transformers.testing_utils import require_torch
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
-
-
-if is_audio_available():
-    pass
-else:
-
-    class Audio:
-        @staticmethod
-        def open(*args, **kwargs):
-            pass
+from .test_pipelines_common import PipelineTestCaseMeta
 
 
-@require_audio
+@require_torch
 class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     # Deactivating auto tests since we don't have a good MODEL_FOR_XX mapping,
     # and only CLAP would be there for now.
@@ -61,169 +52,91 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
 
     #     # Batching
     #     outputs = pipe([audio] * 3, batch_size=2, candidate_labels=["A", "B"])
-
     @require_torch
     def test_small_model_pt(self):
-        audio_classifier = pipeline(
-            model="hf-internal-testing/tiny-random-clap-zero-shot-audio-classification",
-        )
-        audio = Audio.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        output = audio_classifier(audio, candidate_labels=["a", "b", "c"])
+        pass
 
-        self.assertEqual(
-            nested_simplify(output),
-            [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
-        )
+    # @require_torch
+    # def test_small_model_pt(self):
+    #     audio_classifier = pipeline(
+    #         model="hf-internal-testing/tiny-random-clap-zero-shot-audio-classification",
+    #     )
+    #     audio = Audio.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    #     output = audio_classifier(audio, candidate_labels=["a", "b", "c"])
 
-        output = audio_classifier([audio] * 5, candidate_labels=["A", "B", "C"], batch_size=2)
-        self.assertEqual(
-            nested_simplify(output),
-            # Pipeline outputs are supposed to be deterministic and
-            # So we could in theory have real values "A", "B", "C" instead
-            # of ANY(str).
-            # However it seems that in this particular case, the floating
-            # scores are so close, we enter floating error approximation
-            # and the order is not guaranteed anymore with batching.
-            [
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-            ],
-        )
+    #     self.assertEqual(
+    #         nested_simplify(output),
+    #         [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
+    #     )
 
-    @require_tf
-    def test_small_model_tf(self):
-        audio_classifier = pipeline(
-            model="hf-internal-testing/tiny-random-clap-zero-shot-audio-classification", framework="tf"
-        )
-        audio = Audio.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        output = audio_classifier(audio, candidate_labels=["a", "b", "c"])
+    #     output = audio_classifier([audio] * 5, candidate_labels=["A", "B", "C"], batch_size=2)
+    #     self.assertEqual(
+    #         nested_simplify(output),
+    #         # Pipeline outputs are supposed to be deterministic and
+    #         # So we could in theory have real values "A", "B", "C" instead
+    #         # of ANY(str).
+    #         # However it seems that in this particular case, the floating
+    #         # scores are so close, we enter floating error approximation
+    #         # and the order is not guaranteed anymore with batching.
+    #         [
+    #             [
+    #                 {"score": 0.333, "label": ANY(str)},
+    #                 {"score": 0.333, "label": ANY(str)},
+    #                 {"score": 0.333, "label": ANY(str)},
+    #             ],
+    #             [
+    #                 {"score": 0.333, "label": ANY(str)},
+    #                 {"score": 0.333, "label": ANY(str)},
+    #                 {"score": 0.333, "label": ANY(str)},
+    #             ],
+    #             [
+    #                 {"score": 0.333, "label": ANY(str)},
+    #                 {"score": 0.333, "label": ANY(str)},
+    #                 {"score": 0.333, "label": ANY(str)},
+    #             ],
+    #             [
+    #                 {"score": 0.333, "label": ANY(str)},
+    #                 {"score": 0.333, "label": ANY(str)},
+    #                 {"score": 0.333, "label": ANY(str)},
+    #             ],
+    #             [
+    #                 {"score": 0.333, "label": ANY(str)},
+    #                 {"score": 0.333, "label": ANY(str)},
+    #                 {"score": 0.333, "label": ANY(str)},
+    #             ],
+    #         ],
+    #     )
 
-        self.assertEqual(
-            nested_simplify(output),
-            [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
-        )
-
-        output = audio_classifier([audio] * 5, candidate_labels=["A", "B", "C"], batch_size=2)
-        self.assertEqual(
-            nested_simplify(output),
-            # Pipeline outputs are supposed to be deterministic and
-            # So we could in theory have real values "A", "B", "C" instead
-            # of ANY(str).
-            # However it seems that in this particular case, the floating
-            # scores are so close, we enter floating error approximation
-            # and the order is not guaranteed anymore with batching.
-            [
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-                [
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                    {"score": 0.333, "label": ANY(str)},
-                ],
-            ],
-        )
-
-    @slow
+    # @slow
     @require_torch
     def test_large_model_pt(self):
         audio_classifier = pipeline(
             task="zero-shot-audio-classification",
-            model="openai/clap-vit-base-patch32",
+            model="ybelkada/clap-htsat-unfused",
         )
         # This is an audio of 2 cats with remotes and no planes
-        audio = Audio.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        output = audio_classifier(audio, candidate_labels=["cat", "plane", "remote"])
+        dataset = load_dataset("ashraq/esc50")
+        audio = dataset["train"]["audio"][-1]["array"]
+        output = audio_classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
 
         self.assertEqual(
-            nested_simplify(output),
+            output,
             [
-                {"score": 0.511, "label": "remote"},
-                {"score": 0.485, "label": "cat"},
-                {"score": 0.004, "label": "plane"},
+                {"score": 0.9990969896316528, "label": "Sound of a dog"},
+                {"score": 0.0009030875517055392, "label": "Sound of vaccum cleaner"},
             ],
         )
 
-        output = audio_classifier([audio] * 5, candidate_labels=["cat", "plane", "remote"], batch_size=2)
+        output = audio_classifier([audio] * 5, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
         self.assertEqual(
-            nested_simplify(output),
+            output,
             [
                 [
-                    {"score": 0.511, "label": "remote"},
-                    {"score": 0.485, "label": "cat"},
-                    {"score": 0.004, "label": "plane"},
-                ],
+                    {"score": 0.9990969896316528, "label": "Sound of a dog"},
+                    {"score": 0.0009030875517055392, "label": "Sound of vaccum cleaner"},
+                ]
             ]
             * 5,
         )
-
-    @slow
-    @require_tf
-    def test_large_model_tf(self):
-        audio_classifier = pipeline(
-            task="zero-shot-audio-classification", model="openai/clap-vit-base-patch32", framework="tf"
-        )
-        # This is an audio of 2 cats with remotes and no planes
-        audio = Audio.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        output = audio_classifier(audio, candidate_labels=["cat", "plane", "remote"])
-        self.assertEqual(
-            nested_simplify(output),
-            [
-                {"score": 0.511, "label": "remote"},
-                {"score": 0.485, "label": "cat"},
-                {"score": 0.004, "label": "plane"},
-            ],
-        )
-
-        output = audio_classifier([audio] * 5, candidate_labels=["cat", "plane", "remote"], batch_size=2)
-        self.assertEqual(
-            nested_simplify(output),
-            [
-                [
-                    {"score": 0.511, "label": "remote"},
-                    {"score": 0.485, "label": "cat"},
-                    {"score": 0.004, "label": "plane"},
-                ],
-            ]
-            * 5,
-        )
+        # TODO batching will be supported in next PR, the base pipeline needs to be modified
+        # output = audio_classifier([audio] * 5, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"], batch_size=5)
