@@ -1759,20 +1759,6 @@ class CLAPTextPooler(nn.Module):
         return pooled_output
 
 
-# class CLAPPreTrainedModel(PreTrainedModel):
-#     """
-# An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained #
-models. #"""
-
-#     config_class = CLAPConfig
-#     base_model_prefix = "clap"
-#     supports_gradient_checkpointing = True
-#     _keys_to_ignore_on_load_missing = [r"position_ids", r"logit_scale_a", r"logit_scale_t"]
-
-#     def _init_weights(self, module):
-#         pass
-
-
 class CLAPPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
