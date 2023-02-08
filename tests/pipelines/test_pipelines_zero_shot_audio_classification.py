@@ -56,6 +56,10 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     def test_small_model_pt(self):
         pass
 
+
+    def test_small_model_tf(self):
+        pass
+
     # @require_torch
     # def test_small_model_pt(self):
     #     audio_classifier = pipeline(
@@ -114,7 +118,7 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
             task="zero-shot-audio-classification",
             model="ybelkada/clap-htsat-unfused",
         )
-        # This is an audio of 2 cats with remotes and no planes
+        # This is an audio of a dog
         dataset = load_dataset("ashraq/esc50")
         audio = dataset["train"]["audio"][-1]["array"]
         output = audio_classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
@@ -140,3 +144,6 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         )
         # TODO batching will be supported in next PR, the base pipeline needs to be modified
         # output = audio_classifier([audio] * 5, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"], batch_size=5)
+
+    def test_large_model_tf(self):
+        pass
