@@ -14,19 +14,22 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The Mega model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Mega model was proposed in [Mega: Moving Average Equipped Gated Attention](https://arxiv.org/abs/2209.10655) by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig, Jonathan May, and Luke Zettlemoyer.
+Mega proposes a new approach to self-attention leveraging exponential moving averages, giving the attention mechanism 
+stronger positional biases. This allows Mega to perform competitively to Transformers on standard benchmarks including LRA 
+while also having significantly fewer parameters. Mega's compute efficiency allows it to scale to very long sequences, making it an 
+attractive option for long-document NLP tasks.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+The design choices in the Transformer attention mechanism, including weak inductive bias and quadratic computational complexity, have limited its application for modeling long sequences. In this paper, we introduce Mega, a simple, theoretically grounded, single-head gated attention mechanism equipped with (exponential) moving average to incorporate inductive bias of position-aware local dependencies into the position-agnostic attention mechanism. We further propose a variant of Mega that offers linear time and space complexity yet yields only minimal quality loss, by efficiently splitting the whole sequence into multiple chunks with fixed length. Extensive experiments on a wide range of sequence modeling benchmarks, including the Long Range Arena, neural machine translation, auto-regressive language modeling, and image and speech classification, show that Mega achieves significant improvements over other sequence models, including variants of Transformers and recent state space models. 
 
 Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [mnaylor](https://huggingface.co/mnaylor).
+The original code can be found [here](https://github.com/facebookresearch/mega).
 
 
 ## MegaConfig

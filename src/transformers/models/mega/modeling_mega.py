@@ -60,7 +60,7 @@ MEGA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Mega source code converted to pure PyTorch
 # resources
 #   - paper: https://arxiv.org/abs/2209.10655
-#   - original implementation: 
+#   - original implementation: https://github.com/facebookresearch/mega 
 
 # starting with activation functions
 def relu2(x):
