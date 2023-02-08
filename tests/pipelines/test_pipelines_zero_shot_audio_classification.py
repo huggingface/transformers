@@ -17,7 +17,7 @@ import unittest
 from datasets import load_dataset
 
 from transformers.pipelines import pipeline
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import nested_simplify, require_torch
 
 from .test_pipelines_common import PipelineTestCaseMeta
 
@@ -120,21 +120,21 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         output = audio_classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
 
         self.assertEqual(
-            output,
+            nested_simplify(output),
             [
-                {"score": 0.9990969896316528, "label": "Sound of a dog"},
-                {"score": 0.0009030875517055392, "label": "Sound of vaccum cleaner"},
+                {"score": 0.999, "label": "Sound of a dog"},
+                {"score": 0.001, "label": "Sound of vaccum cleaner"},
             ],
         )
 
         output = audio_classifier([audio] * 5, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
         self.assertEqual(
-            output,
+            nested_simplify(output),
             [
                 [
-                    {"score": 0.9990969896316528, "label": "Sound of a dog"},
-                    {"score": 0.0009030875517055392, "label": "Sound of vaccum cleaner"},
-                ]
+                    {"score": 0.999, "label": "Sound of a dog"},
+                    {"score": 0.001, "label": "Sound of vaccum cleaner"},
+                ],
             ]
             * 5,
         )
