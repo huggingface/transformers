@@ -65,7 +65,7 @@ def load_checkpoint(checkpoint_path):
 
             depth = value.shape[0]
             assert depth % 3 == 0
-            # `SequeuceParallelTransformerBlock` has QKV weight is seperated in K,V,Q despite the naming:
+            # `SequeuceParallelTransformerBlock` has QKV weight is separated in K,V,Q despite the naming:
             # https://cs.github.com/facebookresearch/metaseq/blob/51871bd73cd04c038f239ea2a26db1d7f6b37927/metaseq/modules/sequence_parallel_transformer_layer.py#L97
             k,v,q = torch.split(value, depth // 3, dim=0)
 
