@@ -33,7 +33,7 @@ from ..models.auto import (
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
 from ..pytorch_utils import torch_int_div
-from ..utils import ModelOutput, logging, prod
+from ..utils import ModelOutput, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .configuration_utils import GenerationConfig
