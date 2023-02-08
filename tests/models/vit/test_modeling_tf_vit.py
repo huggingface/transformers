@@ -24,6 +24,7 @@ from transformers.utils import cached_property, is_tf_available, is_vision_avail
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_common import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -148,7 +149,7 @@ class TFViTModelTester:
 
 
 @require_tf
-class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_tf_common.py, as ViT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
