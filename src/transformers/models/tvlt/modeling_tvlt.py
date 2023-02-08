@@ -234,8 +234,8 @@ def random_masking(
             noise = torch.rand(batch_size, seq_len)  # noise in [0, 1]
     elif input_type == "audio":
         noise = torch.rand((batch_size, seq_len))  # noise in [0, 1]
-        # sort noise for each sample
-
+        
+    # sort noise for each sample
     ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
     len_keep = int(seq_len * (1 - mask_ratio))
 
