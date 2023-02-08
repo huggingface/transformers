@@ -132,7 +132,7 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
         eos_token="<|endoftext|>",
         mask_token="<|inputmask|>",
         do_clean_text=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,

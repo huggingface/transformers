@@ -287,7 +287,6 @@ class GPTSANJapaneseSparseMLP(nn.Module):
 
         next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
-
             token_indices = router_mask[:, :, idx].bool()
             next_states[token_indices] = expert(hidden_states[token_indices])
 
@@ -1267,7 +1266,7 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         input_ids: torch.LongTensor,
         spout: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        **kwargs
+        **kwargs,
     ):
         if past_key_values is not None:
             return {

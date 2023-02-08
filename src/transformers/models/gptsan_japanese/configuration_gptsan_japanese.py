@@ -126,7 +126,7 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         pad_token_id=35995,
         eos_token_id=35999,
         unk_token_id=35996,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
