@@ -47,6 +47,7 @@ from .pytorch_utils import (  # noqa: F401
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
+    reverse_apply,
 )
 from .utils import (
     DUMMY_INPUTS,
