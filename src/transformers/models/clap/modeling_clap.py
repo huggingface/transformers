@@ -114,13 +114,13 @@ def window_partition(hidden_states, window_size):
 def window_reverse(windows, window_size, height, width):
     """
     Args:
-        windows: (`torch.FloatTensor` of shape `(num_windows * batch_size, window_size, window_size, num_channels)`)
+        windows (`torch.FloatTensor` of shape `(num_windows * batch_size, window_size, window_size, num_channels)`):
             Input windows
-        window_size: (`int`)
+        window_size (`int`):
             Window size
-        height: (`int`)
+        height (`int`):
             Height of the resized audio
-        width: (`int`)
+        width (`int`):
             Width of the resized audio
     """
     batch_size = int(windows.shape[0] / (height * width / window_size / window_size))
@@ -150,7 +150,8 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/Clip.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
+    labels = torch.arange(len(logits), device=logits.device)
+    return nn.functional.cross_entropy(logits, labels)
 
 
 # Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clap, image->audio
@@ -302,7 +303,7 @@ class CLAPDropPath(nn.Module):
 
         keep_prob = 1 - self.drop_prob
         # work with diff dim tensors, not just 2D ConvNets
-        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)  
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
 
         random_tensor = keep_prob + torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
         random_tensor.floor_()  # binarize
@@ -399,6 +400,7 @@ class CLAPAudioPatchEmbed(nn.Module):
 
     def forward(self, hidden_states, is_longer_idx=None):
         if self.enable_fusion:
+            # retrieve the last mel as we have transposed the input
             global_hidden_states = hidden_states[:, 0:1, :, :]
 
             # global processing
@@ -428,19 +430,16 @@ class CLAPAudioPatchEmbed(nn.Module):
                 local_hidden_states = local_hidden_states.permute((0, 2, 3, 1, 4)).contiguous().flatten(3)
                 output_batch_size, output_num_channels, output_height, _ = local_hidden_states.size()
 
-                if local_hidden_states.size(-1) < output_width:
+                local_width = local_hidden_states.size(-1)
+                if local_width < output_width:
+                    padded_hidden_states = torch.zeros(
+                        (output_batch_size, output_num_channels, output_height, output_width - local_width)
+                    ).to(global_hidden_states.device)
+
                     local_hidden_states = torch.cat(
                         [
                             local_hidden_states,
-                            torch.zeros(
-                                (
-                                    output_batch_size,
-                                    output_num_channels,
-                                    output_height,
-                                    output_width - local_hidden_states.size(-1),
-                                ),
-                                device=global_hidden_states.device,
-                            ),
+                            padded_hidden_states,
                         ],
                         dim=-1,
                     )
@@ -987,7 +986,6 @@ class CLAPAudioEncoder(nn.Module):
         always_partition: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, CLAPAudioModelOutput]:
-
         input_features = input_features.transpose(1, 3)
         hidden_states = self.bn0(input_features)
         hidden_states = hidden_states.transpose(1, 3)
