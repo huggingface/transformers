@@ -426,19 +426,20 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    @unittest.skip(reason="Hubert has no input embeddings")
     def test_inputs_embeds(self):
         pass
 
-    # Hubert cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Hubert has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Hubert has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="Hubert has no input embeddings or get_input_embeddings method")
     def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
+    def test_dataset_conversion(self):
         pass
 
     @slow
