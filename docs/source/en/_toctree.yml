@@ -481,6 +481,8 @@
       sections:
       - local: model_doc/audio-spectrogram-transformer
         title: Audio Spectrogram Transformer
+      - local: model_doc/clap
+        title: CLAP
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct

@@ -216,7 +216,35 @@ class CLAPAudioModelOutput(ModelOutput):
     embedding: torch.FloatTensor = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class CLAPAudioModelOutputWithProjection(ModelOutput):
+    """
+    CLAPAudio model output to mimic the output of the original implementation.
+
+    Args:
+        framewise_output (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+    """
+
     projection_output: Optional[torch.FloatTensor] = None
+    framewise_output: torch.FloatTensor = None
+    clipwise_output: torch.FloatTensor = None
+    fine_grained_embedding: torch.FloatTensor = None
+    embedding: torch.FloatTensor = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -1080,7 +1108,14 @@ class CLAPAudioEncoder(nn.Module):
         hidden_states = torch.flatten(hidden_states, 1)
 
         if not return_dict:
-            return (framewise_output, torch.sigmoid(hidden_states), fine_grained_latent_output, latent_output)
+            return (
+                framewise_output,
+                torch.sigmoid(hidden_states),
+                fine_grained_latent_output,
+                latent_output,
+                all_self_attentions,
+                all_reshaped_hidden_states,
+            )
 
         return CLAPAudioModelOutput(
             framewise_output=framewise_output,
@@ -1779,7 +1814,6 @@ class CLAPPreTrainedModel(PreTrainedModel):
             module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.token_type_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, CLAPTextSelfAttention):
-            factor = self.config.initializer_factor
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.query.weight, std=in_proj_std)
             nn.init.normal_(module.key.weight, std=in_proj_std)
@@ -1796,32 +1830,28 @@ class CLAPPreTrainedModel(PreTrainedModel):
                 CLAPAudioOutput,
             ),
         ):
-            factor = self.config.initializer_factor
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.dense.weight, std=in_proj_std)
         elif isinstance(module, CLAPProjectionLayer):
-            factor = self.config.initializer_factor
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.linear1.weight, std=in_proj_std)
             nn.init.normal_(module.linear2.weight, std=in_proj_std)
         elif isinstance(module, CLAPAudioPatchEmbed):
-            factor = self.config.initializer_factor
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.proj.weight, std=in_proj_std)
         elif isinstance(module, CLAPAudioSelfAttention):
-            factor = self.config.initializer_factor
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.query.weight, std=in_proj_std)
             nn.init.normal_(module.key.weight, std=in_proj_std)
             nn.init.normal_(module.value.weight, std=in_proj_std)
         elif isinstance(module, CLAPAudioPatchMerging):
-            factor = self.config.initializer_factor
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.reduction.weight, std=in_proj_std)
         elif isinstance(module, CLAPAudioEncoder):
-            factor = self.config.initializer_factor
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.head.weight, std=in_proj_std)
+        elif isinstance(module, CLAPFusionBlock):
+            nn.init.normal_(module.linear.weight, std=factor * 0.02)
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -1829,11 +1859,13 @@ class CLAPPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
         if isinstance(module, nn.Conv2d):
-            factor = self.config.initializer_factor
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.weight, std=in_proj_std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        if isinstance(module, CLAPModel):
+            nn.init.normal_(module.logit_scale_a, std=factor * 0.02)
+            nn.init.normal_(module.logit_scale_t, std=factor * 0.02)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, CLAPTextEncoder):
@@ -2246,7 +2278,7 @@ class CLAPModel(CLAPPreTrainedModel):
             return_dict=return_dict,
         )
 
-        audio_embeds = audio_outputs[-1] if not return_dict else audio_outputs.embedding
+        audio_embeds = audio_outputs[-3] if not return_dict else audio_outputs.embedding
         audio_embeds = self.audio_projection(audio_embeds)
 
         text_embeds = text_outputs[1]
@@ -2422,19 +2454,20 @@ class CLAPAudioModelWithProjection(CLAPPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = audio_outputs[-1] if not return_dict else audio_outputs.embedding
+        pooled_output = audio_outputs[-3] if not return_dict else audio_outputs.embedding
 
         audio_embeds = self.audio_projection(pooled_output)
 
         if not return_dict:
-            outputs = (audio_embeds, audio_outputs[0]) + audio_outputs[2:]
-            return tuple(output for output in outputs if output is not None)
+            outputs = (audio_embeds, *audio_outputs)
+            return outputs
 
-        return CLAPAudioModelOutput(
+        return CLAPAudioModelOutputWithProjection(
             projection_output=audio_embeds,
-            clipwise_output=audio_outputs.clipwise_output,
             framewise_output=audio_outputs.framewise_output,
+            clipwise_output=audio_outputs.clipwise_output,
+            fine_grained_embedding=audio_outputs.fine_grained_embedding,
             embedding=audio_outputs.embedding,
-            hidden_states=audio_outputs.hidden_states,
             attentions=audio_outputs.attentions,
+            hidden_states=audio_outputs.hidden_states,
         )
