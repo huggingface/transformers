@@ -7,8 +7,9 @@ from ..utils import (
     requires_backends,
 )
 from .base import PIPELINE_INIT_ARGS, ChunkPipeline
-
-
+from .audio_classification import ffmpeg_read
+import requests
+import numpy as np
 if is_torch_available():
     import torch
 
@@ -27,15 +28,15 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> classifier = pipeline(model="openai/clap-vit-large-patch14")
+    >>> classifier = pipeline(model="laion-ai/clap-hsat-tiny")
     >>> classifier(
-    ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
+    ...     "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac",
     ...     candidate_labels=["animals", "humans", "landscape"],
     ... )
     [{'score': 0.965, 'label': 'animals'}, {'score': 0.03, 'label': 'humans'}, {'score': 0.005, 'label': 'landscape'}]
 
     >>> classifier(
-    ...     "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png",
+    ...     "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac",
     ...     candidate_labels=["black and white", "photorealist", "painting"],
     ... )
     [{'score': 0.996, 'label': 'black and white'}, {'score': 0.003, 'label': 'photorealist'}, {'score': 0.0, 'label': 'painting'}]
@@ -54,20 +55,27 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
         super().__init__(**kwargs)
 
         requires_backends(self, "audio")
+        
+        if self.framework != "pt":
+            raise ValueError(f"The {self.__class__} is only available in PyTorch.")
         # No specific FOR_XXX available yet
         # self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
 
-    def __call__(self, audios: Union[str, List[str], "Image", List["Image"]], **kwargs):
+    def __call__(
+        self,
+        audios: Union[np.ndarray, bytes, str],
+        **kwargs,
+    ):
         """
         Assign labels to the audio(s) passed as inputs.
 
         Args:
-            audios (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
-                The pipeline handles three types of audios:
+            audios (`str`, `List[str]`, `np.array` or `List[np.array]`):
+                The pipeline handles three types of inputs:
 
                 - A string containing a http link pointing to an audio
                 - A string containing a local path to an audio
-                - An audio loaded in PIL directly
+                - An audio loaded in numpy
 
             candidate_labels (`List[str]`):
                 The candidate labels for this audio
@@ -75,7 +83,7 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
             hypothesis_template (`str`, *optional*, defaults to `"This is a photo of {}"`):
                 The sentence used in cunjunction with *candidate_labels* to attempt the audio classification by
                 replacing the placeholder with the candidate_labels. Then likelihood is estimated by using
-                logits_per_image
+                logits_per_audio
 
         Return:
             A list of dictionaries containing result, one dictionary per proposed label. The dictionaries contain the
@@ -95,11 +103,39 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
 
         return preprocess_params, {}, {}
 
-    def preprocess(self, audio, candidate_labels=None, hypothesis_template="This is a photo of {}."):
+    def preprocess(self, audio, candidate_labels=None, hypothesis_template="This is a recording of {}."):
         n = len(candidate_labels)
         for i, candidate_label in enumerate(candidate_labels):
-            audio = load_audio(audio)
-            audios = self.image_processor(audios=[audio], return_tensors=self.framework)
+            audio = ffmpeg_read(audio)
+            audios = self.feature_extractor(audios=[audio], return_tensors=self.framework)
+            sequence = hypothesis_template.format(candidate_label)
+            inputs = self.tokenizer(sequence, return_tensors=self.framework)
+            inputs["input_features"] = audios.input_features
+            yield {"is_last": i == n - 1, "candidate_label": candidate_label, **inputs}
+            
+    def preprocess(self, audio, candidate_labels=None, hypothesis_template="This is a recording of {}."):
+        if isinstance(audio, str):
+            if audio.startswith("http://") or audio.startswith("https://"):
+                # We need to actually check for a real protocol, otherwise it's impossible to use a local file
+                # like http_huggingface_co.png
+                audio = requests.get(audio).content
+            else:
+                with open(audio, "rb") as f:
+                    audio = f.read()
+
+        if isinstance(audio, bytes):
+            audio = ffmpeg_read(audio, self.feature_extractor.sampling_rate)
+
+        if not isinstance(audio, np.ndarray):
+            raise ValueError("We expect a numpy ndarray as input")
+        if len(audio.shape) != 1:
+            raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
+        
+        n = len(candidate_labels)
+        for i, candidate_label in enumerate(candidate_labels):
+            audios = self.feature_extractor(
+                audio, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+            )
             sequence = hypothesis_template.format(candidate_label)
             inputs = self.tokenizer(sequence, return_tensors=self.framework)
             inputs["input_features"] = audios.input_features
@@ -110,23 +146,23 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
         candidate_label = model_inputs.pop("candidate_label")
         outputs = self.model(**model_inputs)
 
-        # Clip does crossproduct scoring by default, so we're only
+        # CLAP does crossproduct scoring by default, so we're only
         # interested in the results where audio and text and in the same
         # batch position.
-        diag = torch.diagonal if self.framework == "pt" else tf.linalg.diag_part
-        logits_per_image = diag(outputs.logits_per_image)
+        diag = torch.diagonal
+        logits_per_audio = diag(outputs.logits_per_audio)
 
         model_outputs = {
             "is_last": is_last,
             "candidate_label": candidate_label,
-            "logits_per_image": logits_per_image,
+            "logits_per_audio": logits_per_audio,
         }
         return model_outputs
 
     def postprocess(self, model_outputs):
         candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
         if self.framework == "pt":
-            logits = torch.cat([output["logits_per_image"] for output in model_outputs])
+            logits = torch.cat([output["logits_per_audio"] for output in model_outputs])
             probs = logits.softmax(dim=0)
             scores = probs.tolist()
         else:
