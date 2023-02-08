@@ -1907,6 +1907,33 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             torch_dtype (`str` or `torch.dtype`, *optional*):
                 Override the default `torch.dtype` and load the model under this dtype. If `"auto"` is passed the dtype
                 will be automatically derived from the model's weights.
+
+                Here is how `torch_dtype` defines in which `dtype` the model gets loaded:
+
+                1. `torch_dtype=torch.float16` - (or `torch.bfloat16` or `torch.float`) load in a
+                  specified `dtype`, ignoring the model's `config.torch_dtype` if one exists
+
+                2. `torch_dtype=config.torch_dtype` - use the `dtype` specified in the config (similar to
+                  the first case
+
+                3. torch_dtype="auto" - check the `dtype` of the first weight that's a floating point
+                  one in the checkpoint and use that as `dtype`. This will load the model using the `dtype` it was
+                  saved in. It can't be used as an indicator of how the model was trained. Since it could be trained in
+                  a mixed precision regime but saved in fp32.
+
+                4. if not specified - the model will get loaded in `torch.float` (fp32)
+
+                Specifically for case (2) you could use the following approach to retrieve `config.torch_dtype`:
+
+                ```
+                config = AutoConfig.from_pretrained(x)
+                model = AutoModel.from_pretrained(x, torch_dtype=config.torch_dtype)
+                ```
+
+                Note: for some models the `dtype` they were trained in is unknown - you may try to check the model's
+                paper or reach out to the authors and ask them to add this information to the model's card and to
+                insert the `torch_dtype` entry in `config.json` on the hub
+
             device_map (`str` or `Dict[str, Union[int, str, torch.device]]`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
                 parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
