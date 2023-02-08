@@ -312,9 +312,9 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             max_length:
                 maximum length of the returned list and optionally padding length (see below)
             pad_to_multiple_of (optional) :
-                Integer if set will pad the sequence to a multiple of the provided value.
-                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+                Integer if set will pad the sequence to a multiple of the provided value. This is especially useful to
+                enable the use of Tensor Core on NVIDIA hardware with compute capability `>= 7.5` (Volta), or on TPUs
+                which benefit from having sequence lengths be a multiple of 128.
             truncation (optional):
                 Activates truncation to cut input sequences longer than `max_length` to `max_length`.
         """
@@ -482,12 +482,12 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         mel_scale: str = "htk",
     ) -> np.array:
         """
-        Create a frequency bin conversion matrix used to obtain the Mel Spectrogram. This is called
-        a *mel filter bank*, and various implementation exist, which differ in the number of filters, the shape of the
-        filters, the way the filters are spaced, the bandwidth of the filters, and the manner in which the spectrum is
-        warped. The goal of these features is to approximate the non-linear human perception of the variation in pitch
-        with respect to the frequency. This code is heavily inspired from the *torchaudio* implementation, see [here](https://pytorch.org/audio/stable/transforms.html)
-        for more details.
+        Create a frequency bin conversion matrix used to obtain the Mel Spectrogram. This is called a *mel filter
+        bank*, and various implementation exist, which differ in the number of filters, the shape of the filters, the
+        way the filters are spaced, the bandwidth of the filters, and the manner in which the spectrum is warped. The
+        goal of these features is to approximate the non-linear human perception of the variation in pitch with respect
+        to the frequency. This code is heavily inspired from the *torchaudio* implementation, see
+        [here](https://pytorch.org/audio/stable/transforms.html) for more details.
 
 
         Note:
@@ -593,7 +593,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _power_to_db(self, mel_spectrogram, a_min=1e-10, ref=1.0):
         """
-        Convert a mel spectrogram from power to db scale, this function is the numpy implementation of librosa.power_to_lb.
+        Convert a mel spectrogram from power to db scale, this function is the numpy implementation of
+        librosa.power_to_lb.
         """
         log_spec = 10 * np.log10(np.clip(mel_spectrogram, a_min=a_min, a_max=None))
         log_spec -= 10.0 * np.log10(np.maximum(a_min, ref))
@@ -611,8 +612,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         The window length (self.window_length) defines how much of the signal is contained in each frame, while the hop
         length defines the step between the beginning of each new frame.
 
-        #TODO @Arthur **This method does not support batching yet as we are mainly focus on inference. If you want this to be added
-        feel free to open an issue and ping @arthurzucker on Github**
+        #TODO @Arthur **This method does not support batching yet as we are mainly focus on inference. If you want this
+        to be added feel free to open an issue and ping @arthurzucker on Github**
 
         Args:
             waveform (`np.array`) of shape (sample_length,):

@@ -1,4 +1,7 @@
-from typing import List, Union
+from typing import Union
+
+import numpy as np
+import requests
 
 from ..utils import (
     add_end_docstrings,
@@ -6,10 +9,10 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, ChunkPipeline
 from .audio_classification import ffmpeg_read
-import requests
-import numpy as np
+from .base import PIPELINE_INIT_ARGS, ChunkPipeline
+
+
 if is_torch_available():
     import torch
 
@@ -55,7 +58,7 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
         super().__init__(**kwargs)
 
         requires_backends(self, "audio")
-        
+
         if self.framework != "pt":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
         # No specific FOR_XXX available yet
@@ -104,16 +107,6 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
         return preprocess_params, {}, {}
 
     def preprocess(self, audio, candidate_labels=None, hypothesis_template="This is a recording of {}."):
-        n = len(candidate_labels)
-        for i, candidate_label in enumerate(candidate_labels):
-            audio = ffmpeg_read(audio)
-            audios = self.feature_extractor(audios=[audio], return_tensors=self.framework)
-            sequence = hypothesis_template.format(candidate_label)
-            inputs = self.tokenizer(sequence, return_tensors=self.framework)
-            inputs["input_features"] = audios.input_features
-            yield {"is_last": i == n - 1, "candidate_label": candidate_label, **inputs}
-            
-    def preprocess(self, audio, candidate_labels=None, hypothesis_template="This is a recording of {}."):
         if isinstance(audio, str):
             if audio.startswith("http://") or audio.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
@@ -130,7 +123,7 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
             raise ValueError("We expect a numpy ndarray as input")
         if len(audio.shape) != 1:
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
-        
+
         n = len(candidate_labels)
         for i, candidate_label in enumerate(candidate_labels):
             audios = self.feature_extractor(
