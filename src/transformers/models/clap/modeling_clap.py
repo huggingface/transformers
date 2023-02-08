@@ -65,10 +65,10 @@ def do_mixup(hidden_states, mixup_lambda):
         mixup_lambda (`torch.FloatTensor`):
             Mixing ratio sampled from the Beta distribution
     """
-    out = (
-        hidden_states.transpose(0, -1) * mixup_lambda
-        + torch.flip(hidden_states, dims=[0]).transpose(0, -1) * (1 - mixup_lambda)
-    ).transpose(0, -1)
+    intermediate_hidden_states = hidden_states.transpose(0, -1) * mixup_lambda
+    flipped_hidden_states = torch.flip(hidden_states, dims=[0]).transpose(0, -1) * (1 - mixup_lambda)
+    out = intermediate_hidden_states + flipped_hidden_states
+    out = out.transpose(0, -1)
     return out
 
 
