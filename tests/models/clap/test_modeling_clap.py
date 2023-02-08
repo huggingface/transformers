@@ -79,14 +79,22 @@ class CLAPAudioModelTester:
         self,
         parent,
         batch_size=12,
-        image_size=30,
+        image_size=60,
+        mel_bins=16,
+        window_size=4,
+        spec_size=64,
         patch_size=2,
+        patch_stride=2,
+        seq_length=16,
+        freq_ratio=2,
         num_channels=3,
         is_training=True,
         hidden_size=32,
+        patch_embeds_hidden_size=32,
+        projection_hidden_size=256,
         projection_dim=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
+        num_hidden_layers=4,
+        num_heads=[2, 2, 2, 2],
         intermediate_size=37,
         dropout=0.1,
         attention_dropout=0.1,
@@ -96,74 +104,80 @@ class CLAPAudioModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
+        self.mel_bins = mel_bins
+        self.window_size = window_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.is_training = is_training
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        self.num_heads = num_heads
+        self.num_attention_heads = num_heads[0]
+        self.projection_hidden_size = projection_hidden_size
+        self.seq_length = seq_length
+        self.spec_size = spec_size
+        self.freq_ratio = freq_ratio
+        self.patch_stride = patch_stride
+        self.patch_embeds_hidden_size = patch_embeds_hidden_size
         self.intermediate_size = intermediate_size
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.scope = scope
 
-        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
-
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        input_features = floats_tensor([self.batch_size, 1, self.hidden_size, self.mel_bins])
         config = self.get_config()
 
-        return config, pixel_values
+        return config, input_features
 
     def get_config(self):
         return CLAPAudioConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
+            mel_bins=self.mel_bins,
+            window_size=self.window_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
+            patch_stride=self.patch_stride,
             projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
+            num_attention_heads=self.num_heads,
             intermediate_size=self.intermediate_size,
             dropout=self.dropout,
             attention_dropout=self.attention_dropout,
             initializer_range=self.initializer_range,
+            spec_size=self.spec_size,
+            freq_ratio=self.freq_ratio,
+            patch_embeds_hidden_size=self.patch_embeds_hidden_size,
+            projection_hidden_size=self.projection_hidden_size,
         )
 
-    def create_and_check_model(self, config, pixel_values):
+    def create_and_check_model(self, config, input_features):
         model = CLAPAudioModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(pixel_values)
+            result = model(input_features)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        embedding_shape = self.hidden_size * self.window_size * self.freq_ratio
+        self.parent.assertEqual(
+            result.fine_grained_embedding.shape, (self.batch_size, embedding_shape, embedding_shape)
+        )
 
-    def create_and_check_model_with_projection(self, config, pixel_values):
+    def create_and_check_model_with_projection(self, config, input_features):
         model = CLAPAudioModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
+            result = model(input_features)
+        self.parent.assertEqual(result.projection_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        config, input_features = config_and_inputs
+        inputs_dict = {"input_features": input_features}
         return config, inputs_dict
 
 
@@ -209,7 +223,7 @@ class CLAPAudioModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["pixel_values"]
+            expected_arg_names = ["input_features"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
@@ -268,6 +282,7 @@ class CLAPTextModelTester:
         max_position_embeddings=512,
         initializer_range=0.02,
         scope=None,
+        projection_hidden_act="relu",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -286,6 +301,7 @@ class CLAPTextModelTester:
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.scope = scope
+        self.projection_hidden_act = projection_hidden_act
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -309,6 +325,7 @@ class CLAPTextModelTester:
         return CLAPTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            projection_hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -317,6 +334,7 @@ class CLAPTextModelTester:
             attention_dropout=self.attention_dropout,
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
+            projection_hidden_act=self.projection_hidden_act,
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):
@@ -401,48 +419,48 @@ class CLAPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class CLAPModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+    def __init__(self, parent, text_kwargs=None, audio_kwargs=None, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
-        if vision_kwargs is None:
-            vision_kwargs = {}
+        if audio_kwargs is None:
+            audio_kwargs = {}
 
         self.parent = parent
         self.text_model_tester = CLAPTextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = CLAPAudioModelTester(parent, **vision_kwargs)
+        self.audio_model_tester = CLAPAudioModelTester(parent, **audio_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        audio_config, input_features = self.audio_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, pixel_values
+        return config, input_ids, attention_mask, input_features
 
     def get_config(self):
-        return CLAPConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        return CLAPConfig.from_text_audio_configs(
+            self.text_model_tester.get_config(), self.audio_model_tester.get_config(), projection_dim=64
         )
 
-    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
+    def create_and_check_model(self, config, input_ids, attention_mask, input_features):
         model = CLAPModel(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
+            result = model(input_ids, input_features, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_audio.shape, (self.audio_model_tester.batch_size, self.text_model_tester.batch_size)
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.audio_model_tester.batch_size)
         )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        config, input_ids, attention_mask, input_features = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
+            "input_features": input_features,
             "return_loss": True,
         }
         return config, inputs_dict
@@ -518,8 +536,8 @@ class CLAPModelTest(ModelTesterMixin, unittest.TestCase):
 
             try:
                 input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # CLAP needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
+                input_features = inputs_dict["input_features"]  # CLAP needs input_features
+                traced_model = torch.jit.trace(model, (input_ids, input_features))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
@@ -555,14 +573,14 @@ class CLAPModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertTrue(models_equal)
 
-    def test_load_vision_text_config(self):
+    def test_load_audio_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # Save CLAPConfig and check if we can load CLAPAudioConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            vision_config = CLAPAudioConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+            audio_config = CLAPAudioConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.audio_config.to_dict(), audio_config.to_dict())
 
         # Save CLAPConfig and check if we can load CLAPTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -722,14 +740,14 @@ class CLAPModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         self.assertEqual(
-            outputs.logits_per_image.shape,
-            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+            outputs.logits_per_audio.shape,
+            torch.Size((inputs.input_features.shape[0], inputs.input_ids.shape[0])),
         )
         self.assertEqual(
             outputs.logits_per_text.shape,
-            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+            torch.Size((inputs.input_ids.shape[0], inputs.input_features.shape[0])),
         )
 
         expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs.logits_per_audio, expected_logits, atol=1e-3))
