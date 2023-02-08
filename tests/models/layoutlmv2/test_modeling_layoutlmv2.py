@@ -15,9 +15,6 @@
 """ Testing suite for the PyTorch LayoutLMv2 model. """
 
 
-import os
-import random
-import tempfile
 import unittest
 
 from transformers.testing_utils import require_detectron2, require_torch, require_torch_multi_gpu, slow, torch_device
@@ -31,7 +28,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_MAPPING,
         LayoutLMv2Config,
         LayoutLMv2ForQuestionAnswering,
         LayoutLMv2ForSequenceClassification,
