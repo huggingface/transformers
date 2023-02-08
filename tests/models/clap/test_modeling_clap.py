@@ -170,7 +170,7 @@ class CLAPAudioModelTester:
         model.eval()
         with torch.no_grad():
             result = model(input_features)
-        self.parent.assertEqual(result.projection_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(result.audio_embeds.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()

@@ -225,6 +225,8 @@ class CLAPAudioModelOutputWithProjection(ModelOutput):
     CLAPAudio model output to mimic the output of the original implementation.
 
     Args:
+        audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
+            The audio embeddings obtained by applying the projection layer to the pooler_output.
         framewise_output (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -239,7 +241,7 @@ class CLAPAudioModelOutputWithProjection(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
     """
 
-    projection_output: Optional[torch.FloatTensor] = None
+    audio_embeds: Optional[torch.FloatTensor] = None
     framewise_output: torch.FloatTensor = None
     clipwise_output: torch.FloatTensor = None
     fine_grained_embedding: torch.FloatTensor = None
@@ -929,10 +931,13 @@ class CLAPAudioEncoder(nn.Module):
 
         self.avgpool = nn.AdaptiveAvgPool1d(1)
 
-        division_factor = ((2 ** (len(config.depths) - 1)) * self.patch_embed.patch_stride[0] * self.freq_ratio)
+        division_factor = (2 ** (len(config.depths) - 1)) * self.patch_embed.patch_stride[0] * self.freq_ratio
         kernel_size = config.spec_size // division_factor
         self.tscam_conv = nn.Conv2d(
-            in_channels=self.num_features, out_channels=config.num_classes, kernel_size=(kernel_size, 3), padding=(0, 1)
+            in_channels=self.num_features,
+            out_channels=config.num_classes,
+            kernel_size=(kernel_size, 3),
+            padding=(0, 1),
         )
         self.head = nn.Linear(config.num_classes, config.num_classes)
 
@@ -954,8 +959,6 @@ class CLAPAudioEncoder(nn.Module):
             hidden_states = nn.functional.interpolate(
                 hidden_states, (hidden_states.shape[2], target_F), mode="bicubic", align_corners=True
             )
-
-        # hidden_states = hidden_states.contiguous().view(hidden_states.shape[0], hidden_states.shape[1], hidden_states.shape[-1] * self.freq_ratio, hidden_states.shape[2] // self.freq_ratio)
 
         hidden_states = hidden_states.permute(0, 1, 3, 2).contiguous()
         hidden_states = hidden_states.reshape(
@@ -1092,8 +1095,6 @@ class CLAPAudioEncoder(nn.Module):
         latent_output = self.avgpool(torch.flatten(hidden_states, 2))
         latent_output = torch.flatten(latent_output, 1)
 
-        # display the attention map, if needed
-
         hidden_states = self.tscam_conv(hidden_states)
         hidden_states = torch.flatten(hidden_states, 2)  # B, C, T
 
@@ -1174,8 +1175,8 @@ CLAP_TEXT_INPUTS_DOCSTRING = r"""
 CLAP_AUDIO_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoFeatureExtractor`]. See [`CLAPFeatureExtractor.__call__`] for details.
+            Input audio features. This should be returnes by the [`CLAPFeatureExtractor`] class that you can also
+            retrieve from [`AutoFeatureExtractor`]. See [`CLAPFeatureExtractor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1209,8 +1210,8 @@ CLAP_INPUTS_DOCSTRING = r"""
 
             [What are position IDs?](../glossary#position-ids)
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`AutoFeatureExtractor`]. See [`CLAPFeatureExtractor.__call__`] for details.
+            Input audio features. This should be returnes by the [`CLAPFeatureExtractor`] class that you can also
+            retrieve from [`AutoFeatureExtractor`]. See [`CLAPFeatureExtractor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -1898,20 +1899,19 @@ class CLAPAudioModel(CLAPPreTrainedModel):
         Examples:
 
         ```python
-        >>> import requests
+        >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, CLAPAudioModel
 
-        >>> model = CLAPAudioModel.from_pretrained("laionai/clap-hsat-tiny")
-        >>> processor = AutoProcessor.from_pretrained("laionai/clap-hsat-tiny")
+        >>> dataset = load_dataset("ashraq/esc50")
+        >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> url = "http://audios.cocodataset.org/val2017/000000039769.jpg"
-        >>> audio = Image.open(requests.get(url, stream=True).raw)
+        >>> model = CLAPAudioModel.from_pretrained("laionai/clap-hsat-fused")
+        >>> processor = AutoProcessor.from_pretrained("laionai/clap-hsat-fused")
 
-        >>> inputs = processor(audios=audio, return_tensors="pt")
+        >>> inputs = processor(audios=audio_sample, return_tensors="pt")
 
         >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        >>> last_hidden_state = outputs.embedding
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -2157,8 +2157,8 @@ class CLAPModel(CLAPPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, CLAPModel
 
-        >>> model = CLAPModel.from_pretrained("laion-ai/clap-htst-unfused-base")
-        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/clap-htst-unfused-base")
+        >>> model = CLAPModel.from_pretrained("laion-ai/clap-htsat-unfused")
+        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/clap-htsat-unfused")
 
         >>> inputs = tokenizer(["the sound of a cat", "the sound of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -2234,23 +2234,22 @@ class CLAPModel(CLAPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
+        >>> from dataset import load_dataset
         >>> from transformers import AutoProcessor, CLAPModel
+
+        >>> dataset = load_dataset("ashraq/esc50")
+        >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
         >>> model = CLAPModel.from_pretrained("laion-ai/clap-htst-unfused-base")
         >>> processor = AutoProcessor.from_pretrained("laion-ai/clap-htst-unfused-base")
 
-        >>> url = "http://audios.cocodataset.org/val2017/000000039769.jpg"
-        >>> # TODO audio here
+        >>> input_text = ["Sound of a dog", "Sound of vaccum cleaner"]
 
-        >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], audios=audio, return_tensors="pt", padding=True
-        ... )
+        >>> inputs = processor(text=input_text, audio=audio_sample, return_tensors="pt", padding=True)
 
         >>> outputs = model(**inputs)
         >>> logits_per_audio = outputs.logits_per_audio  # this is the audio-text similarity score
-        >>> probs = logits_per_audio.softmax(dim=1)  # we can take the softmax to get the label probabilities
+        >>> probs = logits_per_audio.softmax(dim=-1)  # we can take the softmax to get the label probabilities
         ```"""
         # Use CLAP model's config for some fields (if specified) instead of those of audio & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -2351,8 +2350,8 @@ class CLAPTextModelWithProjection(CLAPPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, CLAPTextModelWithProjection
 
-        >>> model = CLAPTextModelWithProjection.from_pretrained("laion-ai/clap-htst-unfused-base")
-        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/clap-htst-unfused-base")
+        >>> model = CLAPTextModelWithProjection.from_pretrained("laion-ai/clap-htsat-unfused")
+        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/clap-htsat-unfused")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -2423,18 +2422,16 @@ class CLAPAudioModelWithProjection(CLAPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, CLAPAudioModelWithProjection
+        >>> from datasets import load_dataset
+        >>> from transformers import CLAPAudioModelWithProjection, CLAPProcessor
 
-        >>> model = CLAPAudioModelWithProjection.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = CLAPAudioModelWithProjection.from_pretrained("laion-ai/clap-htsat-unfused")
+        >>> processor = CLAPProcessor.from_pretrained("laion-ai/clap-htsat-unfused")
 
-        >>> url = "http://audios.cocodataset.org/val2017/000000039769.jpg"
-        >>> audio = Image.open(requests.get(url, stream=True).raw)
+        >>> dataset = load_dataset("ashraq/esc50")
+        >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> inputs = processor(audios=audio, return_tensors="pt")
-
+        >>> inputs = processor(audio=audio_sample, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> audio_embeds = outputs.audio_embeds
         ```"""
@@ -2460,7 +2457,7 @@ class CLAPAudioModelWithProjection(CLAPPreTrainedModel):
             return outputs
 
         return CLAPAudioModelOutputWithProjection(
-            projection_output=audio_embeds,
+            audio_embeds=audio_embeds,
             framewise_output=audio_outputs.framewise_output,
             clipwise_output=audio_outputs.clipwise_output,
             fine_grained_embedding=audio_outputs.fine_grained_embedding,
