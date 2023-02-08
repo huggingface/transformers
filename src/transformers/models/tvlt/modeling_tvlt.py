@@ -16,9 +16,9 @@
 
 
 import collections.abc
-import math
 from copy import deepcopy
 from dataclasses import dataclass
+import math
 from typing import Optional, Tuple, Union
 
 import torch
