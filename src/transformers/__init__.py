@@ -1429,7 +1429,6 @@ else:
     _import_structure["models.efficientnet"].extend(
         [
             "EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "EfficientNetBackbone",
             "EfficientNetForImageClassification",
             "EfficientNetModel",
             "EfficientNetPreTrainedModel",
@@ -4738,7 +4737,6 @@ if TYPE_CHECKING:
         )
         from .models.efficientnet import (
             EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EfficientNetBackbone,
             EfficientNetForImageClassification,
             EfficientNetModel,
             EfficientNetPreTrainedModel,

@@ -48,7 +48,6 @@ else:
         "EfficientNetForImageClassification",
         "EfficientNetModel",
         "EfficientNetPreTrainedModel",
-        "EfficientNetBackbone",
     ]
 
 if TYPE_CHECKING:
@@ -74,7 +73,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_efficientnet import (
             EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EfficientNetBackbone,
             EfficientNetForImageClassification,
             EfficientNetModel,
             EfficientNetPreTrainedModel,
