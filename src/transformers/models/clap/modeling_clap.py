@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The OpenAI Team Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2023 The LAION-AI Team Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -60,9 +60,9 @@ def do_mixup(hidden_states, mixup_lambda):
     because the decision boundary becomes smooth.
 
     Args:
-        hidden_states: (`torch.FloatTensor` of shape (batch_size, seq_length, hidden_size))
+        hidden_states (`torch.FloatTensor` of shape (batch_size, seq_length, hidden_size)) :
             Input hidden states
-        mixup_lambda: (`torch.FloatTensor`)
+        mixup_lambda (`torch.FloatTensor`):
             Mixing ratio sampled from the Beta distribution
     """
     out = (
@@ -78,9 +78,9 @@ def interpolate(hidden_states, ratio):
     Interpolate data in time domain. This is used to compensate the resolution reduction in downsampling of a CNN.
 
     Args:
-        hidden_states: (`torch.FloatTensor` of shape (batch_size, time_steps, classes_num))
+        hidden_states (`torch.FloatTensor` of shape (batch_size, time_steps, classes_num)):
             Input hidden states
-        ratio: (`int`)
+        ratio (`int`):
             The ratio of the length of the output to the length of the input.
     """
     (batch_size, time_steps, classes_num) = hidden_states.shape
@@ -96,9 +96,9 @@ def window_partition(hidden_states, window_size):
     num_channels)`
 
     Args:
-        hidden_states: (`torch.FloatTensor` of shape `(batch_size, height, width, num_channels)`)
+        hidden_states (`torch.FloatTensor` of shape `(batch_size, height, width, num_channels)`):
             Input hidden states
-        window_size: (`int`)
+        window_size (`int`):
             Window size
     """
     batch_size, height, width, num_channels = hidden_states.shape
@@ -301,9 +301,8 @@ class CLAPDropPath(nn.Module):
             return hidden_states
 
         keep_prob = 1 - self.drop_prob
-        shape = (hidden_states.shape[0],) + (1,) * (
-            hidden_states.ndim - 1
-        )  # work with diff dim tensors, not just 2D ConvNets
+        # work with diff dim tensors, not just 2D ConvNets
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)  
 
         random_tensor = keep_prob + torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
         random_tensor.floor_()  # binarize
@@ -988,7 +987,6 @@ class CLAPAudioEncoder(nn.Module):
         always_partition: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, CLAPAudioModelOutput]:
-        # print(input_features.shape, self.enable_fusion)
 
         input_features = input_features.transpose(1, 3)
         hidden_states = self.bn0(input_features)
@@ -1001,7 +999,7 @@ class CLAPAudioEncoder(nn.Module):
 
         hidden_states = self.reshape_wav2img(hidden_states)
 
-        _, _, frames_num, _ = hidden_states.shape
+        frames_num = hidden_states.shape[2]
 
         hidden_states = self.patch_embed(hidden_states, is_longer_list_idx)
 
