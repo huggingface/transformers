@@ -352,8 +352,6 @@ class TvltImageProcessor(BaseImageProcessor):
                 Image standard deviation.
             is_mixed (`bool`, *optional*):
                 If the input video has negative samples.
-            mask_pixel (`bool`, *optional*):
-                Whether or not to mask input videos or images for MAE task.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
