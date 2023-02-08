@@ -25,6 +25,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_speech_to_text": ["SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Speech2TextConfig"],
+    "processing_speech_to_text": ["Speech2TextProcessor"],
 }
 
 try:
@@ -42,14 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_speech_to_text"] = ["Speech2TextFeatureExtractor"]
-
-try:
-    if not (is_speech_available() and is_sentencepiece_available()):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["processing_speech_to_text"] = ["Speech2TextProcessor"]
 
 try:
     if not is_tf_available():
@@ -80,6 +73,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
+    from .processing_speech_to_text import Speech2TextProcessor
 
     try:
         if not is_sentencepiece_available():
@@ -96,14 +90,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
-
-    try:
-        if not (is_speech_available() and is_sentencepiece_available()):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .processing_speech_to_text import Speech2TextProcessor
 
     try:
         if not is_tf_available():

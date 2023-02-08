@@ -861,6 +861,10 @@ def pipeline(
                 image_processor = model_name
             elif isinstance(config, str):
                 image_processor = config
+            # Backward compatibility, as `feature_extractor` used to be the name
+            # for `ImageProcessor`.
+            elif feature_extractor is not None and isinstance(feature_extractor, BaseImageProcessor):
+                image_processor = feature_extractor
             else:
                 # Impossible to guess what is the right image_processor here
                 raise Exception(
