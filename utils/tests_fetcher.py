@@ -359,7 +359,11 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "utils/hub.py": "utils/test_hub_utils.py",
     "modelcard.py": "utils/test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
-    "modeling_tf_utils.py": ["test_modeling_tf_common.py", "test_pipeline_common.py", "utils/test_modeling_tf_core.py"],
+    "modeling_tf_utils.py": [
+        "test_modeling_tf_common.py",
+        "test_pipeline_common.py",
+        "utils/test_modeling_tf_core.py",
+    ],
     "modeling_utils.py": ["test_modeling_common.py", "test_pipeline_common.py", "utils/test_offline.py"],
     "models/auto/modeling_auto.py": [
         "models/auto/test_modeling_auto.py",
