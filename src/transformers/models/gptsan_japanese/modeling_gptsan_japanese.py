@@ -17,23 +17,17 @@
 
 import collections
 import copy
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
-from ...generation import GenerationConfig, LogitsProcessorList, TopKLogitsWarper
-from ...modeling_outputs import (
-    MoECausalLMOutputWithPast,
-    MoEModelOutputWithPastAndCrossAttentions,
-)
+from ...modeling_outputs import MoECausalLMOutputWithPast, MoEModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
-    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torch_fx_proxy,
@@ -62,11 +56,14 @@ GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = [
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
     r"""
     Compute the router z-loss implemented in PyTorch.
+
     The router z-loss was introduced in [Designing Effective Sparse Expert Models](https://arxiv.org/abs/2202.08906).
     It encourages router logits to remain small in an effort to improve stability.
+
     Args:
         router_logits (`float`):
             Input logits of shape [batch_size, sequence_length, num_experts]
+
     Returns:
         Scalar router z-loss.
     """
@@ -80,14 +77,17 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
 def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
     See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
+
     Args:
         router_probs (`torch.Tensor`):
             Probability assigned to each expert per token. Shape: [batch_size, seqeunce_length, num_experts].
         expert_indices (`torch.Tensor`):
             Indices tensor of shape [batch_size, seqeunce_length] identifying the selected expert for a given token.
+
     Returns:
         The auxiliary loss.
     """
@@ -957,8 +957,8 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
             https://github.com/tanreinama/GPTSAN/blob/main/report/model.md
 
         Returns:
-            `MoEModelOutputWithPastAndCrossAttentions` or `tuple`
-            if `return_dict` returns MoEModelOutputWithPastAndCrossAttentions insted of tuple
+            `MoEModelOutputWithPastAndCrossAttentions` or `tuple` if `return_dict` returns
+            MoEModelOutputWithPastAndCrossAttentions insted of tuple
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         device = self.position_embeddings.weight.device
@@ -1129,8 +1129,7 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
             labels in `[0, ..., config.vocab_size]`
 
         Returns:
-            `MoECausalLMOutputWithPast` or `tuple`
-            if `return_dict` returns MoECausalLMOutputWithPast insted of tuple
+            `MoECausalLMOutputWithPast` or `tuple` if `return_dict` returns MoECausalLMOutputWithPast insted of tuple
 
         Example:
 
@@ -1169,13 +1168,15 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         device = "cuda"
         model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
         tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
-        x_token = tokenizer.encode("", prefix_text="武田信玄は、<|inputmask|>時代ファンならぜひ押さえ<|inputmask|>きたい名将の一人。", return_tensors="pt").to(device)
+        x_token = tokenizer.encode(
+            "", prefix_text="武田信玄は、<|inputmask|>時代ファンならぜひ押さえ<|inputmask|>きたい名将の一人。", return_tensors="pt"
+        ).to(device)
         trainer_utils.set_seed(30)
         out_lm_token = model.generate(x_token, max_new_tokens=50)
         out_mlm_token = model(x_token).logits.argmax(axis=-1)
         tokenizer.decode(out_mlm_token[0])
         "武田信玄は、戦国時代ファンならぜひ押さえておきたい名将の一人。"
-        tokenizer.decode(out_lm_token[0][x_token.shape[1]:])
+        tokenizer.decode(out_lm_token[0][x_token.shape[1] :])
         "武田氏の三代に渡った武田家のひとり\n甲斐市に住む、日本史上最大の戦国大名。..."
         ```"""
         SEP_TOKEN = self.config.pad_token_id
@@ -1225,10 +1226,10 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
 
             if output_router_logits:
                 # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
-                router_logits, expert_indexes = self._unpack_router_logits(encoder_outputs.router_probs)
-                z_loss = router_z_loss_func(encoder_router_logits)
-                router_probs = nn.Softmax(dim=-1)(encoder_router_logits)
-                aux_loss = load_balancing_loss_func(encoder_router_probs, encoder_expert_indexes)
+                router_logits, expert_indexes = self._unpack_router_logits(outputs.router_probs)
+                z_loss = router_z_loss_func(router_logits)
+                router_probs = nn.Softmax(dim=-1)(router_logits)
+                aux_loss = load_balancing_loss_func(router_probs, expert_indexes)
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 

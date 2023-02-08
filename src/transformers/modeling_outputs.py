@@ -289,8 +289,8 @@ class BaseModelOutputWithPastAndCrossAttentions(ModelOutput):
 @dataclass
 class MoECausalLMOutputWithPast(ModelOutput):
     """
-    Base class for causal language model (or autoregressive) outputs as well as
-    Mixture of Expert's router hidden states terms, to train a MoE model.
+    Base class for causal language model (or autoregressive) outputs as well as Mixture of Expert's router hidden
+    states terms, to train a MoE model.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

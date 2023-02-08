@@ -21,6 +21,7 @@ import numpy as np
 from transformers import (
     GPTSANJapaneseConfig,
     GPTSANJapaneseForConditionalGeneration,
+    GPTSANJapaneseModel,
     GPTSANJapaneseTokenizer,
     is_torch_available,
 )
@@ -31,7 +32,7 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
-class GPTSANJapaneseForConditionalGenerationTester:
+class GPTSANJapaneseTester:
     def __init__(
         self,
         parent,
@@ -126,6 +127,33 @@ class GPTSANJapaneseForConditionalGenerationTester:
 
 
 @require_torch
+class GPTSANJapaneseTest(ModelTesterMixin, unittest.TestCase):
+
+    all_model_classes = (GPTSANJapaneseModel,) if is_torch_available() else ()
+    fx_compatible = False
+    is_encoder_decoder = False
+    test_pruning = False
+    test_headmasking = False
+    test_cpu_offload = False
+    test_disk_offload = False
+    test_save_load_fast_init_to_base = False
+    test_training = False
+    # The small GPTSAN_JAPANESE model needs higher percentages for CPU/MP tests
+    model_split_percents = [0.8, 0.9]
+
+    def setUp(self):
+        self.model_tester = GPTSANJapaneseTester(self)
+        self.config_tester = ConfigTester(self, config_class=GPTSANJapaneseConfig, d_model=37)
+
+    def test_config(self):
+        GPTSANJapaneseConfig()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+
+@require_torch
 class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (GPTSANJapaneseForConditionalGeneration,) if is_torch_available() else ()
@@ -139,7 +167,7 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
     model_split_percents = [0.8, 0.9]
 
     def setUp(self):
-        self.model_tester = GPTSANJapaneseForConditionalGenerationTester(self)
+        self.model_tester = GPTSANJapaneseTester(self)
         self.config_tester = ConfigTester(self, config_class=GPTSANJapaneseConfig, d_model=37)
 
     def test_config(self):

@@ -2944,6 +2944,13 @@ class GPTSANJapaneseForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class GPTSANJapaneseModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class GPTSANJapanesePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
