@@ -1037,7 +1037,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.beit(
+        outputs = self.data2vec_vision(
             pixel_values=pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,

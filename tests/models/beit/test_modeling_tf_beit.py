@@ -478,7 +478,7 @@ class TFBeitModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_BEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFBeitModel.from_pretrained(model_name)
+            model = TFBeitModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
