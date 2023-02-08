@@ -69,7 +69,6 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     TestCasePlus,
-    is_flaky,
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
     is_staging_test,
@@ -382,11 +381,10 @@ class ModelTesterMixin:
             model.gradient_checkpointing_disable()
             self.assertFalse(model.is_gradient_checkpointing)
 
-    @is_flaky()
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        # We will use this to make the init deterministic
-        _config_zero_init(config)
+        if config.__class__ not in MODEL_MAPPING:
+            return
         base_class = MODEL_MAPPING[config.__class__]
 
         if isinstance(base_class, tuple):
@@ -395,8 +393,6 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             if model_class == base_class:
                 continue
-
-            model_class.__bases__[0]
 
             # make a copy of model class to not break future tests
             # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
@@ -436,8 +432,8 @@ class ModelTesterMixin:
 
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        # We will use this to make the init deterministic
-        _config_zero_init(config)
+        if config.__class__ not in MODEL_MAPPING:
+            return
         base_class = MODEL_MAPPING[config.__class__]
 
         if isinstance(base_class, tuple):

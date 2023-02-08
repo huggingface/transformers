@@ -289,10 +289,3 @@ def meshgrid(
         if indexing != "ij":
             raise ValueError('torch.meshgrid only supports `indexing="ij"` for torch<1.10.')
         return torch.meshgrid(*tensors)
-
-
-def reverse_apply(module, fn):
-    fn(module)
-    for child in module.children():
-        child.apply(fn)
-    return module
