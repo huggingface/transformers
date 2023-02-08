@@ -749,7 +749,7 @@ class Pipeline(_ScikitCompat):
         framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
-        device: Union[int, str, "torch.device"] = -1,
+        device: Union[int, str, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
@@ -769,7 +769,7 @@ class Pipeline(_ScikitCompat):
                 self.device = device
             elif isinstance(device, str):
                 self.device = torch.device(device)
-            elif device < 0:
+            elif device is None or device < 0:
                 self.device = torch.device("cpu")
             else:
                 self.device = torch.device(f"cuda:{device}")
@@ -779,10 +779,31 @@ class Pipeline(_ScikitCompat):
         self.binary_output = binary_output
 
         # Special handling
-        if self.framework == "pt" and self.device.type != "cpu":
-            # there is no need to call `.to` on a model that has been loaded with  `accelerate`
-            if not hasattr(self.model, "hf_device_map"):
-                self.model = self.model.to(self.device)
+        if self.framework == "pt" and device is not None:
+            self.model = self.model.to(device=device)
+
+            hf_device_map = getattr(self.model, "hf_device_map", None)
+            if hf_device_map is not None:
+                logger.warning(
+                    "The model has been loaded with `accelerate` using `device_map=xxx` in `from_pretrained`"
+                    " method, you should not pass a device when initializing your pipeline."
+                )
+
+        if device is None and self.framework == "pt":
+            # `accelerate` device map
+            hf_device_map = getattr(self.model, "hf_device_map", None)
+            if hf_device_map is not None:
+                # Take the main device used by `accelerate`.
+                # adapted from: https://github.com/huggingface/transformers/pull/21479#issuecomment-1420833512
+                if set(hf_device_map.values()) == {"cpu"} or set(hf_device_map.values()) == {"cpu", "disk"}:
+                    accelerate_device = torch.device("cpu")
+                else:
+                    main_device = [d for d in hf_device_map.values() if d not in ["cpu", "disk"]][0]
+                    accelerate_device = torch.device(f"cuda:{main_device}")
+                
+                self.device = accelerate_device
+            else:
+                self.device = torch.device("cpu")
 
         # Update config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
