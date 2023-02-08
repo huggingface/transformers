@@ -1911,17 +1911,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Here is how `torch_dtype` defines in which `dtype` the model gets loaded:
 
                 1. `torch_dtype=torch.float16` - (or `torch.bfloat16` or `torch.float`) load in a
-                  specified `dtype`, ignoring the model's `config.torch_dtype` if one exists
+                  specified `dtype`, ignoring the model's `config.torch_dtype` if one exists. If not
+                  specified - the model will get loaded in `torch.float` (fp32).
 
-                2. `torch_dtype=config.torch_dtype` - use the `dtype` specified in the config (similar to
+                2. `torch_dtype="config".torch_dtype` - use the `torch_dtype` specified in the config (similar to
                   the first case
 
                 3. torch_dtype="auto" - check the `dtype` of the first weight that's a floating point
                   one in the checkpoint and use that as `dtype`. This will load the model using the `dtype` it was
                   saved in. It can't be used as an indicator of how the model was trained. Since it could be trained in
                   a mixed precision regime but saved in fp32.
-
-                4. if not specified - the model will get loaded in `torch.float` (fp32)
 
                 Specifically for case (2) you could use the following approach to retrieve `config.torch_dtype`:
 
