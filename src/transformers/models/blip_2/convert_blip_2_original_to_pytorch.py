@@ -67,8 +67,6 @@ def create_rename_keys(config):
         rename_keys.append((f"visual_encoder.blocks.{i}.norm2.weight", f"vision_model.encoder.layers.{i}.layer_norm2.weight"))
         rename_keys.append((f"visual_encoder.blocks.{i}.norm2.bias", f"vision_model.encoder.layers.{i}.layer_norm2.bias"))
         rename_keys.append((f"visual_encoder.blocks.{i}.attn.qkv.weight", f"vision_model.encoder.layers.{i}.self_attn.qkv.weight"))
-        rename_keys.append((f"visual_encoder.blocks.{i}.attn.q_bias", f"vision_model.encoder.layers.{i}.self_attn.q_bias"))
-        rename_keys.append((f"visual_encoder.blocks.{i}.attn.v_bias", f"vision_model.encoder.layers.{i}.self_attn.v_bias"))
         rename_keys.append((f"visual_encoder.blocks.{i}.attn.proj.weight", f"vision_model.encoder.layers.{i}.self_attn.projection.weight",))
         rename_keys.append((f"visual_encoder.blocks.{i}.attn.proj.bias", f"vision_model.encoder.layers.{i}.self_attn.projection.bias"))
         rename_keys.append((f"visual_encoder.blocks.{i}.mlp.fc1.weight", f"vision_model.encoder.layers.{i}.mlp.fc1.weight"))
@@ -87,6 +85,17 @@ def create_rename_keys(config):
 def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
+
+
+def read_in_q_v_bias(state_dict, config):
+    for i in range(config.vision_config.num_hidden_layers):
+        # read in original q and v biases
+        q_bias = state_dict.pop(f"visual_encoder.blocks.{i}.attn.q_bias")
+        v_bias = state_dict.pop(f"visual_encoder.blocks.{i}.attn.v_bias")
+
+        # next, set bias in the state dict
+        qkv_bias = torch.cat((q_bias, torch.zeros_like(v_bias, requires_grad=False), v_bias))
+        state_dict[f"vision_model.encoder.layers.{i}.self_attn.qkv.bias"] = qkv_bias
 
 
 def get_blip2_config(model_name, eos_token_id):
@@ -167,6 +176,9 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         if key.startswith("t5"):
             key = key.replace("t5", "language")
         state_dict[key] = val
+
+    # read in qv biases
+    read_in_q_v_bias(state_dict, config)
 
     missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=False)
     assert len(missing_keys) == 0
