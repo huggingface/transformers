@@ -52,14 +52,14 @@ def load_checkpoint(checkpoint_path):
     for old_key, new_key in keys_to_rename.items():
         if old_key in sd:
             sd[new_key] = sd.pop(old_key)
-    
+
     keys = list(sd.keys())
     for key in keys:
         if ".qkj_proj." in key:
             value = sd[key]
             # We split QKV in seperate Q,K,V
 
-            q_name = key.replace(".qkv_proj.",".q_proj.")
+            q_name = key.replace(".qkv_proj.", ".q_proj.")
             k_name = key.replace(".qkv_proj.", ".k_proj.")
             v_name = key.replace(".qkv_proj.", ".v_proj.")
 
@@ -67,7 +67,7 @@ def load_checkpoint(checkpoint_path):
             assert depth % 3 == 0
             # `SequeuceParallelTransformerBlock` has QKV weight is separated in K,V,Q despite the naming:
             # https://cs.github.com/facebookresearch/metaseq/blob/51871bd73cd04c038f239ea2a26db1d7f6b37927/metaseq/modules/sequence_parallel_transformer_layer.py#L97
-            k,v,q = torch.split(value, depth // 3, dim=0)
+            k, v, q = torch.split(value, depth // 3, dim=0)
 
             sd[q_name] = q
             sd[k_name] = k
