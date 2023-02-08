@@ -142,11 +142,15 @@ class Blip2Attention(nn.Module):
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=False)
 
         if config.qkv_bias:
-            self.q_bias = nn.Parameter(torch.zeros(self.embed_dim))
-            self.v_bias = nn.Parameter(torch.zeros(self.embed_dim))
+            q_bias = nn.Parameter(torch.zeros(self.embed_dim))
+            v_bias = nn.Parameter(torch.zeros(self.embed_dim))
         else:
-            self.q_bias = None
-            self.v_bias = None
+            q_bias = None
+            v_bias = None
+
+        if q_bias is not None:
+            qkv_bias = torch.cat((q_bias, torch.zeros_like(v_bias, requires_grad=False), v_bias))
+            self.qkv.bias = nn.Parameter(qkv_bias)
 
         self.projection = nn.Linear(self.embed_dim, self.embed_dim)
 
@@ -163,11 +167,12 @@ class Blip2Attention(nn.Module):
 
         bsz, tgt_len, embed_dim = hidden_states.size()
 
-        qkv_bias = None
-        if self.q_bias is not None:
-            qkv_bias = torch.cat((self.q_bias, torch.zeros_like(self.v_bias, requires_grad=False), self.v_bias))
+        # qkv_bias = None
+        # if self.q_bias is not None:
+        #     qkv_bias = torch.cat((self.q_bias, torch.zeros_like(self.v_bias, requires_grad=False), self.v_bias))
 
-        mixed_qkv = nn.functional.linear(input=hidden_states, weight=self.qkv.weight, bias=qkv_bias)
+        # mixed_qkv = nn.functional.linear(input=hidden_states, weight=self.qkv.weight, bias=qkv_bias)
+        mixed_qkv = self.qkv(hidden_states)
 
         mixed_qkv = mixed_qkv.reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads).permute(
             2, 0, 3, 1, 4
@@ -285,6 +290,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         r"language_model.encoder.embed_tokens.weight",
         r"language_model.decoder.embed_tokens.weight",
     ]
+    _no_split_modules = ["Blip2Attention", "T5Block", "OPTDecoderLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1335,7 +1341,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
-        attention_mask = torch.cat([language_model_attention_mask, attention_mask], dim=1)
+        expected_device = language_model_attention_mask.device
+        attention_mask = torch.cat([language_model_attention_mask, attention_mask.to(expected_device)], dim=1)
 
         if self.config.use_decoder_only_language_model:
             outputs = self.language_model(
@@ -1352,10 +1359,11 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
                 logits = logits[:, -labels.size(1) :, :]
                 # Shift so that tokens < n predict n
                 shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
+                shift_labels = labels[..., 1:].contiguous().to(logits.device)
 
                 # Flatten the tokens
                 loss_fct = CrossEntropyLoss(reduction="mean")
+
                 loss = loss_fct(shift_logits.view(-1, self.config.text_config.vocab_size), shift_labels.view(-1))
         else:
             outputs = self.language_model(
