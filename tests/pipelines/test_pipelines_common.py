@@ -184,34 +184,6 @@ def is_test_to_skip(test_casse_name, config_class, model_architecture, tokenizer
     return to_skip
 
 
-def validate_test_components(test_case, model, tokenizer, processor):
-    # TODO: Move this to tiny model creation script
-    # head-specific (within a model type) necessary changes to the config
-    # 1. for `BlenderbotForCausalLM`
-    if model.__class__.__name__ == "BlenderbotForCausalLM":
-        model.config.encoder_no_repeat_ngram_size = 0
-
-    # TODO: Change the tiny model creation script: don't create models with problematic tokenizers
-    # Avoid `IndexError` in embedding layers
-    CONFIG_WITHOUT_VOCAB_SIZE = ["CanineConfig"]
-    if tokenizer is not None:
-        config_vocab_size = getattr(model.config, "vocab_size", None)
-        # For CLIP-like models
-        if config_vocab_size is None and hasattr(model.config, "text_config"):
-            config_vocab_size = getattr(model.config.text_config, "vocab_size", None)
-        if config_vocab_size is None and model.config.__class__.__name__ not in CONFIG_WITHOUT_VOCAB_SIZE:
-            raise ValueError(
-                "Could not determine `vocab_size` from model configuration while `tokenizer` is not `None`."
-            )
-        # TODO: Remove tiny models from the Hub which have problematic tokenizers (but still keep this block)
-        if config_vocab_size is not None and len(tokenizer) > config_vocab_size:
-            test_case.skipTest(
-                f"Ignore {model.__class__.__name__}: `tokenizer` ({tokenizer.__class__.__name__}) has"
-                f" {len(tokenizer)} tokens which is greater than `config_vocab_size`"
-                f" ({config_vocab_size}). Something is wrong."
-            )
-
-
 class CommonPipelineTest(unittest.TestCase):
     @require_torch
     def test_pipeline_iteration(self):

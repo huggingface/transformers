@@ -14,10 +14,10 @@ from .pipelines.test_pipelines_text_generation import TextGenerationPipelineTest
 
 
 pipeline_test_mapping = {
-    "text-classification": {"test": TextClassificationPipelineTests},
-    "image-classification": {"test": ImageClassificationPipelineTests},
     "audio-classification": {"test": AudioClassificationPipelineTests},
     "fill-mask": {"test": FillMaskPipelineTests},
+    "image-classification": {"test": ImageClassificationPipelineTests},
+    "text-classification": {"test": TextClassificationPipelineTests},
     "text-generation": {"test": TextGenerationPipelineTests},
 }
 
@@ -73,7 +73,8 @@ class PipelineTesterMixin:
     def run_task_tests(self, task):
         if self.framework not in self.supported_frameworks:
             self.skipTest(
-                f"Test is skipped: Could not determined the framework. This should be in {self.supported_frameworks}, but got {self.framework})"
+                f"Test is skipped: Could not determined the framework. This should be in {self.supported_frameworks}, "
+                f"but got {self.framework})."
             )
 
         if task not in pipeline_test_mapping:
@@ -82,7 +83,8 @@ class PipelineTesterMixin:
         # `_LazyAutoMapping` always has length 0: we need to call `keys()` first before getting the length!
         if model_mapping is None or len(list(model_mapping.keys())) == 0:
             self.skipTest(
-                f"Test is skipped: No model architecture under framework `{self.framework}` is found for the task `{task}`."
+                f"Test is skipped: No model architecture under framework `{self.framework}` is found for the task"
+                f" `{task}`."
             )
 
         if self.config_class is None:
@@ -93,7 +95,8 @@ class PipelineTesterMixin:
         model_architectures = model_mapping.get(self.config_class, None)
         if model_architectures is None:
             self.skipTest(
-                f"Test is skipped: No model architecture under framework {self.framework} with the configuration class `{self.config_class.__name__}` is found for the task `{task}`."
+                f"Test is skipped: No model architecture under framework {self.framework} with the configuration class "
+                f"`{self.config_class.__name__}` is found for the task `{task}`."
             )
 
         if not isinstance(model_architectures, tuple):
@@ -201,5 +204,27 @@ class PipelineTesterMixin:
 
 
 def validate_test_components(test_case, model, tokenizer, processor):
-    # TODO: copy the logic to here
-    pass
+    # TODO: Move this to tiny model creation script
+    # head-specific (within a model type) necessary changes to the config
+    # 1. for `BlenderbotForCausalLM`
+    if model.__class__.__name__ == "BlenderbotForCausalLM":
+        model.config.encoder_no_repeat_ngram_size = 0
+
+    # TODO: Change the tiny model creation script: don't create models with problematic tokenizers
+    # Avoid `IndexError` in embedding layers
+    CONFIG_WITHOUT_VOCAB_SIZE = ["CanineConfig"]
+    if tokenizer is not None:
+        config_vocab_size = getattr(model.config, "vocab_size", None)
+        # For CLIP-like models
+        if config_vocab_size is None and hasattr(model.config, "text_config"):
+            config_vocab_size = getattr(model.config.text_config, "vocab_size", None)
+        if config_vocab_size is None and model.config.__class__.__name__ not in CONFIG_WITHOUT_VOCAB_SIZE:
+            raise ValueError(
+                "Could not determine `vocab_size` from model configuration while `tokenizer` is not `None`."
+            )
+        # TODO: Remove tiny models from the Hub which have problematic tokenizers (but still keep this block)
+        if config_vocab_size is not None and len(tokenizer) > config_vocab_size:
+            test_case.skipTest(
+                f"Test is skipped: tokenizer (`{tokenizer.__class__.__name__}`) has {len(tokenizer)} tokens which is "
+                f"greater than `config_vocab_size` ({config_vocab_size}). Something is wrong."
+            )
