@@ -49,7 +49,6 @@ from .generic import (
     is_torch_device,
     is_torch_dtype,
     is_torch_tensor,
-    prod,
     reshape,
     squeeze,
     tensor_size,
