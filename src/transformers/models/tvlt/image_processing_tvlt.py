@@ -392,7 +392,7 @@ class TvltImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
-        patch_size = self.patch_size
+        patch_size = patch_size if patch_size is not None else self.patch_size
 
         if not valid_images(videos):
             raise ValueError(
