@@ -7,7 +7,6 @@ from ..utils import (
     add_end_docstrings,
     is_torch_available,
     logging,
-    requires_backends,
 )
 from .audio_classification import ffmpeg_read
 from .base import PIPELINE_INIT_ARGS, ChunkPipeline
@@ -56,8 +55,6 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-        requires_backends(self, "audio")
 
         if self.framework != "pt":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
