@@ -7,6 +7,7 @@ from pathlib import Path
 import requests
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
+from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipelineTests
 from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
 from .pipelines.test_pipelines_text_classification import TextClassificationPipelineTests
@@ -15,6 +16,7 @@ from .pipelines.test_pipelines_text_generation import TextGenerationPipelineTest
 
 pipeline_test_mapping = {
     "audio-classification": {"test": AudioClassificationPipelineTests},
+    "feature-extraction": {"test": FeatureExtractionPipelineTests},
     "fill-mask": {"test": FillMaskPipelineTests},
     "image-classification": {"test": ImageClassificationPipelineTests},
     "text-classification": {"test": TextClassificationPipelineTests},
@@ -186,6 +188,9 @@ class PipelineTesterMixin:
             self.assertEqual(len(out), 10)
 
         run_batch_test(pipeline, examples)
+
+    def test_pipeline_feature_extraction(self):
+        self.run_task_tests(task="feature-extraction")
 
     def test_pipeline_audio_classification(self):
         self.run_task_tests(task="audio-classification")
