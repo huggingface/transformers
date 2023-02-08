@@ -42,7 +42,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_torch_available():
@@ -53,7 +53,7 @@ if is_torch_available():
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 
-class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     model_mapping = {
         k: v
         for k, v in (list(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items()) if MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING else [])

@@ -18,7 +18,7 @@ from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_S
 from transformers.pipelines import pipeline
 from transformers.testing_utils import require_tf, require_torch, require_vision, slow
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -32,7 +32,7 @@ else:
 
 
 @require_vision
-class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ImageToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
     tf_model_mapping = TF_MODEL_FOR_VISION_2_SEQ_MAPPING
 

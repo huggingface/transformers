@@ -18,10 +18,10 @@ from transformers import MODEL_FOR_MASKED_LM_MAPPING, TF_MODEL_FOR_MASKED_LM_MAP
 from transformers.pipelines import PipelineException
 from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_torch_gpu, slow
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
-class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class FillMaskPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MASKED_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_MASKED_LM_MAPPING
 

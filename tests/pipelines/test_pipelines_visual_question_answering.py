@@ -18,7 +18,7 @@ from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_
 from transformers.pipelines import pipeline
 from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_vision, slow
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -33,7 +33,7 @@ else:
 
 @require_torch
 @require_vision
-class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
