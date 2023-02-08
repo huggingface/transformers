@@ -494,9 +494,7 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
-            if is_vision_available()
-            else None
+            BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True) if is_vision_available() else None
         )
 
     @slow
@@ -528,9 +526,9 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification_head_imagenet_1k(self):
         model = TFBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
 
-        image_processor = self.default_image_processor
+        feature_extractor = self.default_feature_extractor
         image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="tf")
+        inputs = feature_extractor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)
@@ -553,9 +551,9 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
             "microsoft/beit-large-patch16-224-pt22k-ft22k", from_pt=True
         )
 
-        image_processor = self.default_image_processor
+        feature_extractor = self.default_feature_extractor
         image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="tf")
+        inputs = feature_extractor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)
