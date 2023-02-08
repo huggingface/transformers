@@ -778,6 +778,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 "load_best_model_at_end": True,
                 "max_steps": 1,
                 "deepspeed": ds_config_dict,
+                "report_to": "none",
             }
 
             training_args = TrainingArguments(output_dir, **args_dict)
