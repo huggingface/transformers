@@ -55,7 +55,6 @@ class GPTSANJapaneseTester:
         expert_capacity=100,
         router_jitter_noise=0.0,
     ):
-
         self.vocab_size = vocab_size
         self.parent = parent
         self.batch_size = batch_size
@@ -128,7 +127,6 @@ class GPTSANJapaneseTester:
 
 @require_torch
 class GPTSANJapaneseTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (GPTSANJapaneseModel,) if is_torch_available() else ()
     fx_compatible = False
     is_encoder_decoder = False
@@ -155,7 +153,6 @@ class GPTSANJapaneseTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (GPTSANJapaneseForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     is_encoder_decoder = False

@@ -1132,41 +1132,28 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
 
         Example:
 
-        Text Generation with regular LM Model
         ```python
         from transformers import AutoModel, AutoTokenizer, trainer_utils
 
         device = "cuda"
         model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
         tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+
+        # Text Generation with regular LM Model
         x_token = tokenizer.encode("織田信長は、", return_tensors="pt").to(device)
         trainer_utils.set_seed(30)
         gen_token = model.generate(x_token, max_new_tokens=50)
         tokenizer.decode(gen_token[0])
         "織田信長は、政治・軍事の中枢まで掌握した政治家であり、日本史上類を見ない驚異的な軍事侵攻を続け..."
-        ```
 
-        Text Generation with Prefix-LM Model
-        ```python
-        from transformers import AutoModel, AutoTokenizer, trainer_utils
-
-        device = "cuda"
-        model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
-        tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        # Text Generation with Prefix-LM Model
         x_token = tokenizer.encode("", prefix_text="織田信長は、", return_tensors="pt").to(device)
         trainer_utils.set_seed(30)
         gen_token = model.generate(x_token, max_new_tokens=50)
         tokenizer.decode(gen_token[0])
         "織田信長は、政治・外交で数々の戦果を上げるが、1568年からは、いわゆる本能寺の変で細川晴元に暗殺される..."
-        ```
 
-        Simultaneously Text Generation And Masked Language Model
-        ```python
-        from transformers import AutoModel, AutoTokenizer, trainer_utils
-
-        device = "cuda"
-        model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
-        tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        # Simultaneously Text Generation And Masked Language Model
         x_token = tokenizer.encode(
             "", prefix_text="武田信玄は、<|inputmask|>時代ファンならぜひ押さえ<|inputmask|>きたい名将の一人。", return_tensors="pt"
         ).to(device)
