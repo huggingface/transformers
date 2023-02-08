@@ -160,8 +160,9 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
         magnitudes = np.abs(stft) ** 2
         mel_spec = np.matmul(mel_filters.T, magnitudes)
-        log_mel_spec = self._power_to_db(mel_spec)
-        return log_mel_spec.T
+        log_mel_spec = self._power_to_db(mel_spec).T
+        log_mel_spec = np.asarray(log_mel_spec, np.float32)
+        return log_mel_spec
 
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
@@ -266,8 +267,8 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        truncation: str = "fusion",
-        padding: Optional[str] = "repeatpad",
+        truncation: str = None,
+        padding: Optional[str] = None,
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
