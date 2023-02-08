@@ -42,8 +42,8 @@ logger = logging.get_logger(__name__)
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("altclip", "AltCLIPProcessor"),
-        ("blip", "BLIPProcessor"),
-        ("blip-2", "BLIP2Processor"),
+        ("blip", "BlipProcessor"),
+        ("blip-2", "Blip2Processor"),
         ("bridgetower", "BridgeTowerProcessor"),
         ("chinese_clip", "ChineseCLIPProcessor"),
         ("clip", "CLIPProcessor"),
