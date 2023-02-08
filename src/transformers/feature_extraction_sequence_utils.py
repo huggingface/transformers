@@ -309,12 +309,14 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             processed_features:
                 Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
                 of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
-            max_length: maximum length of the returned list and optionally padding length (see below)
-            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
+            max_length:
+                maximum length of the returned list and optionally padding length (see below)
+            pad_to_multiple_of (optional) :
+                Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            truncation:
-                (optional) Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            truncation (optional):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
         """
         if not truncation:
             return processed_features
@@ -409,11 +411,14 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         """Convert mel bin numbers to frequencies.
 
         Args:
-            mels (np.array): Mel frequencies
-            mel_scale (str, optional): Scale to use: `htk` or `slaney`. (Default: `htk`)
+            mels (np.array):
+                Mel frequencies
+            mel_scale (str, *optional*, `"htk"`):
+                Scale to use: `htk` or `slaney`.
 
         Returns:
-            freqs (np.array): Mels converted in Hz
+            freqs (np.array):
+                Mels converted in Hz
         """
 
         if mel_scale not in ["slaney", "htk"]:
@@ -445,13 +450,16 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         """Create a triangular filter bank.
 
         Args:
-            all_freqs (np.array): STFT freq points of size (`n_freqs`).
-            f_pts (np.array): Filter mid points of size (`n_filter`).
+            all_freqs (`np.array`):
+                STFT freq points of size (`n_freqs`).
+            f_pts (`np.array`):
+                Filter mid points of size (`n_filter`).
 
         Returns:
-            fb (np.array): The filter bank of size (`n_freqs`, `n_filter`).
+            fb (np.array):
+                The filter bank of size (`n_freqs`, `n_filter`).
         """
-        # Adopted from Librosa
+        # Adapted from Librosa
         # calculate the difference between each filter mid point and each stft freq point in hertz
         f_diff = f_pts[1:] - f_pts[:-1]  # (n_filter + 1)
         slopes = np.expand_dims(f_pts, 0) - np.expand_dims(all_freqs, 1)  # (n_freqs, n_filter + 2)
@@ -474,17 +482,16 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         mel_scale: str = "htk",
     ) -> np.array:
         """
-        Create a frequency bin conversion matrix used to obtain the Mel Frequency Cepstral Coefficient. This is called
+        Create a frequency bin conversion matrix used to obtain the Mel Spectrogram. This is called
         a *mel filter bank*, and various implementation exist, which differ in the number of filters, the shape of the
         filters, the way the filters are spaced, the bandwidth of the filters, and the manner in which the spectrum is
         warped. The goal of these features is to approximate the non-linear human perception of the variation in pitch
-        with respect to the frequency. This code is heavily inspired from the *torchaudio* implementation, refer to XXX
+        with respect to the frequency. This code is heavily inspired from the *torchaudio* implementation, see [here](https://pytorch.org/audio/stable/transforms.html)
         for more details.
 
 
         Note:
-            We will try to specify which variation correspond to which MFCCs from the litterature. The main features
-            are:
+            Different banks of MEL filters were introduced in the litterature. The following variation are supported:
                 - MFCC FB-20: introduced in 1980 by Davis and Mermelstein [4]; Davis and Mermelstein assume sampling
                   frequency of 10 kHz; speech bandwidth [0, 4600] Hz
                 - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) described in Young, 1995 [5]; Young uses a
@@ -496,20 +503,19 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
 
         Args:
-            n_freqs (int):
-                Number of frequencies to highlight/apply
-            frequency_min (float):
-                Minimum frequency (Hz)
-            frequency_max (float):
-                Maximum frequency (Hz)
-            n_mels (int):
-                Number of mel filterbanks
-            sample_rate (int):
+            n_freqs (`int`):
+                Number of frequencies to highlight/apply.
+            frequency_min (`float`):
+                Minimum frequency of interest(Hz).
+            frequency_max (`float`):
+                Maximum frequency of interest(Hz).
+            n_mels (`int`):
+                Number of mel filterbanks.
+            sample_rate (`int`):
                 Sample rate of the audio waveform
-            norm (str or None, optional):
+            norm (`str`, *optional*):
                 If "slaney", divide the triangular mel weights by the width of the mel band (area normalization).
-                (Default: `None`)
-            mel_scale (str, optional):
+            mel_scale (`str`, *optional*, `"htk"`):
                 Scale to use: `htk` or `slaney`. (Default: `htk`)
 
         Returns:
@@ -552,7 +558,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
     def _stft(self, frames, window):
         """
         Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
-        results as `torch.stft`.
+        results as `torch.stft`. #TODO @Arthur batching this could alloz more usage, good first issue.
 
         Args:
             frames (`np.array` of dimension `(num_frames, self.n_fft)`):
@@ -587,7 +593,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
     def _power_to_db(self, mel_spectrogram, a_min=1e-10, ref=1.0):
         """
-        Convert a mel spectrogram from power to db, this function is the numpy implementation of librosa.power_to_lb.
+        Convert a mel spectrogram from power to db scale, this function is the numpy implementation of librosa.power_to_lb.
         """
         log_spec = 10 * np.log10(np.clip(mel_spectrogram, a_min=a_min, a_max=None))
         log_spec -= 10.0 * np.log10(np.maximum(a_min, ref))
@@ -605,7 +611,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         The window length (self.window_length) defines how much of the signal is contained in each frame, while the hop
         length defines the step between the beginning of each new frame.
 
-        **This method does not support batching yet as we are mainly focus on inference. If you want this to be added
+        #TODO @Arthur **This method does not support batching yet as we are mainly focus on inference. If you want this to be added
         feel free to open an issue and ping @arthurzucker on Github**
 
         Args:

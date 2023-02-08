@@ -86,7 +86,7 @@ from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
-
+from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
 
 if is_tf_available():
     import tensorflow as tf
@@ -300,6 +300,18 @@ SUPPORTED_TASKS = {
             "model": {
                 "pt": ("openai/clip-vit-base-patch32", "f4881ba"),
                 "tf": ("openai/clip-vit-base-patch32", "f4881ba"),
+            }
+        },
+        "type": "multimodal",
+    },
+    "zero-shot-audio-classification": {
+        "impl": ZeroShotAudioClassificationPipeline,
+        "tf": (TFAutoModel,) if is_tf_available() else (),
+        "pt": (AutoModel,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("laion-ai/clap-hsat-tiny", "f4881ba"),
+                "tf": ("laion-ai/clip-hsat-tiny", "f4881ba"),
             }
         },
         "type": "multimodal",
@@ -537,6 +549,7 @@ def pipeline(
             - `"translation_xx_to_yy"`: will return a [`TranslationPipeline`].
             - `"video-classification"`: will return a [`VideoClassificationPipeline`].
             - `"visual-question-answering"`: will return a [`VisualQuestionAnsweringPipeline`].
+            - `"zero-shot-audio-classification"`: will return a [`ZeroShotAudioClassificationPipeline`].
             - `"zero-shot-classification"`: will return a [`ZeroShotClassificationPipeline`].
             - `"zero-shot-image-classification"`: will return a [`ZeroShotImageClassificationPipeline`].
             - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].
