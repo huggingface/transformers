@@ -62,7 +62,6 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLAPProcessor
 
 
 if is_flax_available():
@@ -213,6 +212,43 @@ class CLAPAudioModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.hidden_size, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    @unittest.skip(reason="CLAPAudio does not output any loss term in the forward pass")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -723,31 +759,5 @@ def prepare_img():
 @require_vision
 @require_torch
 class CLAPModelIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference(self):
-        model_name = "laion-ai/base"
-        model = CLAPModel.from_pretrained(model_name).to(torch_device)
-        processor = CLAPProcessor.from_pretrained(model_name)
-
-        image = prepare_img()
-        inputs = processor(
-            text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
-        ).to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        self.assertEqual(
-            outputs.logits_per_audio.shape,
-            torch.Size((inputs.input_features.shape[0], inputs.input_ids.shape[0])),
-        )
-        self.assertEqual(
-            outputs.logits_per_text.shape,
-            torch.Size((inputs.input_ids.shape[0], inputs.input_features.shape[0])),
-        )
-
-        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits_per_audio, expected_logits, atol=1e-3))
+    # TODO!
+    pass

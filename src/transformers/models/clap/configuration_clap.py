@@ -213,7 +213,7 @@ class CLAPAudioConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "clap_vision_model"
+    model_type = "clap_audio_model"
 
     def __init__(
         self,
@@ -222,7 +222,7 @@ class CLAPAudioConfig(PretrainedConfig):
         spec_size=256,
         hidden_act="gelu",
         patch_size=4,
-        patch_stride=(4, 4),
+        patch_stride=[4, 4],
         num_classes=527,
         hidden_size=96,
         projection_hidden_size=768,
@@ -242,6 +242,7 @@ class CLAPAudioConfig(PretrainedConfig):
         qkv_bias=True,
         mlp_ratio=4.0,
         aff_block_r=4,
+        num_hidden_layers=4,
         enable_patch_fusion=False,
         projection_hidden_act="relu",
         layer_norm_eps=1e-5,
@@ -257,7 +258,7 @@ class CLAPAudioConfig(PretrainedConfig):
         self.num_classes = num_classes
         self.hidden_size = hidden_size
         self.depths = depths
-        self.num_hidden_layers = len(depths)
+        self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.window_size = window_size
         self.enable_fusion = enable_fusion
