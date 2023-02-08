@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 NAVER AI Labs and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 MURGe-Lab and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,321 +12,402 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViLT model."""
+""" PyTorch TVLT model."""
+
 
 import collections.abc
 import math
+from copy import deepcopy
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPooling,
-    MaskedLMOutput,
-    ModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import BaseModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import (
-    find_pruneable_heads_and_indices,
-    is_torch_greater_or_equal_than_1_10,
-    meshgrid,
-    prune_linear_layer,
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
 )
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_vilt import ViltConfig
+from .configuration_tvlt import TvltConfig
 
 
 logger = logging.get_logger(__name__)
 
-if not is_torch_greater_or_equal_than_1_10:
-    logger.warning(
-        f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
-        "ViltModel. Please upgrade torch."
-    )
+_CONFIG_FOR_DOC = "TvltConfig"
+_CHECKPOINT_FOR_DOC = "murgelab/tvlt-base"
 
-_CONFIG_FOR_DOC = "ViltConfig"
-_CHECKPOINT_FOR_DOC = "dandelin/vilt-b32-mlm"
-
-VILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "dandelin/vilt-b32-mlm",
-    # See all ViLT models at https://huggingface.co/models?filter=vilt
+TVLT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "murgelab/tvlt-base",
+    # See all TVLT models at https://huggingface.co/murgelab/tvlt-base
 ]
 
 
 @dataclass
-class ViltForImagesAndTextClassificationOutput(ModelOutput):
+class TvltModelOutput(ModelOutput):
     """
-    Class for outputs of [`ViltForImagesAndTextClassification`].
+    Class for TvltModel's outputs, with potential hidden states and attentions.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`List[tuple(torch.FloatTensor)]`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            List of tuples of `torch.FloatTensor` (one for each image-text pair, each tuple containing the output of
-            the embeddings + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`List[tuple(torch.FloatTensor)]`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            List of tuples of `torch.FloatTensor` (one for each image-text pair, each tuple containing the attention
-            weights of shape `(batch_size, num_heads, sequence_length, sequence_length)`. Attentions weights after the
-            attention softmax, used to compute the weighted average in the self-attention heads.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        last_pixel_hidden_state (`torch.FloatTensor` of shape `(batch_size, pixel_sequence_length, hidden_size)`):
+            Pixel sequence of hidden-states at the output of the last layer of the model.
+        last_audio_hidden_state (`torch.FloatTensor` of shape `(batch_size, audio_sequence_length, hidden_size)`):
+            Audio sequence of hidden-states at the output of the last layer of the model.
+        pixel_label_masks (`torch.FloatTensor` of shape `(batch_size, pixel_patch_length)`):
+            Tensor indicating which pixel patches are masked (1) and which are not (0).
+        audio_label_masks (`torch.FloatTensor` of shape `(batch_size, audio_patch_length)`):
+            Tensor indicating which audio patches are masked (1) and which are not (0).
+        pixel_ids_restore (`torch.LongTensor` of shape `(batch_size, pixel_patch_length)`):
+            Tensor containing the ids permutation of pixel masking.
+        audio_ids_restore (`torch.LongTensor` of shape `(batch_size, audio_patch_length)`):
+            Tensor containing the ids permutation of audio masking.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    last_pixel_hidden_state: torch.FloatTensor = None
+    last_audio_hidden_state: torch.FloatTensor = None
+    pixel_label_masks: torch.LongTensor = None
+    audio_label_masks: torch.LongTensor = None
+    pixel_ids_restore: torch.LongTensor = None
+    audio_ids_restore: torch.LongTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class TvltDecoderOutput(ModelOutput):
+    """
+    Class for TvltDecoder's outputs, with potential hidden states and attentions.
+
+    Args:
+        logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
+            Pixel reconstruction logits.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+    """
+
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class TvltForPreTrainingOutput(ModelOutput):
+    """
+    Class for TvltForPreTraining's outputs, with potential hidden states and attentions.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`):
+            Pixel reconstruction loss.
+        matching_logits (`torch.FloatTensor` of shape `(batch_size, 1)`):
+            Matching objective logits.
+        pixel_logits (`torch.FloatTensor` of shape
+            `(batch_size, pixel_patch_length, image_patch_size ** 3 * pixel_num_channels)`): Pixel reconstruction
+            logits.
+        audio_logits (`torch.FloatTensor` of shape
+            `(batch_size, audio_patch_length, image_patch_size[0] * image_patch_size[1])`): Audio reconstruction
+            logits.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings and one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[List[Tuple[torch.FloatTensor]]] = None
-    attentions: Optional[List[Tuple[torch.FloatTensor]]] = None
+    matching_logits: torch.FloatTensor = None
+    pixel_logits: torch.FloatTensor = None
+    audio_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class ViltEmbeddings(nn.Module):
+class TvltEmbeddings(nn.Module):
     """
-    Construct the text and patch embeddings.
-
-    Text embeddings are equivalent to BERT embeddings.
-
-    Patch embeddings are equivalent to ViT embeddings.
+    Construct the patch and position embeddings.
     """
 
     def __init__(self, config):
         super().__init__()
 
-        # text embeddings
-        self.text_embeddings = TextEmbeddings(config)
-        # patch embeddings
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.patch_embeddings = ViltPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
-        # modality type (text/patch) embeddings
-        self.token_type_embeddings = nn.Embedding(config.modality_type_vocab_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.pixel_embeddings = TvltPixelEmbeddings(config)
+        self.audio_embeddings = TvltAudioEmbeddings(config)
+        self.cls_embedding = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+
+        self.pixel_mask_ratio = config.pixel_mask_ratio
+        self.audio_mask_ratio = config.audio_mask_ratio
+        self.audio_mask_type = config.audio_mask_type
         self.config = config
 
-    def visual_embed(self, pixel_values, pixel_mask, max_image_length=200):
-        _, _, ph, pw = self.patch_embeddings.projection.weight.shape
-
-        x = self.patch_embeddings(pixel_values)
-        x_mask = pixel_mask[:, None, :, :].float()
-        x_mask = nn.functional.interpolate(x_mask, size=(x.shape[2], x.shape[3])).long()
-        x_h = x_mask[:, 0].sum(dim=1)[:, 0]
-        x_w = x_mask[:, 0].sum(dim=2)[:, 0]
-
-        batch_size, num_channels, height, width = x.shape
-        patch_dim = self.config.image_size // self.config.patch_size
-        spatial_pos = self.position_embeddings[:, 1:, :].transpose(1, 2).view(1, num_channels, patch_dim, patch_dim)
-        pos_embed = torch.cat(
-            [
-                nn.functional.pad(
-                    nn.functional.interpolate(
-                        spatial_pos,
-                        size=(h, w),
-                        mode="bilinear",
-                        align_corners=True,
-                    ),
-                    (0, width - w, 0, height - h),
-                )
-                for h, w in zip(x_h, x_w)
-            ],
-            dim=0,
-        )
-
-        pos_embed = pos_embed.flatten(2).transpose(1, 2)
-        x = x.flatten(2).transpose(1, 2)
-        # Set `device` here, otherwise `patch_index` will always be on `CPU` and will fail near the end for torch>=1.13
-        patch_index = torch.stack(
-            meshgrid(torch.arange(x_mask.shape[-2]), torch.arange(x_mask.shape[-1]), indexing="ij"), dim=-1
-        ).to(device=x_mask.device)
-        patch_index = patch_index[None, None, :, :, :]
-        patch_index = patch_index.expand(x_mask.shape[0], x_mask.shape[1], -1, -1, -1)
-        patch_index = patch_index.flatten(1, 3)
-        x_mask = x_mask.flatten(1)
-
-        if max_image_length < 0 or max_image_length is None or not isinstance(max_image_length, int):
-            # suppose aug is 800 x 1333, then, maximum effective res is 800 x 1333 (if one side gets bigger, the other will be constrained and be shrinked)
-            # (800 // self.patch_size) * (1333 // self.patch_size) is the maximum number of patches that single image can get.
-            # if self.patch_size = 32, 25 * 41 = 1025
-            # if res is 384 x 640, 12 * 20 = 240
-            effective_resolution = x_h * x_w
-            max_image_length = effective_resolution.max()
-        else:
-            effective_resolution = x_h * x_w
-            max_image_length = min(effective_resolution.max(), max_image_length)
-
-        valid_idx = x_mask.nonzero(as_tuple=False)
-        non_valid_idx = (1 - x_mask).nonzero(as_tuple=False)
-        unique_rows = valid_idx[:, 0].unique()
-        valid_row_idx = [valid_idx[valid_idx[:, 0] == u] for u in unique_rows]
-        non_valid_row_idx = [non_valid_idx[non_valid_idx[:, 0] == u] for u in unique_rows]
-
-        valid_nums = [v.size(0) for v in valid_row_idx]
-        non_valid_nums = [v.size(0) for v in non_valid_row_idx]
-        pad_nums = [max_image_length - v for v in valid_nums]
-
-        select = list()
-        for i, (v, nv, p) in enumerate(zip(valid_nums, non_valid_nums, pad_nums)):
-            if p <= 0:
-                valid_choice = torch.multinomial(torch.ones(v).float(), max_image_length)
-                select.append(valid_row_idx[i][valid_choice])
-            else:
-                pad_choice = torch.multinomial(torch.ones(nv).float(), p, replacement=True)
-                select.append(torch.cat([valid_row_idx[i], non_valid_row_idx[i][pad_choice]], dim=0))
-
-        select = torch.cat(select, dim=0)
-        x = x[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
-        x_mask = x_mask[select[:, 0], select[:, 1]].view(batch_size, -1)
-        # `patch_index` should be on the same device as `select` (for torch>=1.13), which is ensured at definition time.
-        patch_index = patch_index[select[:, 0], select[:, 1]].view(batch_size, -1, 2)
-        pos_embed = pos_embed[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
-
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
-        pos_embed = torch.cat(
-            (self.position_embeddings[:, 0, :][:, None, :].expand(batch_size, -1, -1), pos_embed), dim=1
-        )
-        x = x + pos_embed
-        x = self.dropout(x)
-
-        x_mask = torch.cat([torch.ones(x_mask.shape[0], 1).to(x_mask), x_mask], dim=1)
-
-        return x, x_mask, (patch_index, (height, width))
-
     def forward(
-        self,
-        input_ids,
-        attention_mask,
-        token_type_ids,
-        pixel_values,
-        pixel_mask,
-        inputs_embeds,
-        image_embeds,
-        image_token_type_idx=1,
+        self, pixel_values, audio_values, pixel_mask=None, audio_mask=None, mask_pixel=False, mask_audio=False
     ):
-        # PART 1: text embeddings
-        text_embeds = self.text_embeddings(
-            input_ids=input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
-        )
+        # create patch embeddings
 
-        # PART 2: patch embeddings (with interpolated position encodings)
-        if image_embeds is None:
-            image_embeds, image_masks, patch_index = self.visual_embed(
-                pixel_values, pixel_mask, max_image_length=self.config.max_image_length
+        pixel_embedding_output, pixel_mask = self.pixel_embeddings(pixel_values, pixel_mask)
+        pixel_label_masks = None
+        pixel_ids_restore = None
+        if mask_pixel:
+            pixel_embedding_output, pixel_mask, pixel_label_masks, pixel_ids_restore = random_masking(
+                pixel_embedding_output,
+                attention_masks=pixel_mask,
+                mask_ratio=self.pixel_mask_ratio,
+                input_type="pixel",
+                mask_type="patch-level",
             )
-        else:
-            image_masks = pixel_mask.flatten(1)
 
-        # PART 3: add modality type embeddings
-        # 0 indicates text, 1 indicates image, 2 is optionally used when a second image is provided (NLVR2)
-        if image_token_type_idx is None:
-            image_token_type_idx = 1
-        text_embeds = text_embeds + self.token_type_embeddings(
-            torch.zeros_like(attention_mask, dtype=torch.long, device=text_embeds.device)
+        audio_embedding_output, audio_mask = self.audio_embeddings(audio_values, audio_mask)
+        audio_label_masks = None
+        audio_ids_restore = None
+        if mask_audio:
+            audio_embedding_output, audio_mask, audio_label_masks, audio_ids_restore = random_masking(
+                audio_embedding_output,
+                attention_masks=audio_mask,
+                mask_ratio=self.audio_mask_ratio,
+                input_type="audio",
+                mask_type=self.audio_mask_type,
+            )
+        batch_size = pixel_values.size(0)
+        embedding_output = torch.cat(
+            [self.cls_embedding.repeat(batch_size, 1, 1), pixel_embedding_output, audio_embedding_output], 1
         )
-        image_embeds = image_embeds + self.token_type_embeddings(
-            torch.full_like(image_masks, image_token_type_idx, dtype=torch.long, device=text_embeds.device)
+        masked_pixel_len = pixel_embedding_output.size(1)
+
+        attention_mask = None
+        if pixel_mask is not None and audio_mask is not None:
+            attention_mask = torch.cat([pixel_mask[:, :1], pixel_mask, audio_mask], 1)
+        return (
+            embedding_output,
+            attention_mask,
+            pixel_label_masks,
+            audio_label_masks,
+            pixel_ids_restore,
+            audio_ids_restore,
+            masked_pixel_len,
         )
 
-        # PART 4: concatenate
-        embeddings = torch.cat([text_embeds, image_embeds], dim=1)
-        masks = torch.cat([attention_mask, image_masks], dim=1)
 
-        return embeddings, masks
+def random_masking(
+    sequence, attention_masks=None, mask_ratio=0.75, input_type="pixel", mask_type="patch-level", freq_len=8
+):
+    """
+    Perform random masking by per-sample shuffling on frame-level. Per-sample shuffling is done by argsort random
+    noise. sequence: [batch_size, seq_len, hidden_dim], sequence
+    """
+
+    batch_size, seq_len, hidden_dim = sequence.shape
+
+    if input_type == "pixel":
+        if mask_type == "frame-level":
+            num_time_patches = seq_len // freq_len
+            noise = (
+                torch.rand(batch_size, num_time_patches).unsqueeze(-1).repeat(1, 1, freq_len).view(batch_size, seq_len)
+            )  # noise in [0, 1]
+        elif mask_type == "patch-level":
+            noise = torch.rand(batch_size, seq_len)  # noise in [0, 1]
+    elif input_type == "audio":
+        noise = torch.rand((batch_size, seq_len))  # noise in [0, 1]
+        # sort noise for each sample
+
+    ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+    len_keep = int(seq_len * (1 - mask_ratio))
+
+    # sort noise for each sample
+    ids_restore = torch.argsort(ids_shuffle, dim=1)
+
+    # keep the first subset
+    ids_keep = ids_shuffle[:, :len_keep]
+    sequence_masked = torch.gather(sequence, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, hidden_dim))
+
+    # generate the binary mask: 0 is keep, 1 is remove
+    label_masks = torch.ones([batch_size, seq_len], device=sequence.device)
+    label_masks[:, :len_keep] = 0
+    # unshuffle to get the binary mask
+    label_masks = torch.gather(label_masks, dim=1, index=ids_restore)
+
+    if attention_masks is not None:
+        label_masks *= attention_masks
+        attention_masks = torch.gather(attention_masks, dim=1, index=ids_keep)
+
+    return sequence_masked, attention_masks, label_masks, ids_restore
 
 
-class TextEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings."""
+class TvltPixelEmbeddings(nn.Module):
+    """
+    Construct the patch and position embeddings.
+    """
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
-        )
+        self.patch_embeddings = TvltPixelPatchEmbeddings(config)
+        self.num_patches_per_image = self.patch_embeddings.num_patches_per_image
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
-        if input_ids is not None:
-            input_shape = input_ids.size()
-        else:
-            input_shape = inputs_embeds.size()[:-1]
+        self.type_embed_v = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.temporal_embed = nn.Parameter(torch.zeros(1, config.num_frames, config.hidden_size))
+        self.pos_embed_v = nn.Parameter(torch.zeros(1, self.num_patches_per_image, config.hidden_size))
 
-        seq_length = input_shape[1]
+        self.mask_ratio = config.pixel_mask_ratio
+        self.config = config
 
-        if position_ids is None:
-            position_ids = self.position_ids[:, :seq_length]
+    def forward(self, pixel_values, attention_masks=None):
+        # create patch embeddings
+        batch_size, num_frames, num_channels, height, width = pixel_values.shape
 
-        # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
-        # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
-        # issue #5664
-        if token_type_ids is None:
-            if hasattr(self, "token_type_ids"):
-                buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+        embeddings = self.patch_embeddings(pixel_values)
+        embeddings += self.pos_embed_v.repeat(1, num_frames, 1)
+        embeddings += torch.repeat_interleave(self.temporal_embed[:, :num_frames], self.num_patches_per_image, dim=1)
+        embeddings += self.type_embed_v
 
-        if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
-        embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
-        embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings)
-        return embeddings
+        return embeddings, attention_masks
 
 
-class ViltPatchEmbeddings(nn.Module):
+class TvltAudioEmbeddings(nn.Module):
     """
-    Image to Patch Embedding.
+    Construct the patch and position embeddings.
     """
 
     def __init__(self, config):
         super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        self.patch_embeddings = TvltAudioPatchEmbeddings(config)
+        self.num_patches = self.patch_embeddings.num_patches
+
+        self.type_embed_a = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.num_freq_patches = config.frequency_length // config.audio_patch_size[1]
+        self.pos_embed_a = nn.Parameter(torch.zeros(1, self.num_patches // self.num_freq_patches, config.hidden_size))
+        self.freq_embed = nn.Parameter(torch.zeros(1, self.num_freq_patches, config.hidden_size))
+
+        self.num_freq_patches = config.frequency_length // config.audio_patch_size[1]
+        self.mask_ratio = config.audio_mask_ratio
+        self.config = config
+
+    def forward(self, audio_values, attention_masks=None):
+        # create patch embeddings
+        embeddings = self.patch_embeddings(audio_values)
+
+        num_time_patches = embeddings.size(1) // self.num_freq_patches
+        embeddings += self.freq_embed.repeat(1, num_time_patches, 1)
+        embeddings += torch.repeat_interleave(self.pos_embed_a[:, :num_time_patches], self.num_freq_patches, dim=1)
+        embeddings += self.type_embed_a
+
+        return embeddings, attention_masks
+
+
+class TvltPixelPatchEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        image_size, patch_size = config.image_size, config.image_patch_size
+        num_channels, hidden_size = config.num_image_channels, config.hidden_size
 
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        num_patches_per_image = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-        self.num_patches = num_patches
+        self.num_patches_per_image = num_patches_per_image
+        self.hidden_size = hidden_size
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, pixel_values):
-        batch_size, num_channels, height, width = pixel_values.shape
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        batch_size, num_frames, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        x = self.projection(pixel_values)
-        return x
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
+
+        pixel_values = pixel_values.reshape(batch_size * num_frames, num_channels, height, width)
+        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        embeddings = embeddings.reshape(batch_size, num_frames * self.num_patches_per_image, self.hidden_size)
+
+        return embeddings
 
 
-class ViltSelfAttention(nn.Module):
+class TvltAudioPatchEmbeddings(nn.Module):
+    """
+    This class turns `audio_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        spectrogram_length, frequency_length, patch_size = (
+            config.spectrogram_length,
+            config.frequency_length,
+            config.audio_patch_size,
+        )
+        num_channels, hidden_size = config.num_audio_channels, config.hidden_size
+
+        spectrogram_size = (spectrogram_length, frequency_length)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (spectrogram_size[1] // patch_size[1]) * (spectrogram_size[0] // patch_size[0])
+        patch_shape = (spectrogram_size[0] // patch_size[0], spectrogram_size[1] // patch_size[1])
+        self.spectrogram_size = spectrogram_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+        self.patch_shape = patch_shape
+
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, audio_values: torch.Tensor) -> torch.Tensor:
+        batch_size, num_channels, height, width = audio_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        if height > self.spectrogram_size[0] or width != self.spectrogram_size[1]:
+            raise ValueError(
+                f"Input audio size ({height}*{width}) doesn't match model"
+                f" ({self.spectrogram_size[0]}*{self.spectrogram_size[1]})."
+            )
+        embeddings = self.projection(audio_values).flatten(2).transpose(1, 2)
+
+        return embeddings
+
+
+# Copied from transformers.models.vilt.modeling_vilt.ViltSelfAttention with Vilt->Tvlt
+class TvltSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -386,14 +467,14 @@ class ViltSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->Vilt
-class ViltSelfOutput(nn.Module):
+# Copied from transformers.models.vilt.modeling_vilt.ViltSelfOutput with Vilt->Tvlt
+class TvltSelfOutput(nn.Module):
     """
-    The residual connection is defined in ViltLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in TvltLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
-    def __init__(self, config: ViltConfig) -> None:
+    def __init__(self, config: TvltConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -405,11 +486,12 @@ class ViltSelfOutput(nn.Module):
         return hidden_states
 
 
-class ViltAttention(nn.Module):
+# Copied from transformers.models.vilt.modeling_vilt.ViltAttention with Vilt->Tvlt
+class TvltAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = ViltSelfAttention(config)
-        self.output = ViltSelfOutput(config)
+        self.attention = TvltSelfAttention(config)
+        self.output = TvltSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -439,9 +521,9 @@ class ViltAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->Vilt
-class ViltIntermediate(nn.Module):
-    def __init__(self, config: ViltConfig) -> None:
+# Copied from transformers.models.vilt.modeling_vilt.ViltIntermediate with Vilt->Tvlt
+class TvltIntermediate(nn.Module):
+    def __init__(self, config: TvltConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -456,9 +538,9 @@ class ViltIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->Vilt
-class ViltOutput(nn.Module):
-    def __init__(self, config: ViltConfig) -> None:
+# Copied from transformers.models.vilt.modeling_vilt.ViltOutput with Vilt->Tvlt
+class TvltOutput(nn.Module):
+    def __init__(self, config: TvltConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -472,16 +554,17 @@ class ViltOutput(nn.Module):
         return hidden_states
 
 
-class ViltLayer(nn.Module):
+# Copied from transformers.models.vilt.modeling_vilt.ViltLayer with Vilt->Tvlt
+class TvltLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ViltAttention(config)
-        self.intermediate = ViltIntermediate(config)
-        self.output = ViltOutput(config)
+        self.attention = TvltAttention(config)
+        self.intermediate = TvltIntermediate(config)
+        self.output = TvltOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -510,11 +593,12 @@ class ViltLayer(nn.Module):
         return outputs
 
 
-class ViltEncoder(nn.Module):
+# Copied from transformers.models.vilt.modeling_vilt.ViltEncoder with Vilt->Tvlt
+class TvltEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([ViltLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([TvltLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -569,16 +653,16 @@ class ViltEncoder(nn.Module):
         )
 
 
-class ViltPreTrainedModel(PreTrainedModel):
+class TvltPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ViltConfig
-    base_model_prefix = "vilt"
+    config_class = TvltConfig
+    base_model_prefix = "tvlt"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ViltSelfAttention"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -588,164 +672,93 @@ class ViltPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ViltEncoder):
+        if isinstance(module, TvltEncoder):
             module.gradient_checkpointing = value
 
 
-VILT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
-    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+TVLT_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`ViltConfig`]): Model configuration class with all the parameters of the model.
+        config ([`TvltConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-VILT_INPUTS_DOCSTRING = r"""
+TVLT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`BertTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
-            IDs?](../glossary#input-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for
+            details.
 
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
+        audio_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Audio values. Audio values can be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for
+            details.
 
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-            [What are token type IDs?](../glossary#token-type-ids)
+        pixel_mask (`torch.FloatTensor` of shape `(batch_size, num_pixel_patches)`):
+            Pixel masks. Pixel masks can be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for
+            details.
 
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`ViltImageProcessor.__call__`] for details.
+        audio_mask (`torch.FloatTensor` of shape `(batch_size, num_audio_patches)`):
+            Audio masks. Audio masks can be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for
+            details.
 
-        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
+        pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+            Pixel values that mix positive and negative samples in Tvlt vision-audio matching. Pixel values mixed can
+            be obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-            `What are attention masks? <../glossary.html#attention-mask>`__
+        pixel_mask_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel masks of pixel_values_mixed. Pixel masks mixed can be obtained using [`TvltProcessor`]. See
+            [`TvltProcessor.__call__`] for details.
 
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
+        mask_pixel (`bool`, *optional*):
+            Whether to mask pixel for MAE tasks. Only set to True in TvltForPreTraining.
 
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
-            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
+        mask_audio (`bool`, *optional*):
+            Whether to mask audio for MAE tasks. Only set to True in TvltForPreTraining.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
+
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
-VILT_IMAGES_AND_TEXT_CLASSIFICATION_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`BertTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
-            IDs?](../glossary#input-ids)
-
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            [What are attention masks?](../glossary#attention-mask)
-
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-            [What are token type IDs?](../glossary#token-type-ids)
-
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_images, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`ViltImageProcessor.__call__`] for details.
-
-        pixel_mask (`torch.LongTensor` of shape `(batch_size, num_images, height, width)`, *optional*):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
-
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-            `What are attention masks? <../glossary.html#attention-mask>`__
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, num_images, num_patches, hidden_size)`, *optional*):
-            Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
 @add_start_docstrings(
-    "The bare ViLT Model transformer outputting raw hidden-states without any specific head on top.",
-    VILT_START_DOCSTRING,
+    "The bare TVLT Model transformer outputting raw hidden-states without any specific head on top.",
+    TVLT_START_DOCSTRING,
 )
-class ViltModel(ViltPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+class TvltModel(TvltPreTrainedModel):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ViltEmbeddings(config)
-        self.encoder = ViltEncoder(config)
+        self.embeddings = TvltEmbeddings(config)
+        self.encoder = TvltEncoder(config)
 
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = ViltPooler(config) if add_pooling_layer else None
+        if config.use_mean_pooling:
+            self.layernorm = None
+        else:
+            self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.text_embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.embeddings.text_embeddings.word_embeddings = value
+        return self.embeddings.pixel_embeddings.patch_embeddings, self.embeddings.audio_embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -755,328 +768,503 @@ class ViltModel(ViltPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(TVLT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TvltModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        image_embeds: Optional[torch.FloatTensor] = None,
-        image_token_type_idx: Optional[int] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[BaseModelOutputWithPooling, Tuple[torch.FloatTensor]]:
+        pixel_values,
+        audio_values,
+        pixel_mask=None,
+        audio_mask=None,
+        mask_pixel=False,
+        mask_audio=False,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ) -> Union[tuple, TvltModelOutput]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import ViltProcessor, ViltModel
-        >>> from PIL import Image
-        >>> import requests
+        >>> from transformers import TvltProcessor, TvltModel
+        >>> import numpy as np
+        >>> import torch
 
-        >>> # prepare image and text
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> text = "hello world"
+        >>> num_frames = 8
+        >>> images = list(np.random.randn(num_frames, 3, 224, 224))
+        >>> audio = list(np.random.randn(10000))
 
-        >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
-        >>> model = ViltModel.from_pretrained("dandelin/vilt-b32-mlm")
+        >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
+        >>> model = TvltModel.from_pretrained("TVLT/tvlt-base")
 
-        >>> inputs = processor(image, text, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
+        >>> input_dict = processor(images, audio, sampling_rate=44100, return_tensors="pt")
+
+        >>> outputs = model(**input_dict)
+        >>> loss = outputs.loss
         ```"""
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        text_batch_size, seq_length = input_shape
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if attention_mask is None:
-            attention_mask = torch.ones(((text_batch_size, seq_length)), device=device)
-
-        if pixel_values is not None and image_embeds is not None:
-            raise ValueError("You cannot specify both pixel_values and image_embeds at the same time")
-        elif pixel_values is None and image_embeds is None:
-            raise ValueError("You have to specify either pixel_values or image_embeds")
-
-        image_batch_size = pixel_values.shape[0] if pixel_values is not None else image_embeds.shape[0]
-        if image_batch_size != text_batch_size:
-            raise ValueError("The text inputs and image inputs need to have the same batch size")
-        if pixel_mask is None:
-            pixel_mask = torch.ones((image_batch_size, self.config.image_size, self.config.image_size), device=device)
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
-        embedding_output, attention_mask = self.embeddings(
-            input_ids,
+        (
+            embedding_output,
             attention_mask,
-            token_type_ids,
+            pixel_label_masks,
+            audio_label_masks,
+            pixel_ids_restore,
+            audio_ids_restore,
+            masked_pixel_len,
+        ) = self.embeddings(
             pixel_values,
+            audio_values,
             pixel_mask,
-            inputs_embeds,
-            image_embeds,
-            image_token_type_idx=image_token_type_idx,
+            audio_mask,
+            mask_pixel=mask_pixel,
+            mask_audio=mask_audio,
         )
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        input_shape = embedding_output.size()
+
+        extended_attention_mask = None
+        if attention_mask is not None:
+            extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        if self.layernorm is not None:
+            sequence_output = self.layernorm(sequence_output)
 
+        pixel_sequence_output = sequence_output[:, 1 : 1 + masked_pixel_len]
+        audio_sequence_output = sequence_output[:, 1 + masked_pixel_len :]
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (
+                sequence_output,
+                pixel_sequence_output,
+                audio_sequence_output,
+                pixel_label_masks,
+                audio_label_masks,
+                pixel_ids_restore,
+                audio_ids_restore,
+            ) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return TvltModelOutput(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
+            last_pixel_hidden_state=pixel_sequence_output,
+            last_audio_hidden_state=audio_sequence_output,
+            pixel_label_masks=pixel_label_masks,
+            audio_label_masks=audio_label_masks,
+            pixel_ids_restore=pixel_ids_restore,
+            audio_ids_restore=audio_ids_restore,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
 
-class ViltPooler(nn.Module):
+class TvltDecoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        decoder_config = deepcopy(config)
+        decoder_config.hidden_size = config.decoder_hidden_size
+        decoder_config.num_hidden_layers = config.decoder_num_hidden_layers
+        decoder_config.num_attention_heads = config.decoder_num_attention_heads
+        decoder_config.intermediate_size = config.decoder_intermediate_size
+        self.decoder_layers = nn.ModuleList(
+            [TvltLayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
+        )
+
+        self.layernorm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
+
+        self.gradient_checkpointing = False
+        self.config = config
+
+    def forward(
+        self,
+        hidden_states,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+    ):
+        # apply Transformer layers (blocks)
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+        for i, layer_module in enumerate(self.decoder_layers):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    None,
+                )
+            else:
+                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        # predictor projection
+        logits = self.layernorm(hidden_states)
+
+        if not return_dict:
+            return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
+        return TvltDecoderOutput(logits=logits, hidden_states=all_hidden_states, attentions=all_self_attentions)
+
+
+@add_start_docstrings(
+    "The TVLT Model transformer with the decoder on top for self-supervised pre-training.",
+    TVLT_START_DOCSTRING,
+)
+class TvltForPreTraining(TvltPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.config = config
+
+        self.task_matching = config.task_matching
+        self.task_mae = config.task_mae
+        if not (self.task_matching or self.task_mae):
+            raise ValueError("Must set at least one of matching task and MAE task to true")
+
+        self.tvlt = TvltModel(config)
+
+        if self.task_matching:
+            self.matching_head = TvltMatchingHead(config)
+
+        if self.task_mae:
+            self.encoder_to_decoder = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=True)
+
+            self.pixel_mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
+            self.audio_mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
+
+            self.decoder = TvltDecoder(config)
+
+            decoder_hidden_size = config.decoder_hidden_size
+
+            num_frames = config.num_frames
+            num_patches_per_image = self.tvlt.embeddings.pixel_embeddings.num_patches_per_image
+            self.decoder_pixel_pos_embed = nn.Parameter(torch.zeros(1, num_patches_per_image, decoder_hidden_size))
+            self.decoder_temporal_embed = nn.Parameter(torch.zeros(1, config.num_frames, decoder_hidden_size))
+            self.decoder_pixel_type_embed = nn.Parameter(torch.zeros(1, 1, decoder_hidden_size))
+
+            num_audio_patches = self.tvlt.embeddings.audio_embeddings.num_patches
+            num_freq_patches = config.frequency_length // config.audio_patch_size[1]
+            self.decoder_audio_pos_embed = nn.Parameter(
+                torch.zeros(1, num_audio_patches // num_freq_patches, decoder_hidden_size)
+            )
+            self.decoder_freq_embed = nn.Parameter(torch.zeros(1, num_freq_patches, decoder_hidden_size))
+            self.decoder_audio_type_embed = nn.Parameter(torch.zeros(1, 1, decoder_hidden_size))
+
+            pixel_mae_output_dim = self.config.image_patch_size[0] ** 2 * self.config.num_image_channels
+            self.pixel_mae_head = TvltMAEHead(config, pixel_mae_output_dim)
+            audio_mae_output_dim = (
+                self.config.audio_patch_size[0] * self.config.audio_patch_size[1] * self.config.num_audio_channels
+            )
+            self.audio_mae_head = TvltMAEHead(config, audio_mae_output_dim)
+
+            self.num_frames = num_frames
+            self.num_patches_per_image = num_patches_per_image
+            self.num_freq_patches = num_freq_patches
+            self.image_patch_size = config.image_patch_size
+            self.audio_patch_size = config.audio_patch_size
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def patchify_pixel(self, pixel_values):
+        """
+        pixel_values: [batch_size, num_frames, 3, height, width]
+        """
+        batch_size, num_frames, num_channels, height, width = pixel_values.shape
+        num_patches_height = pixel_values.shape[3] // self.image_patch_size[0]
+        num_patches_width = pixel_values.shape[4] // self.image_patch_size[1]
+        patchified_pixel_values = pixel_values.reshape(
+            shape=(
+                batch_size,
+                num_frames,
+                num_channels,
+                num_patches_height,
+                self.image_patch_size[0],
+                num_patches_width,
+                self.image_patch_size[1],
+            )
+        )
+        patchified_pixel_values = torch.einsum("ntchpwq->nthwpqc", patchified_pixel_values)
+        patchified_pixel_values = patchified_pixel_values.reshape(
+            shape=(
+                batch_size,
+                num_patches_height * num_patches_width * num_frames,
+                self.image_patch_size[0] * self.image_patch_size[1] * num_channels,
+            )
+        )
+        return patchified_pixel_values
+
+    def patchify_audio(self, audio_values):
+        """
+        audio_values: [batch_size, 1, height, width]
+        """
+        batch_size, num_channels, height, width = audio_values.shape
+        num_patches_height = height // self.audio_patch_size[0]
+        num_patches_width = width // self.audio_patch_size[1]
+        patchified_audio_values = audio_values.reshape(
+            shape=(
+                batch_size,
+                num_channels,
+                num_patches_height,
+                self.audio_patch_size[0],
+                num_patches_width,
+                self.audio_patch_size[1],
+            )
+        )
+        patchified_audio_values = torch.einsum("nchpwq->nhwpqc", patchified_audio_values)
+        patchified_audio_values = patchified_audio_values.reshape(
+            shape=(
+                batch_size,
+                num_patches_height * num_patches_width,
+                self.audio_patch_size[0] * self.audio_patch_size[1] * num_channels,
+            )
+        )
+        return patchified_audio_values
+
+    def pixel_mae_loss(self, pixel_values, pixel_predictions, mask):
+        patchified_pixel_values = self.patchify_pixel(pixel_values)
+        loss = (pixel_predictions - patchified_pixel_values) ** 2
+        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        return loss
+
+    def audio_mae_loss(self, audio_values, audio_predictions, mask):
+        patchified_audio_values = self.patchify_audio(audio_values)
+        loss = (audio_predictions - patchified_audio_values) ** 2
+        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        return loss
+
+    def concatenate_mask(self, mask_token, sequence, ids_restore):
+        batch_size, seq_length, dim = sequence.shape
+        mask_tokens = mask_token.repeat(batch_size, ids_restore.shape[1] - seq_length, 1)
+        padded_sequence = torch.cat([sequence, mask_tokens], dim=1)
+        padded_sequence = torch.gather(
+            padded_sequence, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, dim)
+        )  # unshuffle
+        return padded_sequence
+
+    @add_start_docstrings_to_model_forward(TVLT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TvltForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values,
+        audio_values,
+        pixel_mask=None,
+        audio_mask=None,
+        labels=None,
+        pixel_values_mixed=None,
+        pixel_mask_mixed=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ) -> Union[tuple, TvltForPreTrainingOutput]:
+        r"""
+        pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
+            Pixel values that mixe positive and negative samples in Tvlt vision-audio matching. Audio values can be
+            obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
+
+        pixel_mask_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel masks of pixel_values_mixed. Pixel values mixed can be obtained using [`TvltProcessor`]. See
+            [`TvltProcessor.__call__`] for details.
+
+        labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
+            Labels for computing the vision audio matching loss. Indices should be in `[0, 1]`. num_labels has to be 1.
+
+        Return:
+
+        Examples:
+
+        ```python
+        >>> from transformers import TvltProcessor, TvltForPreTraining
+        >>> import numpy as np
+        >>> import torch
+
+        >>> num_frames = 8
+        >>> images = list(np.random.randn(num_frames, 3, 224, 224))
+        >>> images_mixed = list(np.random.randn(num_frames, 3, 224, 224))
+        >>> audio = list(np.random.randn(10000))
+        >>> processor = TvltProcessor.from_pretrained("murgelab/tvlt-base")
+        >>> model = TvltForPreTraining.from_pretrained("murgelab/tvlt-base")
+        >>> input_dict = processor(
+        ...     images, audio, images_mixed, sampling_rate=44100, mask_pixel=True, mask_audio=True, return_tensors="pt"
+        ... )
+
+        >>> outputs = model(**input_dict)
+        >>> loss = outputs.loss
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        total_loss = 0.0
+
+        if self.task_matching:
+            if labels is None:
+                raise ValueError("Matching task requires labels")
+            if pixel_values_mixed is None:
+                raise ValueError("Matching task requires pixel_values_mixed")
+
+            outputs = self.tvlt(
+                pixel_values_mixed,
+                audio_values,
+                pixel_mask=pixel_mask_mixed,
+                audio_mask=audio_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+            sequence_output = outputs[0]
+            matching_logits = self.matching_head(sequence_output)
+
+            loss_fct = BCEWithLogitsLoss()
+            loss = loss_fct(matching_logits.view(-1), labels.view(-1))
+            total_loss += loss
+
+        pixel_logits = None
+        audio_logits = None
+        if self.task_mae and self.training:
+            outputs = self.tvlt(
+                pixel_values,
+                audio_values,
+                pixel_mask=pixel_mask,
+                audio_mask=audio_mask,
+                mask_pixel=True,
+                mask_audio=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+            pixel_sequence_output = outputs.last_pixel_hidden_state if return_dict else outputs[1]
+            audio_sequence_output = outputs.last_audio_hidden_state if return_dict else outputs[2]
+            pixel_label_masks = outputs.pixel_label_masks if return_dict else outputs[3]
+            audio_label_masks = outputs.audio_label_masks if return_dict else outputs[4]
+            pixel_ids_restore = outputs.pixel_ids_restore if return_dict else outputs[5]
+            audio_ids_restore = outputs.audio_ids_restore if return_dict else outputs[6]
+
+            pixel_decoder_input = self.encoder_to_decoder(
+                pixel_sequence_output
+            )  # [batch_size, num_masked_pixel_patches, decoder_hidden_size]
+            audio_decoder_input = self.encoder_to_decoder(
+                audio_sequence_output
+            )  # [batch_size, num_masked_audio_patches, decoder_hidden_size]
+            num_frames = pixel_values.size(1)
+            pixel_decoder_input = self.concatenate_mask(self.pixel_mask_token, pixel_decoder_input, pixel_ids_restore)
+            pixel_decoder_input = pixel_decoder_input + self.decoder_pixel_pos_embed.repeat(1, num_frames, 1)
+            pixel_decoder_input = pixel_decoder_input + torch.repeat_interleave(
+                self.decoder_temporal_embed[:, :num_frames], self.num_patches_per_image, dim=1
+            )
+            pixel_decoder_input = pixel_decoder_input + self.decoder_pixel_type_embed
+            pixel_decoder_outputs = self.decoder(pixel_decoder_input)
+            pixel_logits = self.pixel_mae_head(pixel_decoder_outputs.logits)
+
+            audio_decoder_input = self.concatenate_mask(self.audio_mask_token, audio_decoder_input, audio_ids_restore)
+            num_time_patches = audio_decoder_input.size(1) // self.num_freq_patches
+            audio_decoder_input = audio_decoder_input + self.decoder_freq_embed.repeat(1, num_time_patches, 1)
+            audio_decoder_input = audio_decoder_input + torch.repeat_interleave(
+                self.decoder_audio_pos_embed[:, :num_time_patches], self.num_freq_patches, dim=1
+            )
+            audio_decoder_input = audio_decoder_input + self.decoder_audio_type_embed
+            audio_decoder_outputs = self.decoder(audio_decoder_input)
+            audio_logits = self.audio_mae_head(audio_decoder_outputs.logits)
+
+            loss = self.pixel_mae_loss(pixel_values, pixel_logits, pixel_label_masks) + self.audio_mae_loss(
+                audio_values, audio_logits, audio_label_masks
+            )
+            total_loss += loss
+
+        if not return_dict:
+            output = (matching_logits, pixel_logits, audio_logits) + outputs[7:]
+            return ((total_loss,) + output) if loss is not None else output
+
+        return TvltForPreTrainingOutput(
+            loss=total_loss,
+            matching_logits=matching_logits,
+            pixel_logits=pixel_logits,
+            audio_logits=audio_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class TvltPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
     def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
         first_token_tensor = hidden_states[:, 0]
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
 
 
-@add_start_docstrings(
-    """
-    ViLT Model with a language modeling head on top as done during pretraining.
-    """,
-    VILT_START_DOCSTRING,
-)
-class ViltForMaskedLM(ViltPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["mlm_score.decoder.bias"]
-
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.vilt = ViltModel(config)
-        self.mlm_score = ViltMLMHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_output_embeddings(self):
-        return self.mlm_score.decoder
-
-    def set_output_embeddings(self, new_embeddings):
-        self.mlm_score.decoder = new_embeddings
-
-    @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        image_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[MaskedLMOutput, Tuple[torch.FloatTensor]]:
-        r"""
-        labels (*torch.LongTensor* of shape *(batch_size, sequence_length)*, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in *[-100, 0, ...,
-            config.vocab_size]* (see *input_ids* docstring) Tokens with indices set to *-100* are ignored (masked), the
-            loss is only computed for the tokens with labels in *[0, ..., config.vocab_size]*
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import ViltProcessor, ViltForMaskedLM
-        >>> import requests
-        >>> from PIL import Image
-        >>> import re
-        >>> import torch
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> text = "a bunch of [MASK] laying on a [MASK]."
-
-        >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
-        >>> model = ViltForMaskedLM.from_pretrained("dandelin/vilt-b32-mlm")
-
-        >>> # prepare inputs
-        >>> encoding = processor(image, text, return_tensors="pt")
-
-        >>> # forward pass
-        >>> outputs = model(**encoding)
-
-        >>> tl = len(re.findall("\[MASK\]", text))
-        >>> inferred_token = [text]
-
-        >>> # gradually fill in the MASK tokens, one by one
-        >>> with torch.no_grad():
-        ...     for i in range(tl):
-        ...         encoded = processor.tokenizer(inferred_token)
-        ...         input_ids = torch.tensor(encoded.input_ids)
-        ...         encoded = encoded["input_ids"][0][1:-1]
-        ...         outputs = model(input_ids=input_ids, pixel_values=encoding.pixel_values)
-        ...         mlm_logits = outputs.logits[0]  # shape (seq_len, vocab_size)
-        ...         # only take into account text features (minus CLS and SEP token)
-        ...         mlm_logits = mlm_logits[1 : input_ids.shape[1] - 1, :]
-        ...         mlm_values, mlm_ids = mlm_logits.softmax(dim=-1).max(dim=-1)
-        ...         # only take into account text
-        ...         mlm_values[torch.tensor(encoded) != 103] = 0
-        ...         select = mlm_values.argmax().item()
-        ...         encoded[select] = mlm_ids[select].item()
-        ...         inferred_token = [processor.decode(encoded)]
-
-        >>> selected_token = ""
-        >>> encoded = processor.tokenizer(inferred_token)
-        >>> output = processor.decode(encoded.input_ids[0], skip_special_tokens=True)
-        >>> print(output)
-        a bunch of cats laying on a couch.
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.vilt(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            pixel_values=pixel_values,
-            pixel_mask=pixel_mask,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            image_embeds=image_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output, pooled_output = outputs[:2]
-        # split up final hidden states into text and image features
-        text_seq_len = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-        text_features, _ = (sequence_output[:, :text_seq_len], sequence_output[:, text_seq_len:])
-
-        mlm_logits = self.mlm_score(text_features)
-
-        masked_lm_loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(mlm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (mlm_logits,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
-        return MaskedLMOutput(
-            loss=masked_lm_loss,
-            logits=mlm_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-class ViltPredictionHeadTransform(nn.Module):
+class TvltMatchingHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pooler = TvltPooler(config)
+        self.fc = nn.Linear(config.hidden_size, 1)
 
     def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.fc(self.pooler(hidden_states))
         return hidden_states
 
 
-class ViltMLMHead(nn.Module):
-    def __init__(self, config, weight=None):
+class TvltMAEHead(nn.Module):
+    def __init__(self, config, output_dim=None):
         super().__init__()
         self.config = config
-        self.transform = ViltPredictionHeadTransform(config)
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        if weight is not None:
-            self.decoder.weight = weight
+        self.decoder = nn.Linear(config.decoder_hidden_size, output_dim)
 
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, x):
-        x = self.transform(x)
-        x = self.decoder(x)
-        return x
+    def forward(self, hidden_states):
+        hidden_states = self.decoder(hidden_states)
+        return hidden_states
 
 
 @add_start_docstrings(
     """
-    Vilt Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the [CLS]
-    token) for visual question answering, e.g. for VQAv2.
+    Tvlt Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the [CLS]
+    token) for question answering tasks, e.g. Audio-based VQA.
     """,
-    VILT_START_DOCSTRING,
+    TVLT_START_DOCSTRING,
 )
-class ViltForQuestionAnswering(ViltPreTrainedModel):
+class TvltForQuestionAnswering(TvltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.num_labels = config.num_labels
-        self.vilt = ViltModel(config)
+        self.tvlt = TvltModel(config)
 
         # Classifier head
         self.classifier = nn.Sequential(
             nn.Linear(config.hidden_size, config.hidden_size * 2),
-            nn.LayerNorm(config.hidden_size * 2),
+            nn.LayerNorm(config.hidden_size * 2, eps=config.layer_norm_eps),
             nn.GELU(),
             nn.Linear(config.hidden_size * 2, config.num_labels),
         )
@@ -1084,82 +1272,63 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(TVLT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        image_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:
+        pixel_values,
+        audio_values,
+        pixel_mask=None,
+        audio_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, num_labels)`, *optional*):
-            Labels for computing the visual question answering loss. This tensor must be either a one-hot encoding of
-            all answers that are applicable for a given example in the batch, or a soft encoding indicating which
-            answers are applicable, where 1.0 is the highest score.
+        labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
+            Labels for computing the question answering loss. Indices should be in `[0, ..., num_answer_choices-1]`
+            where num_answer_choices refers to the number of answer choices in question answering.
 
-        Returns:
+        Return:
 
         Examples:
-
         ```python
-        >>> from transformers import ViltProcessor, ViltForQuestionAnswering
-        >>> import requests
-        >>> from PIL import Image
+        >>> from transformers import TvltProcessor, TvltForQuestionAnswering
+        >>> import numpy as np
+        >>> import torch
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> text = "How many cats are there?"
+        >>> num_frames = 8
+        >>> images = list(np.random.randn(num_frames, 3, 224, 224))
+        >>> audio = list(np.random.randn(10000))  # Audio/speech-based question
+        >>> processor = TvltProcessor.from_pretrained("murgelab/tvlt-base")
+        >>> model = TvltForQuestionAnswering.from_pretrained("murgelab/tvlt-base")
+        >>> input_dict = processor(images, audio, sampling_rate=44100, return_tensors="pt")
 
-        >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
-        >>> model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-finetuned-vqa")
-
-        >>> # prepare inputs
-        >>> encoding = processor(image, text, return_tensors="pt")
-
-        >>> # forward pass
-        >>> outputs = model(**encoding)
-        >>> logits = outputs.logits
-        >>> idx = logits.argmax(-1).item()
-        >>> print("Predicted answer:", model.config.id2label[idx])
-        Predicted answer: 2
+        >>> outputs = model(**input_dict)
+        >>> loss = outputs.loss
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.vilt(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            pixel_values=pixel_values,
+        outputs = self.tvlt(
+            pixel_values,
+            audio_values,
             pixel_mask=pixel_mask,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            image_embeds=image_embeds,
+            audio_mask=audio_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        pooler_output = outputs.pooler_output if return_dict else outputs[1]
-
-        logits = self.classifier(pooler_output)
+        sequence_output = outputs[0][:, 0]
+        logits = self.classifier(sequence_output)  # rank value
 
         loss = None
         if labels is not None:
-            loss = nn.functional.binary_cross_entropy_with_logits(logits, labels) * labels.shape[1]
-            # see https://github.com/jnhwkim/ban-vqa/blob/master/train.py#L19
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[4:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
@@ -1172,322 +1341,93 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Vilt Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the [CLS]
-    token) for image-to-text or text-to-image retrieval, e.g. MSCOCO and F30K.
+    Tvlt Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the [CLS]
+    token) for audiovisual classification tasks, e.g. CMU-MOSEI Sentiment Analysis and Audio to Video Retrieval.
     """,
-    VILT_START_DOCSTRING,
+    TVLT_START_DOCSTRING,
 )
-class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
+class TvltForAudioVisualClassification(TvltPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.vilt = ViltModel(config)
+        self.tvlt = TvltModel(config)
 
         # Classifier head
-        self.rank_output = nn.Linear(config.hidden_size, 1)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        image_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels are currently not supported.
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import ViltProcessor, ViltForImageAndTextRetrieval
-        >>> import requests
-        >>> from PIL import Image
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
-
-        >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-coco")
-        >>> model = ViltForImageAndTextRetrieval.from_pretrained("dandelin/vilt-b32-finetuned-coco")
-
-        >>> # forward pass
-        >>> scores = dict()
-        >>> for text in texts:
-        ...     # prepare inputs
-        ...     encoding = processor(image, text, return_tensors="pt")
-        ...     outputs = model(**encoding)
-        ...     scores[text] = outputs.logits[0, :].item()
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.vilt(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            pixel_values=pixel_values,
-            pixel_mask=pixel_mask,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            image_embeds=image_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooler_output = outputs.pooler_output if return_dict else outputs[1]
-
-        logits = self.rank_output(pooler_output)
-
-        loss = None
-        if labels is not None:
-            raise NotImplementedError("Training is not yet supported.")
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    Vilt Model transformer with a classifier head on top for natural language visual reasoning, e.g. NLVR2.
-    """,
-    VILT_IMAGES_AND_TEXT_CLASSIFICATION_INPUTS_DOCSTRING,
-)
-class ViltForImagesAndTextClassification(ViltPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.num_labels = config.num_labels
-        self.vilt = ViltModel(config)
-
-        # Classifier head
-        num_images = config.num_images
         self.classifier = nn.Sequential(
-            nn.Linear(config.hidden_size * num_images, config.hidden_size * num_images),
-            nn.LayerNorm(config.hidden_size * num_images),
+            nn.Linear(config.hidden_size, config.hidden_size * 2),
+            nn.LayerNorm(config.hidden_size * 2, eps=config.layer_norm_eps),
             nn.GELU(),
-            nn.Linear(config.hidden_size * num_images, config.num_labels),
+            nn.Linear(config.hidden_size * 2, config.num_labels),
         )
+        self.config = config
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ViltForImagesAndTextClassificationOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(TVLT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        image_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[ViltForImagesAndTextClassificationOutput, Tuple[torch.FloatTensor]]:
+        pixel_values,
+        audio_values,
+        pixel_mask=None,
+        audio_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Binary classification labels.
+        labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
+            Labels for computing the audiovisual loss. Indices should be in `[0, ..., num_classes-1]` where num_classes
+            refers to the number of classes in audiovisual tasks.
 
-        Returns:
+        Return:
 
         Examples:
-
         ```python
-        >>> from transformers import ViltProcessor, ViltForImagesAndTextClassification
-        >>> import requests
-        >>> from PIL import Image
+        >>> from transformers import TvltProcessor, TvltForAudioVisualClassification
+        >>> import numpy as np
+        >>> import torch
 
-        >>> image1 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
-        >>> image2 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_1.jpg", stream=True).raw)
-        >>> text = "The left image contains twice the number of dogs as the right image."
+        >>> num_frames = 8
+        >>> images = list(np.random.randn(num_frames, 3, 224, 224))
+        >>> audio = list(np.random.randn(10000))
+        >>> processor = TvltProcessor.from_pretrained("murgelab/tvlt-base")
+        >>> model = TvltForAudioVisualClassification.from_pretrained("murgelab/tvlt-base")
+        >>> input_dict = processor(images, audio, sampling_rate=44100, return_tensors="pt")
 
-        >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
-        >>> model = ViltForImagesAndTextClassification.from_pretrained("dandelin/vilt-b32-finetuned-nlvr2")
-
-        >>> # prepare inputs
-        >>> encoding = processor([image1, image2], text, return_tensors="pt")
-
-        >>> # forward pass
-        >>> outputs = model(input_ids=encoding.input_ids, pixel_values=encoding.pixel_values.unsqueeze(0))
-        >>> logits = outputs.logits
-        >>> idx = logits.argmax(-1).item()
-        >>> print("Predicted answer:", model.config.id2label[idx])
-        Predicted answer: True
+        >>> outputs = model(**input_dict)
+        >>> loss = outputs.loss
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is not None and pixel_values.ndim == 4:
-            # add dummy num_images dimension
-            pixel_values = pixel_values.unsqueeze(1)
-
-        if image_embeds is not None and image_embeds.ndim == 3:
-            # add dummy num_images dimension
-            image_embeds = image_embeds.unsqueeze(1)
-
-        num_images = pixel_values.shape[1] if pixel_values is not None else None
-        if num_images is None:
-            num_images = image_embeds.shape[1] if image_embeds is not None else None
-        if num_images != self.config.num_images:
-            raise ValueError(
-                "Make sure to match the number of images in the model with the number of images in the input."
-            )
-        pooler_outputs = []
-        hidden_states = [] if output_hidden_states else None
-        attentions = [] if output_attentions else None
-        for i in range(num_images):
-            # forward every image through the model
-            outputs = self.vilt(
-                input_ids,
-                attention_mask=attention_mask,
-                token_type_ids=token_type_ids,
-                pixel_values=pixel_values[:, i, :, :, :] if pixel_values is not None else None,
-                pixel_mask=pixel_mask[:, i, :, :] if pixel_mask is not None else None,
-                head_mask=head_mask,
-                inputs_embeds=inputs_embeds,
-                image_embeds=image_embeds[:, i, :, :] if image_embeds is not None else None,
-                image_token_type_idx=i + 1,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            pooler_output = outputs.pooler_output if return_dict else outputs[1]
-            pooler_outputs.append(pooler_output)
-            if output_hidden_states:
-                hidden_states.append(outputs.hidden_states)
-            if output_attentions:
-                attentions.append(outputs.attentions)
-
-        pooled_output = torch.cat(pooler_outputs, dim=-1)
-        logits = self.classifier(pooled_output)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits, hidden_states, attentions)
-            return ((loss,) + output) if loss is not None else output
-
-        return ViltForImagesAndTextClassificationOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    ViLT Model with a token classification head on top (a linear layer on top of the final hidden-states of the text
-    tokens) e.g. for Named-Entity-Recognition (NER) tasks.
-    """,
-    VILT_START_DOCSTRING,
-)
-class ViltForTokenClassification(ViltPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.num_labels = config.num_labels
-        self.vilt = ViltModel(config, add_pooling_layer=False)
-
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        image_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[TokenClassifierOutput, Tuple[torch.FloatTensor]]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-
-        Returns:
-        """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.vilt(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            pixel_values=pixel_values,
+        outputs = self.tvlt(
+            pixel_values,
+            audio_values,
             pixel_mask=pixel_mask,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            image_embeds=image_embeds,
+            audio_mask=audio_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        sequence_output = outputs[0]
-
-        text_input_size = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output[:, :text_input_size])
+        sequence_output = outputs[0][:, 0]
+        logits = self.classifier(sequence_output)  # rank value
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            if self.config.loss_type == "regression":
+                loss_fct = MSELoss()
+                loss = loss_fct(logits, labels)
+            elif self.config.loss_type == "classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[4:]
             return ((loss,) + output) if loss is not None else output
 
-        return TokenClassifierOutput(
+        return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
