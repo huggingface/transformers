@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch GPT-J model."""
 
+import warnings
 from typing import Optional, Tuple, Union
 
 import torch
@@ -152,7 +153,6 @@ class GPTJAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
     ):
-
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
@@ -199,7 +199,6 @@ class GPTJAttention(nn.Module):
         Tuple[torch.Tensor, Tuple[torch.Tensor]],
         Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
     ]:
-
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
@@ -373,7 +372,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPTJTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -491,6 +490,13 @@ class GPTJModel(GPTJPreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`GPTJModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your"
+            " model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'h.0': 0, 'h.1': 1,"
+            " ...}",
+            FutureWarning,
+        )
         # Check validity of device_map
         self.device_map = (
             get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
@@ -510,6 +516,10 @@ class GPTJModel(GPTJPreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.model_parallel = False
         self.device_map = None
         self.first_device = "cpu"
@@ -627,7 +637,6 @@ class GPTJModel(GPTJPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-
             # Model parallel
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
@@ -643,7 +652,6 @@ class GPTJModel(GPTJPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -728,6 +736,13 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`GPTJForCausalLM.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
+            " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'transformer.h.0':"
+            " 0, 'transformer.h.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
             if device_map is None
@@ -740,6 +755,10 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.transformer.deparallelize()
         self.transformer = self.transformer.to("cpu")
         self.lm_head = self.lm_head.to("cpu")
@@ -859,7 +878,9 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         )
 
     @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+    def _reorder_cache(
+        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
         [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -867,7 +888,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         """
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
+            for layer_past in past_key_values
         )
 
 

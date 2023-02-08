@@ -1226,7 +1226,6 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
     def _compute_attn_mask(
         self, query_indices, key_indices, attention_mask, query_key_dots_shape, do_standard_self_attention
     ):
-
         # chunk attention mask and look before and after
         if attention_mask is not None:
             attention_mask = attention_mask.to(torch.uint8)[:, None, :]
@@ -1922,7 +1921,7 @@ REFORMER_INPUTS_DOCSTRING = r"""
             a multiple of the relevant model's chunk lengths (lsh's, local's or both). During evaluation, the indices
             are automatically padded to be a multiple of the chunk length.
 
-            Indices can be obtained using [`ReformerTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -2299,9 +2298,9 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
         return inputs_dict
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reord_past_buckets_states = []
-        for layer_past in past:
+        for layer_past in past_key_values:
             # buckets
             if layer_past[0] is not None:
                 reord_buckets = layer_past[0].index_select(0, beam_idx)

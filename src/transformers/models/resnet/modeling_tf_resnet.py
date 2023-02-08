@@ -171,7 +171,7 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
         stride: int = 1,
         activation: str = "relu",
         reduction: int = 4,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         should_apply_shortcut = in_channels != out_channels or stride != 1
@@ -313,7 +313,7 @@ RESNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            [`ConvNextImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for

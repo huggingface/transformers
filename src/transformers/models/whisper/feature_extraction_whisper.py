@@ -66,7 +66,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         n_fft=400,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             feature_size=feature_size,
@@ -225,7 +225,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         padding: Optional[str] = "max_length",
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).

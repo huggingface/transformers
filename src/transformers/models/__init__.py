@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,6 +34,7 @@ from . import (
     blip,
     bloom,
     bort,
+    bridgetower,
     byt5,
     camembert,
     canine,
@@ -57,6 +54,7 @@ from . import (
     decision_transformer,
     deformable_detr,
     deit,
+    deta,
     detr,
     dialogpt,
     dinat,
@@ -153,6 +151,7 @@ from . import (
     speech_encoder_decoder,
     speech_to_text,
     speech_to_text_2,
+    speecht5,
     splinter,
     squeezebert,
     swin,

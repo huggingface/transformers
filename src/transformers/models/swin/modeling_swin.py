@@ -741,7 +741,6 @@ class SwinStage(nn.Module):
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
-
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             layer_outputs = layer_module(
@@ -910,8 +909,8 @@ SWIN_START_DOCSTRING = r"""
 SWIN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 

@@ -113,15 +113,10 @@ class GPTNeoConfig(PretrainedConfig):
         attention_dropout=0.0,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-        summary_type="cls_index",
-        summary_use_proj=True,
-        summary_activation=None,
-        summary_proj_to_labels=True,
-        summary_first_dropout=0.1,
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -136,11 +131,6 @@ class GPTNeoConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.summary_type = summary_type
-        self.summary_use_proj = summary_use_proj
-        self.summary_activation = summary_activation
-        self.summary_first_dropout = summary_first_dropout
-        self.summary_proj_to_labels = summary_proj_to_labels
         self.use_cache = use_cache
 
         self.bos_token_id = bos_token_id
@@ -231,7 +221,6 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
-
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
             tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
         )

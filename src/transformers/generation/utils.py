@@ -301,9 +301,9 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
-        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+        beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
-            `(batch_size*num_return_sequences, input_ids.shape[-1])`.
+            `(batch_size*num_return_sequences, sequence_length)`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -338,10 +338,9 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
-        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+        beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
-            `(batch_size*num_return_sequences, max_length-1)`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
+            `(batch_size*num_return_sequences, sequence_length)`.
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
@@ -387,9 +386,9 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
             of log probabilities of tokens conditioned on log softmax of previously generated tokens in this beam.
             Tuple of `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token),
             with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
-        beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
+        beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
-            `(batch_size*num_return_sequences, input_ids.shape[-1])`.
+            `(batch_size*num_return_sequences, sequence_length)`.
         attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -426,7 +425,7 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
             with each tensor of shape `(batch_size*num_beams, config.vocab_size)`).
         beam_indices (`torch.LongTensor`, *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
-            `(batch_size*num_return_sequences, max_length-1)`.
+            `(batch_size*num_return_sequences, sequence_length)`.
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer of the decoder) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`.
@@ -519,46 +518,39 @@ class GenerationMixin:
         inputs_kwarg = model_kwargs.pop(input_name, None)
         if inputs_kwarg is not None and inputs is not None:
             raise ValueError(
-                f"`inputs`: {inputs}` were passed alongside "
-                f"{input_name} which is not allowed."
+                f"`inputs`: {inputs}` were passed alongside {input_name} which is not allowed."
                 f"Make sure to either pass {inputs} or {input_name}=..."
             )
         elif inputs_kwarg is not None:
             inputs = inputs_kwarg
 
-        # 3. models with `input_ids` can also make use of `inputs_embeds`
-        if self._can_retrieve_inputs_from_name(inputs, "inputs_embeds", model_kwargs):
-            inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
+        # 3. In the presence of `inputs_embeds` for text models:
+        # - decoder-only models should complain if the user attempts to pass `inputs_embeds`, but the model
+        # doesn't have its forwarding implemented. `inputs_embeds` is kept in `model_kwargs` and can coexist with
+        # input_ids (`inputs_embeds` will be used in the 1st generation step, as opposed to `input_ids`)
+        # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
+        # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
+        if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
+            if not self.config.is_encoder_decoder:
+                has_inputs_embeds_forwarding = "inputs_embeds" in set(
+                    inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
+                )
+                if not has_inputs_embeds_forwarding:
+                    raise ValueError(
+                        f"You passed `inputs_embeds` to `.generate()`, but the model class {self.__class__.__name__} "
+                        "doesn't have its forwarding implemented. See the GPT2 implementation for an example "
+                        "(https://github.com/huggingface/transformers/pull/21405), and feel free to open a PR with it!"
+                    )
+            else:
+                if inputs is not None:
+                    raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
+                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
 
-        # 4. Only encoder-decoder models can have non `input_ids` input format
-        if not self.config.is_encoder_decoder and input_name != "input_ids":
-            raise ValueError(
-                f"If {input_name} is passed as model-specific keyword "
-                "input then model has to be an encoder-decoder and not a "
-                f"{self.__class__.__name__}."
-            )
-
-        # 5. if `inputs` is still None, try to create `input_ids` from BOS token
+        # 4. if `inputs` is still None, try to create `input_ids` from BOS token
         if inputs is None:
             inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
 
         return inputs, input_name, model_kwargs
-
-    def _can_retrieve_inputs_from_name(
-        self, inputs: Optional[torch.Tensor], name: str, model_kwargs: Dict[str, torch.Tensor]
-    ) -> torch.Tensor:
-        """
-        If `inputs` is None and `name` is in both forward function and keyword arguments, then inputs can be retrieved
-        from name
-        """
-        can_retrieve_inputs = model_kwargs.get(name, None) is not None and name in set(
-            inspect.signature(self.forward).parameters.keys()
-        )
-
-        if can_retrieve_inputs and inputs is not None:
-            raise ValueError(f"Cannot only pass one of {name} and {self.main_input_name}")
-
-        return can_retrieve_inputs
 
     def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         """
@@ -731,7 +723,7 @@ class GenerationMixin:
 
         return model_kwargs
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         raise NotImplementedError(
             f"Make sure that a `_reorder_cache` function is correctly implemented in {self.__class__.__module__} to"
             f" enable beam search for {self.__class__}"
@@ -866,7 +858,7 @@ class GenerationMixin:
                 ExponentialDecayLengthPenalty(
                     generation_config.exponential_decay_length_penalty,
                     generation_config.eos_token_id,
-                    generation_config.input_ids_seq_length,
+                    input_ids_seq_length,
                 )
             )
         if generation_config.suppress_tokens is not None:
@@ -944,9 +936,9 @@ class GenerationMixin:
                 of log probabilities of tokens conditioned on log softmax of previously generated tokens Tuple of
                 `torch.FloatTensor` with up to `max_new_tokens` elements (one element for each generated token), with
                 each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
-            beam_indices (`tuple(tuple(torch.LongTensor))`, *optional*):
+            beam_indices (`torch.LongTensor`, *optional*):
                 Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
-                `(batch_size*num_return_sequences, input_ids.shape[-1])`. Only required if a `num_beams>1` at
+                `(batch_size*num_return_sequences, sequence_length)`. Only required if a `num_beams>1` at
                 generate-time.
             normalize_logits (`bool`, *optional*, defaults to `False`):
                 Whether to normalize the logits (which, for legacy reasons, may be unnormalized).
@@ -971,7 +963,9 @@ class GenerationMixin:
         >>> transition_scores = model.compute_transition_scores(
         ...     outputs.sequences, outputs.scores, normalize_logits=True
         ... )
-        >>> input_length = inputs.input_ids.shape[1]
+        >>> # input_length is the length of the input prompt for decoder-only models, like the GPT family, and 1 for
+        >>> # encoder-decoder models, like BART or T5.
+        >>> input_length = 1 if model.config.is_encoder_decoder else inputs.input_ids.shape[1]
         >>> generated_tokens = outputs.sequences[:, input_length:]
         >>> for tok, score in zip(generated_tokens[0], transition_scores[0]):
         ...     # | token | token string | logits | probability
@@ -995,8 +989,9 @@ class GenerationMixin:
         ...     outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False
         ... )
         >>> # If you sum the generated tokens' scores and apply the length penalty, you'll get the sequence scores.
-        >>> # Tip: set `normalize_logits=True` to recompute the scores from the normalized logits.
-        >>> output_length = inputs.input_ids.shape[1] + np.sum(transition_scores.numpy() < 0, axis=1)
+        >>> # Tip: recomputing the scores is only guaranteed to match with `normalize_logits=False`. Depending on the
+        >>> # use case, you might want to recompute it with `normalize_logits=True`.
+        >>> output_length = input_length + np.sum(transition_scores.numpy() < 0, axis=1)
         >>> length_penalty = model.generation_config.length_penalty
         >>> reconstructed_scores = transition_scores.sum(axis=1) / (output_length**length_penalty)
         >>> print(np.allclose(outputs.sequences_scores, reconstructed_scores))
@@ -1021,11 +1016,10 @@ class GenerationMixin:
         # 4. cut beam_indices to longest beam length
         beam_indices_mask = beam_indices < 0
         max_beam_length = (1 - beam_indices_mask.long()).sum(-1).max()
-        beam_indices = beam_indices[:, :max_beam_length]
+        beam_indices = beam_indices.clone()[:, :max_beam_length]
         beam_indices_mask = beam_indices_mask[:, :max_beam_length]
 
-        # 5. Set indices of beams that finished early to 0
-        # such indices will be masked correctly afterwards
+        # 5. Set indices of beams that finished early to 0; such indices will be masked correctly afterwards
         beam_indices[beam_indices_mask] = 0
 
         # 6. multiply beam_indices with vocab size to gather correctly from scores
@@ -1194,6 +1188,7 @@ class GenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+        generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 2. Set generation parameters if not already defined
@@ -1271,21 +1266,21 @@ class GenerationMixin:
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
             warnings.warn(
-                "Neither `max_length` nor `max_new_tokens` has been set, `max_length` will default to"
-                f" {generation_config.max_length} (`generation_config.max_length`). Controlling `max_length` via the"
-                " config is deprecated and `max_length` will be removed from the config in v5 of Transformers -- we"
+                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
+                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
                 " recommend using `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,
             )
-        elif has_default_max_length and generation_config.max_new_tokens is not None:
+        elif generation_config.max_new_tokens is not None:
             generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
-        elif not has_default_max_length and generation_config.max_new_tokens is not None:
-            raise ValueError(
-                "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a"
-                " limit to the generated output length. Remove one of those arguments. Please refer to the"
-                " documentation for more information. "
-                "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
-            )
+            if not has_default_max_length:
+                logger.warn(
+                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
+                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
+                    "Please refer to the documentation for more information. "
+                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)",
+                    UserWarning,
+                )
 
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
             raise ValueError(
@@ -1462,6 +1457,7 @@ class GenerationMixin:
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
+                max_length=generation_config.max_length,
             )
             # 12. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -1497,6 +1493,7 @@ class GenerationMixin:
                 device=inputs_tensor.device,
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
+                max_length=generation_config.max_length,
             )
 
             # 13. interleave input_ids with `num_beams` additional sequences per batch
@@ -1540,12 +1537,12 @@ class GenerationMixin:
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
                 num_beams=generation_config.num_beams,
-                max_length=stopping_criteria.max_length,
                 device=inputs_tensor.device,
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
                 num_beam_groups=generation_config.num_beam_groups,
+                max_length=generation_config.max_length,
             )
             # 12. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -1633,6 +1630,7 @@ class GenerationMixin:
                 length_penalty=generation_config.length_penalty,
                 do_early_stopping=generation_config.early_stopping,
                 num_beam_hyps_to_keep=generation_config.num_return_sequences,
+                max_length=generation_config.max_length,
             )
             # 12. interleave input_ids with `num_beams` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -1759,6 +1757,7 @@ class GenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
+        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -1982,8 +1981,10 @@ class GenerationMixin:
             )
 
             # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul((sum(next_tokens != i for i in eos_token_id)).long())
+            if eos_token_id_tensor is not None:
+                unfinished_sequences = (
+                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
+                )
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -2131,6 +2132,7 @@ class GenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
+        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -2225,8 +2227,10 @@ class GenerationMixin:
             )
 
             # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul((sum(next_tokens != i for i in eos_token_id)).long())
+            if eos_token_id_tensor is not None:
+                unfinished_sequences = (
+                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
+                )
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -2394,6 +2398,7 @@ class GenerationMixin:
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
+        eos_token_id_tensor = torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -2491,8 +2496,10 @@ class GenerationMixin:
             )
 
             # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id is not None:
-                unfinished_sequences = unfinished_sequences.mul((sum(next_tokens != i for i in eos_token_id)).long())
+            if eos_token_id_tensor is not None:
+                unfinished_sequences = (
+                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
+                )
 
             # stop when each sentence is finished, or if we exceed the maximum length
             if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
@@ -3067,6 +3074,9 @@ class GenerationMixin:
 
             next_token_scores_processed = logits_processor(input_ids, next_token_scores)
             next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(next_token_scores)
+            # Note: logits warpers are intentionally applied after adding running beam scores. On some logits warpers
+            # (like top_p) this is indiferent, but on others (like temperature) it is not. For reference, see
+            # https://github.com/huggingface/transformers/pull/5420#discussion_r449779867
             next_token_scores = logits_warper(input_ids, next_token_scores)
 
             # Store scores, attentions and hidden_states when required

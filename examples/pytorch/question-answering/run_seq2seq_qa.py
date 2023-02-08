@@ -25,11 +25,11 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 import datasets
-from datasets import load_dataset
-
 import evaluate
-import transformers
+from datasets import load_dataset
 from trainer_seq2seq_qa import QuestionAnsweringSeq2SeqTrainer
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -45,7 +45,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.26.0.dev0")
+check_min_version("4.27.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 

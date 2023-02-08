@@ -242,7 +242,7 @@ class DeformableDetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~AutoImageProcessor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~DeformableDetrProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -545,27 +545,42 @@ def build_position_encoding(config):
     return position_embedding
 
 
-def ms_deform_attn_core_pytorch(value, value_spatial_shapes, sampling_locations, attention_weights):
-    # for debug and test only,
-    # need to use cuda version instead
-    N_, S_, M_, D_ = value.shape
-    _, Lq_, M_, L_, P_, _ = sampling_locations.shape
-    value_list = value.split([H_ * W_ for H_, W_ in value_spatial_shapes], dim=1)
+def multi_scale_deformable_attention(
+    value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
+) -> Tensor:
+    batch_size, _, num_heads, hidden_dim = value.shape
+    _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
+    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
-    for lid_, (H_, W_) in enumerate(value_spatial_shapes):
-        # N_, H_*W_, M_, D_ -> N_, H_*W_, M_*D_ -> N_, M_*D_, H_*W_ -> N_*M_, D_, H_, W_
-        value_l_ = value_list[lid_].flatten(2).transpose(1, 2).reshape(N_ * M_, D_, H_, W_)
-        # N_, Lq_, M_, P_, 2 -> N_, M_, Lq_, P_, 2 -> N_*M_, Lq_, P_, 2
-        sampling_grid_l_ = sampling_grids[:, :, :, lid_].transpose(1, 2).flatten(0, 1)
-        # N_*M_, D_, Lq_, P_
-        sampling_value_l_ = F.grid_sample(
+    for level_id, (height, width) in enumerate(value_spatial_shapes):
+        # batch_size, height*width, num_heads, hidden_dim
+        # -> batch_size, height*width, num_heads*hidden_dim
+        # -> batch_size, num_heads*hidden_dim, height*width
+        # -> batch_size*num_heads, hidden_dim, height, width
+        value_l_ = (
+            value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, hidden_dim, height, width)
+        )
+        # batch_size, num_queries, num_heads, num_points, 2
+        # -> batch_size, num_heads, num_queries, num_points, 2
+        # -> batch_size*num_heads, num_queries, num_points, 2
+        sampling_grid_l_ = sampling_grids[:, :, :, level_id].transpose(1, 2).flatten(0, 1)
+        # batch_size*num_heads, hidden_dim, num_queries, num_points
+        sampling_value_l_ = nn.functional.grid_sample(
             value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
         )
         sampling_value_list.append(sampling_value_l_)
-    # (N_, Lq_, M_, L_, P_) -> (N_, M_, Lq_, L_, P_) -> (N_, M_, 1, Lq_, L_*P_)
-    attention_weights = attention_weights.transpose(1, 2).reshape(N_ * M_, 1, Lq_, L_ * P_)
-    output = (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights).sum(-1).view(N_, M_ * D_, Lq_)
+    # (batch_size, num_queries, num_heads, num_levels, num_points)
+    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+    attention_weights = attention_weights.transpose(1, 2).reshape(
+        batch_size * num_heads, 1, num_queries, num_levels * num_points
+    )
+    output = (
+        (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights)
+        .sum(-1)
+        .view(batch_size, num_heads * hidden_dim, num_queries)
+    )
     return output.transpose(1, 2).contiguous()
 
 
@@ -678,7 +693,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
         try:
-            # GPU
+            # custom kernel
             output = MultiScaleDeformableAttentionFunction.apply(
                 value,
                 spatial_shapes,
@@ -688,8 +703,8 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
                 self.im2col_step,
             )
         except Exception:
-            # CPU
-            output = ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
+            # PyTorch implementation
+            output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -1086,7 +1101,8 @@ DEFORMABLE_DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`AutoImageProcessor`]. See [`AutoImageProcessor.__call__`] for details.
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`DeformableDetrImageProcessor.__call__`]
+            for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1156,7 +1172,6 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         """
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes):
-
             ref_y, ref_x = meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),

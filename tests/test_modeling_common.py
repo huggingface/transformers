@@ -30,11 +30,11 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
-
-import transformers
 from huggingface_hub import HfFolder, delete_repo, set_access_token
 from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoModel,
@@ -44,6 +44,26 @@ from transformers import (
     logging,
 )
 from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import (
+    MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES,
+    MODEL_FOR_BACKBONE_MAPPING_NAMES,
+    MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES,
+    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
+    MODEL_FOR_MASKED_LM_MAPPING_NAMES,
+    MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
+    MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES,
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
+    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_MAPPING_NAMES,
+)
 from transformers.testing_utils import (
     TOKEN,
     USER,
@@ -88,28 +108,11 @@ if is_accelerate_available():
 
 if is_torch_available():
     import torch
+    from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from torch import nn
 
-    from test_module.custom_modeling import CustomModel, NoSuperInitModel
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
-        MODEL_FOR_AUDIO_XVECTOR_MAPPING,
-        MODEL_FOR_BACKBONE_MAPPING,
-        MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
-        MODEL_FOR_CAUSAL_LM_MAPPING,
-        MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
-        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
-        MODEL_FOR_MASKED_LM_MAPPING,
-        MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
-        MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
-        MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
-        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         AdaptiveEmbedding,
         AutoModelForCausalLM,
@@ -157,6 +160,7 @@ if is_tf_available():
 
 if is_flax_available():
     import jax.numpy as jnp
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -180,7 +184,6 @@ TINY_BERT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-bert-for-token-cl
 
 @require_torch
 class ModelTesterMixin:
-
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
@@ -199,22 +202,22 @@ class ModelTesterMixin:
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
-        if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+        if model_class.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
             inputs_dict = {
                 k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
                 if isinstance(v, torch.Tensor) and v.ndim > 1
                 else v
                 for k, v in inputs_dict.items()
             }
-        elif model_class in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING):
+        elif model_class.__name__ in get_values(MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES):
             inputs_dict.pop("attention_mask")
 
         if return_labels:
-            if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+            if model_class.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
                 inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
-            elif model_class in [
-                *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING),
-                *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING),
+            elif model_class.__name__ in [
+                *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
+                *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES),
             ]:
                 inputs_dict["start_positions"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
@@ -222,32 +225,32 @@ class ModelTesterMixin:
                 inputs_dict["end_positions"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            elif model_class in [
-                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING),
-                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING),
+            elif model_class.__name__ in [
+                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            elif model_class in [
-                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING),
-                *get_values(MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING),
-                *get_values(MODEL_FOR_MASKED_LM_MAPPING),
-                *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
+            elif model_class.__name__ in [
+                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES),
+                *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
-            elif model_class in get_values(MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING):
+            elif model_class.__name__ in get_values(MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES):
                 num_patches = self.model_tester.image_size // self.model_tester.patch_size
                 inputs_dict["bool_masked_pos"] = torch.zeros(
                     (self.model_tester.batch_size, num_patches**2), dtype=torch.long, device=torch_device
                 )
-            elif model_class in get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING):
+            elif model_class.__name__ in get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES):
                 batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
                 inputs_dict["labels"] = torch.zeros(
                     [self.model_tester.batch_size, height, width], device=torch_device
@@ -414,7 +417,6 @@ class ModelTesterMixin:
             base_class = base_class[0]
 
         for model_class in self.all_model_classes:
-
             if model_class == base_class:
                 continue
 
@@ -527,9 +529,9 @@ class ModelTesterMixin:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            if model_class in [
-                *get_values(MODEL_MAPPING),
-                *get_values(MODEL_FOR_BACKBONE_MAPPING),
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
             ]:
                 continue
 
@@ -550,7 +552,8 @@ class ModelTesterMixin:
             config.return_dict = True
 
             if (
-                model_class in [*get_values(MODEL_MAPPING), *get_values(MODEL_FOR_BACKBONE_MAPPING)]
+                model_class.__name__
+                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
@@ -620,9 +623,9 @@ class ModelTesterMixin:
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
                 # Question Answering model returns start_logits and end_logits
-                if model_class in [
-                    *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING),
-                    *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING),
+                if model_class.__name__ in [
+                    *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES),
                 ]:
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                 if "past_key_values" in outputs:
@@ -702,7 +705,6 @@ class ModelTesterMixin:
 
     # This is copied from `torch/testing/_internal/jit_utils.py::clear_class_registry`
     def clear_torch_jit_class_registry(self):
-
         torch._C._jit_clear_class_registry()
         torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
         # torch 1.8 has no `_clear_class_state` in `torch.jit._state`
@@ -875,7 +877,7 @@ class ModelTesterMixin:
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
                     input_names = list(filtered_inputs.keys())
 
-                    if isinstance(model, tuple(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values())) and (
+                    if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
                         not hasattr(model.config, "problem_type") or model.config.problem_type is None
                     ):
                         model.config.problem_type = "single_label_classification"
@@ -1508,7 +1510,6 @@ class ModelTesterMixin:
             base_model_prefix = model.base_model_prefix
 
             if hasattr(model, base_model_prefix):
-
                 extra_params = {k: v for k, v in model.named_parameters() if not k.startswith(base_model_prefix)}
                 extra_params.update({k: v for k, v in model.named_buffers() if not k.startswith(base_model_prefix)})
                 # Some models define this as None
@@ -1850,7 +1851,6 @@ class ModelTesterMixin:
             )
 
     def prepare_tf_inputs_from_pt_inputs(self, pt_inputs_dict):
-
         tf_inputs_dict = {}
         for key, tensor in pt_inputs_dict.items():
             # skip key that does not exist in tf
@@ -1871,7 +1871,6 @@ class ModelTesterMixin:
         return tf_inputs_dict
 
     def check_pt_tf_models(self, tf_model, pt_model, pt_inputs_dict):
-
         tf_inputs_dict = self.prepare_tf_inputs_from_pt_inputs(pt_inputs_dict)
 
         # send pytorch inputs to the correct device
@@ -1903,7 +1902,6 @@ class ModelTesterMixin:
         import transformers
 
         for model_class in self.all_model_classes:
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
@@ -2532,15 +2530,14 @@ class ModelTesterMixin:
         ]
 
         for model_class in self.all_model_classes:
-            if model_class not in [
-                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+            if model_class.__name__ not in [
+                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
             ]:
                 continue
 
             for problem_type in problem_types:
                 with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
-
                     config.problem_type = problem_type["title"]
                     config.num_labels = problem_type["num_labels"]
 
@@ -2575,7 +2572,7 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            if model_class not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+            if model_class.__name__ not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
                 continue
 
             with self.subTest(msg=f"Testing {model_class}"):
@@ -2953,6 +2950,138 @@ class ModelUtilsTest(TestCasePlus):
         ref_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         for p1, p2 in zip(model.parameters(), ref_model.parameters()):
             self.assertTrue(torch.allclose(p1, p2))
+
+    def test_checkpoint_variant_local(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, variant="v2")
+
+            weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
+
+            weights_file = os.path.join(tmp_dir, weights_name)
+            self.assertTrue(os.path.isfile(weights_file))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+
+            with self.assertRaises(EnvironmentError):
+                _ = BertModel.from_pretrained(tmp_dir)
+
+            new_model = BertModel.from_pretrained(tmp_dir, variant="v2")
+
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
+
+    def test_checkpoint_variant_local_sharded(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, variant="v2", max_shard_size="50kB")
+
+            weights_index_name = ".".join(WEIGHTS_INDEX_NAME.split(".")[:-1] + ["v2"] + ["json"])
+            weights_index_file = os.path.join(tmp_dir, weights_index_name)
+            self.assertTrue(os.path.isfile(weights_index_file))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_INDEX_NAME)))
+
+            for i in range(1, 6):
+                weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + [f"v2-0000{i}-of-00006"] + ["bin"])
+                weights_name_file = os.path.join(tmp_dir, weights_name)
+                self.assertTrue(os.path.isfile(weights_name_file))
+
+            with self.assertRaises(EnvironmentError):
+                _ = BertModel.from_pretrained(tmp_dir)
+
+            new_model = BertModel.from_pretrained(tmp_dir, variant="v2")
+
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_checkpoint_variant_local_safe(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, variant="v2", safe_serialization=True)
+
+            weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
+
+            weights_file = os.path.join(tmp_dir, weights_name)
+            self.assertTrue(os.path.isfile(weights_file))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+
+            with self.assertRaises(EnvironmentError):
+                _ = BertModel.from_pretrained(tmp_dir)
+
+            new_model = BertModel.from_pretrained(tmp_dir, variant="v2")
+
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_checkpoint_variant_local_sharded_safe(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, variant="v2", max_shard_size="50kB", safe_serialization=True)
+
+            weights_index_name = ".".join(SAFE_WEIGHTS_INDEX_NAME.split(".")[:-1] + ["v2"] + ["json"])
+            weights_index_file = os.path.join(tmp_dir, weights_index_name)
+            self.assertTrue(os.path.isfile(weights_index_file))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
+
+            for i in range(1, 6):
+                weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + [f"v2-0000{i}-of-00006"] + ["safetensors"])
+                weights_name_file = os.path.join(tmp_dir, weights_name)
+                self.assertTrue(os.path.isfile(weights_name_file))
+
+            with self.assertRaises(EnvironmentError):
+                _ = BertModel.from_pretrained(tmp_dir)
+
+            new_model = BertModel.from_pretrained(tmp_dir, variant="v2")
+
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
+
+    def test_checkpoint_variant_hub(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(EnvironmentError):
+                _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir)
+            model = BertModel.from_pretrained(
+                "hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir, variant="v2"
+            )
+        self.assertIsNotNone(model)
+
+    def test_checkpoint_variant_hub_sharded(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(EnvironmentError):
+                _ = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant-sharded", cache_dir=tmp_dir
+                )
+            model = BertModel.from_pretrained(
+                "hf-internal-testing/tiny-random-bert-variant-sharded", cache_dir=tmp_dir, variant="v2"
+            )
+        self.assertIsNotNone(model)
+
+    @require_safetensors
+    def test_checkpoint_variant_hub_safe(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(EnvironmentError):
+                _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir)
+            model = BertModel.from_pretrained(
+                "hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir, variant="v2"
+            )
+        self.assertIsNotNone(model)
+
+    @require_safetensors
+    def test_checkpoint_variant_hub_sharded_safe(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(EnvironmentError):
+                _ = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir
+                )
+            model = BertModel.from_pretrained(
+                "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir, variant="v2"
+            )
+        self.assertIsNotNone(model)
 
     @require_accelerate
     def test_from_pretrained_low_cpu_mem_usage_functional(self):

@@ -33,15 +33,15 @@ from pathlib import Path
 
 import datasets
 import torch
+from accelerate import Accelerator, DistributedType
+from accelerate.logging import get_logger
+from accelerate.utils import set_seed
 from datasets import load_dataset
+from huggingface_hub import Repository, create_repo
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator, DistributedType
-from accelerate.logging import get_logger
-from accelerate.utils import set_seed
-from huggingface_hub import Repository, create_repo
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
@@ -57,7 +57,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.26.0.dev0")
+check_min_version("4.27.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -407,8 +407,9 @@ def main():
         block_size = tokenizer.model_max_length
         if block_size > 1024:
             logger.warning(
-                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                "Picking 1024 instead. You can change that default value by passing --block_size xxx."
+                "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+                " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+                " override this default with `--block_size xxx`."
             )
         block_size = 1024
     else:

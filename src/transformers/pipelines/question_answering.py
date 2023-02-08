@@ -307,7 +307,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         max_question_len=None,
         handle_impossible_answer=None,
         align_to_words=None,
-        **kwargs
+        **kwargs,
     ):
         # Set defaults values
         preprocess_params = {}
@@ -403,6 +403,9 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             max_seq_len = min(self.tokenizer.model_max_length, 384)
         if doc_stride is None:
             doc_stride = min(max_seq_len // 2, 128)
+
+        if doc_stride > max_seq_len:
+            raise ValueError(f"`doc_stride` ({doc_stride}) is larger than `max_seq_len` ({max_seq_len})")
 
         if not self.tokenizer.is_fast:
             features = squad_convert_examples_to_features(

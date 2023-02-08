@@ -1044,11 +1044,10 @@ UNISPEECH_SAT_START_DOCSTRING = r"""
 UNISPEECH_SAT_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`UniSpeechSatProcessor`] should be used for
-            padding and conversion into a tensor of type *torch.FloatTensor*. See [`UniSpeechSatProcessor.__call__`]
-            for details.
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1431,7 +1430,6 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
 
         loss = None
         if labels is not None:
-
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
@@ -1608,8 +1606,7 @@ class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
 
         if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
-                "Audio frame classification does not support the use of UniSpeechSat adapters"
-                " (config.add_adapter=True)"
+                "Audio frame classification does not support the use of UniSpeechSat adapters (config.add_adapter=True)"
             )
         self.unispeech_sat = UniSpeechSatModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings

@@ -29,7 +29,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -91,9 +91,8 @@ class BlipImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
-
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 384, "width": 384}
         size = get_size_dict(size, default_to_square=True)
@@ -114,7 +113,7 @@ class BlipImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image.
@@ -142,7 +141,7 @@ class BlipImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -163,7 +162,7 @@ class BlipImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
@@ -247,8 +246,7 @@ class BlipImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

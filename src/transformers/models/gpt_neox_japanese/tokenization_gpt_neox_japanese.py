@@ -129,7 +129,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         bos_token="<|startoftext|>",
         eos_token="<|endoftext|>",
         do_clean_text=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,

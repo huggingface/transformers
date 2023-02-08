@@ -352,7 +352,6 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         plan_num_rand_blocks,
         output_attentions,
     ):
-
         # BigBirdPegasus block-sparse attention as suggested in paper
 
         # ITC:
@@ -1636,10 +1635,10 @@ BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
     Summarization example:
 
     ```python
-    >>> from transformers import PegasusTokenizer, BigBirdPegasusForConditionalGeneration
+    >>> from transformers import AutoTokenizer, BigBirdPegasusForConditionalGeneration
 
     >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained("google/bigbird-pegasus-large-arxiv")
-    >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
 
     >>> ARTICLE_TO_SUMMARIZE = (
     ...     "The dominant sequence transduction models are based on complex recurrent or convolutional neural "
@@ -1664,7 +1663,7 @@ BIGBIRD_PEGASUS_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1815,7 +1814,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1998,7 +1997,6 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
     @staticmethod  # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel.create_masks_for_block_sparse_attn
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
-
         batch_size, seq_length = attention_mask.size()
         if seq_length % block_size != 0:
             raise ValueError(
@@ -2141,7 +2139,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -2266,7 +2264,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -2291,7 +2288,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -2397,7 +2393,6 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
-
         # different to other models, BigBirdPegasus automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -2611,7 +2606,7 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
@@ -2634,9 +2629,9 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
@@ -2965,7 +2960,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PegasusTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -3030,9 +3025,9 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import PegasusTokenizer, BigBirdPegasusForCausalLM
+        >>> from transformers import AutoTokenizer, BigBirdPegasusForCausalLM
 
-        >>> tokenizer = PegasusTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
         >>> model = BigBirdPegasusForCausalLM.from_pretrained(
         ...     "google/bigbird-pegasus-large-arxiv", add_cross_attention=False
         ... )
@@ -3103,8 +3098,8 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

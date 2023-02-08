@@ -23,7 +23,14 @@ from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import rescale, resize, to_channel_dimension_format
-from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, is_batched, to_numpy_array, valid_images
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+)
 from ...utils import logging
 
 
@@ -84,7 +91,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_normalize: bool = True,
         do_color_quantize: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 256, "width": 256}
@@ -102,7 +109,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to (size["height"], size["width"]).
@@ -196,8 +203,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         do_color_quantize = do_color_quantize if do_color_quantize is not None else self.do_color_quantize
         clusters = clusters if clusters is not None else self.clusters
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

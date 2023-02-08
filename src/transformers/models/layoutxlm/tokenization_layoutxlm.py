@@ -247,7 +247,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         pad_token_label=-100,
         only_label_first_subword=True,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
@@ -462,7 +462,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -481,6 +481,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             word_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
+
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
@@ -613,9 +614,8 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "
@@ -736,7 +736,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -790,7 +790,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Prepares a sequence or a pair of sequences so that it can be used by the model. It adds special tokens,

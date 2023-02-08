@@ -136,7 +136,7 @@ class OpenAIGPTConfig(PretrainedConfig):
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.n_positions = n_positions
