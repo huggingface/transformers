@@ -119,9 +119,9 @@ def window_reverse(windows, window_size, height, width):
         window_size: (`int`)
             Window size
         height: (`int`)
-            Height of the resized image
+            Height of the resized audio
         width: (`int`)
-            Width of the resized image
+            Width of the resized audio
     """
     batch_size = int(windows.shape[0] / (height * width / window_size / window_size))
 
@@ -156,8 +156,8 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
 # Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clap
 def clap_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
-    return (caption_loss + image_loss) / 2.0
+    audio_loss = contrastive_loss(similarity.t())
+    return (caption_loss + audio_loss) / 2.0
 
 
 @dataclass
@@ -220,22 +220,22 @@ class CLAPAudioModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->CLAP,vision->audio,Vision->Audio
+# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->CLAP,vision->audio,Vision->Audio,audio->audio
 class CLAPOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image:(`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+            Contrastive loss for audio-text similarity.
+        logits_per_audio:(`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
+            The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
             similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`CLAPTextModel`].
-        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLAPAudioModel`].
+        audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The audio embeddings obtained by applying the projection layer to the pooled output of [`CLAPAudioModel`].
         text_model_output(`BaseModelOutputWithPooling`):
             The output of the [`CLAPTextModel`].
         audio_model_output(`BaseModelOutputWithPooling`):
@@ -243,10 +243,10 @@ class CLAPOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits_per_image: torch.FloatTensor = None
+    logits_per_audio: torch.FloatTensor = None
     logits_per_text: torch.FloatTensor = None
     text_embeds: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
+    audio_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
     audio_model_output: BaseModelOutputWithPooling = None
 
@@ -379,7 +379,7 @@ class CLAPAudioPatchEmbed(nn.Module):
 
             if height != self.img_size[0] or width != self.img_size[1]:
                 raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+                    f"Input audio size ({height}*{width}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
                 )
 
             global_hidden_states = self.proj(global_hidden_states)
@@ -428,7 +428,7 @@ class CLAPAudioPatchEmbed(nn.Module):
             _, _, height, width = hidden_states.shape
             if height != self.img_size[0] or width != self.img_size[1]:
                 raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+                    f"Input audio size ({height}*{width}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
                 )
             hidden_states = self.proj(hidden_states)
 
@@ -887,7 +887,7 @@ class CLAPAudioEncoder(nn.Module):
                     dim=int(config.hidden_size * 2**i_layer),
                     input_resolution=self.input_resolutions[i_layer],
                     depth=config.depths[i_layer],
-                    num_heads=config.num_heads[i_layer],
+                    num_heads=config.num_attention_heads[i_layer],
                     drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
                     downsample=CLAPAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
                 )
@@ -1767,12 +1767,13 @@ class CLAPPreTrainedModel(PreTrainedModel):
 
     config_class = CLAPTextConfig
     base_model_prefix = "clap"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
     _keys_to_ignore_on_load_missing = [r"position_ids", r"logit_scale_a", r"logit_scale_t"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
+
         if isinstance(module, CLAPTextEmbeddings):
             module.word_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
@@ -1783,7 +1784,18 @@ class CLAPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.query.weight, std=in_proj_std)
             nn.init.normal_(module.key.weight, std=in_proj_std)
             nn.init.normal_(module.value.weight, std=in_proj_std)
-        elif isinstance(module, (CLAPTextSelfOutput, CLAPTextOutput, CLAPTextIntermediate, CLAPTextPooler)):
+        elif isinstance(
+            module,
+            (
+                CLAPTextSelfOutput,
+                CLAPTextOutput,
+                CLAPTextIntermediate,
+                CLAPTextPooler,
+                CLAPAudioSelfOutput,
+                CLAPAudioIntermediate,
+                CLAPAudioOutput,
+            ),
+        ):
             factor = self.config.initializer_factor
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.dense.weight, std=in_proj_std)
@@ -1792,12 +1804,36 @@ class CLAPPreTrainedModel(PreTrainedModel):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.linear1.weight, std=in_proj_std)
             nn.init.normal_(module.linear2.weight, std=in_proj_std)
+        elif isinstance(module, CLAPAudioPatchEmbed):
+            factor = self.config.initializer_factor
+            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
+            nn.init.normal_(module.proj.weight, std=in_proj_std)
+        elif isinstance(module, CLAPAudioSelfAttention):
+            factor = self.config.initializer_factor
+            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
+            nn.init.normal_(module.query.weight, std=in_proj_std)
+            nn.init.normal_(module.key.weight, std=in_proj_std)
+            nn.init.normal_(module.value.weight, std=in_proj_std)
+        elif isinstance(module, CLAPAudioPatchMerging):
+            factor = self.config.initializer_factor
+            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
+            nn.init.normal_(module.reduction.weight, std=in_proj_std)
+        elif isinstance(module, CLAPAudioEncoder):
+            factor = self.config.initializer_factor
+            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
+            nn.init.normal_(module.head.weight, std=in_proj_std)
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
+        if isinstance(module, nn.Conv2d):
+            factor = self.config.initializer_factor
+            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
+            nn.init.normal_(module.weight, std=in_proj_std)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, CLAPTextEncoder):
@@ -1815,7 +1851,7 @@ class CLAPAudioModel(CLAPPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.audio_encoder.embeddings.patch_embedding
+        return self.audio_encoder.patch_embed.proj
 
     @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLAPAudioConfig)
@@ -1839,10 +1875,10 @@ class CLAPAudioModel(CLAPPreTrainedModel):
         >>> model = CLAPAudioModel.from_pretrained("laionai/clap-hsat-tiny")
         >>> processor = AutoProcessor.from_pretrained("laionai/clap-hsat-tiny")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://audios.cocodataset.org/val2017/000000039769.jpg"
+        >>> audio = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(audios=audio, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
@@ -2155,7 +2191,7 @@ class CLAPModel(CLAPPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        input_values: Optional[torch.FloatTensor] = None,
+        input_features: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
@@ -2176,16 +2212,16 @@ class CLAPModel(CLAPPreTrainedModel):
         >>> model = CLAPModel.from_pretrained("laion-ai/clap-htst-unfused-base")
         >>> processor = AutoProcessor.from_pretrained("laion-ai/clap-htst-unfused-base")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> url = "http://audios.cocodataset.org/val2017/000000039769.jpg"
         >>> # TODO audio here
 
         >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+        ...     text=["a photo of a cat", "a photo of a dog"], audios=audio, return_tensors="pt", padding=True
         ... )
 
         >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+        >>> logits_per_audio = outputs.logits_per_audio  # this is the audio-text similarity score
+        >>> probs = logits_per_audio.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
         # Use CLAP model's config for some fields (if specified) instead of those of audio & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -2195,8 +2231,7 @@ class CLAPModel(CLAPPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         audio_outputs = self.audio_model(
-            input_values=input_values,
-            attention_mask=attention_mask,
+            input_features=input_features,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -2211,7 +2246,7 @@ class CLAPModel(CLAPPreTrainedModel):
             return_dict=return_dict,
         )
 
-        audio_embeds = audio_outputs[1]
+        audio_embeds = audio_outputs[-1] if not return_dict else audio_outputs.embedding
         audio_embeds = self.audio_projection(audio_embeds)
 
         text_embeds = text_outputs[1]
@@ -2222,21 +2257,22 @@ class CLAPModel(CLAPPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, audio_embeds.t()) * logit_scale
-        logits_per_image = logits_per_text.t()
+        logit_scale_text = self.logit_scale_t.exp()
+        logit_scale_audio = self.logit_scale_a.exp()
+        logits_per_text = torch.matmul(text_embeds, audio_embeds.t()) * logit_scale_text
+        logits_per_audio = torch.matmul(audio_embeds, text_embeds.t()) * logit_scale_audio
 
         loss = None
         if return_loss:
             loss = clap_loss(logits_per_text)
 
         if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, audio_embeds, text_outputs, audio_outputs)
+            output = (logits_per_audio, logits_per_text, text_embeds, audio_embeds, text_outputs, audio_outputs)
             return ((loss,) + output) if loss is not None else output
 
         return CLAPOutput(
             loss=loss,
-            logits_per_image=logits_per_image,
+            logits_per_audio=logits_per_audio,
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
             audio_embeds=audio_embeds,
@@ -2341,7 +2377,7 @@ class CLAPAudioModelWithProjection(CLAPPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.audio_model.embeddings.patch_embedding
+        return self.audio_model.audio_encoder.patch_embed.proj
 
     @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLAPAudioModelOutput, config_class=CLAPAudioConfig)
@@ -2365,10 +2401,10 @@ class CLAPAudioModelWithProjection(CLAPPreTrainedModel):
         >>> model = CLAPAudioModelWithProjection.from_pretrained("openai/clip-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "http://audios.cocodataset.org/val2017/000000039769.jpg"
+        >>> audio = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(audios=audio, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> audio_embeds = outputs.audio_embeds

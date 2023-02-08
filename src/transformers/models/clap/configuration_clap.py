@@ -227,7 +227,7 @@ class CLAPAudioConfig(PretrainedConfig):
         hidden_size=96,
         projection_hidden_size=768,
         depths=[2, 2, 6, 2],
-        num_heads=[4, 8, 16, 32],
+        num_attention_heads=[4, 8, 16, 32],
         enable_fusion=False,
         hidden_dropout_prob=0.1,
         fusion_type=None,
@@ -257,7 +257,8 @@ class CLAPAudioConfig(PretrainedConfig):
         self.num_classes = num_classes
         self.hidden_size = hidden_size
         self.depths = depths
-        self.num_heads = num_heads
+        self.num_hidden_layers = len(depths)
+        self.num_attention_heads = num_attention_heads
         self.window_size = window_size
         self.enable_fusion = enable_fusion
         self.fusion_type = fusion_type
@@ -393,6 +394,7 @@ class CLAPConfig(PretrainedConfig):
 
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = initializer_factor
+        self.num_hidden_layers = self.text_config.num_hidden_layers + len(self.audio_config.depths)
 
     @classmethod
     def from_text_audio_configs(cls, text_config: CLAPTextConfig, audio_config: CLAPAudioConfig, **kwargs):

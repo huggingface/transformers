@@ -143,7 +143,7 @@ class CLAPAudioModelTester:
             patch_stride=self.patch_stride,
             projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
-            num_heads=self.num_heads,
+            num_attention_heads=self.num_heads,
             intermediate_size=self.intermediate_size,
             dropout=self.dropout,
             attention_dropout=self.attention_dropout,
@@ -448,7 +448,7 @@ class CLAPModelTester:
         with torch.no_grad():
             result = model(input_ids, input_features, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.audio_model_tester.batch_size, self.text_model_tester.batch_size)
+            result.logits_per_audio.shape, (self.audio_model_tester.batch_size, self.text_model_tester.batch_size)
         )
         self.parent.assertEqual(
             result.logits_per_text.shape, (self.text_model_tester.batch_size, self.audio_model_tester.batch_size)
@@ -740,7 +740,7 @@ class CLAPModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         self.assertEqual(
-            outputs.logits_per_image.shape,
+            outputs.logits_per_audio.shape,
             torch.Size((inputs.input_features.shape[0], inputs.input_ids.shape[0])),
         )
         self.assertEqual(
@@ -750,4 +750,4 @@ class CLAPModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs.logits_per_audio, expected_logits, atol=1e-3))
