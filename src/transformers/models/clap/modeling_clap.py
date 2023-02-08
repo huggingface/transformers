@@ -929,9 +929,10 @@ class CLAPAudioEncoder(nn.Module):
 
         self.avgpool = nn.AdaptiveAvgPool1d(1)
 
-        SF = config.spec_size // (2 ** (len(config.depths) - 1)) // self.patch_embed.patch_stride[0] // self.freq_ratio
+        division_factor = ((2 ** (len(config.depths) - 1)) * self.patch_embed.patch_stride[0] * self.freq_ratio)
+        kernel_size = config.spec_size // division_factor
         self.tscam_conv = nn.Conv2d(
-            in_channels=self.num_features, out_channels=config.num_classes, kernel_size=(SF, 3), padding=(0, 1)
+            in_channels=self.num_features, out_channels=config.num_classes, kernel_size=(kernel_size, 3), padding=(0, 1)
         )
         self.head = nn.Linear(config.num_classes, config.num_classes)
 
