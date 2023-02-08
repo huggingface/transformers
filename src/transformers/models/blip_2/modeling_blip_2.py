@@ -166,12 +166,7 @@ class Blip2Attention(nn.Module):
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
-
-        # qkv_bias = None
-        # if self.q_bias is not None:
-        #     qkv_bias = torch.cat((self.q_bias, torch.zeros_like(self.v_bias, requires_grad=False), self.v_bias))
-
-        # mixed_qkv = nn.functional.linear(input=hidden_states, weight=self.qkv.weight, bias=qkv_bias)
+        
         mixed_qkv = self.qkv(hidden_states)
 
         mixed_qkv = mixed_qkv.reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads).permute(
