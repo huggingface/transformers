@@ -84,7 +84,7 @@ class CLAPTextConfig(PretrainedConfig):
 
     Examples:
 
-    ```python
+    ```python 
     >>> from transformers import CLAPTextConfig, CLAPTextModel
 
     >>> # Initializing a RoBERTa configuration
@@ -172,31 +172,66 @@ class CLAPAudioConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
+        window_size (`int`, *optional*, defaults to 8):
+            [description]
+        mel_bins (`int`, *optional*, defaults to 64):
+            [description]
+        spec_size (`int`, *optional*, defaults to 256):
+            [description]
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
+            [description]
+        patch_size (`int`, *optional*, defaults to 4):
+            [description]
+        patch_stride (`list`, *optional*, defaults to `[4, 4]`):
+            [description]
+        num_classes (`int`, *optional*, defaults to 527):
+            [description]
+        hidden_size (`int`, *optional*, defaults to 96):
+            [description]
+        projection_hidden_size (`int`, *optional*, defaults to 768):
+            [description]
+        depths (`list`, *optional*, defaults to `[2, 2, 6, 2]`):
+            [description]
+        num_attention_heads (`list`, *optional*, defaults to `[4, 8, 16, 32]`):
+            [description]
+        enable_fusion (`bool`, *optional*, defaults to `False`):
+            [description]
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            [description]
+        fusion_type (`[type]`, *optional*):
+            [description]
         image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
-            The size (resolution) of each patch.
-        hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"relu"`,
-            `"relu"`, `"selu"` and `"relu_new"` ``"relu"` are supported. layer_norm_eps (`float`, *optional*, defaults
-            to 1e-5): The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
+            [description]
+        input_channels (`int`, *optional*, defaults to 3):
+            [description]
+        patch_embed_input_channels (`int`, *optional*, defaults to 1):
+            [description]
+        flatten_patch_embeds (`bool`, *optional*, defaults to `True`):
+            [description]
+        patch_embeds_hidden_size (`int`, *optional*, defaults to 96):
+            [description]
+        enable_patch_layer_norm (`bool`, *optional*, defaults to `True`):
+            [description]
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            [description]
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
+            [description]
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            [description]
+        mlp_ratio (`float`, *optional*, defaults to 4.0):
+            [description]
+        aff_block_r (`int`, *optional*, defaults to 4):
+            [description]
+        num_hidden_layers (`int`, *optional*, defaults to 4):
+            [description]
+        enable_patch_fusion (`bool`, *optional*, defaults to `False`):
+            [description]
+        projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
+            [description]
+        layer_norm_eps (`[type]`, *optional*, defaults to `1e-5`):
+            [description]
+        initializer_factor (`float`, *optional*, defaults to 1.0):
+            [description]
 
     Example:
 
@@ -318,6 +353,14 @@ class CLAPConfig(PretrainedConfig):
             Dimentionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLAP implementation.
+        fusion_num_hidden_layers (`int`, *optional*, defaults to 2):
+            [description]
+        projection_dim (`int`, *optional*, defaults to 512):
+            [description]
+        projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
+            [description]
+        initializer_factor (`float`, *optional*, defaults to 1.0):
+            [description]
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
