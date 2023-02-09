@@ -416,6 +416,9 @@ class TrainingArguments:
                 - fsdp_min_num_params (`int`, *optional*, defaults to `0`):
                     FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
                     passed).
+                - fsdp_transformer_layer_cls_to_wrap (`List[str]`, *optional*):
+                    List of transformer layer class names (case-sensitive) to wrap, e.g, `BertLayer`, `GPTJBlock`, `T5Block` ....
+                    (useful only when `fsdp` flag is passed).
                 - fsdp_backward_prefetch (`str`, *optional*)
                     FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when
                     `fsdp` field is passed).
@@ -948,7 +951,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
+                "This parameter is deprecated. Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
                 "(useful only when `fsdp` flag is passed)."
             )
         },
@@ -1359,20 +1362,26 @@ class TrainingArguments:
             getattr(self.fsdp_config, "fsdp_min_num_params", 0), self.fsdp_min_num_params
         )
 
+        if self.fsdp_transformer_layer_cls_to_wrap is not None:
+            warnings.warn("using `--fsdp_transformer_layer_cls_to_wrap` is deprecated. Use fsdp_config instead ", FutureWarning)
+            self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = getattr(self.fsdp_config, "fsdp_transformer_layer_cls_to_wrap", [])+[self.fsdp_transformer_layer_cls_to_wrap]
+
         if len(self.fsdp) == 0 and self.fsdp_config["fsdp_min_num_params"] > 0:
             warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
 
-        if len(self.fsdp) == 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+        if len(self.fsdp) == 0 and self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] is not None:
             warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
 
         if (
             len(self.fsdp) > 0
             and self.fsdp_config["fsdp_min_num_params"] > 0
-            and self.fsdp_transformer_layer_cls_to_wrap is not None
+            and self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] is not None
         ):
             raise ValueError(
                 "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
             )
+        self.fsdp_config["xla"] = getattr(self.fsdp_config, "xla", False)
+        self.fsdp_config["xla_fsdp_grad_ckpt"] = getattr(self.fsdp_config, "xla_fsdp_grad_ckpt", False)
         if self.fsdp_config["xla"]:
             if self.fsdp is not "":
                 # gather fsdp configuration parameters into a dictionary from specified json file
@@ -1385,7 +1394,7 @@ class TrainingArguments:
                     self.xla_fsdp_config["buffer_dtype"] = getattr(torch, self.xla_fsdp_config["buffer_dtype"])
             else:
                 warnings.warn("XLA FSDP can be used only when `--fsdp` is specified.")
-        else
+        else:
             if self.fsdp_config["xla_fsdp_grad_ckpt"]:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 

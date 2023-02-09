@@ -417,7 +417,7 @@ class Trainer:
                 raise ValueError(
                     "Using --fsdp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
-            if args.local_rank == -1:
+            if not is_torch_tpu_available() and args.local_rank == -1:
                 raise ValueError("Using fsdp only works in distributed training.")
 
             # dep_version_check("torch>=1.12.0")
@@ -1419,7 +1419,7 @@ class Trainer:
                 ).to(self.args.device)
         # Distributed training using PyTorch FSDP
         elif self.fsdp is not None:
-            if not self.fsdp_config["xla"]:
+            if not self.args.fsdp_config["xla"]:
                 # PyTorch FSDP!
                 from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, MixedPrecision
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -1437,16 +1437,18 @@ class Trainer:
                         auto_wrap_policy = functools.partial(
                             size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
                         )
-                    elif self.args.fsdp_transformer_layer_cls_to_wrap is not None:
-                        transformer_cls_to_wrap = get_module_class_from_name(
-                            model, self.args.fsdp_transformer_layer_cls_to_wrap
-                        )
-                        if transformer_cls_to_wrap is None:
-                            raise Exception("Could not find the transformer layer class to wrap in the model.")
+                    elif self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] is not None:
+                        transformer_cls_to_wrap = set()
+                        for layer_class in self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]:
+                            transformer_cls = get_module_class_from_name(model, layer_class)
+                            if transformer_cls is None:
+                                raise Exception("Could not find the transformer layer class to wrap in the model.")
+                            else:
+                                transformer_cls_to_wrap.add(transformer_cls)
                         auto_wrap_policy = functools.partial(
                             transformer_auto_wrap_policy,
                             # Transformer layer class to wrap
-                            transformer_layer_cls={transformer_cls_to_wrap},
+                            transformer_layer_cls=transformer_cls_to_wrap,
                         )
                 mixed_precision_policy = None
                 dtype = None
@@ -1469,7 +1471,7 @@ class Trainer:
                         forward_prefetch=self.forword_prefetch,
                     limit_all_gathers=self.limit_all_gathers,
                     )
-            else
+            else:
                 try:
                     from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
                     from torch_xla.distributed.fsdp import checkpoint_module
@@ -1478,13 +1480,13 @@ class Trainer:
                     raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
                 auto_wrap_policy = None
                 auto_wrapper_callable = None
-                if self.fsdp_config["fsdp_min_num_params"] > 0:
+                if self.args.fsdp_config["fsdp_min_num_params"] > 0:
                     auto_wrap_policy = functools.partial(
-                        size_based_auto_wrap_policy, min_num_params=self.fsdp_config["fsdp_min_num_params"]
+                        size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
                     )
-                elif self.args.fsdp_transformer_layer_cls_to_wrap is not None:
+                elif self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] is not None:
                     transformer_cls_to_wrap = set()
-                    for layer_class in self.args.xla_fsdp_transformer_layer_cls_to_wrap:
+                    for layer_class in self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]:
                         transformer_cls = get_module_class_from_name(model, layer_class)
                         if transformer_cls is None:
                             raise Exception("Could not find the transformer layer class to wrap in the model.")
@@ -1496,7 +1498,7 @@ class Trainer:
                         transformer_layer_cls=transformer_cls_to_wrap,
                     )
                 fsdp_kwargs = self.args.xla_fsdp_config
-                if self.fsdp_config["xla_fsdp_grad_ckpt"]:
+                if self.args.fsdp_config["xla_fsdp_grad_ckpt"]:
                     # Apply gradient checkpointing to auto-wrapped sub-modules if specified
                     auto_wrapper_callable = lambda m, *args, **kwargs: FSDP(checkpoint_module(m), *args, **kwargs)
                 # Wrap the base model with an outer FSDP wrapper
@@ -1683,7 +1685,6 @@ class Trainer:
             and self.sharded_ddp != ShardedDDPOption.SIMPLE
             or is_sagemaker_mp_enabled()
             or self.fsdp is not None
-            or self.args.xla_fsdp is not None
         )
         if args.deepspeed:
             deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
