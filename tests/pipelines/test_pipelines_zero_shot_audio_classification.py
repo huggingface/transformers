@@ -56,7 +56,6 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     def test_small_model_pt(self):
         pass
 
-
     def test_small_model_tf(self):
         pass
 
