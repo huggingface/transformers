@@ -52,6 +52,9 @@ SPECIAL_CASES_TO_ALLOW = {
     # used internally in the configuration class file
     "T5Config": ["feed_forward_proj"],
     # used internally in the configuration class file
+    # `tokenizer_class` get default value `T5Tokenizer` intentionally
+    "MT5Config": ["feed_forward_proj", "tokenizer_class"],
+    # used internally in the configuration class file
     "LongT5Config": ["feed_forward_proj"],
     # used internally in the configuration class file
     "SwitchTransformersConfig": ["feed_forward_proj"],
