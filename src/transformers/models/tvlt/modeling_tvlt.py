@@ -759,13 +759,7 @@ class TvltModel(TvltPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        (
-            pixel_embedding_output,
-            pixel_mask,
-        ) = self.pixel_embeddings(
-            pixel_values,
-            pixel_mask,
-        )
+        pixel_embedding_output, pixel_mask = self.pixel_embeddings(pixel_values, pixel_mask)
 
         (
             audio_embedding_output,
