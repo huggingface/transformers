@@ -1012,7 +1012,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         attention_mask: torch.Tensor,
         input_shape: Tuple[int],
         device: torch.device,
-        is_decoder: bool,
         has_query: bool = False,
     ) -> torch.Tensor:
         """
@@ -1035,46 +1034,8 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
             extended_attention_mask = attention_mask[:, None, :, :]
         elif attention_mask.dim() == 2:
             # Provided a padding mask of dimensions [batch_size, seq_length]
-            # - if the model is a decoder, apply a causal mask in addition to the padding mask
-            # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            if is_decoder:
-                batch_size, seq_length = input_shape
-
-                seq_ids = torch.arange(seq_length, device=device)
-                causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
-
-                # add a prefix ones mask to the causal mask
-                # causal and attention masks must have same type with pytorch version < 1.3
-                causal_mask = causal_mask.to(attention_mask.dtype)
-
-                if causal_mask.shape[1] < attention_mask.shape[1]:
-                    prefix_seq_len = attention_mask.shape[1] - causal_mask.shape[1]
-                    if has_query:  # UniLM style attention mask
-                        causal_mask = torch.cat(
-                            [
-                                torch.zeros(
-                                    (batch_size, prefix_seq_len, seq_length),
-                                    device=device,
-                                    dtype=causal_mask.dtype,
-                                ),
-                                causal_mask,
-                            ],
-                            axis=1,
-                        )
-                    causal_mask = torch.cat(
-                        [
-                            torch.ones(
-                                (batch_size, causal_mask.shape[1], prefix_seq_len),
-                                device=device,
-                                dtype=causal_mask.dtype,
-                            ),
-                            causal_mask,
-                        ],
-                        axis=-1,
-                    )
-                extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
-            else:
-                extended_attention_mask = attention_mask[:, None, None, :]
+            # - the model is an encoder, so make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
+            extended_attention_mask = attention_mask[:, None, None, :]
         else:
             raise ValueError(
                 "Wrong shape for input_ids (shape {}) or attention_mask (shape {})".format(
@@ -1103,7 +1064,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        is_decoder=False,  # TODO remove this argument
     ):
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
@@ -1149,16 +1109,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        if is_decoder:
-            extended_attention_mask = self.get_extended_attention_mask(
-                attention_mask,
-                input_shape,
-                device,
-                is_decoder,
-                has_query=(query_embeds is not None),
-            )
-        else:
-            extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, device, is_decoder)
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, device)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]

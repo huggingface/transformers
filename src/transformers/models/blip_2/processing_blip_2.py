@@ -34,7 +34,7 @@ class Blip2Processor(ProcessorMixin):
         image_processor (`BlipImageProcessor`):
             An instance of [`BlipImageProcessor`]. The image processor is a required input.
         tokenizer (`AutoTokenizer`):
-            An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
+            An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "BlipImageProcessor"
@@ -129,19 +129,19 @@ class Blip2Processor(ProcessorMixin):
 
         return encoding_image_processor
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to BertTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
+        to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
