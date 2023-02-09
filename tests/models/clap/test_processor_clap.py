@@ -35,7 +35,7 @@ NOTIMESTAMPS = 50362
 @require_sentencepiece
 class CLAPProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "laionai/clap-tiny-hsat"
+        self.checkpoint = "ybelkada/clap-htsat-unfused"
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):

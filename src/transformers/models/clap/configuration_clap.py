@@ -84,7 +84,7 @@ class CLAPTextConfig(PretrainedConfig):
 
     Examples:
 
-    ```python 
+    ```python
     >>> from transformers import CLAPTextConfig, CLAPTextModel
 
     >>> # Initializing a RoBERTa configuration
