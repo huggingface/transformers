@@ -102,18 +102,18 @@ As you can see, the dataset is split into train and test sets already. Take a lo
 yourself with the features.
 
 ```py
->>> dataset["train"][0]
+>>> dataset["train"].features
 ```
 
 Here's what the individual fields represent:
 * `id`: the example's id
 * `image`: a PIL.Image.Image object containing the document image
 * `query`: the question string - natural language asked question, in several languages
-* `answers`: a list of correct answers provided by annotators
+* `answers`: a list of correct answers provided by human annotators
 * `words` and `bounding_boxes`: the results of OCR, which we will not use here
 * `answer`: an answer matched by a different model which we will not use here
 
-Let's leave only English questions, and drop the answer feature which appears to contain predictions by another model.
+Let's leave only English questions, and drop the `answer` feature which appears to contain predictions by another model.
 We'll also take the first of the answers from the set provided by the annotators. Alternatively, you can randomly sample it.
 
 ```py
@@ -124,7 +124,7 @@ We'll also take the first of the answers from the set provided by the annotators
 ```
 
 Note that the LayoutLMv2 checkpoint that we use in this guide has been trained with `max_position_embeddings = 512` (you can
-find this information in the [checkpoint's `config.json` file](https://huggingface.co/microsoft/layoutlmv2-base-uncased/blob/main/config.json)).
+find this information in the [checkpoint's `config.json` file](https://huggingface.co/microsoft/layoutlmv2-base-uncased/blob/main/config.json#L18)).
 We can truncate the examples but to avoid the situation where the answer might be at the end of a large document and end up truncated,
 let's remove the few examples where the embedding is likely to end up longer than 512. If most of the documents in your dataset are long, you
 may need to choose a different pretrained model checkpoint.
@@ -157,8 +157,7 @@ Finally, the data exploration won't be complete if we don't peek at an image exa
 ## Preprocess the data
 
 The Document Question Answering task is a multimodal task, and you need to make sure that the inputs from each modality
-are preprocessed according to model's expectations. Let's start by loading the [`~LayoutLMv2Processor`], which internally
-combines an image processor that can handle image data and a tokenizer that can encode text data.
+are preprocessed according to the model's expectations. Let's start by loading the [`~LayoutLMv2Processor`], which internally combines an image processor that can handle image data and a tokenizer that can encode text data.
 
 ```py
 >>> from transformers import AutoProcessor
