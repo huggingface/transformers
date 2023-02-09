@@ -73,10 +73,16 @@ class PipelineTesterMixin:
         return config.__class__ if config is not None else None
 
     def run_task_tests(self, task):
+        """Run pipeline tests for a specific `task`
+
+        Args:
+            task (`str`):
+                A task name. This should be a key in the mapping `pipeline_test_mapping`.
+        """
         if self.framework not in self.supported_frameworks:
             self.skipTest(
                 f"Test is skipped: Could not determined the framework. This should be in {self.supported_frameworks}, "
-                f"but got {self.framework})."
+                f"but got `{self.framework}`)."
             )
 
         if task not in pipeline_test_mapping:
@@ -97,7 +103,7 @@ class PipelineTesterMixin:
         model_architectures = model_mapping.get(self.config_class, None)
         if model_architectures is None:
             self.skipTest(
-                f"Test is skipped: No model architecture under framework {self.framework} with the configuration class "
+                f"Test is skipped: No model architecture under framework `{self.framework}` with the configuration class "
                 f"`{self.config_class.__name__}` is found for the task `{task}`."
             )
 
@@ -127,11 +133,41 @@ class PipelineTesterMixin:
             self.run_model_pipeline_tests(task, repo_name, model_architecture, tokenizer_names, processor_names)
 
     def run_model_pipeline_tests(self, task, repo_name, model_architecture, tokenizer_names, processor_names):
+        """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class names
+
+        Args:
+            task (`str`):
+                A task name. This should be a key in the mapping `pipeline_test_mapping`.
+            repo_name (`str`):
+                A model repository id on the Hub.
+            model_architecture (`type`):
+                A subclass of `PretrainedModel` or `PretrainedModel`.
+            tokenizer_names (`List[str]`):
+                A list of names of a subclasses of `PreTrainedTokenizerFast` or `PreTrainedTokenizer`.
+            processor_names (`List[str]`):
+                A list of names of subclasses of `BaseImageProcessor` or `FeatureExtractionMixin`.
+        """
         for tokenizer_name in tokenizer_names:
             for processor_name in processor_names:
                 self.run_pipeline_test(task, repo_name, model_architecture, tokenizer_name, processor_name)
 
     def run_pipeline_test(self, task, repo_name, model_architecture, tokenizer_name, processor_name):
+        """Run pipeline tests for a specific `task` with the give model class and tokenizer/processor class name
+
+        The model will be loaded from a model repository on the Hub.
+
+        Args:
+            task (`str`):
+                A task name. This should be a key in the mapping `pipeline_test_mapping`.
+            repo_name (`str`):
+                A model repository id on the Hub.
+            model_architecture (`type`):
+                A subclass of `PretrainedModel` or `PretrainedModel`.
+            tokenizer_name (`str`):
+                The name of a subclass of `PreTrainedTokenizerFast` or `PreTrainedTokenizer`.
+            processor_name (`str`):
+                The name of a subclass of `BaseImageProcessor` or `FeatureExtractionMixin`.
+        """
         repo_id = f"hf-internal-testing/{repo_name}"
 
         tokenizer = None
@@ -159,7 +195,8 @@ class PipelineTesterMixin:
         if hasattr(model, "eval"):
             model = model.eval()
 
-        # Get ... in order to use `get_test_pipeline` and `run_pipeline_test`
+        # Get an instance of the corresponding class `XXXPipelineTests` in order to use `get_test_pipeline` and
+        # `run_pipeline_test`.
         task_test = pipeline_test_mapping[task]["test"]()
 
         pipeline, examples = task_test.get_test_pipeline(model, tokenizer, processor)
