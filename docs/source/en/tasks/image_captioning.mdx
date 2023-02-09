@@ -38,7 +38,7 @@ from huggingface_hub import notebook_login
 notebook_login()
 ```
 
-## Load the Pokemons dataset
+## Load the Pokémon BLIP captions dataset
 
 Use the 🤗 Dataset library to load a dataset that consists of {image-caption} pairs. If you are looking for a more customizable treatment of the dataset, you can follow [this notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/GIT/Fine_tune_GIT_on_an_image_captioning_dataset.ipynb). 
 
@@ -58,7 +58,7 @@ DatasetDict({
 })
 ```
 
-Notice that the dataset has got two features namely `image` and `text` which are self-explanatory. 
+The dataset has two features, `image` and `text`.
 
 <Tip>
 
@@ -75,7 +75,7 @@ train_ds = ds["train"]
 test_ds = ds["test"]
 ```
 
-Visualize a couple of samples from the training set. 
+Let's visualize a couple of samples from the training set. 
 
 
 ```python
@@ -106,7 +106,7 @@ plot_images(sample_images_to_visualize, sample_captions)
 
 ## Preprocess the dataset
 
-Since the dataset has two different modalities (image and text), the pre-processing pipeline will include pre-processing of the images as well the text (the captions).
+Since the dataset has two modalities (image and text), the pre-processing pipeline will preprocess images and the captions.
 
 To do so, load the processor class associated with the model you are about to fine-tune. 
 
@@ -132,7 +132,7 @@ train_ds.set_transform(transforms)
 test_ds.set_transform(transforms)
 ```
 
-With the datasets ready, proceed to setting up the model for fine-tuning. 
+With the dataset ready, you can now set up the model for fine-tuning. 
 
 ## Load a base model
 
@@ -147,7 +147,7 @@ model = AutoModelForCausalLM.from_pretrained(checkpoint)
 
 ## Evaluate
 
-For evaluating image captioning models, the typical metrics are [Rouge Score](https://huggingface.co/spaces/evaluate-metric/rouge) and [Word Error Rate](https://huggingface.co/spaces/evaluate-metric/wer). For this guide, you will use the Word Error Rate (WER). 
+Image captioning models are typically evaluated with the [Rouge Score](https://huggingface.co/spaces/evaluate-metric/rouge) or [Word Error Rate](https://huggingface.co/spaces/evaluate-metric/wer). For this guide, you will use the Word Error Rate (WER). 
 
 Use the 🤗 Evaluate library to do so. For potential limitations and other gotchas of the WER, refer to [this guide](https://huggingface.co/spaces/evaluate-metric/wer). 
 
@@ -170,9 +170,9 @@ def compute_metrics(eval_pred):
 
 ## Train!
 
-Now, you are ready to start fine-tuning the model. You will [🤗 Trainer](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.Trainer) for this. 
+Now, you are ready to start fine-tuning the model. You will the 🤗 [`Trainer`] for this. 
 
-First, define the training arguments using [`TrainingArguments`](https://huggingface.co/docs/transformers/v4.26.0/en/main_classes/trainer#transformers.TrainingArguments). Then pass them along with the datasets and the model to 🤗 Trainer. To start training, simply call `train()` on the `Trainer` object.
+First, define the training arguments using [`TrainingArguments`]. Then pass them along with the datasets and the model to 🤗 Trainer. To start training, simply call [`~Trainer.train`] on the [`Trainer`] object.
 
 
 ```python
@@ -211,9 +211,9 @@ trainer = Trainer(
 trainer.train()
 ```
 
-You should expect to see the training loss going down smoothly as training progresses.
+You should see the training loss drop smoothly as training progresses.
 
-Once training is completed, share your model to the Hub with the [`push_to_hub()`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.Trainer.push_to_hub) method so everyone can use your model:
+Once training is completed, share your model to the Hub with the [`~Trainer.push_to_hub`] method so everyone can use your model:
 
 
 ```python
@@ -247,7 +247,7 @@ inputs = processor(images=image, return_tensors="pt").to(device)
 pixel_values = inputs.pixel_values
 ```
 
-Perform inference and decode the predictions. 
+Call [`generate`] and decode the predictions. 
 
 ```python
 generated_ids = model.generate(pixel_values=pixel_values, max_length=50)
@@ -258,4 +258,4 @@ print(generated_caption)
 a drawing of a pink and blue pokemon
 ```
 
-Looks like the fine-tuned model generated a good caption. 
+Looks like the fine-tuned model generated a pretty good caption!
