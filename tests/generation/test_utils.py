@@ -17,8 +17,6 @@
 import inspect
 import unittest
 
-import numpy as np
-
 from transformers import is_torch_available, pipeline
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -40,7 +38,6 @@ if is_torch_available():
         ImageGPTForCausalImageModeling,
         Speech2TextForConditionalGeneration,
         SpeechEncoderDecoderModel,
-        T5ForConditionalGeneration,
         VisionEncoderDecoderModel,
         top_k_top_p_filtering,
     )
@@ -1792,6 +1789,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     # setting framework_dependent_parameters needs to be gated, just like its contents' imports
     if is_torch_available():
         framework_dependent_parameters = {
+            "AutoModelForCausalLM": AutoModelForCausalLM,
             "AutoModelForSeq2SeqLM": AutoModelForSeq2SeqLM,
             "LogitsProcessorList": LogitsProcessorList,
             "MinLengthLogitsProcessor": MinLengthLogitsProcessor,
@@ -2094,219 +2092,8 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         output = generator(prompt, stop_sequence=" number")
         self.assertEqual(output, [{"generated_text": "Hello I believe in in in number"}])
 
-    def test_max_new_tokens_encoder_decoder(self):
-        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
-        bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
-            torch_device
-        )
-        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        self.assertEqual(list(input_ids.shape), [1, 29])
-
-        max_new_tokens = 3
-        bart_model.config.max_length = 20
-        bart_model.config.eos_token_id = None
-
-        # Encoder decoder call
-        outputs = bart_model.generate(input_ids, max_new_tokens=max_new_tokens)
-        # 1 BOS + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 4])
-
-        # Decoder only call
-        outputs = bart_model.generate(decoder_input_ids=input_ids, max_new_tokens=max_new_tokens)
-        # 29 + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 32])
-
-        # Encoder decoder call > 20
-        outputs = bart_model.generate(max_new_tokens=max_new_tokens + 20)
-
-        # 1 BOS + 20 + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 24])
-
-    def test_max_new_tokens_decoder_only_contrastive_search_t5(self):
-        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
-        t5_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-t5")
-        t5_model = T5ForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-t5").to(torch_device)
-        input_ids = t5_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        self.assertEqual(list(input_ids.shape), [1, 56])
-
-        max_new_tokens = 3
-        t5_model.config.max_length = 20
-        t5_model.config.eos_token_id = None
-
-        # Encoder decoder call
-        outputs = t5_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
-        # 1 BOS + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 4])
-
-        # Decoder only call
-        outputs = t5_model.generate(
-            decoder_input_ids=input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4
-        )
-        # 56 + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 59])
-
-        # Encoder decoder call > 20
-        outputs = t5_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
-
-        # 1 BOS + 20 + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 24])
-
-    def test_max_new_tokens_decoder_only_contrastive_search_bart(self):
-        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
-        bart_tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
-            torch_device
-        )
-        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        self.assertEqual(list(input_ids.shape), [1, 29])
-
-        max_new_tokens = 3
-        bart_model.config.max_length = 20
-        bart_model.config.eos_token_id = None
-
-        # Encoder decoder call
-        outputs = bart_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
-        # 1 BOS + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 4])
-
-        # Decoder only call
-        outputs = bart_model.generate(
-            decoder_input_ids=input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4
-        )
-        # 29 + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 32])
-
-        # Encoder decoder call > 20
-        outputs = bart_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
-
-        # 1 BOS + 20 + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 24])
-
-    def test_max_new_tokens_decoder_only_contrastive_search_gptj(self):
-        article = """Justin Timberlake."""
-        gptj_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gptj")
-        gptj_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gptj").to(torch_device)
-        input_ids = gptj_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        self.assertEqual(list(input_ids.shape), [1, 9])
-
-        max_new_tokens = 3
-        gptj_model.config.max_length = 20
-
-        # call < 20
-        outputs = gptj_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
-
-        # 9 input_ids + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 12])
-
-        # call > 20
-        outputs = gptj_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
-
-        # 1 BOS token + 23 new tokens
-        self.assertEqual(list(outputs.shape), [1, 24])
-
-    def test_max_new_tokens_decoder_only_contrastive_search_gpt2(self):
-        article = """Justin Timberlake."""
-        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        gpt2_model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-        input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        self.assertEqual(list(input_ids.shape), [1, 9])
-
-        max_new_tokens = 3
-        gpt2_model.config.max_length = 20
-
-        # call < 20
-        outputs = gpt2_model.generate(input_ids, max_new_tokens=max_new_tokens, penalty_alpha=0.6, top_k=4)
-
-        # 9 input_ids + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 12])
-
-        # call > 20
-        outputs = gpt2_model.generate(max_new_tokens=max_new_tokens + 20, penalty_alpha=0.6, top_k=4)
-
-        # 1 BOS token + 23 new tokens
-        self.assertEqual(list(outputs.shape), [1, 24])
-
-    def test_max_new_tokens_decoder_only(self):
-        article = """Justin Timberlake."""
-        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        gpt2_model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-        input_ids = gpt2_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-
-        self.assertEqual(list(input_ids.shape), [1, 9])
-
-        max_new_tokens = 3
-        gpt2_model.config.max_length = 20
-
-        # call < 20
-        outputs = gpt2_model.generate(input_ids, max_new_tokens=max_new_tokens)
-
-        # 9 input_ids + 3 new tokens
-        self.assertEqual(list(outputs.shape), [1, 12])
-
-        # call > 20
-        outputs = gpt2_model.generate(max_new_tokens=max_new_tokens + 20)
-
-        # 1 BOS token + 23 new tokens
-        self.assertEqual(list(outputs.shape), [1, 24])
-
-    def test_encoder_decoder_generate_with_inputs_embeds(self):
-        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
-        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart", max_length=5).to(
-            torch_device
-        )
-        model.config.eos_token_id = None
-        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-        inputs_embeds = model.get_input_embeddings()(input_ids)
-
-        output_sequences = model.generate(inputs_embeds=inputs_embeds)
-
-        # make sure model generated correctly until `max_length`
-        self.assertEqual(output_sequences.shape, (1, 5))
-
-    def test_encoder_decoder_generate_attention_mask(self):
-        articles = ["Timberlake", "Jessica Biel, welcome to parenthood among other things"]
-        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        # need extrem generation values here to force this test
-        # to fail when `attention_mask` is not correctly treated in generate
-        model = BartForConditionalGeneration.from_pretrained(
-            "hf-internal-testing/tiny-random-bart", max_length=50, num_beams=5, num_return_sequences=5
-        ).to(torch_device)
-
-        model.config.eos_token_id = None
-        input_ids = tokenizer(articles[0], return_tensors="pt").input_ids.to(torch_device)
-        input_ids_batched = tokenizer(articles, padding=True, return_tensors="pt").input_ids.to(torch_device)
-
-        output_sequences_batched = model.generate(
-            input_ids=input_ids_batched, return_dict_in_generate=True, output_scores=True
-        )
-        output_sequences = model.generate(input_ids=input_ids, return_dict_in_generate=True, output_scores=True)
-
-        batched_out = output_sequences_batched.sequences_scores
-        out = output_sequences.sequences_scores
-
-        diff = (batched_out[:5].sum() - out.sum()).abs()
-
-        self.assertTrue(diff < 1e-4)
-
-    def test_generate_input_ids_as_kwarg(self):
-        article = """I need input_ids to generate"""
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=15).to(torch_device)
-        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-        output_sequences_kwargs = model.generate(input_ids=input_ids).cpu()
-        output_sequences = model.generate(input_ids).cpu()
-
-        self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
-        self.assertEqual(output_sequences.shape, (1, 15))
-
     def test_generate_non_nlp_input_ids_as_kwarg(self):
+        # PT-only test: AFAIK there is no non-NLP model architecture in TF that supports `input_ids` as its only input
         model = ImageGPTForCausalImageModeling.from_pretrained(
             "hf-internal-testing/tiny-random-imagegpt", max_length=10
         ).to(torch_device)
@@ -2317,28 +2104,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
         self.assertEqual(output_sequences.shape, (3, 10))
-
-    def test_generate_input_ids_as_encoder_kwarg(self):
-        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
-        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart", max_length=5).to(
-            torch_device
-        )
-        model.config.eos_token_id = None
-        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-        output_sequences_kwargs = model.generate(input_ids=input_ids).cpu()
-        output_sequences = model.generate(input_ids).cpu()
-
-        self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
-        self.assertEqual(output_sequences.shape, (1, 5))
-
-    def test_generate_inputs_and_encoder_kwargs(self):
-        article = """I need input_ids to generate"""
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2", max_length=10).to(torch_device)
-        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
-        with self.assertRaises(ValueError):
-            model.generate(input_ids, input_ids=input_ids)
 
     def test_generate_too_many_encoder_kwargs(self):
         article = """I need input_ids to generate"""
@@ -2396,165 +2161,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
         self.assertListEqual(output_sequences_no_mask.tolist(), output_sequences_with_mask.tolist())
 
-    def test_transition_scores_greedy_search(self):
-        articles = ["Justin Timberlake", "Michael Phelps"]
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer.pad_token = tokenizer.eos_token
-
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-
-        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(
-            input_ids=input_ids,
-            max_new_tokens=5,
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=None,
-            return_dict_in_generate=True,
-            output_scores=True,
-        )
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores)
-        expected_scores = np.array(
-            [
-                [0.3596273, 0.39646253, 0.46157718, 0.4594633, 0.44866616],
-                [0.34934354, 0.4935004, 0.6373219, 0.5173545, 0.57517034],
-            ]
-        )
-        self.assertTrue(np.allclose(transition_scores.cpu().numpy(), expected_scores))
-
-    def test_transition_scores_greedy_search_normalized(self):
-        articles = ["Justin Timberlake", "Michael Phelps"]
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer.pad_token = tokenizer.eos_token
-
-        model = GPT2LMHeadModel.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-
-        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(
-            input_ids=input_ids,
-            max_new_tokens=5,
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=None,
-            return_dict_in_generate=True,
-            output_scores=True,
-        )
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True)
-        expected_scores = np.array(
-            [
-                [-6.5532393, -6.5158753, -6.451863, -6.4527144, -6.459402],
-                [-6.5685124, -6.4277077, -6.282607, -6.399295, -6.340927],
-            ]
-        )
-        self.assertTrue(np.allclose(transition_scores.cpu().numpy(), expected_scores))
-
-    def test_transition_scores_beam_search_encoder_decoder(self):
-        articles = [
-            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
-            "Michael Phelps is arguably the most decorated Olympian of all time.",
-        ]
-        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        model = BartForConditionalGeneration.from_pretrained(
-            "hf-internal-testing/tiny-random-bart",
-            max_length=10,
-            num_beams=4,
-            num_return_sequences=2,
-            eos_token_id=None,
-            return_dict_in_generate=True,
-            output_scores=True,
-            length_penalty=0.0,
-        )
-        model = model.to(torch_device)
-
-        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(input_ids=input_ids)
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-        transition_scores_sum = transition_scores.sum(-1)
-
-        self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
-
-    def test_transition_scores_beam_search_encoder_decoder_with_eos(self):
-        articles = [
-            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
-            "Michael Phelps is arguably the most decorated Olympian of all time.",
-        ]
-        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        model = BartForConditionalGeneration.from_pretrained(
-            "hf-internal-testing/tiny-random-bart",
-            max_length=10,
-            num_beams=4,
-            num_return_sequences=2,
-            return_dict_in_generate=True,
-            output_scores=True,
-            length_penalty=0.0,
-        )
-        model = model.to(torch_device)
-
-        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(input_ids=input_ids)
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-        transition_scores_sum = transition_scores.sum(-1)
-
-        self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
-
-    def test_transition_scores_beam_search_decoder_only(self):
-        articles = [
-            "Justin Timberlake",
-            "Michael Phelps",
-        ]
-        tokenizer = GPT2Tokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer.pad_token = tokenizer.eos_token
-
-        model = GPT2LMHeadModel.from_pretrained(
-            "hf-internal-testing/tiny-random-gpt2",
-            max_length=10,
-            num_beams=4,
-            num_return_sequences=2,
-            pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=None,
-            return_dict_in_generate=True,
-            output_scores=True,
-            length_penalty=0.0,
-        )
-        model = model.to(torch_device)
-
-        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(input_ids=input_ids)
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-        transition_scores_sum = transition_scores.sum(-1)
-
-        self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
-
-    def test_transition_scores_beam_sample_encoder_decoder(self):
-        articles = [
-            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
-            "Michael Phelps is arguably the most decorated Olympian of all time.",
-        ]
-        tokenizer = BartTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
-        model = BartForConditionalGeneration.from_pretrained(
-            "hf-internal-testing/tiny-random-bart",
-            do_sample=True,
-            max_length=10,
-            num_beams=4,
-            num_return_sequences=2,
-            eos_token_id=None,
-            return_dict_in_generate=True,
-            output_scores=True,
-            length_penalty=0.0,
-        )
-        model = model.to(torch_device)
-
-        input_ids = tokenizer(articles, return_tensors="pt", padding=True).input_ids.to(torch_device)
-        outputs = model.generate(input_ids=input_ids)
-
-        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
-        transition_scores_sum = transition_scores.sum(-1)
-
-        self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
-
     def test_transition_scores_group_beam_search_encoder_decoder(self):
         articles = [
             "Justin Timberlake and Jessica Biel, welcome to parenthood.",
@@ -2581,38 +2187,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         transition_scores_sum = transition_scores.sum(-1)
 
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
-
-    @slow
-    def test_transition_scores_early_stopping(self):
-        # This is an aggressive test that makes sure that `beam_search's`
-        # transition scores are computed correctly for varying `num_return_sequences`,
-        # `num_beams` and `batch_size > 1`
-        # 2 x input_ids for "question: How are you? \n context: I had a long day, "
-        input_ids = torch.tensor(2 * [[822, 10, 571, 33, 25, 58, 2625, 10, 27, 141, 3, 9, 307, 239, 6, 1]]).to(
-            torch_device
-        )
-
-        model = AutoModelForSeq2SeqLM.from_pretrained("t5-small").to(torch_device)
-
-        result = model.generate(
-            input_ids,
-            max_length=10,
-            return_dict_in_generate=True,
-            output_scores=True,
-            forced_eos_token_id=model.config.eos_token_id,
-            num_beams=4,
-            do_sample=False,
-            num_return_sequences=3,
-            length_penalty=0.0,
-        )
-
-        transition_scores = model.compute_transition_scores(
-            sequences=result.sequences, scores=result.scores, beam_indices=result.beam_indices
-        )
-
-        sum_transition_scores = torch.sum(transition_scores, dim=1)
-
-        self.assertListEqual(sum_transition_scores.cpu().tolist(), result.sequences_scores.cpu().tolist())
 
     def test_log_scores_sample_decoder_only(self):
         articles = ["I need input_ids to generate", "Short and"]
@@ -2978,7 +2552,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(expectation == len(generated_tokens[0]))
 
         torch.manual_seed(0)
-        eos_token_id = [873]
+        eos_token_id = [873, 198]
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
 
@@ -3003,7 +2577,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(expectation == len(generated_tokens[0]))
 
         torch.manual_seed(0)
-        eos_token_id = [225]
+        eos_token_id = [225, 198]
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
 
@@ -3029,7 +2603,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(expectation == len(generated_tokens[0]))
 
         torch.manual_seed(0)
-        eos_token_id = [846]
+        eos_token_id = [846, 198]
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
 
@@ -3052,7 +2626,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(expectation == len(generated_tokens[0]))
 
         torch.manual_seed(0)
-        eos_token_id = [873]
+        eos_token_id = [873, 198]
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
 
