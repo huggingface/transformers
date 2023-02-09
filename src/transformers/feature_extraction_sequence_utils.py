@@ -595,7 +595,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         librosa.power_to_lb.
         
         Note: 
-            The motivation behind applying the log function on the mel spectrgram is that humans do not hear loudness on a linear scale.
+            The motivation behind applying the log function on the mel spectrogram is that humans do not hear loudness on a linear scale.
             Generally to double the percieved volume of a sound we need to put 8 times as much energy into it. This means that large variations 
             in energy may not sound all that different if the sound is loud to begin with. This compression operation makes the mel features match
             more closely what humans actually hear.
@@ -627,7 +627,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 waveform on the left and on the right.
 
         Return:
-            framed_waveform (`np.array` of shape (waveform.shape // self.hop_length , self.n_fft)):
+            framed_waveform (`np.array` of shape (`waveform.shape // self.hop_length , self.n_fft)`):
                 The framed waveforms that can be fed to `np.fft`.
         """
         frames = []
