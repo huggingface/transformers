@@ -14,14 +14,7 @@
 
 import unittest
 
-from transformers import (
-    MODEL_FOR_CAUSAL_LM_MAPPING,
-    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    TextGenerationPipeline,
-    pipeline,
-)
+from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING, TextGenerationPipeline, pipeline
 from transformers.testing_utils import (
     require_accelerate,
     require_tf,
