@@ -46,7 +46,6 @@ else:
     ]
 
 if TYPE_CHECKING:
-
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()

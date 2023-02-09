@@ -29,19 +29,17 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
 
     ```python
     >>> from transformers import pipeline
+    >>> from datasets import load_dataset
 
-    >>> classifier = pipeline(model="laion-ai/clap-hsat-tiny")
-    >>> classifier(
-    ...     "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac",
-    ...     candidate_labels=["animals", "humans", "landscape"],
-    ... )
-    [{'score': 0.965, 'label': 'animals'}, {'score': 0.03, 'label': 'humans'}, {'score': 0.005, 'label': 'landscape'}]
+    >>> dataset = load_dataset("ashraq/esc50")
+    >>> audio = next(iter(dataset["train"]["audio"]))["array"]
 
+    >>> classifier = pipeline(task="zero-shot-audio-classification", model="laion-ai/clap-hsat-tiny")
     >>> classifier(
-    ...     "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac",
-    ...     candidate_labels=["black and white", "photorealist", "painting"],
+    ...     audio,
+    ...     candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"],
     ... )
-    [{'score': 0.996, 'label': 'black and white'}, {'score': 0.003, 'label': 'photorealist'}, {'score': 0.0, 'label': 'painting'}]
+    [{'score': 0.999727189540863, 'label': 'Sound of a dog'}, {'score': 0.0002727957325987518, 'label': 'Sound of vaccum cleaner'}]
     ```
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
