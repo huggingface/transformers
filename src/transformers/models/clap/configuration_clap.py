@@ -164,8 +164,8 @@ class CLAPTextConfig(PretrainedConfig):
 class CLAPAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLAPAudioModel`]. It is used to instantiate a
-    CLAP vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the CLAP
+    CLAP audio encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the audio encoder of the CLAP
     [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -174,12 +174,15 @@ class CLAPAudioConfig(PretrainedConfig):
     Args:
         window_size (`int`, *optional*, defaults to 8):
             [description]
-        mel_bins (`int`, *optional*, defaults to 64):
-            [description]
+        num_mel_bins (`int`, *optional*, defaults to 64):
+            Number of mel features used per frames. Should correspond to the value used in the `CLAPProcessor` class.
         spec_size (`int`, *optional*, defaults to 256):
-            [description]
+            Desired input size of the spectrogram that the model supports. It can be different from the output of the
+            `CLAPFeatureExtractor`, in which case the input features will be resized. Corresponds to the `image_size`
+            of the audio models.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            [description]
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         patch_size (`int`, *optional*, defaults to 4):
             [description]
         patch_stride (`list`, *optional*, defaults to `[4, 4]`):
@@ -195,14 +198,11 @@ class CLAPAudioConfig(PretrainedConfig):
         num_attention_heads (`list`, *optional*, defaults to `[4, 8, 16, 32]`):
             [description]
         enable_fusion (`bool`, *optional*, defaults to `False`):
-            [description]
+            Whether or not to enable patch fusion. This is the main contribution of the authors, and should give the
+            best results. Patch fusion will #TODO describe what it does
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             [description]
         fusion_type (`[type]`, *optional*):
-            [description]
-        image_size (`int`, *optional*, defaults to 224):
-            [description]
-        input_channels (`int`, *optional*, defaults to 3):
             [description]
         patch_embed_input_channels (`int`, *optional*, defaults to 1):
             [description]
@@ -224,14 +224,14 @@ class CLAPAudioConfig(PretrainedConfig):
             [description]
         num_hidden_layers (`int`, *optional*, defaults to 4):
             [description]
-        enable_patch_fusion (`bool`, *optional*, defaults to `False`):
-            [description]
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
-            [description]
+            The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         layer_norm_eps (`[type]`, *optional*, defaults to `1e-5`):
-            [description]
+            The epsilon used by the layer normalization layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):
-            [description]
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
 
     Example:
 
@@ -253,7 +253,7 @@ class CLAPAudioConfig(PretrainedConfig):
     def __init__(
         self,
         window_size=8,
-        mel_bins=64,
+        num_mel_bins=64,
         spec_size=256,
         hidden_act="gelu",
         patch_size=4,
@@ -266,8 +266,6 @@ class CLAPAudioConfig(PretrainedConfig):
         enable_fusion=False,
         hidden_dropout_prob=0.1,
         fusion_type=None,
-        image_size=224,
-        input_channels=3,
         patch_embed_input_channels=1,
         flatten_patch_embeds=True,
         patch_embeds_hidden_size=96,
@@ -278,7 +276,6 @@ class CLAPAudioConfig(PretrainedConfig):
         mlp_ratio=4.0,
         aff_block_r=4,
         num_hidden_layers=4,
-        enable_patch_fusion=False,
         projection_hidden_act="relu",
         layer_norm_eps=1e-5,
         initializer_factor=1.0,
@@ -286,7 +283,7 @@ class CLAPAudioConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.window_size = window_size
-        self.mel_bins = mel_bins
+        self.num_mel_bins = num_mel_bins
         self.spec_size = spec_size
         self.patch_size = patch_size
         self.patch_stride = patch_stride
@@ -301,8 +298,6 @@ class CLAPAudioConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.projection_hidden_size = projection_hidden_size
-        self.image_size = image_size
-        self.input_channels = input_channels
         self.flatten_patch_embeds = flatten_patch_embeds
         self.patch_embeds_hidden_size = patch_embeds_hidden_size
         self.enable_patch_layer_norm = enable_patch_layer_norm
@@ -312,7 +307,6 @@ class CLAPAudioConfig(PretrainedConfig):
         self.mlp_ratio = mlp_ratio
         self.patch_embed_input_channels = patch_embed_input_channels
         self.aff_block_r = aff_block_r
-        self.enable_patch_fusion = enable_patch_fusion
         self.layer_norm_eps = layer_norm_eps
         self.initializer_factor = initializer_factor
         self.projection_hidden_act = projection_hidden_act
@@ -321,7 +315,7 @@ class CLAPAudioConfig(PretrainedConfig):
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the vision config dict if we are loading from CLAPConfig
+        # get the audio config dict if we are loading from CLAPConfig
         if config_dict.get("model_type") == "clap":
             config_dict = config_dict["audio_config"]
 
@@ -337,8 +331,8 @@ class CLAPAudioConfig(PretrainedConfig):
 class CLAPConfig(PretrainedConfig):
     r"""
     [`CLAPConfig`] is the configuration class to store the configuration of a [`CLAPModel`]. It is used to instantiate
-    a CLAP model according to the specified arguments, defining the text model and vision model configs. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the CLAP
+    a CLAP model according to the specified arguments, defining the text model and audio model configs. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the CLAP
     [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -350,7 +344,7 @@ class CLAPConfig(PretrainedConfig):
         audio_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`CLAPAudioConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and vision projection layers.
+            Dimentionality of text and audio projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLAP implementation.
         fusion_num_hidden_layers (`int`, *optional*, defaults to 2):
@@ -383,9 +377,9 @@ class CLAPConfig(PretrainedConfig):
 
     >>> # Initializing a CLAPText and CLAPAudioConfig configuration
     >>> config_text = CLAPTextConfig()
-    >>> config_vision = CLAPAudioConfig()
+    >>> config_audio = CLAPAudioConfig()
 
-    >>> config = CLAPConfig.from_text_audio_configs(config_text, config_vision)
+    >>> config = CLAPConfig.from_text_audio_configs(config_text, config_audio)
     ```"""
 
     model_type = "clap"
@@ -443,7 +437,7 @@ class CLAPConfig(PretrainedConfig):
     @classmethod
     def from_text_audio_configs(cls, text_config: CLAPTextConfig, audio_config: CLAPAudioConfig, **kwargs):
         r"""
-        Instantiate a [`CLAPConfig`] (or a derived class) from clap text model configuration and clap vision model
+        Instantiate a [`CLAPConfig`] (or a derived class) from clap text model configuration and clap audio model
         configuration.
 
         Returns:
