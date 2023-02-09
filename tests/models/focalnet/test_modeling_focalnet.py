@@ -189,7 +189,6 @@ class FocalNetModelTester:
 
 @require_torch
 class FocalNetModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             FocalNetModel,

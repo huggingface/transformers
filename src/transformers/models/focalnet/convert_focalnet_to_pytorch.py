@@ -17,12 +17,12 @@
 import argparse
 import json
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import BitImageProcessor, FocalNetConfig, FocalNetForImageClassification
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
 
@@ -69,7 +69,17 @@ def get_focalnet_config(model_name):
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
-    config = FocalNetConfig(embed_dim=embed_dim, depths=depths, focal_levels=focal_levels, focal_windows=focal_windows, use_conv_embed=use_conv_embed, id2label=id2label, label2id=label2id, use_post_layernorm=use_post_layernorm, use_layerscale=use_layerscale)
+    config = FocalNetConfig(
+        embed_dim=embed_dim,
+        depths=depths,
+        focal_levels=focal_levels,
+        focal_windows=focal_windows,
+        use_conv_embed=use_conv_embed,
+        id2label=id2label,
+        label2id=label2id,
+        use_post_layernorm=use_post_layernorm,
+        use_layerscale=use_layerscale,
+    )
 
     return config
 
