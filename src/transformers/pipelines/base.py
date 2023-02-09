@@ -764,12 +764,25 @@ class Pipeline(_ScikitCompat):
         self.image_processor = image_processor
         self.modelcard = modelcard
         self.framework = framework
+
+        if self.framework == "pt" and device is not None:
+            self.model = self.model.to(device=device)
+
+        if device is None:
+            # `accelerate` device map
+            hf_device_map = getattr(self.model, "hf_device_map", None)
+            if hf_device_map is not None:
+                # Take the first device used by `accelerate`.
+                device = next(iter(hf_device_map.values()))
+            else:
+                device = -1
+
         if is_torch_available() and self.framework == "pt":
             if isinstance(device, torch.device):
                 self.device = device
             elif isinstance(device, str):
                 self.device = torch.device(device)
-            elif device is None or device < 0:
+            elif device < 0:
                 self.device = torch.device("cpu")
             else:
                 self.device = torch.device(f"cuda:{device}")
@@ -777,33 +790,6 @@ class Pipeline(_ScikitCompat):
             self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
         self.binary_output = binary_output
-
-        # Special handling
-        if self.framework == "pt" and device is not None:
-            self.model = self.model.to(device=self.device)
-
-            hf_device_map = getattr(self.model, "hf_device_map", None)
-            if hf_device_map is not None:
-                logger.warning(
-                    "The model has been loaded with `accelerate` using `device_map=xxx` in `from_pretrained`"
-                    " method, you should not pass a device when initializing your pipeline."
-                )
-
-        if device is None and self.framework == "pt":
-            # `accelerate` device map
-            hf_device_map = getattr(self.model, "hf_device_map", None)
-            if hf_device_map is not None:
-                # Take the main device used by `accelerate`.
-                # adapted from: https://github.com/huggingface/transformers/pull/21479#issuecomment-1420833512
-                if set(hf_device_map.values()) == {"cpu"} or set(hf_device_map.values()) == {"cpu", "disk"}:
-                    accelerate_device = torch.device("cpu")
-                else:
-                    main_device = [d for d in hf_device_map.values() if d not in ["cpu", "disk"]][0]
-                    accelerate_device = torch.device(f"cuda:{main_device}")
-
-                self.device = accelerate_device
-            else:
-                self.device = torch.device("cpu")
 
         # Update config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
@@ -1071,8 +1057,10 @@ class Pipeline(_ScikitCompat):
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
             warnings.warn(
-                "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please"
-                " use a dataset",
+                (
+                    "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please"
+                    " use a dataset"
+                ),
                 UserWarning,
             )
 
