@@ -31,6 +31,7 @@ else:
         "BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BioGptForCausalLM",
         "BioGptForTokenClassification",
+        "BioGptForSequenceClassification",
         "BioGptModel",
         "BioGptPreTrainedModel",
     ]
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
             BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BioGptForCausalLM,
             BioGptForTokenClassification,
+            BioGptForSequenceClassification,
             BioGptModel,
             BioGptPreTrainedModel,
         )
