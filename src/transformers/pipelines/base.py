@@ -780,7 +780,7 @@ class Pipeline(_ScikitCompat):
 
         # Special handling
         if self.framework == "pt" and device is not None:
-            self.model = self.model.to(device=device)
+            self.model = self.model.to(device=self.device)
 
             hf_device_map = getattr(self.model, "hf_device_map", None)
             if hf_device_map is not None:
@@ -1071,10 +1071,8 @@ class Pipeline(_ScikitCompat):
         self.call_count += 1
         if self.call_count > 10 and self.framework == "pt" and self.device.type == "cuda":
             warnings.warn(
-                (
-                    "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please"
-                    " use a dataset"
-                ),
+                "You seem to be using the pipelines sequentially on GPU. In order to maximize efficiency please"
+                " use a dataset",
                 UserWarning,
             )
 
