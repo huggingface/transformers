@@ -80,7 +80,7 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
             candidate_labels (`List[str]`):
                 The candidate labels for this audio
 
-            hypothesis_template (`str`, *optional*, defaults to `"This is a photo of {}"`):
+            hypothesis_template (`str`, *optional*, defaults to `"This is a sound of {}"`):
                 The sentence used in cunjunction with *candidate_labels* to attempt the audio classification by
                 replacing the placeholder with the candidate_labels. Then likelihood is estimated by using
                 logits_per_audio
@@ -103,7 +103,7 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
 
         return preprocess_params, {}, {}
 
-    def preprocess(self, audio, candidate_labels=None, hypothesis_template="This is a recording of {}."):
+    def preprocess(self, audio, candidate_labels=None, hypothesis_template="This is a sound of {}."):
         if isinstance(audio, str):
             if audio.startswith("http://") or audio.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file

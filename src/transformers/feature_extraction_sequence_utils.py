@@ -375,13 +375,14 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         """Convert Hz to Mels.
 
         Args:
-            freqs (float):
+            freqs (`float`):
                 Frequencies in Hz
-            mel_scale (str, *optional*):
-                Scale to use: `htk` or `slaney`. (Default: `htk`)
+            mel_scale (`str`, *optional*, defaults to `"htk"`):
+                Scale to use, `htk` or `slaney`.
 
         Returns:
-            mels (float): Frequency in Mels
+            mels (`float`):
+                Frequency in Mels
         """
 
         if mel_scale not in ["slaney", "htk"]:
@@ -411,13 +412,13 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         """Convert mel bin numbers to frequencies.
 
         Args:
-            mels (np.array):
+            mels (`np.array`):
                 Mel frequencies
-            mel_scale (str, *optional*, `"htk"`):
+            mel_scale (`str`, *optional*, `"htk"`):
                 Scale to use: `htk` or `slaney`.
 
         Returns:
-            freqs (np.array):
+            freqs (`np.array`):
                 Mels converted in Hz
         """
 
@@ -448,6 +449,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         f_pts: np.array,
     ) -> np.array:
         """Create a triangular filter bank.
+
+        #TODO this is the part that should be very well detailed
 
         Args:
             all_freqs (`np.array`):
@@ -558,7 +561,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
     def _stft(self, frames, window):
         """
         Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
-        results as `torch.stft`. #TODO @Arthur batching this could alloz more usage, good first issue.
+        results as `torch.stft`. #TODO @Arthur batching this could allow more usage, good first issue.
 
         Args:
             frames (`np.array` of dimension `(num_frames, self.n_fft)`):
@@ -624,7 +627,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         Return:
             framed_waveform (`np.array` of shape (waveform.shape // self.hop_length , self.n_fft)):
-                The framed waveforms that can be fed `np.fft`.
+                The framed waveforms that can be fed to `np.fft`.
         """
         # TODO: test if stereo audio works???
         frames = []
@@ -652,5 +655,4 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             frames.append(frame)
 
         frames = np.stack(frames, 0)
-
         return frames

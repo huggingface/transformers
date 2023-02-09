@@ -58,25 +58,24 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask (`bool`, *optional*, False):
             Whether or not the model should return the attention masks coresponding to the input.
         frequency_min (`float`, *optional*, 0):
-            The lowest frequency of interest. The STFT TODO (not sure) will not be computed for values below this.
+            The lowest frequency of interest. The STFT will not be computed for values below this.
         frequency_max (`float`, *optional*, 14_000):
-            The highest frequency of interest. The STFT TODO (not sure) will not be computed for values above this.
+            The highest frequency of interest. The STFT will not be computed for values above this.
         top_db (`float`, *optional*):
             The highest decibel value used to convert the mel spectrogram to the log scale. For more details see the
             `SequenceFeatureExtractor._power_to_db` function
         truncation (`str`, *optional*, `"fusions"`):
             Truncation pattern for long audio inputs. Two patterns are available:
                 - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and a
-                  downsampled version of the entire mel spectrogram. These 4 spectrogram will have a dimension of
-                  `n_fft, feature_size`. TODO check this
+                  downsampled version of the entire mel spectrogram.
             If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a copy
             of the original mel obtained from the padded audio.
                 - `rand_trunc` will select a random crop of the mel spectrogram.
-        padding (`str`, *optional*, `"repeatpad"`):
+        padding (`str`, *optional*):
             Padding pattern for shorter audio inputs. Three patterns were originaly implemented:
-                - `repeatpad`:
-                - `repeat`:
-                - `pad`:
+                - `repeatpad`: the audio is repeated, and then padded to fit the `max_length`.
+                - `repeat`: the audio is repeated and then cut to fit the `max_length`
+                - `pad`: the audio is padded.
     """
 
     model_input_names = ["input_features", "is_longer"]
@@ -151,8 +150,14 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
-        Compute the log-Mel spectrogram of the provided audio using the `hanning` window. Two different banks of filters were used:
-            - self.
+        Compute the log-Mel spectrogram of the provided `waveform` using the `hanning` window. In CLAP, two different
+        banks of filters are used depending on the truncation pattern:
+            - `self.mel_filters`: they correspond to the defaults parameters of `torchaduio` which can be obtained from
+              calling `torchaudio.transforms.MelSpectrogram().mel_scale.fb`. These filters are used when `truncation`
+              is set to `fuison`.
+            - `self.mel_filteres_slanney` : they correspond to the defaults parameters of `torchlibrosa` which used
+              `librosa.filters.mel` when computing the mel spectrogram. These filters were only used in the original
+              implementation when the truncation mode is not `"fusion"`.
         """
         window = np.hanning(self.n_fft + 1)[:-1]
         frames = self._fram_wave(waveform)
@@ -164,29 +169,6 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         log_mel_spec = np.asarray(log_mel_spec, np.float32)
         return log_mel_spec
 
-    @staticmethod
-    # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
-    def zero_mean_unit_var_norm(
-        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
-    ) -> List[np.ndarray]:
-        """
-        Every array in the list is normalized to have zero mean and unit variance
-        """
-        if attention_mask is not None:
-            attention_mask = np.array(attention_mask, np.int32)
-            normed_input_values = []
-
-            for vector, length in zip(input_values, attention_mask.sum(-1)):
-                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
-                if length < normed_slice.shape[0]:
-                    normed_slice[length:] = padding_value
-
-                normed_input_values.append(normed_slice)
-        else:
-            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
-
-        return normed_input_values
-
     def _random_mel_fusion(self, mel, total_frames, chunk_frames):
         ranges = np.array_split(list(range(0, total_frames - chunk_frames + 1)), 3)
         if len(ranges[1]) == 0:
@@ -196,29 +178,31 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             # if the audio is too short, we just use the first chunk
             ranges[2] = [0]
         # randomly choose index for each part
-        idx_front = np.random.choice(ranges[0])  # 172
-        idx_middle = np.random.choice(ranges[1])  # 508
-        idx_back = np.random.choice(ranges[2])  # 1039
-        # select mel
+        idx_front = np.random.choice(ranges[0])
+        idx_middle = np.random.choice(ranges[1])
+        idx_back = np.random.choice(ranges[2])
+
         mel_chunk_front = mel[idx_front : idx_front + chunk_frames, :]
         mel_chunk_middle = mel[idx_middle : idx_middle + chunk_frames, :]
         mel_chunk_back = mel[idx_back : idx_back + chunk_frames, :]
 
-        mel_shrink = np_bilinear_resize(mel, chunk_frames, self.feature_size)  # current flags are probalby wrong
+        mel_shrink = np_bilinear_resize(mel, chunk_frames, self.feature_size)
         mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], axis=0)
         return mel_fusion
 
     def _get_input_mel(self, waveform: np.array, max_length, truncation, padding) -> np.array:
         """
-        Possible cases :
-            - wave > max_length
-                - rand_trun
-                - fusion
-            - wave < max_length
-                - repeat
-                - fusion
-
-                TODO the max length should be 10x the sampling rate of the provided audio.
+        Extracts the mel spectrogram and prepares it for the mode based on the `truncation` and `padding` arguments.
+        Four different path are possible:
+            - `truncation="fusion"` and the length of the waveform is greater than the max length: the mel spectrogram
+              will be computed on the entire audio. 3 random crops and a dowsampled version of the full mel spectrogram
+              are then stacked together. They will later be used for `feature_fusion`.
+            - `truncation="rand_trunc"` and the length of the waveform is smaller than the max length: the audio is
+              padded based on `padding`.
+            - `truncation="fusion"` and the length of the waveform is smaller than the max length: the audio is padded
+              based on `padding`, and is repeated `4` times.
+            - `truncation="rand_trunc"` and the length of the waveform is greater than the max length: the mel
+              spectrogram will be computed on a random crop of the waveform.
 
         """
         if waveform.shape[0] > max_length:
@@ -284,8 +268,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             truncation (`str`, *optional*):
                 Truncation pattern for long audio inputs. Two patterns are available:
                     - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and
-                      a downsampled version of the entire mel spectrogram. These 4 spectrogram will have a dimension of
-                      `n_fft, feature_size`. TODO check this
+                      a downsampled version of the entire mel spectrogram.
                 If `config.fusion` is set to True, shorter audios also need to to return 4 mels, which will just be a
                 copy of the original mel obtained from the padded audio.
                     - `rand_trunc` will select a random crop of the mel spectrogram.
