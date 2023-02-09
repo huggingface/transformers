@@ -265,15 +265,14 @@ pip install pytesseract
 
 You can easily run `pipeline` on large models using 🤗 `accelerate`! First make sure you have installed `accelerate` with `pip install accelerate`. 
 
-Let's assume you fullfill the hardware requirements to run a large model such as `bloom` (which has 176B parameters, so ~350GB in `bfloat16`). First load your model
-using `device_map="auto"`
+First load your model using `device_map="auto"`! We will use `facebook/opt-1.3b` for our example.
 
 ```py
 # pip install accelerate
 import torch
 from transformers import pipeline
 
-pipe = pipeline(model="bigscience/bloom", torch_dtype=torch.bfloat16, device_map="auto")
+pipe = pipeline(model="facebook/opt-1.3b", torch_dtype=torch.bfloat16, device_map="auto")
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 
@@ -284,6 +283,8 @@ You can also pass 8-bit loaded models if you install `bitsandbytes` and add the 
 import torch
 from transformers import pipeline
 
-pipe = pipeline(model="bigscience/bloom", device_map="auto", model_kwargs={"load_in_8bit":True})
+pipe = pipeline(model="facebook/opt-1.3b", device_map="auto", model_kwargs={"load_in_8bit": True})
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
+
+Note that you can replace the checkpoint with any of the Hugging Face model that supports large model loading such as BLOOM!
