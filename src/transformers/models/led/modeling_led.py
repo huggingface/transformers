@@ -2543,8 +2543,9 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
             config.num_labels,
             config.classifier_dropout,
         )
-        self.led._init_weights(self.classification_head.dense)
-        self.led._init_weights(self.classification_head.out_proj)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -2672,7 +2673,8 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
         self.led = LEDModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.led._init_weights(self.qa_outputs)
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
