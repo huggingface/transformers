@@ -288,3 +288,90 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
             output_logits = outputs.logits.detach().cpu().numpy()[0]
             output_id = np.argmax(output_logits[-1])
             self.assertEqual(output_id, output)
+
+    @slow
+    def test_spout_generation(self):
+        model = GPTSANJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
+        tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        model.to(torch_device)
+
+        # set deterministically
+        generation_config = GenerationConfig.from_pretrained("Tanrei/GPTSAN-japanese")
+        generation_config.top_k = 1
+
+        input_text = "武田信玄は、"
+        input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(torch_device)
+        input_ids_batch = tokenizer([input_text, input_text], return_tensors="pt").input_ids.to(torch_device)
+
+        # spout from uniform and one-hot
+        spouts = [
+            # fmt: off
+            [0.87882208, 0.38426396, 0.33220248, 0.43890406, 0.16562252,
+            0.04803985, 0.211572  , 0.23188473, 0.37153068, 0.7836377 ,
+            0.02160172, 0.38761719, 0.75290772, 0.90198857, 0.34365777,
+            0.64168169, 0.44318471, 0.14575746, 0.92562881, 0.40812148,
+            0.29019122, 0.88861599, 0.65524846, 0.43563456, 0.38177187,
+            0.70832965, 0.81527892, 0.68832812, 0.38833192, 0.4561522 ,
+            0.14828817, 0.47248213, 0.54357335, 0.82009566, 0.1338884 ,
+            0.02755417, 0.19764677, 0.2422084 , 0.04757674, 0.65409606,
+            0.0824589 , 0.03304383, 0.94387689, 0.98764509, 0.82433901,
+            0.27646741, 0.64907493, 0.76009406, 0.30087915, 0.17904689,
+            0.41601714, 0.67046398, 0.10422822, 0.08447374, 0.07354344,
+            0.61423565, 0.70284866, 0.7532333 , 0.1972038 , 0.29575659,
+            0.90583886, 0.29265307, 0.50000175, 0.70407655, 0.889363  ,
+            0.81904418, 0.66829128, 0.64468815, 0.56563723, 0.85601875,
+            0.94924672, 0.00166762, 0.25220643, 0.74540219, 0.67993247,
+            0.1549675 , 0.39385352, 0.92153607, 0.63745931, 0.27759043,
+            0.84702295, 0.65904271, 0.58676614, 0.8666936 , 0.39607438,
+            0.79954983, 0.42220697, 0.39650381, 0.7849864 , 0.56150201,
+            0.15678925, 0.14746032, 0.34542114, 0.47026783, 0.11956489,
+            0.25421435, 0.33788901, 0.68934842, 0.36424685, 0.71737898,
+            0.38983449, 0.94393779, 0.39575588, 0.36616553, 0.87104665,
+            0.64630203, 0.22516905, 0.88270804, 0.15031338, 0.75144345,
+            0.46459025, 0.85396454, 0.86355643, 0.65139851, 0.70266061,
+            0.30241389, 0.81056497, 0.88865969, 0.38773807, 0.70635849,
+            0.90718459, 0.43245789, 0.28000654, 0.45935562, 0.08773519,
+            0.9552151 , 0.93901511, 0.22489288], # uniform
+            [1., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+             0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+             0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+             0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+             0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+             0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+             0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+             0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.,
+             0., 0., 0., 0., 0., 0., 0., 0.],
+            # fmt: on
+        ]
+
+        output1 = model.generate(
+            input_ids=input_ids,
+            spout=spouts[0],
+            max_new_tokens=20,
+            generation_config=generation_config,
+        )
+
+        output2 = model.generate(
+            input_ids=input_ids,
+            spout=spouts[1],
+            max_new_tokens=20,
+            generation_config=generation_config,
+        )
+
+        output3 = model.generate(
+            input_ids=input_ids_batch,
+            spout=spouts,
+            max_new_tokens=20,
+            generation_config=generation_config,
+        )
+
+        out1_sentence = tokenizer.decode(output1[0])
+        out2_sentence = tokenizer.decode(output2[0])
+        batch_out_sentence = tokenizer.batch_decode(output3)
+
+        expected_output_sentence = [
+            "武田信玄は、武田氏の滅亡後、武田氏の居城であった甲斐武田氏の居城である",
+            "武田信玄は、武田家の滅亡を防ぐため、武田家の家臣である武田信虎を討",
+        ]
+        self.assertListEqual(expected_output_sentence, batch_out_sentence)
+        self.assertListEqual(batch_out_sentence, [out1_sentence, out2_sentence])

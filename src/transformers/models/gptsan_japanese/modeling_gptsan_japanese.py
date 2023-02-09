@@ -16,7 +16,7 @@
 
 
 import copy
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -818,7 +818,7 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        squad (`torch.Tensor` of shape `(batch_size, config.d_spout)`):
+        spout (`torch.Tensor` of shape `(batch_size, config.d_spout)`):
                 This vector is transformed through an 8-layer FFN and can be used instead of `past_key_values`.
         past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
@@ -1001,7 +1001,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
             input_ids = torch.zeros([1, 1]).int().to(device)  # dummy for input_ids was None
         num_pasts_contexts = 0
         num_batch = input_ids.shape[0]
-        pasts_or_squad_value = None
+        pasts_or_spout_value = None
         if past_key_values is not None:
             num_pasts_contexts = past_key_values[0][0].shape[2]
         elif self.config.d_spout and spout is not None:
@@ -1009,7 +1009,13 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
             # This controls the output by projecting embedded information such as the class of sentences during learning.
             # It should passed instead of the first past_key_value.
             # See the original GPTSAN repository for details
-            num_pasts_contexts = 1
+            num_pasts_contexts += 1
+
+        # If there is an attention_mask, increase first one for spout
+        if self.config.d_spout and spout is not None and attention_mask is not None:
+            attention_mask_with_spout = torch.ones(num_batch, attention_mask.shape[1] + 1, device=device)
+            attention_mask_with_spout[:, 1:] -= 1 - attention_mask  # 1st token should be spout
+            attention_mask = attention_mask_with_spout  # update attention_mask
 
         if num_precontext is not None:
             # `num_precontext` is the number of tokens that refer to each other in prefix-lm
@@ -1028,12 +1034,12 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         hidden_states = self.embed_tokens(input_ids)
 
         if past_key_values is not None:
-            pasts_or_squad_value = past_key_values
+            pasts_or_spout_value = past_key_values
         elif self.config.d_spout and spout is not None:
-            # Make vector from `sqout` of GPTSAN to the same shape as past_key_values
-            pasts_or_squad_value = self.spout(spout)  # projecting `sqout` vector
-            pasts_or_squad_value = torch.reshape(
-                pasts_or_squad_value,
+            # Make vector from `spout` of GPTSAN to the same shape as past_key_values
+            pasts_or_spout_value = self.spout(spout)  # projecting `spout` vector
+            pasts_or_spout_value = torch.reshape(
+                pasts_or_spout_value,
                 [
                     num_batch,
                     self.config.num_layers,
@@ -1043,15 +1049,15 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
                     self.config.d_model // self.config.num_heads,
                 ],
             )
-            pasts_or_squad_value = torch.split(pasts_or_squad_value, [1] * self.config.num_layers, dim=1)
+            pasts_or_spout_value = torch.split(pasts_or_spout_value, [1] * self.config.num_layers, dim=1)
             # make same shape as past_key_values
-            pasts_or_squad_value = tuple(
-                torch.split(a.squeeze(1), [1, 1], dim=1).squeeze(1) for a in pasts_or_squad_value
+            pasts_or_spout_value = tuple(
+                tuple([b.squeeze(1) for b in torch.split(a.squeeze(1), [1, 1], dim=1)]) for a in pasts_or_spout_value
             )
         else:
-            pasts_or_squad_value = [None] * self.config.num_layers
+            pasts_or_spout_value = [None] * self.config.num_layers
 
-        # Token position considering squad and pasts
+        # Token position considering spout and pasts
         token_position = torch.arange(num_input_contexts).to(device) + num_pasts_contexts
 
         if attention_mask is None:
@@ -1090,7 +1096,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         all_attentions = () if self.config.output_attentions or output_attentions else None
         all_router_probs = () if self.config.output_router_logits or output_router_logits else None
 
-        for layer, past in enumerate(pasts_or_squad_value):
+        for layer, past in enumerate(pasts_or_spout_value):
             if layer == self.config.num_switch_layers:
                 if self.config.num_ext_layers > 0:
                     # extra_position_embeddings are extra position embeddings that are only created when extending the model with code from the original GPTSAN repository. Not used in the default model.
@@ -1336,15 +1342,19 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.LongTensor,
-        spout: Optional[torch.FloatTensor] = None,
+        spout: Optional[Union[List, torch.FloatTensor]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         **kwargs,
     ):
+        if type(spout) is list:
+            spout = torch.tensor(spout).float()
+            if input_ids is not None:
+                spout = spout.to(input_ids.device)
         if past_key_values is not None:
             return {
                 "input_ids": input_ids[:, -1:],
                 "attention_mask": attention_mask,
-                "spout": None,
+                "spout": spout,
                 "past_key_values": past_key_values,
             }
         return {
