@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Google GPTSANJapanese Authors and HuggingFace Inc. team.
+# Copyright 2023 GPTSANJapanese Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ from transformers import (
     GPTSANJapaneseTokenizer,
     is_torch_available,
 )
+from transformers.generation import GenerationConfig
 from transformers.testing_utils import require_torch, slow, tooslow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -122,7 +123,7 @@ class GPTSANJapaneseTester:
         result = model(
             input_ids=input_ids,
         )
-        assert result
+        self.parent.assertIsNotNone(result)
 
 
 @require_torch
@@ -183,116 +184,28 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
         output_logits = outputs.logits.detach().cpu().numpy()
         # Output of original model created with mesh-tensoflow
         target = [
-            [
-                -12.037839889526367,
-                -12.433061599731445,
-                -14.333840370178223,
-                -12.450345993041992,
-                -11.1661376953125,
-                -11.930137634277344,
-                -10.659740447998047,
-                -12.909574508666992,
-                -13.241043090820312,
-                -13.398579597473145,
-                -11.107524871826172,
-                -12.3685941696167,
-                -22.97943115234375,
-                -10.481067657470703,
-                -12.484030723571777,
-                -12.807360649108887,
-                -14.769700050354004,
-                -12.233579635620117,
-                -13.428145408630371,
-                -22.624177932739258,
-            ],
-            [
-                -7.511149883270264,
-                -8.281851768493652,
-                -7.943127155303955,
-                -7.55021333694458,
-                -6.49869966506958,
-                -7.586796283721924,
-                -6.978085994720459,
-                -7.839145183563232,
-                -8.21964168548584,
-                -8.695091247558594,
-                -6.706910610198975,
-                -6.6585798263549805,
-                -19.565698623657227,
-                -5.353842735290527,
-                -8.350686073303223,
-                -8.039388656616211,
-                -10.856569290161133,
-                -7.75154447555542,
-                -8.819022178649902,
-                -19.51532745361328,
-            ],
-            [
-                -9.73066234588623,
-                -10.223922729492188,
-                -9.932981491088867,
-                -11.857836723327637,
-                -7.662626266479492,
-                -11.13529109954834,
-                -7.765097618103027,
-                -11.472923278808594,
-                -9.543149948120117,
-                -11.905633926391602,
-                -9.366164207458496,
-                -11.5734281539917,
-                -23.699003219604492,
-                -9.429590225219727,
-                -10.42839241027832,
-                -10.585240364074707,
-                -10.94771957397461,
-                -11.095416069030762,
-                -10.390240669250488,
-                -23.769372940063477,
-            ],
-            [
-                -9.728265762329102,
-                -9.859712600708008,
-                -10.09729290008545,
-                -9.678522109985352,
-                -6.879519939422607,
-                -9.68487548828125,
-                -4.2803425788879395,
-                -10.018914222717285,
-                -9.308445930480957,
-                -10.63394546508789,
-                -8.083646774291992,
-                -9.06301498413086,
-                -21.904266357421875,
-                -8.90160846710205,
-                -8.841876029968262,
-                -11.856719970703125,
-                -12.079398155212402,
-                -11.233753204345703,
-                -10.177338600158691,
-                -21.87256622314453,
-            ],
-            [
-                -9.669764518737793,
-                -9.614198684692383,
-                -9.814510345458984,
-                -9.996501922607422,
-                -11.375690460205078,
-                -10.113405227661133,
-                -10.546867370605469,
-                -10.04369068145752,
-                -10.907809257507324,
-                -10.504216194152832,
-                -11.129199028015137,
-                -10.151124000549316,
-                -21.96586799621582,
-                -9.086349487304688,
-                -11.730339050292969,
-                -10.460667610168457,
-                -10.298049926757812,
-                -10.784148216247559,
-                -10.840693473815918,
-                -22.03152847290039,
-            ],
+            # fmt: off
+            [-12.037839889526367, -12.433061599731445, -14.333840370178223, -12.450345993041992, -11.1661376953125,
+            -11.930137634277344, -10.659740447998047, -12.909574508666992, -13.241043090820312, -13.398579597473145,
+            -11.107524871826172, -12.3685941696167, -22.97943115234375, -10.481067657470703, -12.484030723571777,
+            -12.807360649108887, -14.769700050354004, -12.233579635620117, -13.428145408630371, -22.624177932739258],
+            [-7.511149883270264, -8.281851768493652, -7.943127155303955, -7.55021333694458, -6.49869966506958,
+            -7.586796283721924, -6.978085994720459, -7.839145183563232, -8.21964168548584, -8.695091247558594,
+            -6.706910610198975, -6.6585798263549805, -19.565698623657227, -5.353842735290527, -8.350686073303223,
+            -8.039388656616211, -10.856569290161133, -7.75154447555542, -8.819022178649902, -19.51532745361328],
+            [-9.73066234588623, -10.223922729492188, -9.932981491088867, -11.857836723327637, -7.662626266479492,
+            -11.13529109954834, -7.765097618103027, -11.472923278808594, -9.543149948120117, -11.905633926391602,
+            -9.366164207458496, -11.5734281539917, -23.699003219604492, -9.429590225219727, -10.42839241027832,
+            -10.585240364074707, -10.94771957397461, -11.095416069030762, -10.390240669250488, -23.769372940063477],
+            [-9.728265762329102, -9.859712600708008, -10.09729290008545, -9.678522109985352, -6.879519939422607,
+            -9.68487548828125, -4.2803425788879395, -10.018914222717285, -9.308445930480957, -10.63394546508789,
+            -8.083646774291992, -9.06301498413086, -21.904266357421875, -8.90160846710205, -8.841876029968262,
+            -11.856719970703125, -12.079398155212402, -11.233753204345703, -10.177338600158691, -21.87256622314453],
+            [-9.669764518737793, -9.614198684692383, -9.814510345458984, -9.996501922607422, -11.375690460205078,
+            -10.113405227661133, -10.546867370605469, -10.04369068145752, -10.907809257507324, -10.504216194152832,
+            -11.129199028015137, -10.151124000549316, -21.96586799621582, -9.086349487304688, -11.730339050292969,
+            -10.460667610168457, -10.298049926757812, -10.784148216247559, -10.840693473815918, -22.03152847290039],
+            # fmt: on
         ]
         target = np.array(target).flatten()
         predict = output_logits[0, :, :20].flatten()
@@ -300,7 +213,57 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
         def check(a, b, epsilon=5e-4):
             return abs(a - b) < epsilon * max(abs(a), abs(b))
 
-        assert np.all([check(target[i], predict[i]) for i in range(len(target))])
+        self.assertTrue(np.all([check(target[i], predict[i]) for i in range(len(target))]))
+
+    @slow
+    def test_batch_generation(self):
+        model = GPTSANJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
+        tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        model.to(torch_device)
+
+        # set deterministically
+        generation_config = GenerationConfig.from_pretrained("Tanrei/GPTSAN-japanese")
+        generation_config.top_k = 1
+
+        # use different length sentences to test batching
+        sentences = [
+            "甲斐なら武田と言うほど",
+            "織田信長は、",
+        ]
+
+        tokenizer.padding_side = "left"
+        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
+        input_ids = inputs["input_ids"].to(torch_device)
+
+        self.assertNotEqual(inputs["attention_mask"][0].numpy().tolist(), inputs["attention_mask"][1].numpy().tolist())
+
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"].to(torch_device),
+            max_new_tokens=3,
+            generation_config=generation_config,
+        )
+
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
+        output_non_padded = model.generate(
+            input_ids=inputs_non_padded, max_new_tokens=3, generation_config=generation_config
+        )
+
+        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
+        output_padded = model.generate(input_ids=inputs_padded, max_new_tokens=3, generation_config=generation_config)
+
+        self.assertNotEqual(inputs_non_padded.shape, inputs_padded.shape)
+
+        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
+
+        expected_output_sentence = [
+            "甲斐なら武田と言うほど甲斐の武田",
+            "織田信長は、このような",
+        ]
+        self.assertListEqual(expected_output_sentence, batch_out_sentence)
+        self.assertListEqual(batch_out_sentence, [non_padded_sentence, padded_sentence])
 
     @tooslow
     def test_sample(self):
@@ -324,4 +287,4 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
             outputs = model(input_ids)
             output_logits = outputs.logits.detach().cpu().numpy()[0]
             output_id = np.argmax(output_logits[-1])
-            assert output_id == output
+            self.assertEqual(output_id, output)

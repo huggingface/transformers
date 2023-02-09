@@ -314,6 +314,10 @@ class MoECausalLMOutputWithPast(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        z_loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
+            z_loss for the sparse modules.
+        aux_loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
+            aux_loss for the sparse modules.
         router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed or when `config.add_router_probs=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
 
