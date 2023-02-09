@@ -812,7 +812,6 @@ class CLAPModelIntegrationTest(unittest.TestCase):
             inputs = processor(
                 audios=audio_sample["audio"]["array"], return_tensors="pt", padding=padding, truncation="fusion"
             ).to(torch_device)
-            inputs["is_longer"] = torch.tensor([False])
 
             audio_embed = model.get_audio_features(**inputs)
             expected_mean = EXPECTED_MEANS_FUSED[padding]

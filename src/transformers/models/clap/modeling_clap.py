@@ -519,7 +519,7 @@ class CLAPAudioSelfAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
-        batch_size, dim, num_channels = hidden_states.shape
+        batch_size, dim, _ = hidden_states.shape
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -1009,7 +1009,7 @@ class CLAPAudioEncoder(nn.Module):
         is_longer_list_idx = None
         if self.enable_fusion:
             is_longer_list = is_longer.to(input_features.device)
-            is_longer_list_idx = torch.where(is_longer_list == 0)[0]
+            is_longer_list_idx = torch.where(is_longer_list == 1)[0]
 
         hidden_states = self.reshape_mel2img(normalixed_input_features)
 
