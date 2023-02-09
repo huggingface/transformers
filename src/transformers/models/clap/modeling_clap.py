@@ -43,10 +43,11 @@ from .configuration_clap import CLAPAudioConfig, CLAPConfig, CLAPTextConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "laion-ai/clap-htst-unfused-base"
+_CHECKPOINT_FOR_DOC = "laion-ai/clap-htsat-fused"
 
 CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "laion-ai/clap-htst-unfused-base",
+    "laion-ai/clap-htsat-fused",
+    "laion-ai/clap-htsat-unfused",
     # See all clap models at https://huggingface.co/models?filter=clap
 ]
 
@@ -354,7 +355,10 @@ class CLAPAudioAFFBlock(nn.Module):
 
 
 class CLAPAudioPatchEmbed(nn.Module):
-    """2D Image to Patch Embedding"""
+    """
+    This module converts the hidden states reshaped as an image to patch embeddings ready to be passed to the
+    Transformer block.
+    """
 
     def __init__(self, config: CLAPAudioConfig):
         super().__init__()
