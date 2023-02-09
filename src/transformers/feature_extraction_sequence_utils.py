@@ -494,11 +494,16 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         Note:
             Different banks of MEL filters were introduced in the litterature. The following variation are supported:
-                - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHz and a speech bandwidth of `[0, 4600]` Hz
-                - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) (1995) uses a filter bank of 24 filters for a speech bandwidth `[0, 8000]` Hz (sampling rate ≥ 16 kHz).
-                - MFCC FB-40: from the Auditory Toolbox for MATLAB written by Slaney in 1998, assumes a sampling rate of 16 kHz, and speech bandwidth [133, 6854] Hz. This version also includes an area normalization.
-                - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes sampling rate of 12.5 kHz and speech bandwidth [0, 6250] Hz
-            The default parameters of `torchaudio`'s mel filterbanks implement the `"htk"` filers while `torchlibrosa` uses the `"slaney"` implementation.
+                - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHz
+                  and a speech bandwidth of `[0, 4600]` Hz
+                - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) (1995) uses a filter bank of 24 filters for a
+                  speech bandwidth `[0, 8000]` Hz (sampling rate ≥ 16 kHz).
+                - MFCC FB-40: from the Auditory Toolbox for MATLAB written by Slaney in 1998, assumes a sampling rate
+                  of 16 kHz, and speech bandwidth [133, 6854] Hz. This version also includes an area normalization.
+                - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes sampling
+                  rate of 12.5 kHz and speech bandwidth [0, 6250] Hz
+            The default parameters of `torchaudio`'s mel filterbanks implement the `"htk"` filers while `torchlibrosa`
+            uses the `"slaney"` implementation.
 
         Args:
             n_freqs (`int`):
@@ -593,12 +598,13 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         """
         Convert a mel spectrogram from power to db scale, this function is the numpy implementation of
         librosa.power_to_lb.
-        
-        Note: 
-            The motivation behind applying the log function on the mel spectrogram is that humans do not hear loudness on a linear scale.
-            Generally to double the percieved volume of a sound we need to put 8 times as much energy into it. This means that large variations 
-            in energy may not sound all that different if the sound is loud to begin with. This compression operation makes the mel features match
-            more closely what humans actually hear.
+
+        Note:
+            The motivation behind applying the log function on the mel spectrogram is that humans do not hear loudness
+            on a linear scale. Generally to double the percieved volume of a sound we need to put 8 times as much
+            energy into it. This means that large variations in energy may not sound all that different if the sound is
+            loud to begin with. This compression operation makes the mel features match more closely what humans
+            actually hear.
         """
         log_spec = 10 * np.log10(np.clip(mel_spectrogram, a_min=a_min, a_max=None))
         log_spec -= 10.0 * np.log10(np.maximum(a_min, ref))

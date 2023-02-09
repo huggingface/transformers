@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The LAION-AI Team Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2023 The LAION-AI Team and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -373,13 +373,11 @@ class CLAPAudioPatchEmbed(nn.Module):
         self.num_patches = self.grid_size[0] * self.grid_size[1]
 
         self.flatten = config.flatten_patch_embeds
-        self.enable_patch_fusion = config.enable_patch_fusion
         self.enable_fusion = config.enable_fusion
-        self.fusion_type = config.fusion_type
 
         padding = ((patch_size[0] - patch_stride[0]) // 2, (patch_size[1] - patch_stride[1]) // 2)
 
-        scale_factor = 4 if (self.enable_fusion) and (self.fusion_type == "channel_map") else 1
+        scale_factor = 4 if (self.enable_fusion) and (config.fusion_type == "channel_map") else 1
 
         self.proj = nn.Conv2d(
             config.patch_embed_input_channels * scale_factor,
@@ -390,7 +388,7 @@ class CLAPAudioPatchEmbed(nn.Module):
         )
 
         self.norm = nn.LayerNorm(config.patch_embeds_hidden_size) if config.enable_patch_layer_norm else nn.Identity()
-        if self.enable_patch_fusion:
+        if self.enable_fusion:
             self.fusion_model = CLAPAudioAFFBlock(config)
             self.mel_conv2d = nn.Conv2d(
                 config.patch_embed_input_channels,
@@ -899,10 +897,10 @@ class CLAPAudioEncoder(nn.Module):
         grid_size = self.patch_embed.grid_size
         self.patch_stride = self.patch_embed.patch_stride
         self.spec_size = config.spec_size
-        self.freq_ratio = self.spec_size // config.mel_bins
+        self.freq_ratio = self.spec_size // config.num_mel_bins
 
         self.num_features = int(config.hidden_size * 2 ** (self.num_layers - 1))
-        self.freq_ratio = config.spec_size // config.mel_bins
+        self.freq_ratio = config.spec_size // config.num_mel_bins
 
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
 
@@ -925,7 +923,7 @@ class CLAPAudioEncoder(nn.Module):
 
         self.gradient_checkpointing = False
 
-        self.bn0 = nn.BatchNorm2d(config.mel_bins)
+        self.bn0 = nn.BatchNorm2d(config.num_mel_bins)
         self.norm = nn.LayerNorm(self.num_features)
         self.depths = config.depths
 
@@ -941,43 +939,53 @@ class CLAPAudioEncoder(nn.Module):
         )
         self.head = nn.Linear(config.num_classes, config.num_classes)
 
-    def reshape_wav2img(self, hidden_states):
-        _, _, time_steps, freq_steps = hidden_states.shape
+    def reshape_mel2img(self, normalixed_input_features):
+        """
+        The input is 4 normalized log mel spectrograms. It is reshape to the common shape of images. Each channel
+        should represent 1 of the 4 crops of the spectrogram. For more details, refer to the `CLAPFeatureExtracor`.
+        """
+        _, _, time_steps, freq_steps = normalixed_input_features.shape
 
         target_T = int(self.spec_size * self.freq_ratio)
         target_F = self.spec_size // self.freq_ratio
 
         if time_steps > target_T or freq_steps > target_F:
-            raise ValueError("the wav size should less than or equal to the swin input size")
+            raise ValueError("the wav size should be less than or equal to the swin input size")
 
         # to avoid bicubic zero error
         if time_steps < target_T:
-            hidden_states = nn.functional.interpolate(
-                hidden_states, (target_T, hidden_states.shape[3]), mode="bicubic", align_corners=True
+            normalixed_input_features = nn.functional.interpolate(
+                normalixed_input_features,
+                (target_T, normalixed_input_features.shape[3]),
+                mode="bicubic",
+                align_corners=True,
             )
         if freq_steps < target_F:
-            hidden_states = nn.functional.interpolate(
-                hidden_states, (hidden_states.shape[2], target_F), mode="bicubic", align_corners=True
+            normalixed_input_features = nn.functional.interpolate(
+                normalixed_input_features,
+                (normalixed_input_features.shape[2], target_F),
+                mode="bicubic",
+                align_corners=True,
             )
 
-        hidden_states = hidden_states.permute(0, 1, 3, 2).contiguous()
-        hidden_states = hidden_states.reshape(
-            hidden_states.shape[0],
-            hidden_states.shape[1],
-            hidden_states.shape[2],
+        normalixed_input_features = normalixed_input_features.permute(0, 1, 3, 2).contiguous()
+        normalixed_input_features = normalixed_input_features.reshape(
+            normalixed_input_features.shape[0],
+            normalixed_input_features.shape[1],
+            normalixed_input_features.shape[2],
             self.freq_ratio,
-            hidden_states.shape[3] // self.freq_ratio,
+            normalixed_input_features.shape[3] // self.freq_ratio,
         )
 
-        hidden_states = hidden_states.permute(0, 1, 3, 2, 4).contiguous()
-        hidden_states = hidden_states.reshape(
-            hidden_states.shape[0],
-            hidden_states.shape[1],
-            hidden_states.shape[2] * hidden_states.shape[3],
-            hidden_states.shape[4],
+        normalixed_input_features = normalixed_input_features.permute(0, 1, 3, 2, 4).contiguous()
+        normalixed_input_features = normalixed_input_features.reshape(
+            normalixed_input_features.shape[0],
+            normalixed_input_features.shape[1],
+            normalixed_input_features.shape[2] * normalixed_input_features.shape[3],
+            normalixed_input_features.shape[4],
         )
 
-        return hidden_states
+        return normalixed_input_features
 
     def forward(
         self,
@@ -991,15 +999,15 @@ class CLAPAudioEncoder(nn.Module):
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, CLAPAudioModelOutput]:
         input_features = input_features.transpose(1, 3)
-        hidden_states = self.bn0(input_features)
-        hidden_states = hidden_states.transpose(1, 3)
+        normalixed_input_features = self.bn0(input_features)
+        normalixed_input_features = normalixed_input_features.transpose(1, 3)
 
         is_longer_list_idx = None
         if self.enable_fusion:
             is_longer_list = is_longer.to(input_features.device)
             is_longer_list_idx = torch.where(is_longer_list == 0)[0]
 
-        hidden_states = self.reshape_wav2img(hidden_states)
+        hidden_states = self.reshape_mel2img(normalixed_input_features)
 
         frames_num = hidden_states.shape[2]
 
@@ -1013,7 +1021,7 @@ class CLAPAudioEncoder(nn.Module):
 
         if output_hidden_states:
             batch_size, _, hidden_size = hidden_states.shape
-            # rearrange b (h w) c -> b c h w
+            # rearrange batch_size (height width) channels -> batch_size channel height width
             reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
             reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
             all_hidden_states += (hidden_states,)

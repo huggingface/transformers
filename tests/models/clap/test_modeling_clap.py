@@ -78,7 +78,7 @@ class CLAPAudioModelTester:
         parent,
         batch_size=12,
         image_size=60,
-        mel_bins=16,
+        num_mel_bins=16,
         window_size=4,
         spec_size=64,
         patch_size=2,
@@ -102,7 +102,7 @@ class CLAPAudioModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
-        self.mel_bins = mel_bins
+        self.num_mel_bins = num_mel_bins
         self.window_size = window_size
         self.patch_size = patch_size
         self.num_channels = num_channels
@@ -125,7 +125,7 @@ class CLAPAudioModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_features = floats_tensor([self.batch_size, 1, self.hidden_size, self.mel_bins])
+        input_features = floats_tensor([self.batch_size, 1, self.hidden_size, self.num_mel_bins])
         config = self.get_config()
 
         return config, input_features
@@ -134,7 +134,7 @@ class CLAPAudioModelTester:
         return CLAPAudioConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
-            mel_bins=self.mel_bins,
+            num_mel_bins=self.num_mel_bins,
             window_size=self.window_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
@@ -199,7 +199,7 @@ class CLAPAudioModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="CLAP does not use inputs_embeds")
+    @unittest.skip(reason="CLAPAudioModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -245,7 +245,7 @@ class CLAPAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip(reason="CLAPAudio does not output any loss term in the forward pass")
+    @unittest.skip(reason="CLAPAudioModel does not output any loss term in the forward pass")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -269,9 +269,11 @@ class CLAPAudioModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
+    @unittest.skip(reason="CLAPAudioModel does not output any loss term in the forward pass")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="CLAPAudioModel does not output any loss term in the forward pass")
     def test_training_gradient_checkpointing(self):
         pass
 

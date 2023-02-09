@@ -52,7 +52,8 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         chunk_length_s (`int`, defaults to 10):
             The maximum input lenght of the model in seconds. This is used to pad the audio.
         n_fft (`int`, defaults to 400):
-            Size of the Fourier transform. This should be the length of a single frame in samples. 400 means that the fourrier transform is computed on 400 samples.
+            Size of the Fourier transform. This should be the length of a single frame in samples. 400 means that the
+            fourrier transform is computed on 400 samples.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
         return_attention_mask (`bool`, *optional*, False):
