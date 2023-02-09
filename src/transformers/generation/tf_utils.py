@@ -665,7 +665,7 @@ class TFGenerationMixin:
 
     def generate(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        inputs: Optional[tf.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
         logits_processor: Optional[TFLogitsProcessorList] = None,
         seed=None,
@@ -686,9 +686,11 @@ class TFGenerationMixin:
         </Tip>
 
         Parameters:
-            input_ids (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
-                The sequence used as a prompt for the generation. If `None` the method initializes it with
-                `bos_token_id` and a batch size of 1.
+            inputs (`tf.Tensor` of varying shape depending on the modality, *optional*):
+                The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
+                method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
+                should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
+                `input_ids`, `input_values`, `input_features`, or `pixel_values`.
             generation_config (`~generation.GenerationConfig`, *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
@@ -755,13 +757,13 @@ class TFGenerationMixin:
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 2. Cast input dtypes to tf.int32 unless they're floats (which happens for some image models)
-        if input_ids is not None:
-            if isinstance(input_ids, tf.Tensor) and input_ids.dtype.is_floating:
+        if inputs is not None:
+            if isinstance(inputs, tf.Tensor) and inputs.dtype.is_floating:
                 pass
-            elif isinstance(input_ids, np.ndarray) and np.issubdtype(input_ids.dtype, np.floating):
+            elif isinstance(inputs, np.ndarray) and np.issubdtype(inputs.dtype, np.floating):
                 pass
             else:
-                input_ids = tf.cast(input_ids, tf.int32)
+                inputs = tf.cast(inputs, tf.int32)
         if model_kwargs.get("attention_mask") is not None:
             model_kwargs["attention_mask"] = tf.cast(model_kwargs["attention_mask"], tf.int32)
         if "decoder_input_ids" in model_kwargs:
@@ -800,7 +802,7 @@ class TFGenerationMixin:
 
         # 4. Define model inputs
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
-            input_ids, generation_config.bos_token_id, model_kwargs
+            inputs, generation_config.bos_token_id, model_kwargs
         )
         # inputs_ids now has to be defined and cannot be None anymore
         batch_size = shape_list(inputs_tensor)[0]
