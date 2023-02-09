@@ -378,7 +378,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("camembert", "CamemBERT"),
         ("canine", "CANINE"),
         ("chinese_clip", "Chinese-CLIP"),
-        ("clap", "clap"),
+        ("clap", "CLAP"),
         ("clip", "CLIP"),
         ("clipseg", "CLIPSeg"),
         ("codegen", "CodeGen"),
