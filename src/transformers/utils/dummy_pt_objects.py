@@ -1211,6 +1211,37 @@ class BlipVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class Blip2ForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Blip2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Blip2QFormerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class Blip2VisionModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
