@@ -1030,12 +1030,11 @@ class Trainer:
         Trainer's init through `optimizers`, or subclass and override this method (or `create_optimizer` and/or
         `create_scheduler`) in a subclass.
         """
-        print(f"before creation {self.args.local_rank}")
         self.create_optimizer()
         if (IS_SAGEMAKER_MP_POST_1_10 and smp.state.cfg.fp16) or (
             IS_SAGEMAKER_MP_POST_1_15 and smp.state.cfg.sharded_data_parallel_degree > 1
         ):
-            # If smp >= 1.10 and fp16 is enabled or smp >= 1.11 and SDP enabled, we unwrap the optimizer
+            # If smp >= 1.10 and fp16 is enabled or smp >= 1.15 and SDP enabled, we unwrap the optimizer
             optimizer = self.optimizer.optimizer
         else:
             optimizer = self.optimizer
@@ -1050,13 +1049,9 @@ class Trainer:
         """
         opt_model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
 
-        print(f"come creation {self.args.local_rank}")
         if self.optimizer is None:
-            print(f"param is nonenonenone")
             decay_parameters = get_parameter_names(opt_model, ALL_LAYERNORM_LAYERS)
-            # print(f'decay param 1 is {decay_parameters}')
             decay_parameters = [name for name in decay_parameters if "bias" not in name]
-            # print(f'decay param 2 is {decay_parameters}')
             optimizer_grouped_parameters = [
                 {
                     "params": [
@@ -1071,13 +1066,6 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
-            if is_sagemaker_mp_enabled():
-                opt_grouped_params = []
-                for params in optimizer_grouped_parameters:
-                    if len(params["params"]) > 0:
-                        opt_grouped_params.append(params)
-                optimizer_grouped_parameters = opt_grouped_params
-                print(f"opt g params is {[len(x['params']) for x in optimizer_grouped_parameters]}")
             optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args)
 
             if self.sharded_ddp == ShardedDDPOption.SIMPLE:
