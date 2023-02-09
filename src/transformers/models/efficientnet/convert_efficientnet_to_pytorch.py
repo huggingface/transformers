@@ -22,93 +22,61 @@ import json
 from pathlib import Path
 
 import torch
+import numpy as np
 from PIL import Image
 
 import requests
 from huggingface_hub import hf_hub_download
-from transformers import ConvNextFeatureExtractor, EfficientNetConfig, EfficientNetForImageClassification
+import tensorflow as tf
+from tensorflow.keras.applications.efficientnet import *
+from transformers import EfficientNetImageProcessor, EfficientNetConfig, EfficientNetForImageClassification
 from transformers.utils import logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
+model_classes = {
+    'b0': EfficientNetB0,
+    'b1': EfficientNetB1,
+    'b2': EfficientNetB2,
+    'b3': EfficientNetB3,
+    'b4': EfficientNetB4,
+    'b5': EfficientNetB5,
+    'b6': EfficientNetB6,
+    'b7': EfficientNetB7,
+}
 
-def get_efficientnet_config(checkpoint_url):
+CONFIG_MAP = {
+    'b0': {"width_coef": 1.0, "depth_coef": 1.0, "image_size": 224, "dropout_rate": 0.2},
+    'b1': {"width_coef": 1.0, "depth_coef": 1.1, "image_size": 240, "dropout_rate": 0.2},
+    'b2': {"width_coef": 1.1, "depth_coef": 1.2, "image_size": 260, "dropout_rate": 0.3},
+    'b3': {"width_coef": 1.2, "depth_coef": 1.4, "image_size": 300, "dropout_rate": 0.3},
+    'b4': {"width_coef": 1.4, "depth_coef": 1.8, "image_size": 380, "dropout_rate": 0.4},
+    'b5': {"width_coef": 1.6, "depth_coef": 2.2, "image_size": 456, "dropout_rate": 0.4},
+    'b6': {"width_coef": 1.8, "depth_coef": 2.6, "image_size": 528, "dropout_rate": 0.5},
+    'b7': {"width_coef": 2.0, "depth_coef": 3.1, "image_size": 600, "dropout_rate": 0.5},
+}
+
+
+def get_efficientnet_config(model_name):
     config = EfficientNetConfig()
-
-    if "tiny" in checkpoint_url:
-        depths = [3, 3, 9, 3]
-        hidden_sizes = [96, 192, 384, 768]
-    if "small" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [96, 192, 384, 768]
-    if "base" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [128, 256, 512, 1024]
-    if "large" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [192, 384, 768, 1536]
-    if "xlarge" in checkpoint_url:
-        depths = [3, 3, 27, 3]
-        hidden_sizes = [256, 512, 1024, 2048]
-
-    if "1k" in checkpoint_url:
-        num_labels = 1000
-        filename = "imagenet-1k-id2label.json"
-        expected_shape = (1, 1000)
-    else:
-        num_labels = 21841
-        filename = "imagenet-22k-id2label.json"
-        expected_shape = (1, 21841)
+    config.width_coefficient = CONFIG_MAP[model_name]["width_coef"]
+    config.depth_coefficient = CONFIG_MAP[model_name]["depth_coef"]
+    config.image_size = CONFIG_MAP[model_name]["image_size"]
+    config.dropout_rate = CONFIG_MAP[model_name]["dropout_rate"]
 
     repo_id = "huggingface/label-files"
-    config.num_labels = num_labels
+    filename = "imagenet-1k-id2label.json"
+    config.num_labels = 1000
     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
-    if "1k" not in checkpoint_url:
-        # this dataset contains 21843 labels but the model only has 21841
-        # we delete the classes as mentioned in https://github.com/google-research/big_transfer/issues/18
-        del id2label[9205]
-        del id2label[15027]
+
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
     config.hidden_sizes = hidden_sizes
     config.depths = depths
-
-    return config, expected_shape
-
-
-def rename_key(name):
-    if "downsample_layers.0.0" in name:
-        name = name.replace("downsample_layers.0.0", "embeddings.patch_embeddings")
-    if "downsample_layers.0.1" in name:
-        name = name.replace("downsample_layers.0.1", "embeddings.norm")  # we rename to layernorm later on
-    if "downsample_layers.1.0" in name:
-        name = name.replace("downsample_layers.1.0", "stages.1.downsampling_layer.0")
-    if "downsample_layers.1.1" in name:
-        name = name.replace("downsample_layers.1.1", "stages.1.downsampling_layer.1")
-    if "downsample_layers.2.0" in name:
-        name = name.replace("downsample_layers.2.0", "stages.2.downsampling_layer.0")
-    if "downsample_layers.2.1" in name:
-        name = name.replace("downsample_layers.2.1", "stages.2.downsampling_layer.1")
-    if "downsample_layers.3.0" in name:
-        name = name.replace("downsample_layers.3.0", "stages.3.downsampling_layer.0")
-    if "downsample_layers.3.1" in name:
-        name = name.replace("downsample_layers.3.1", "stages.3.downsampling_layer.1")
-    if "stages" in name and "downsampling_layer" not in name:
-        # stages.0.0. for instance should be renamed to stages.0.layers.0.
-        name = name[: len("stages.0")] + ".layers" + name[len("stages.0") :]
-    if "stages" in name:
-        name = name.replace("stages", "encoder.stages")
-    if "norm" in name:
-        name = name.replace("norm", "layernorm")
-    if "gamma" in name:
-        name = name.replace("gamma", "layer_scale_parameter")
-    if "head" in name:
-        name = name.replace("head", "classifier")
-
-    return name
+    return config
 
 
 # We will verify our results on an image of cute cats
@@ -118,13 +86,56 @@ def prepare_img():
     return im
 
 
+def convert_image_processor(model_name):
+    size = CONFIG_MAP[model_name]["image_size"]
+    preprocessor = EfficientNetImageProcessor(
+        size={"height": size, "width": size}, 
+        do_center_crop=False,
+    )
+    return preprocessor
+
+# here we list all keys to be renamed (original name on the left, our name on the right)
+def rename_keys(original_param_names):
+    block_names = [v.split("_")[0].split("block")[1] for v in original_param_names if v.startswith("block")]
+    block_names = sorted(list(set(block_names)))
+    num_blocks = len(block_names)
+    block_name_mapping = {b: str(i) for b, i in zip(block_names, range(num_blocks))}
+
+    rename_keys = []
+    rename_keys.append("stem_conv/kernel:0", "embeddings.convolution.weight")
+    rename_keys.append("stem_bn/gamma:0", "embeddings.batchnorm.weight")
+    rename_keys.append("stem_bn/beta:0", "embeddings.batchnorm.bias")
+
+    for b in range(block_names):
+        hf_b = block_name_mapping[b]
+        rename_keys.append((f"block{b}_se_expand/kernel:0", f"encoder.blocks.{hf_b}.expansion.expand_conv.weight"))
+        rename_keys.append((f"block{b}_se_expand/bias:0", f"encoder.blocks.{hf_b}.expansion.expand_conv.bias"))
+
+    key_mapping = {item[0]: item[1] for item in rename_keys}
+    return key_mapping
+
+
 @torch.no_grad()
-def convert_efficientnet_checkpoint(checkpoint_url, pytorch_dump_folder_path):
+def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path):
     """
     Copy/paste/tweak model's weights to our EfficientNet structure.
     """
+    # Load original model
+    original_model = model_classes[model_name](
+        include_top=True,
+        weights="imagenet",
+        input_tensor=None,
+        input_shape=None,
+        pooling=None,
+        classes=1000,
+        classifier_activation="softmax",
+    )
 
-    # define EfficientNet configuration based on URL
+    vars = original_model.trainable_variables
+    var_names = [v.name for v in if vars]
+    key_mapping = rename_keys(var_names)
+
+    # Define EfficientNet configuration based on URL
     config, expected_shape = get_efficientnet_config(checkpoint_url)
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
@@ -132,58 +143,44 @@ def convert_efficientnet_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
         state_dict[rename_key(key)] = val
-    # add prefix to all keys expect classifier head
+    # Add prefix to all keys expect classifier head
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
         if not key.startswith("classifier"):
             key = "efficientnet." + key
         state_dict[key] = val
 
-    # load HuggingFace model
+    # Load HuggingFace model
+    config = get_efficientnet_config(model_name)
     model = EfficientNetForImageClassification(config)
     model.load_state_dict(state_dict)
     model.eval()
 
-    # Check outputs on an image, prepared by ConvNextFeatureExtractor
-    size = 224 if "224" in checkpoint_url else 384
-    feature_extractor = ConvNextFeatureExtractor(size=size)
-    pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
+    # Initialize preprocessor and preprocess input image
+    preprocessor = convert_image_processor(model_name)
+    inputs = preprocessor(images=prepare_img(), return_tensors="pt")
 
     logits = model(pixel_values).logits
 
     # note: the logits below were obtained without center cropping
-    if checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_tiny_1k_224_ema.pth":
+    if model_name == "b0":
         expected_logits = torch.tensor([-0.1210, -0.6605, 0.1918])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_small_1k_224_ema.pth":
+    elif model_name == "b1":
         expected_logits = torch.tensor([-0.4473, -0.1847, -0.6365])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_base_1k_224_ema.pth":
+    elif model_name == "b2":
         expected_logits = torch.tensor([0.4525, 0.7539, 0.0308])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_base_1k_384.pth":
+    elif model_name == "b3":
         expected_logits = torch.tensor([0.3561, 0.6350, -0.0384])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_large_1k_224_ema.pth":
+    elif model_name == "b4":
         expected_logits = torch.tensor([0.4174, -0.0989, 0.1489])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_large_1k_384.pth":
+    elif model_name == "b5":
         expected_logits = torch.tensor([0.2513, -0.1349, -0.1613])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_base_22k_224.pth":
+    elif model_name == "b6":
         expected_logits = torch.tensor([1.2980, 0.3631, -0.1198])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_large_22k_224.pth":
+    elif model_name == "b7":
         expected_logits = torch.tensor([1.2963, 0.1227, 0.1723])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_xlarge_22k_224.pth":
-        expected_logits = torch.tensor([1.7956, 0.8390, 0.2820])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_base_22k_1k_224.pth":
-        expected_logits = torch.tensor([-0.2822, -0.0502, -0.0878])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_base_22k_1k_384.pth":
-        expected_logits = torch.tensor([-0.5672, -0.0730, -0.4348])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_large_22k_1k_224.pth":
-        expected_logits = torch.tensor([0.2681, 0.2365, 0.6246])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_large_22k_1k_384.pth":
-        expected_logits = torch.tensor([-0.2642, 0.3931, 0.5116])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_xlarge_22k_1k_224_ema.pth":
-        expected_logits = torch.tensor([-0.6677, -0.1873, -0.8379])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/efficientnet/efficientnet_xlarge_22k_1k_384_ema.pth":
-        expected_logits = torch.tensor([-0.7749, -0.2967, -0.6444])
     else:
-        raise ValueError(f"Unknown URL: {checkpoint_url}")
+        raise ValueError(f"Unknown version: {model_name}")
 
     assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
     assert logits.shape == expected_shape
@@ -195,29 +192,11 @@ def convert_efficientnet_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     print("Pushing model to the hub...")
-    model_name = "efficientnet"
-    if "tiny" in checkpoint_url:
-        model_name += "-tiny"
-    elif "small" in checkpoint_url:
-        model_name += "-small"
-    elif "base" in checkpoint_url:
-        model_name += "-base"
-    elif "xlarge" in checkpoint_url:
-        model_name += "-xlarge"
-    elif "large" in checkpoint_url:
-        model_name += "-large"
-    if "224" in checkpoint_url:
-        model_name += "-224"
-    elif "384" in checkpoint_url:
-        model_name += "-384"
-    if "22k" in checkpoint_url and "1k" not in checkpoint_url:
-        model_name += "-22k"
-    if "22k" in checkpoint_url and "1k" in checkpoint_url:
-        model_name += "-22k-1k"
+    model_name = "efficientnet-" + model_name
 
     model.push_to_hub(
         repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-        organization="nielsr",
+        organization="adirik",
         commit_message="Add model",
     )
 
@@ -226,10 +205,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--checkpoint_url",
-        default="https://dl.fbaipublicfiles.com/efficientnet/efficientnet_tiny_1k_224_ema.pth",
+        "--model_name",
+        default="b0",
         type=str,
-        help="URL of the original EfficientNet checkpoint you'd like to convert.",
+        help="Version name of the EfficientNet model you want to convert, select from [b0, b1, b2, b3, b4, b5, b6, b7].",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
@@ -240,4 +219,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_efficientnet_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path)
+    convert_efficientnet_checkpoint(args.model_name, args.pytorch_dump_folder_path)

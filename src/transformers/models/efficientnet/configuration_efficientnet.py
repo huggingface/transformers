@@ -75,8 +75,8 @@ class EfficientNetConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         layer_scale_init_value (`float`, *optional*, defaults to 1e-6):
             The initial value for the layer scale.
-        drop_rate (`float`, *optional*, defaults to 0.5):
-            The drop rate to be applied before final classifier layer.
+        dropout_rate (`float`, *optional*, defaults to 0.5):
+            The dropout rate to be applied before final classifier layer.
         drop_connect_rate (`float`, *optional*, defaults to 0.2):
             The drop rate for skip connections.
         out_features (`List[str]`, *optional*):
@@ -117,8 +117,7 @@ class EfficientNetConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         layer_scale_init_value=1e-6,
-        drop_rate=0.5,
-        drop_path_rate=0.0,
+        dropout_rate=0.5,
         drop_connect_rate=0.2,
         out_features=None,
         **kwargs
@@ -142,8 +141,7 @@ class EfficientNetConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.layer_scale_init_value = layer_scale_init_value
-        self.drop_rate = drop_rate
-        self.drop_path_rate = drop_path_rate
+        self.dropout_rate = dropout_rate
         self.drop_connect_rate = drop_connect_rate
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.kernel_sizes) + 1)]
         if out_features is not None:

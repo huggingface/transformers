@@ -99,42 +99,6 @@ def round_filters(config: EfficientNetConfig, num_channels: int):
     return int(new_dim)
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input, drop_prob: float = 0.0, training: bool = False):
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->EfficientNet
-class EfficientNetDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None):
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
-
-
 class EfficientNetEmbeddings(nn.Module):
     def __init__(self, config: EfficientNetConfig):
         super().__init__()
@@ -491,14 +455,17 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     EFFICIENTNET_START_DOCSTRING,
 )
 class EfficientNetModel(EfficientNetPreTrainedModel):
-    def __init__(self, config: EfficientNetConfig):
+    def __init__(self, config: EfficientNetConfig, pooling: str = "avg"):
         super().__init__(config)
         self.config = config
         self.embeddings = EfficientNetEmbeddings(config)
         self.encoder = EfficientNetEncoder(config)
 
         # Final pooling layer
-        self.pooler = nn.AvgPool2d(config.hidden_dim)
+        if pooling == "avg":
+            self.pooler = nn.AvgPool2d(config.hidden_dim)
+        else:
+            self.pooler = nn.MaxPool2d(config.hidden_dim)
         
         # Initialize weights and apply final processing
         self.post_init()
@@ -535,7 +502,7 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
 
         last_hidden_state = encoder_outputs[0]
 
-        # Global average pooling, (N, C, H, W) -> (N, C)
+        # Apply pooling
         pooled_output = self.pooler(last_hidden_state)
 
         if not return_dict:
@@ -562,7 +529,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
 
         self.efficientnet = EfficientNetModel(config)
         # Classifier head
-        self.dropout = nn.Dropout(p=config.drop_rate)
+        self.dropout = nn.Dropout(p=config.dropout_rate)
         self.classifier = nn.Linear(config.hidden_sizes[-1], num_labels) if num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
@@ -593,7 +560,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         outputs = self.efficientnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
-        pooled_output = self.dropout(p=config.drop_rate)
+        pooled_output = self.dropout(p=config.dropout_rate)
         logits = self.classifier(pooled_output)
 
         loss = None

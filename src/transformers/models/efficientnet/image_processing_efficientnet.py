@@ -66,10 +66,10 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        rescale_offset (`bool`, *optional*, defaults to `True`):
+        rescale_offset (`bool`, *optional*, defaults to `False`):
             Whether to rescale the image between [-scale_range, scale_range] instead of [0, scale_range]. Can be
             overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `False`):
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
@@ -89,8 +89,8 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         resample: PILImageResampling = PIL.Image.BICUBIC,
         do_center_crop: bool = True,
         crop_size: Dict[str, int] = None,
-        rescale_factor: Union[int, float] = 1 / 127.5,
-        rescale_offset: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_offset: bool = False,
         do_rescale: bool = True,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
