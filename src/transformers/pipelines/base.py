@@ -766,8 +766,6 @@ class Pipeline(_ScikitCompat):
         self.framework = framework
 
         if self.framework == "pt" and device is not None:
-            if isinstance(device, int) and device == -1:
-                device = "cpu"
             self.model = self.model.to(device=device)
 
         if device is None:
