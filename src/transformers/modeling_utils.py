@@ -1905,33 +1905,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
                 This is an experimental feature and a subject to change at any moment.
             torch_dtype (`str` or `torch.dtype`, *optional*):
-                Override the default `torch.dtype` and load the model under this dtype. If `"auto"` is passed the dtype
-                will be automatically derived from the model's weights.
+                Override the default `torch.dtype` and load the model under a specific `dtype`. The different options
+                are:
 
-                Here is how `torch_dtype` defines in which `dtype` the model gets loaded:
+                1. `torch.float16` or `torch.bfloat16` or `torch.float`: load in a specified
+                  `dtype`, ignoring the model's `config.torch_dtype` if one exists. If not specified
+                  - the model will get loaded in `torch.float` (fp32).
 
-                1. `torch_dtype=torch.float16` - (or `torch.bfloat16` or `torch.float`) load in a
-                  specified `dtype`, ignoring the model's `config.torch_dtype` if one exists. If not specified - the
-                  model will get loaded in `torch.float` (fp32).
+                2. `"config"`- use the `torch_dtype` specified in the `config.json` file that comes with the model. If
+                   `config.torch_dtype` isn't in `config.json` the program will assert.
 
-                2. `torch_dtype="config".torch_dtype` - use the `torch_dtype` specified in the config (similar to
-                  the first case
-
-                3. torch_dtype="auto" - check the `dtype` of the first weight that's a floating point
-                  one in the checkpoint and use that as `dtype`. This will load the model using the `dtype` it was
-                  saved in. It can't be used as an indicator of how the model was trained. Since it could be trained in
-                  a mixed precision regime but saved in fp32.
-
-                Specifically for case (2) you could use the following approach to retrieve `config.torch_dtype`:
-
-                ```
-                config = AutoConfig.from_pretrained(x)
-                model = AutoModel.from_pretrained(x, torch_dtype=config.torch_dtype)
-                ```
+                3. `"auto"` - check the `dtype` of the first weight in the checkpoint that's of a
+                  floating point type and use that as `dtype`. This will load the model using the `dtype` it was saved
+                  in at the end of the training. It can't be used as an indicator of how the model was trained. Since
+                  it could be trained in one of half precision dtypes but saved in fp32.
 
                 Note: for some models the `dtype` they were trained in is unknown - you may try to check the model's
                 paper or reach out to the authors and ask them to add this information to the model's card and to
-                insert the `torch_dtype` entry in `config.json` on the hub
+                insert the `torch_dtype` entry in `config.json` on the hub.
 
             device_map (`str` or `Dict[str, Union[int, str, torch.device]]`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
@@ -2097,10 +2088,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     " bitsandbytes `pip install -i https://test.pypi.org/simple/ bitsandbytes` or"
                     " pip install bitsandbytes` "
                 )
-            if torch_dtype == "auto" or torch_dtype != torch.float16:
+            if torch_dtype != torch.float16:
                 # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
+                logger.warning(
+                    f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
+                    "requirements of `bitsandbytes` to enable model loading in mixed int8. "
+                    "Either pass torch_dtype=torch.float16 or don't pass this argument at all to remove this warning."
+                )
                 torch_dtype = torch.float16
-                logger.info("Loading the model in mixed int8 - forcing the weights to be casted in float16")
+
             if device_map is None:
                 raise ValueError(
                     "A device map needs to be passed to run convert models into mixed-int8 format. Please run"
@@ -2386,7 +2382,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if torch_dtype is not None:
                 if isinstance(torch_dtype, str):
-                    if torch_dtype == "auto":
+                    if torch_dtype == "config":
+                        if hasattr(config, "torch_dtype"):
+                            torch_dtype = config.torch_dtype
+                        else:
+                            raise ValueError(
+                                'Cannot resolve torch_dtype="config" as `torch_dtype` cannot be found in `config.json`. '
+                                "Please either fix `config.json` to include a `torch_dtype` entry if it is under your control, and if not, "
+                                'either use an explicit torch `dtype` or "auto" or remove this argument altogether and then `torch.float` will be used'
+                            )
+                    elif torch_dtype == "auto":
                         if is_sharded and "dtype" in sharded_metadata:
                             torch_dtype = sharded_metadata["dtype"]
                         elif not is_sharded:
@@ -2397,7 +2402,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             del one_state_dict  # free CPU memory
                     else:
                         raise ValueError(
-                            f"`torch_dtype` can be either a `torch.dtype` or `auto`, but received {torch_dtype}"
+                            f'`torch_dtype` can be one of torch `dtype`, `"config"` or `"auto"`, but received {torch_dtype}'
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 

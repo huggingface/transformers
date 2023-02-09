@@ -1035,6 +1035,8 @@ class T5Stack(T5PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
+            assert self.gradient_checkpointing and self.training
+
             if self.gradient_checkpointing and self.training:
                 if use_cache:
                     logger.warning(

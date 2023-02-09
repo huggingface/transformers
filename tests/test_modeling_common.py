@@ -2749,7 +2749,6 @@ class ModelUtilsTest(TestCasePlus):
             BertModel.from_pretrained(TINY_T5)
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
 
-    @require_torch
     def test_model_from_config_torch_dtype(self):
         # test that the model can be instantiated with dtype of user's choice - as long as it's a
         # float dtype. To make it happen config.torch_dtype needs to be set before instantiating the
@@ -2768,7 +2767,6 @@ class ModelUtilsTest(TestCasePlus):
         with self.assertRaises(ValueError):
             model = AutoModel.from_config(config, torch_dtype=torch.int64)
 
-    @require_torch
     def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
         # 1. explicit from_pretrained's torch_dtype argument
@@ -2789,6 +2787,9 @@ class ModelUtilsTest(TestCasePlus):
         # test with auto-detection
         model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
+        # now same with using config info
+        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="config")
+        self.assertEqual(model.dtype, torch.float32)
 
         # test forced loading in fp16 (even though the weights are in fp32)
         model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float16)
@@ -2799,6 +2800,9 @@ class ModelUtilsTest(TestCasePlus):
         model.save_pretrained(model_path)
         model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
         self.assertEqual(model.config.torch_dtype, torch.float16)
+        self.assertEqual(model.dtype, torch.float16)
+        # now same with using config info
+        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="config")
         self.assertEqual(model.dtype, torch.float16)
 
         # tests `config.torch_dtype` saving
@@ -2814,6 +2818,10 @@ class ModelUtilsTest(TestCasePlus):
         # test auto-detection
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
+        # XXX: some models don't have `torch_dtype` in `config.json` so we can't test those at the moment
+        # test via config's dtype
+        #model = AutoModel.from_pretrained(TINY_T5, torch_dtype="config")
+        #self.assertEqual(model.dtype, torch.float32)
         # test forcing an explicit dtype
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
@@ -2821,6 +2829,9 @@ class ModelUtilsTest(TestCasePlus):
         # test model whose first param is not of a floating type, but int
         model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
+
+
+
 
     def test_no_super_init_config_and_model(self):
         config = NoSuperInitConfig(attribute=32)
