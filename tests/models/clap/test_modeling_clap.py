@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     is_flax_available,
     is_pt_flax_cross_test,
     require_torch,
-    require_vision,
     slow,
     torch_device,
 )
@@ -53,6 +52,7 @@ if is_torch_available():
         CLAPAudioModel,
         CLAPAudioModelWithProjection,
         CLAPModel,
+        CLAPProcessor,
         CLAPTextModel,
         CLAPTextModelWithProjection,
     )
@@ -755,8 +755,66 @@ def prepare_img():
     return im
 
 
-@require_vision
+@slow
 @require_torch
 class CLAPModelIntegrationTest(unittest.TestCase):
-    # TODO!
-    pass
+    paddings = ["repeatpad", "repeat", "pad"]
+
+    def test_integration_unfused(self):
+        EXPECTED_MEANS_UNFUSED = {
+            "repeatpad": 0.0024,
+            "pad": 0.0020,
+            "repeat": 0.0023,
+        }
+
+        from datasets import load_dataset
+
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        audio_sample = librispeech_dummy[-1]
+
+        model_id = "ybelkada/clap-htsat-unfused"
+
+        model = CLAPModel.from_pretrained(model_id).to(torch_device)
+        processor = CLAPProcessor.from_pretrained(model_id)
+
+        for padding in self.paddings:
+            inputs = processor(audios=audio_sample["audio"]["array"], return_tensors="pt", padding=padding).to(
+                torch_device
+            )
+
+            audio_embed = model.get_audio_features(**inputs)
+            expected_mean = EXPECTED_MEANS_UNFUSED[padding]
+
+            self.assertTrue(
+                torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
+            )
+
+    def test_integration_fused(self):
+        EXPECTED_MEANS_FUSED = {
+            "repeatpad": 0.00069,
+            "repeat": 0.00196,
+            "pad": -0.000379,
+        }
+
+        from datasets import load_dataset
+
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        audio_sample = librispeech_dummy[-1]
+
+        model_id = "ybelkada/clap-htsat-fused"
+
+        model = CLAPModel.from_pretrained(model_id).to(torch_device)
+        processor = CLAPProcessor.from_pretrained(model_id)
+
+        for padding in self.paddings:
+            inputs = processor(
+                audios=audio_sample["audio"]["array"], return_tensors="pt", padding=padding, truncation="fusion"
+            ).to(torch_device)
+            inputs["is_longer"] = torch.tensor([False])
+
+            audio_embed = model.get_audio_features(**inputs)
+            expected_mean = EXPECTED_MEANS_FUSED[padding]
+
+            self.assertTrue(
+                torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
+            )
