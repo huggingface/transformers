@@ -536,7 +536,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values=None,
+        pixel_values: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
