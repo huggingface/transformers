@@ -160,7 +160,7 @@ Finally, the data exploration won't be complete if we don't peek at an image exa
 ## Preprocess the data
 
 The Document Question Answering task is a multimodal task, and you need to make sure that the inputs from each modality
-are preprocessed according to the model's expectations. Let's start by loading the [`~LayoutLMv2Processor`], which internally combines an image processor that can handle image data and a tokenizer that can encode text data.
+are preprocessed according to the model's expectations. Let's start by loading the [`LayoutLMv2Processor`], which internally combines an image processor that can handle image data and a tokenizer that can encode text data.
 
 ```py
 >>> from transformers import AutoProcessor
@@ -340,6 +340,9 @@ Now that we have this preprocessing function, we can encode the entire dataset:
 >>> encoded_train_dataset = dataset_with_ocr["train"].map(
 ...     encode_dataset, batched=True, batch_size=2, remove_columns=dataset_with_ocr["train"].column_names
 ... )
+>>> encoded_test_dataset = dataset_with_ocr["test"].map(
+...     encode_dataset, batched=True, batch_size=2, remove_columns=dataset_with_ocr["test"].column_names
+... )
 ```
 
 Let's check what the features of the encoded dataset look like:
@@ -358,9 +361,10 @@ Let's check what the features of the encoded dataset look like:
 ## Evaluation
 
 Evaluation for document question answering requires a significant amount of postprocessing. To avoid taking up too much
-of your time, this guide skips the evaluation step. The [`~Trainer`] still calculates the evaluation loss during training so
-you're not completely in the dark about your model's performance. If you'd like to implement it yourself, check out the
-[Question Answering chapter](https://huggingface.co/course/chapter7/7?fw=pt#postprocessing) of Hugging Face course for inspiration.
+of your time, this guide skips the evaluation step. The [`Trainer`] still calculates the evaluation loss during training so
+you're not completely in the dark about your model's performance. Extractive question answering is typically evaluated using F1/exact match.
+If you'd like to implement it yourself, check out the [Question Answering chapter](https://huggingface.co/course/chapter7/7?fw=pt#postprocessing)
+of the Hugging Face course for inspiration.
 
 ## Train
 
@@ -394,6 +398,7 @@ In this case the `output_dir` will also be the name of the repo where your model
 ...     num_train_epochs=20,
 ...     save_steps=200,
 ...     logging_steps=50,
+...     evaluation_strategy="steps",
 ...     learning_rate=5e-5,
 ...     save_total_limit=2,
 ...     remove_unused_columns=False,
@@ -419,6 +424,7 @@ Finally, bring everything together, and call [`~Trainer.train`]:
 ...     args=training_args,
 ...     data_collator=data_collator,
 ...     train_dataset=encoded_train_dataset,
+...     eval_dataset=encoded_test_dataset,
 ...     tokenizer = processor,
 ... )
 
