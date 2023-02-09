@@ -168,9 +168,9 @@ are preprocessed according to model's expectations. Let's start by loading the [
 combines an image processor that can handle image data and a tokenizer that can encode text data.
 
 ```py
->>> from transformers import LayoutLMv2Processor
+>>> from transformers import AutoProcessor
 
->>> processor = LayoutLMv2Processor.from_pretrained(model_checkpoint)
+>>> processor = AutoProcessor.from_pretrained(model_checkpoint)
 ```
 
 ### Preprocessing document images
@@ -368,9 +368,9 @@ Training involves the following steps:
 * Call [`~Trainer.train`] to finetune your model.
 
 ```py
->>> from transformers import AutoModelForQuestionAnswering
+>>> from transformers import AutoModelForDocumentQuestionAnswering
 
->>> model = AutoModelForQuestionAnswering.from_pretrained(model_checkpoint)
+>>> model = AutoModelForDocumentQuestionAnswering.from_pretrained(model_checkpoint)
 ```
 
 In the [`TrainingArguments`] use `output_dir` to specify where to save your model, and configure hyperparameters as you see fit.
@@ -467,10 +467,10 @@ which token is at the end of the answer. Both have shape (batch_size, sequence_l
 
 ```py
 >>> import torch
->>> from transformers import LayoutLMv2Processor
+>>> from transformers import AutoProcessor
 >>> from transformers import AutoModelForDocumentQuestionAnswering
 
->>> processor = LayoutLMv2Processor.from_pretrained("MariaK/layoutlmv2-base-uncased_finetuned_docvqa")
+>>> processor = AutoProcessor.from_pretrained("MariaK/layoutlmv2-base-uncased_finetuned_docvqa")
 >>> model = AutoModelForDocumentQuestionAnswering.from_pretrained("MariaK/layoutlmv2-base-uncased_finetuned_docvqa")
 
 >>> with torch.no_grad():
