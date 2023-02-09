@@ -522,6 +522,8 @@
         title: AltCLIP
       - local: model_doc/blip
         title: BLIP
+      - local: model_doc/blip-2
+        title: BLIP-2
       - local: model_doc/bridgetower
         title: BridgeTower
       - local: model_doc/chinese_clip
