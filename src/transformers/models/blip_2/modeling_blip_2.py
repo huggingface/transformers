@@ -61,13 +61,13 @@ class Blip2ForConditionalGenerationModelOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             Language modeling loss from the language model.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head of the language model.
-        vision_outputs (...):
+        vision_outputs (`BaseModelOutputWithPooling`):
             Outputs of the vision encoder.
-        qformer_outputs (...):
+        qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
             Outputs of the Q-Former (Querying Transformer).
-        language_model_outputs (...):
+        language_model_outputs (`CausalLMOutputWithPast` or `Seq2SeqLMOutput`):
             Outputs of the language model.
     """
 
