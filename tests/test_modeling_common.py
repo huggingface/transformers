@@ -2749,6 +2749,15 @@ class ModelUtilsTest(TestCasePlus):
             BertModel.from_pretrained(TINY_T5)
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
 
+    def test_model_from_pretrained_no_checkpoint(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+        state_dict = model.state_dict()
+
+        new_model = BertModel.from_pretrained(pretrained_model_name_or_path=None, config=config, state_dict=state_dict)
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
     @require_torch
     def test_model_from_config_torch_dtype(self):
         # test that the model can be instantiated with dtype of user's choice - as long as it's a
