@@ -46,14 +46,6 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_clap import (
-        CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CLAPAudioConfig,
-        CLAPConfig,
-        CLAPTextConfig,
-    )
-    from .feature_extraction_clap import CLAPFeatureExtractor
-    from .processing_clap import CLAPProcessor
 
     try:
         if not is_torch_available():
@@ -61,15 +53,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_clap import (
-            CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CLAPAudioModel,
-            CLAPAudioModelWithProjection,
-            CLAPModel,
-            CLAPPreTrainedModel,
-            CLAPTextModel,
-            CLAPTextModelWithProjection,
-        )
+        pass
 
 else:
     import sys

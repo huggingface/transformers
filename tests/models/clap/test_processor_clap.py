@@ -16,19 +16,10 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import RobertaTokenizer, RobertaTokenizerFast
+from transformers import CLAPFeatureExtractor, CLAPProcessor, RobertaTokenizer, RobertaTokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_torchaudio
-from transformers.utils import is_torchvision_available
 
 from .test_feature_extraction_clap import floats_list
-
-
-if is_torchvision_available():
-    from transformers import CLAPFeatureExtractor, CLAPProcessor
-
-
-TRANSCRIBE = 50358
-NOTIMESTAMPS = 50362
 
 
 @require_torchaudio
