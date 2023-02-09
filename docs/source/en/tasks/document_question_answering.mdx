@@ -15,8 +15,8 @@ specific language governing permissions and limitations under the License.
 [[open-in-colab]]
 
 Document Question Answering, also referred to as Document Visual Question Answering, is a task that involves providing
-answers to questions posed about document images. The input to these models is typically a combination of an image and
-a question, and the output is an answer expressed in natural language. These models utilize multiple features, including
+answers to questions posed about document images. The input to models supporting this task is typically a combination of an image and
+a question, and the output is an answer expressed in natural language. These models utilize multiple modalities, including
 text, the positions of words (bounding boxes), and the image itself.
 
 This guide illustrates how to:
@@ -129,8 +129,8 @@ We'll also take the first of the answers from the set provided by the annotators
 Note that the LayoutLMv2 checkpoint that we use in this guide has been trained with `max_position_embeddings = 512` (you can
 find this information in the [checkpoint's `config.json` file](https://huggingface.co/microsoft/layoutlmv2-base-uncased/blob/main/config.json#L18)).
 We can truncate the examples but to avoid the situation where the answer might be at the end of a large document and end up truncated,
-let's remove the few examples where the embedding is likely to end up longer than 512. If most of the documents in your dataset are long, you
-may need to choose a different pretrained model checkpoint.
+here we'll remove the few examples where the embedding is likely to end up longer than 512.
+If most of the documents in your dataset are long, you can implement a sliding window strategy - check out [this notebook](https://github.com/huggingface/notebooks/blob/main/examples/question_answering.ipynb) for details.
 
 ```py
 >>> updated_dataset = updated_dataset.filter(lambda x: len(x["words"]) + len(x["question"].split()) < 512)
