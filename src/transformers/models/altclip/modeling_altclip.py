@@ -1067,10 +1067,12 @@ class AltCLIPPreTrainedModel(PreTrainedModel):
                 module.text_projection.weight,
                 std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
             )
+            module.text_projection._is_hf_initialized = True
             nn.init.normal_(
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
             )
+            module.visual_projection._is_hf_initialized = True
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)

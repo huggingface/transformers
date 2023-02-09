@@ -1049,8 +1049,14 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
+        # Wav2Vec2ForPreTraining last 2 linear layers need standard Linear init.
+        if isinstance(module, Wav2Vec2ForPreTraining):
+            module.project_hid.reset_parameters()
+            module.project_q.reset_parameters()
+            module.project_hid._is_hf_initialized = True
+            module.project_q._is_hf_initialized = True
         # gumbel softmax requires special init
-        if isinstance(module, Wav2Vec2GumbelVectorQuantizer):
+        elif isinstance(module, Wav2Vec2GumbelVectorQuantizer):
             module.weight_proj.weight.data.normal_(mean=0.0, std=1)
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
@@ -1345,12 +1351,11 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         self.quantizer = Wav2Vec2GumbelVectorQuantizer(config)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
-        # make sure that project_hid & project_q are initialized like normal linear layers
         self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
         self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def set_gumbel_temperature(self, temperature: int):
         """

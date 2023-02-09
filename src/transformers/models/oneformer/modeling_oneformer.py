@@ -2801,6 +2801,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, OneFormerTransformerDecoder):
             nn.init.xavier_uniform_(module.query_input_projection.weight, gain=xavier_std)
             nn.init.constant_(module.query_input_projection.bias, 0)
+            module.query_input_projection._is_hf_initialized = True
         elif isinstance(module, OneFormerPixelDecoderEncoderMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             thetas = torch.arange(module.n_heads, dtype=torch.float32) * (2.0 * math.pi / module.n_heads)

@@ -436,6 +436,17 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             )
 
 
+def set_initialized_submodules(model, state_dict_keys):
+    """
+    Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
+    dict.
+    """
+    for module_name, module in model.named_modules():
+        loaded_keys = [k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")]
+        if len(set(module.state_dict().keys()) - set(loaded_keys)) == 0:
+            module._is_hf_initialized = True
+
+
 def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
@@ -1176,7 +1187,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Initialize the weights. This method should be overridden by derived class.
         """
-        raise NotImplementedError(f"Make sure `_init_weights` is implemented for {self.__class__}")
+        pass
+
+    def _initialize_weights(self, module):
+        """
+        Initialize the weights if they are not already initialized.
+        """
+        if getattr(module, "_is_hf_initialized", False):
+            return
+        self._init_weights(module)
+        module._is_hf_initialized = True
 
     def tie_weights(self):
         """
@@ -1505,7 +1525,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def init_weights(self):
         """
-        If needed prunes and maybe initializes weights.
+        If needed prunes and maybe initializes weights. If using a custom `PreTrainedModel`, you need to implement any
+        initialization logic in `_init_weights`.
         """
         # Prune heads if needed
         if self.config.pruned_heads:
@@ -1513,7 +1534,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if _init_weights:
             # Initialize weights
-            self.apply(self._init_weights)
+            self.apply(self._initialize_weights)
 
             # Tie weights should be skipped when not initializing all weights
             # since from_pretrained(...) calls tie weights anyways
@@ -2713,11 +2734,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
-            uninitialized_modules = model.retrieve_modules_from_names(
-                missing_keys, add_prefix=add_prefix_to_model, remove_prefix=remove_prefix_from_model
-            )
-            for module in uninitialized_modules:
-                model._init_weights(module)
+            if remove_prefix_from_model:
+                _loaded_keys = [f"{prefix}.{k}" for k in loaded_keys]
+            elif add_prefix_to_model:
+                _loaded_keys = [k[len(prefix) + 1 :] for k in loaded_keys]
+            else:
+                _loaded_keys = loaded_keys
+            set_initialized_submodules(model, _loaded_keys)
+            # This will only initialize submodules that are not marked as initialized by the line above.
+            model.apply(model._initialize_weights)
 
         # Set some modules to fp32 if any
         if keep_in_fp32_modules is not None:
