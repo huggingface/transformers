@@ -15,7 +15,9 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Image captioning is the task of predicting a caption for a given image. Common real world applications of it include aiding visually impaired people that can help them navigate through different situations.
+Image captioning is the task of predicting a caption for a given image. Common real world applications of it include
+aiding visually impaired people that can help them navigate through different situations. Therefore, image captioning
+helps to improve content accessibility for people by describing images to them.
 
 This guide will show you how to:
 
@@ -40,7 +42,8 @@ notebook_login()
 
 ## Load the Pokémon BLIP captions dataset
 
-Use the 🤗 Dataset library to load a dataset that consists of {image-caption} pairs. If you are looking for a more customizable treatment of the dataset, you can follow [this notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/GIT/Fine_tune_GIT_on_an_image_captioning_dataset.ipynb). 
+Use the 🤗 Dataset library to load a dataset that consists of {image-caption} pairs. To create your own image captioning dataset
+in PyTorch, you can follow [this notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/GIT/Fine_tune_GIT_on_an_image_captioning_dataset.ipynb). 
 
 
 ```python
@@ -66,7 +69,7 @@ Many image captioning datasets contain multiple captions per image. In those cas
 
 </Tip>
 
-Split the dataset’s train split into a train and test set with the [`train_test_split()`](https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.train_test_split) method:
+Split the dataset’s train split into a train and test set with the [~datasets.Dataset.train_test_split] method:
 
 
 ```python
@@ -172,7 +175,7 @@ def compute_metrics(eval_pred):
 
 Now, you are ready to start fine-tuning the model. You will the 🤗 [`Trainer`] for this. 
 
-First, define the training arguments using [`TrainingArguments`]. Then pass them along with the datasets and the model to 🤗 Trainer. To start training, simply call [`~Trainer.train`] on the [`Trainer`] object.
+First, define the training arguments using [`TrainingArguments`].
 
 
 ```python
@@ -199,7 +202,11 @@ training_args = TrainingArguments(
     label_names=["labels"],
     load_best_model_at_end=True,
 )
+```
 
+Then pass them along with the datasets and the model to 🤗 Trainer. 
+
+```python
 trainer = Trainer(
     model=model,
     args=training_args,
@@ -207,7 +214,11 @@ trainer = Trainer(
     eval_dataset=test_ds,
     compute_metrics=compute_metrics,
 )
+```
 
+To start training, simply call [`~Trainer.train`] on the [`Trainer`] object.
+
+```python 
 trainer.train()
 ```
 
