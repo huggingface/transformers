@@ -262,9 +262,6 @@ if is_torch_available():
             self.b = nn.Parameter(torch.tensor(config.b).float())
             self.double_output = config.double_output
 
-        def _init_weights(self, module):
-            pass
-
         def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
             if labels is None:

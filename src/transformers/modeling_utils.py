@@ -1187,7 +1187,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Initialize the weights. This method should be overridden by derived class.
         """
-        raise NotImplementedError(f"Make sure `_init_weights` is implemented for {self.__class__}")
+        pass
 
     def _initialize_weights(self, module):
         """
@@ -1525,7 +1525,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def init_weights(self):
         """
-        If needed prunes and maybe initializes weights.
+        If needed prunes and maybe initializes weights. If using a custom `PreTrainedModel`, you need to implement any
+        initialization logic in `_init_weights`.
         """
         # Prune heads if needed
         if self.config.pruned_heads:
