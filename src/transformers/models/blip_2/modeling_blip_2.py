@@ -45,11 +45,10 @@ from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionCo
 
 logger = logging.get_logger(__name__)
 
-# TODO update organization
-_CHECKPOINT_FOR_DOC = "nielsr/blip2-opt-2.7b"
+_CHECKPOINT_FOR_DOC = "Salesforce/blip2-opt-2.7b"
 
 BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nielsr/blip2-opt-2.7b",
+    "Salesforce/blip2-opt-2.7b",
     # See all BLIP-2 models at https://huggingface.co/models?filter=blip
 ]
 
@@ -604,7 +603,6 @@ class Blip2QFormerMultiHeadAttention(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
-        print_values=False,
     ):
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
@@ -731,7 +729,6 @@ class Blip2QFormerAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-        print_values=False,  # TODO remove this
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.attention(
             hidden_states,
@@ -741,7 +738,6 @@ class Blip2QFormerAttention(nn.Module):
             encoder_attention_mask,
             past_key_value,
             output_attentions,
-            print_values,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -816,7 +812,6 @@ class Blip2QFormerLayer(nn.Module):
             head_mask,
             output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
-            print_values=self.layer_idx == 0,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:-1]
@@ -1286,8 +1281,10 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
-        >>> processor = Blip2Processor.from_pretrained("nielsr/blip2-opt-2.7b")
-        >>> model = Blip2ForConditionalGeneration.from_pretrained("nielsr/blip2-opt-2.7b", torch_dtype=torch.float16)
+        >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+        >>> model = Blip2ForConditionalGeneration.from_pretrained(
+        ...     "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
+        ... )
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
