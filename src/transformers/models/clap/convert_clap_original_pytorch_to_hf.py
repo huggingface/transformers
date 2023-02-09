@@ -14,128 +14,101 @@
 # limitations under the License.
 
 import argparse
+import re
 
 import torch
-from clap import load
+from CLAP import create_model
 
-from transformers import CLAPConfig, CLAPModel
-
-
-def copy_attn_layer(hf_attn_layer, pt_attn_layer):
-    q_proj, k_proj, v_proj = pt_attn_layer.in_proj_weight.chunk(3, dim=0)
-    q_proj_bias, k_proj_bias, v_proj_bias = pt_attn_layer.in_proj_bias.chunk(3, dim=0)
-
-    out_proj_weights = pt_attn_layer.out_proj.weight
-    out_proj_bias = pt_attn_layer.out_proj.bias
-
-    hf_attn_layer.q_proj.weight.data = q_proj
-    hf_attn_layer.q_proj.bias.data = q_proj_bias
-
-    hf_attn_layer.k_proj.weight.data = k_proj
-    hf_attn_layer.k_proj.bias.data = k_proj_bias
-
-    hf_attn_layer.v_proj.weight.data = v_proj
-    hf_attn_layer.v_proj.bias.data = v_proj_bias
-
-    hf_attn_layer.out_proj.weight = out_proj_weights
-    hf_attn_layer.out_proj.bias = out_proj_bias
+from transformers import AutoFeatureExtractor, CLAPConfig, CLAPModel
 
 
-def copy_mlp(hf_mlp, pt_mlp):
-    copy_linear(hf_mlp.fc1, pt_mlp.c_fc)
-    copy_linear(hf_mlp.fc2, pt_mlp.c_proj)
+KEYS_TO_MODIFY_MAPPING = {
+    "text_branch": "text_model",
+    "audio_branch": "audio_model.audio_encoder",
+    "attn": "attention.self",
+    "self.proj": "output.dense",
+    "attention.self_mask": "attn_mask",
+    "mlp.fc1": "intermediate.dense",
+    "mlp.fc2": "output.dense",
+    "norm1": "layernorm_before",
+    "norm2": "layernorm_after",
+    # "bn0": "batch_norm",
+}
+
+processor = AutoFeatureExtractor.from_pretrained("ArthurZ/clap", truncation="rand_trunc")
 
 
-def copy_linear(hf_linear, pt_linear):
-    hf_linear.weight = pt_linear.weight
-    hf_linear.bias = pt_linear.bias
+def init_clap(checkpoint_path, enable_fusion=False):
+    model, model_cfg = create_model(
+        "HTSAT-tiny",
+        "roberta",
+        checkpoint_path,
+        precision="fp32",
+        device="cuda:0" if torch.cuda.is_available() else "cpu",
+        enable_fusion=enable_fusion,
+        fusion_type="aff_2d" if enable_fusion else None,
+    )
+    return model, model_cfg
 
 
-def copy_layer(hf_layer, pt_layer):
-    # copy layer norms
-    copy_linear(hf_layer.layer_norm1, pt_layer.ln_1)
-    copy_linear(hf_layer.layer_norm2, pt_layer.ln_2)
+def rename_state_dict(state_dict):
+    model_state_dict = {}
 
-    # copy MLP
-    copy_mlp(hf_layer.mlp, pt_layer.mlp)
+    sequential_layers_pattern = r".*sequential.(\d+).*"
+    text_projection_pattern = r".*_projection.(\d+).*"
 
-    # copy attn
-    copy_attn_layer(hf_layer.self_attn, pt_layer.attn)
+    for key, value in state_dict.items():
+        # check if any key needs to be modified
+        for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
+            if key_to_modify in key:
+                key = key.replace(key_to_modify, new_key)
 
+        if re.match(sequential_layers_pattern, key):
+            # replace sequential layers with list
+            sequential_layer = re.match(sequential_layers_pattern, key).group(1)
 
-def copy_layers(hf_layers, pt_layers):
-    for hf_layer, pt_layer in zip(hf_layers, pt_layers):
-        copy_layer(hf_layer, pt_layer)
+            key = key.replace(f"sequential.{sequential_layer}.", f"layers.{int(sequential_layer)//3}.linear.")
+        elif re.match(text_projection_pattern, key):
+            projecton_layer = int(re.match(text_projection_pattern, key).group(1))
 
+            # Because in CLAP they use `nn.Sequential`...
+            transformers_projection_layer = 1 if projecton_layer == 0 else 2
 
-def copy_encoder(hf_encoder, pt_model):
-    # copy  embeds
-    hf_encoder.embeddings.token_embedding.weight = pt_model.token_embedding.weight
-    hf_encoder.embeddings.position_embedding.weight.data = pt_model.positional_embedding
+            key = key.replace(f"_projection.{projecton_layer}.", f"_projection.linear{transformers_projection_layer}.")
 
-    # copy layer norm
-    copy_linear(hf_encoder.final_layer_norm, pt_model.ln_final)
+        if "audio" and "qkv" in key:
+            # split qkv into query key and value
+            mixed_qkv = value
+            qkv_dim = mixed_qkv.size(0) // 3
 
-    # copy hidden layers
-    copy_layers(hf_encoder.encoder.layers, pt_model.transformer.resblocks)
+            query_layer = mixed_qkv[:qkv_dim]
+            key_layer = mixed_qkv[qkv_dim : qkv_dim * 2]
+            value_layer = mixed_qkv[qkv_dim * 2 :]
 
+            model_state_dict[key.replace("qkv", "query")] = query_layer
+            model_state_dict[key.replace("qkv", "key")] = key_layer
+            model_state_dict[key.replace("qkv", "value")] = value_layer
+        else:
+            model_state_dict[key] = value
 
-def copy_text_model_and_projection(hf_model, pt_model):
-    # copy projection
-    hf_model.text_projection.weight.data = pt_model.text_projection.data.T
-
-    # copy text encoder
-    copy_encoder(hf_model.text_model, pt_model)
-
-
-def copy_vison_model_and_projection(hf_model, pt_model):
-    # copy projection
-    hf_model.visual_projection.weight.data = pt_model.visual.proj.data.T
-
-    # copy layer norms
-    copy_linear(hf_model.vision_model.pre_layrnorm, pt_model.visual.ln_pre)
-    copy_linear(hf_model.vision_model.post_layernorm, pt_model.visual.ln_post)
-
-    # copy embeds
-    hf_model.vision_model.embeddings.patch_embedding.weight.data = pt_model.visual.conv1.weight.data
-    hf_model.vision_model.embeddings.class_embedding = pt_model.visual.class_embedding
-    hf_model.vision_model.embeddings.position_embedding.weight.data = pt_model.visual.positional_embedding.data
-
-    # copy encoder
-    copy_layers(hf_model.vision_model.encoder.layers, pt_model.visual.transformer.resblocks)
+    return model_state_dict
 
 
-@torch.no_grad()
-def convert_clap_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path=None):
-    """
-    Copy/paste/tweak model's weights to transformers design.
-    """
-    if config_path is not None:
-        config = CLAPConfig.from_pretrained(config_path)
-    else:
-        config = CLAPConfig(projection_dim=512, text_config={}, vision_config={})
+def convert_clap_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path, enable_fusion=False):
+    clap_model, clap_model_cfg = init_clap(checkpoint_path, enable_fusion=enable_fusion)
 
-    hf_model = CLAPModel(config).eval()
+    clap_model.eval()
+    state_dict = clap_model.state_dict()
+    state_dict = rename_state_dict(state_dict)
 
-    pt_model, _ = load(checkpoint_path, device="cpu", jit=False)
-    pt_model = pt_model.eval()
+    transformers_config = CLAPConfig()
+    transformers_config.audio_config.enable_fusion = enable_fusion
+    model = CLAPModel(transformers_config)
 
-    copy_text_model_and_projection(hf_model, pt_model)
-    copy_vison_model_and_projection(hf_model, pt_model)
-    hf_model.logit_scale = pt_model.logit_scale
+    model.load_state_dict(state_dict, strict=False)
 
-    input_ids = torch.arange(0, 77).unsqueeze(0)
-    pixel_values = torch.randn(1, 3, 224, 224)
-
-    hf_logits_per_image, hf_logits_per_text = hf_model(
-        input_ids=input_ids, pixel_values=pixel_values, return_dict=True
-    )[1:3]
-    pt_logits_per_image, pt_logits_per_text = pt_model(pixel_values, input_ids)
-
-    assert torch.allclose(hf_logits_per_image, pt_logits_per_image, atol=1e-3)
-    assert torch.allclose(hf_logits_per_text, pt_logits_per_text, atol=1e-3)
-
-    hf_model.save_pretrained(pytorch_dump_folder_path)
+    model.save_pretrained(pytorch_dump_folder_path)
+    transformers_config.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
@@ -143,6 +116,7 @@ if __name__ == "__main__":
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument("--enable_fusion", action="store_true", help="Whether to enable fusion or not")
     args = parser.parse_args()
 
-    convert_clap_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path)
+    convert_clap_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.enable_fusion)
