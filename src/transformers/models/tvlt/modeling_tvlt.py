@@ -149,74 +149,28 @@ class TvltForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class TvltEmbeddings(nn.Module):
-    """
-    Construct the patch and position embeddings.
-    """
+def generate_pixel_mask_noise(pixel_values, pixel_mask=None, mask_ratio=0.75):
 
-    def __init__(self, config):
-        super().__init__()
-
-        self.pixel_embeddings = TvltPixelEmbeddings(config)
-        self.audio_embeddings = TvltAudioEmbeddings(config)
-        self.cls_embedding = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-
-        self.pixel_mask_ratio = config.pixel_mask_ratio
-        self.audio_mask_ratio = config.audio_mask_ratio
-        self.audio_mask_type = config.audio_mask_type
-        self.config = config
-
-    def forward(
-        self, pixel_values, audio_values, pixel_mask=None, audio_mask=None, mask_pixel=False, mask_audio=False
-    ):
-        # create patch embeddings
-
-        pixel_embedding_output, pixel_mask = self.pixel_embeddings(pixel_values, pixel_mask)
-        pixel_label_masks = None
-        pixel_ids_restore = None
-        if mask_pixel:
-            pixel_embedding_output, pixel_mask, pixel_label_masks, pixel_ids_restore = random_masking(
-                pixel_embedding_output,
-                attention_masks=pixel_mask,
-                mask_ratio=self.pixel_mask_ratio,
-                input_type="pixel",
-                mask_type="patch-level",
-            )
-
-        audio_embedding_output, audio_mask = self.audio_embeddings(audio_values, audio_mask)
-        audio_label_masks = None
-        audio_ids_restore = None
-        if mask_audio:
-            audio_embedding_output, audio_mask, audio_label_masks, audio_ids_restore = random_masking(
-                audio_embedding_output,
-                attention_masks=audio_mask,
-                mask_ratio=self.audio_mask_ratio,
-                input_type="audio",
-                mask_type=self.audio_mask_type,
-            )
-        batch_size = pixel_values.size(0)
-        embedding_output = torch.cat(
-            [self.cls_embedding.repeat(batch_size, 1, 1), pixel_embedding_output, audio_embedding_output], 1
-        )
-        masked_pixel_len = pixel_embedding_output.size(1)
-
-        attention_mask = None
-        if pixel_mask is not None and audio_mask is not None:
-            attention_mask = torch.cat([pixel_mask[:, :1], pixel_mask, audio_mask], 1)
-        return (
-            embedding_output,
-            attention_mask,
-            pixel_label_masks,
-            audio_label_masks,
-            pixel_ids_restore,
-            audio_ids_restore,
-            masked_pixel_len,
-        )
+    batch_size, seq_len = pixel_values.shape[:2]
+    noise = torch.rand((batch_size, seq_len))  # noise in [0, 1]
+    len_keep = int(seq_len * (1 - mask_ratio))
+    return noise, len_keep
 
 
-def random_masking(
-    sequence, attention_masks=None, mask_ratio=0.75, input_type="pixel", mask_type="patch-level", freq_len=8
-):
+def generate_audio_mask_noise(audio_values, audio_mask=None, mask_ratio=0.75, mask_type="patch-level", freq_len=8):
+    batch_size, seq_len = audio_values.shape[:2]
+    if mask_type == "frame-level":
+        num_time_patches = seq_len // freq_len
+        noise = (
+            torch.rand(batch_size, num_time_patches).unsqueeze(-1).repeat(1, 1, freq_len).view(batch_size, seq_len)
+        )  # noise in [0, 1]
+    elif mask_type == "patch-level":
+        noise = torch.rand(batch_size, seq_len)  # noise in [0, 1]
+    len_keep = int(seq_len * (1 - mask_ratio))
+    return noise, len_keep
+
+
+def random_masking(sequence, noise, len_keep, attention_masks=None):
     """
     Perform random masking by per-sample shuffling on frame-level. Per-sample shuffling is done by argsort random
     noise. sequence: [batch_size, seq_len, hidden_dim], sequence
@@ -224,22 +178,8 @@ def random_masking(
 
     batch_size, seq_len, hidden_dim = sequence.shape
 
-    if input_type == "pixel":
-        if mask_type == "frame-level":
-            num_time_patches = seq_len // freq_len
-            noise = (
-                torch.rand(batch_size, num_time_patches).unsqueeze(-1).repeat(1, 1, freq_len).view(batch_size, seq_len)
-            )  # noise in [0, 1]
-        elif mask_type == "patch-level":
-            noise = torch.rand(batch_size, seq_len)  # noise in [0, 1]
-    elif input_type == "audio":
-        noise = torch.rand((batch_size, seq_len))  # noise in [0, 1]
-        
     # sort noise for each sample
     ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
-    len_keep = int(seq_len * (1 - mask_ratio))
-
-    # sort noise for each sample
     ids_restore = torch.argsort(ids_shuffle, dim=1)
 
     # keep the first subset
@@ -274,7 +214,6 @@ class TvltPixelEmbeddings(nn.Module):
         self.temporal_embed = nn.Parameter(torch.zeros(1, config.num_frames, config.hidden_size))
         self.pos_embed_v = nn.Parameter(torch.zeros(1, self.num_patches_per_image, config.hidden_size))
 
-        self.mask_ratio = config.pixel_mask_ratio
         self.config = config
 
     def forward(self, pixel_values, attention_masks=None):
@@ -306,7 +245,6 @@ class TvltAudioEmbeddings(nn.Module):
         self.freq_embed = nn.Parameter(torch.zeros(1, self.num_freq_patches, config.hidden_size))
 
         self.num_freq_patches = config.frequency_length // config.audio_patch_size[1]
-        self.mask_ratio = config.audio_mask_ratio
         self.config = config
 
     def forward(self, audio_values, attention_masks=None):
@@ -746,8 +684,11 @@ class TvltModel(TvltPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = TvltEmbeddings(config)
+        self.pixel_embeddings = TvltPixelEmbeddings(config)
+        self.audio_embeddings = TvltAudioEmbeddings(config)
         self.encoder = TvltEncoder(config)
+
+        self.cls_embedding = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
         if config.use_mean_pooling:
             self.layernorm = None
@@ -758,7 +699,7 @@ class TvltModel(TvltPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.pixel_embeddings.patch_embeddings, self.embeddings.audio_embeddings.patch_embeddings
+        return self.pixel_embeddings.patch_embeddings, self.audio_embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -811,22 +752,56 @@ class TvltModel(TvltPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        (
-            embedding_output,
-            attention_mask,
-            pixel_label_masks,
-            audio_label_masks,
-            pixel_ids_restore,
-            audio_ids_restore,
-            masked_pixel_len,
-        ) = self.embeddings(
+        (pixel_embedding_output, pixel_mask,) = self.pixel_embeddings(
             pixel_values,
-            audio_values,
             pixel_mask,
-            audio_mask,
-            mask_pixel=mask_pixel,
-            mask_audio=mask_audio,
         )
+
+        (audio_embedding_output, audio_mask,) = self.audio_embeddings(
+            audio_values,
+            audio_mask,
+        )
+
+        pixel_label_masks = None
+        pixel_ids_restore = None
+        if mask_pixel:
+            pixel_mask_noise, pixel_len_keep = generate_pixel_mask_noise(
+                pixel_embedding_output, pixel_mask=pixel_mask, mask_ratio=self.config.pixel_mask_ratio
+            )
+            pixel_embedding_output, pixel_mask, pixel_label_masks, pixel_ids_restore = random_masking(
+                pixel_embedding_output,
+                pixel_mask_noise,
+                pixel_len_keep,
+                attention_masks=pixel_mask,
+            )
+
+        audio_label_masks = None
+        audio_ids_restore = None
+        if mask_audio:
+            num_freq_patches = self.config.frequency_length // self.config.audio_patch_size[1]
+            audio_mask_noise, audio_len_keep = generate_audio_mask_noise(
+                audio_embedding_output,
+                audio_mask=audio_mask,
+                mask_ratio=self.config.audio_mask_ratio,
+                mask_type=self.config.audio_mask_type,
+                freq_len=num_freq_patches,
+            )
+            audio_embedding_output, audio_mask, audio_label_masks, audio_ids_restore = random_masking(
+                audio_embedding_output,
+                audio_mask_noise,
+                audio_len_keep,
+                attention_masks=audio_mask,
+            )
+
+        batch_size = pixel_values.size(0)
+        embedding_output = torch.cat(
+            [self.cls_embedding.repeat(batch_size, 1, 1), pixel_embedding_output, audio_embedding_output], 1
+        )
+        masked_pixel_len = pixel_embedding_output.size(1)
+
+        attention_mask = None
+        if pixel_mask is not None and audio_mask is not None:
+            attention_mask = torch.cat([pixel_mask[:, :1], pixel_mask, audio_mask], 1)
 
         input_shape = embedding_output.size()
 
@@ -965,12 +940,12 @@ class TvltForPreTraining(TvltPreTrainedModel):
             decoder_hidden_size = config.decoder_hidden_size
 
             num_frames = config.num_frames
-            num_patches_per_image = self.tvlt.embeddings.pixel_embeddings.num_patches_per_image
+            num_patches_per_image = self.tvlt.pixel_embeddings.num_patches_per_image
             self.decoder_pixel_pos_embed = nn.Parameter(torch.zeros(1, num_patches_per_image, decoder_hidden_size))
             self.decoder_temporal_embed = nn.Parameter(torch.zeros(1, config.num_frames, decoder_hidden_size))
             self.decoder_pixel_type_embed = nn.Parameter(torch.zeros(1, 1, decoder_hidden_size))
 
-            num_audio_patches = self.tvlt.embeddings.audio_embeddings.num_patches
+            num_audio_patches = self.tvlt.audio_embeddings.num_patches
             num_freq_patches = config.frequency_length // config.audio_patch_size[1]
             self.decoder_audio_pos_embed = nn.Parameter(
                 torch.zeros(1, num_audio_patches // num_freq_patches, decoder_hidden_size)
@@ -1052,14 +1027,14 @@ class TvltForPreTraining(TvltPreTrainedModel):
     def pixel_mae_loss(self, pixel_values, pixel_predictions, mask):
         patchified_pixel_values = self.patchify_pixel(pixel_values)
         loss = (pixel_predictions - patchified_pixel_values) ** 2
-        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+        loss = loss.mean(dim=-1)  # [batch_size, pixel_pixel_length], mean loss per patch
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
 
     def audio_mae_loss(self, audio_values, audio_predictions, mask):
         patchified_audio_values = self.patchify_audio(audio_values)
         loss = (audio_predictions - patchified_audio_values) ** 2
-        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+        loss = loss.mean(dim=-1)  # [batch_size, audio_pixel_length], mean loss per patch
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
 
@@ -1089,7 +1064,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
     ) -> Union[tuple, TvltForPreTrainingOutput]:
         r"""
         pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values that mixe positive and negative samples in Tvlt vision-audio matching. Audio values can be
+            Pixel values that mix positive and negative samples in Tvlt vision-audio matching. Audio values can be
             obtained using [`TvltProcessor`]. See [`TvltProcessor.__call__`] for details.
 
         pixel_mask_mixed (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):

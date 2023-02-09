@@ -122,7 +122,7 @@ class TvltImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        patch_size: int = [16, 16],
+        patch_size: List[int] = [16, 16],
         num_frames: int = 8,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = True,
@@ -310,6 +310,7 @@ class TvltImageProcessor(BaseImageProcessor):
         videos: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
+        patch_size: List[int] = None,
         resample: PILImageResampling = None,
         do_center_crop: bool = None,
         crop_size: Dict[str, int] = None,
@@ -333,6 +334,8 @@ class TvltImageProcessor(BaseImageProcessor):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after applying resize.
+            patch_size (`List[int]` *optional*, defaults to [16,16]):
+                The patch size of image patch embedding.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.

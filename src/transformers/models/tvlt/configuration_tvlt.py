@@ -175,6 +175,8 @@ class TvltConfig(PretrainedConfig):
         self.pixel_mask_ratio = pixel_mask_ratio
         self.audio_mask_ratio = audio_mask_ratio
         self.audio_mask_type = audio_mask_type
+        if not isinstance(audio_mask_type, str):
+            raise TypeError("audio_mask_type must be a string and is either frame-level or patch-level")
 
         self.task_matching = task_matching
         self.task_mae = task_mae
