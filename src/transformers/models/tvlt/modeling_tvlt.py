@@ -150,6 +150,9 @@ class TvltForPreTrainingOutput(ModelOutput):
 
 
 def generate_pixel_mask_noise(pixel_values, pixel_mask=None, mask_ratio=0.75):
+    """
+    Generate noise for audio masking.
+    """
 
     batch_size, seq_len = pixel_values.shape[:2]
     noise = torch.rand((batch_size, seq_len))  # noise in [0, 1]
@@ -158,6 +161,10 @@ def generate_pixel_mask_noise(pixel_values, pixel_mask=None, mask_ratio=0.75):
 
 
 def generate_audio_mask_noise(audio_values, audio_mask=None, mask_ratio=0.75, mask_type="patch-level", freq_len=8):
+    """
+    Generate noise for audio masking.
+    """
+
     batch_size, seq_len = audio_values.shape[:2]
     if mask_type == "frame-level":
         num_time_patches = seq_len // freq_len
@@ -762,6 +769,7 @@ class TvltModel(TvltPreTrainedModel):
             audio_mask,
         )
 
+        # Mask pixel if mask_pixel is True
         pixel_label_masks = None
         pixel_ids_restore = None
         if mask_pixel:
@@ -775,6 +783,7 @@ class TvltModel(TvltPreTrainedModel):
                 attention_masks=pixel_mask,
             )
 
+        # Mask audio if mask_audio is True
         audio_label_masks = None
         audio_ids_restore = None
         if mask_audio:
@@ -793,6 +802,7 @@ class TvltModel(TvltPreTrainedModel):
                 attention_masks=audio_mask,
             )
 
+        # Prepare for encoder inputs and attention masks
         batch_size = pixel_values.size(0)
         embedding_output = torch.cat(
             [self.cls_embedding.repeat(batch_size, 1, 1), pixel_embedding_output, audio_embedding_output], 1
@@ -804,7 +814,6 @@ class TvltModel(TvltPreTrainedModel):
             attention_mask = torch.cat([pixel_mask[:, :1], pixel_mask, audio_mask], 1)
 
         input_shape = embedding_output.size()
-
         extended_attention_mask = None
         if attention_mask is not None:
             extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
