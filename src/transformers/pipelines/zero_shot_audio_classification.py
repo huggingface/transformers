@@ -119,7 +119,7 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
         if not isinstance(audio, np.ndarray):
             raise ValueError("We expect a numpy ndarray as input")
         if len(audio.shape) != 1:
-            raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
+            raise ValueError("We expect a single channel audio input for ZeroShotAudioClassificationPipeline")
 
         n = len(candidate_labels)
         for i, candidate_label in enumerate(candidate_labels):

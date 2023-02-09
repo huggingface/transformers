@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 HuggingFace Inc.
+# Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,15 +20,12 @@ import unittest
 
 import numpy as np
 
-from transformers import is_speech_available
+from transformers import CLAPFeatureExtractor
 from transformers.testing_utils import require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
-
-if is_speech_available():
-    from transformers import CLAPFeatureExtractor
 
 if is_torch_available():
     import torch
@@ -114,7 +111,7 @@ class CLAPFeatureExtractionTester(unittest.TestCase):
 @require_torchaudio
 # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest with Whisper->CLAP
 class CLAPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = CLAPFeatureExtractor if is_speech_available() else None
+    feature_extraction_class = CLAPFeatureExtractor
 
     def setUp(self):
         self.feat_extract_tester = CLAPFeatureExtractionTester(self)
@@ -268,5 +265,3 @@ class CLAPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
                 input_speech, return_tensors="pt", truncation="rand_trunc", padding=padding
             ).input_features
             self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_VALUES, atol=1e-4))
-
-        # TODO test fusion with a longer audio

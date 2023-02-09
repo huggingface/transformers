@@ -311,7 +311,6 @@ SUPPORTED_TASKS = {
         "default": {
             "model": {
                 "pt": ("laion-ai/clap-hsat-tiny", "f4881ba"),
-                "tf": ("laion-ai/clip-hsat-tiny", "f4881ba"),
             }
         },
         "type": "multimodal",

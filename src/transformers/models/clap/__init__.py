@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -50,16 +46,6 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_clap import (
-        CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CLAPAudioConfig,
-        CLAPConfig,
-        CLAPOnnxConfig,
-        CLAPTextConfig,
-    )
-    from .feature_extraction_clap import CLAPFeatureExtractor
-    from .processing_clap import CLAPProcessor
-    from .tokenization_clap import CLAPTokenizer
 
     try:
         if not is_torch_available():
@@ -67,15 +53,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_clap import (
-            CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CLAPAudioModel,
-            CLAPAudioModelWithProjection,
-            CLAPModel,
-            CLAPPreTrainedModel,
-            CLAPTextModel,
-            CLAPTextModelWithProjection,
-        )
+        pass
 
 else:
     import sys
