@@ -5,7 +5,7 @@ Framework agnostic tests for generate()-related methods.
 import numpy as np
 
 from transformers import AutoTokenizer
-from transformers.testing_utils import torch_device
+from transformers.testing_utils import slow, torch_device
 
 
 class GenerationIntegrationTestsMixin:
@@ -133,16 +133,12 @@ class GenerationIntegrationTestsMixin:
     def test_encoder_decoder_generate_with_inputs_embeds(self):
         model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
         return_tensors = self.framework_dependent_parameters["return_tensors"]
-        is_pt = not model_cls.__name__.startswith("TF")
 
         article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
         model = model_cls.from_pretrained("hf-internal-testing/tiny-random-bart", max_length=5)
         model.config.eos_token_id = None
         input_ids = tokenizer(article, return_tensors=return_tensors).input_ids
-        if is_pt:
-            model = model.to(torch_device)
-            input_ids = input_ids.to(torch_device)
 
         inputs_embeds = model.get_input_embeddings()(input_ids)
 
@@ -150,3 +146,253 @@ class GenerationIntegrationTestsMixin:
 
         # make sure model generated correctly until `max_length`
         self.assertEqual(output_sequences.shape, (1, 5))
+
+    def test_transition_scores_greedy_search(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForCausalLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        articles = ["Justin Timberlake", "Michael Phelps"]
+        tokenizer = AutoTokenizer.from_pretrained("distilgpt2", padding_side="left")
+        tokenizer.pad_token = tokenizer.eos_token
+
+        model = model_cls.from_pretrained("distilgpt2")
+        input_ids = tokenizer(articles, return_tensors=return_tensors, padding=True).input_ids
+        if is_pt:
+            model = model.to(torch_device)
+            input_ids = input_ids.to(torch_device)
+
+        outputs = model.generate(
+            input_ids=input_ids,
+            max_new_tokens=5,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=None,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores)
+        if is_pt:
+            transition_scores = transition_scores.cpu().numpy()
+
+        expected_scores = np.array(
+            [
+                [-57.8844, -60.45698, -70.16364, -65.50791, -66.35648],
+                [-54.417572, -60.216614, -62.661243, -58.621933, -58.298683],
+            ]
+        )
+        self.assertTrue(np.allclose(transition_scores, expected_scores, atol=1e-3))
+
+    def test_transition_scores_greedy_search_normalized(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForCausalLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        articles = ["Justin Timberlake", "Michael Phelps"]
+        tokenizer = AutoTokenizer.from_pretrained("distilgpt2", padding_side="left")
+        tokenizer.pad_token = tokenizer.eos_token
+
+        model = model_cls.from_pretrained("distilgpt2")
+        input_ids = tokenizer(articles, return_tensors=return_tensors, padding=True).input_ids
+        if is_pt:
+            model = model.to(torch_device)
+            input_ids = input_ids.to(torch_device)
+
+        outputs = model.generate(
+            input_ids=input_ids,
+            max_new_tokens=5,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=None,
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True)
+        if is_pt:
+            transition_scores = transition_scores.cpu().numpy()
+
+        expected_scores = np.array(
+            [
+                [-2.538938, -2.2694316, -2.1580915, -1.572299, -2.6719835],
+                [-1.8826028, -2.2461371, -1.7556462, -2.9644494, -1.7996008],
+            ]
+        )
+        self.assertTrue(np.allclose(transition_scores, expected_scores, atol=1e-3))
+
+    def test_transition_scores_beam_search_encoder_decoder(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        articles = [
+            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
+            "Michael Phelps is arguably the most decorated Olympian of all time.",
+        ]
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+
+        model = model_cls.from_pretrained(
+            "hf-internal-testing/tiny-random-bart",
+            max_length=10,
+            num_beams=4,
+            num_return_sequences=2,
+            eos_token_id=None,
+            return_dict_in_generate=True,
+            output_scores=True,
+            length_penalty=0.0,
+        )
+        input_ids = tokenizer(articles, return_tensors=return_tensors, padding=True).input_ids
+        if is_pt:
+            model = model.to(torch_device)
+            input_ids = input_ids.to(torch_device)
+
+        outputs = model.generate(input_ids=input_ids)
+
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
+        if is_pt:
+            transition_scores = transition_scores.cpu().numpy()
+            outputs.sequences_scores = outputs.sequences_scores.cpu().numpy()
+
+        self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
+
+    def test_transition_scores_beam_search_encoder_decoder_with_eos(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        articles = [
+            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
+            "Michael Phelps is arguably the most decorated Olympian of all time.",
+        ]
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+
+        model = model_cls.from_pretrained(
+            "hf-internal-testing/tiny-random-bart",
+            max_length=10,
+            num_beams=4,
+            num_return_sequences=2,
+            return_dict_in_generate=True,
+            output_scores=True,
+            length_penalty=0.0,
+        )
+        input_ids = tokenizer(articles, return_tensors=return_tensors, padding=True).input_ids
+        if is_pt:
+            model = model.to(torch_device)
+            input_ids = input_ids.to(torch_device)
+
+        outputs = model.generate(input_ids=input_ids)
+
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
+        if is_pt:
+            transition_scores = transition_scores.cpu().numpy()
+            outputs.sequences_scores = outputs.sequences_scores.cpu().numpy()
+
+        self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
+
+    def test_transition_scores_beam_search_decoder_only(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForCausalLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        articles = [
+            "Justin Timberlake",
+            "Michael Phelps",
+        ]
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        tokenizer.pad_token = tokenizer.eos_token
+
+        model = model_cls.from_pretrained(
+            "hf-internal-testing/tiny-random-gpt2",
+            max_length=10,
+            num_beams=4,
+            num_return_sequences=2,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=None,
+            return_dict_in_generate=True,
+            output_scores=True,
+            length_penalty=0.0,
+        )
+        input_ids = tokenizer(articles, return_tensors=return_tensors, padding=True).input_ids
+        if is_pt:
+            model = model.to(torch_device)
+            input_ids = input_ids.to(torch_device)
+
+        outputs = model.generate(input_ids=input_ids)
+
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
+        if is_pt:
+            transition_scores = transition_scores.cpu().numpy()
+            outputs.sequences_scores = outputs.sequences_scores.cpu().numpy()
+
+        self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
+
+    def test_transition_scores_beam_sample_encoder_decoder(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        articles = [
+            "Justin Timberlake and Jessica Biel, welcome to parenthood.",
+            "Michael Phelps is arguably the most decorated Olympian of all time.",
+        ]
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+
+        model = model_cls.from_pretrained(
+            "hf-internal-testing/tiny-random-bart",
+            do_sample=True,
+            max_length=10,
+            num_beams=4,
+            num_return_sequences=2,
+            eos_token_id=None,
+            return_dict_in_generate=True,
+            output_scores=True,
+            length_penalty=0.0,
+        )
+        input_ids = tokenizer(articles, return_tensors=return_tensors, padding=True).input_ids
+        if is_pt:
+            model = model.to(torch_device)
+            input_ids = input_ids.to(torch_device)
+
+        outputs = model.generate(input_ids=input_ids)
+
+        transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
+        if is_pt:
+            transition_scores = transition_scores.cpu().numpy()
+            outputs.sequences_scores = outputs.sequences_scores.cpu().numpy()
+
+        self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores, atol=1e-3))
+
+    @slow
+    def test_transition_scores_early_stopping(self):
+        # This is an aggressive test that makes sure that `beam_search's`
+        # transition scores are computed correctly for varying `num_return_sequences`, `num_beams` and `batch_size > 1`
+        # 2 x input_ids for "question: How are you? \n context: I had a long day, "
+        model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
+        create_tensor_fn = self.framework_dependent_parameters["create_tensor_fn"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        input_ids = create_tensor_fn(2 * [[822, 10, 571, 33, 25, 58, 2625, 10, 27, 141, 3, 9, 307, 239, 6, 1]])
+        model = model_cls.from_pretrained("t5-small")
+        if is_pt:
+            model = model.to(torch_device)
+            input_ids = input_ids.to(torch_device)
+
+        outputs = model.generate(
+            input_ids,
+            max_length=10,
+            return_dict_in_generate=True,
+            output_scores=True,
+            forced_eos_token_id=model.config.eos_token_id,
+            num_beams=4,
+            do_sample=False,
+            num_return_sequences=3,
+            length_penalty=0.0,
+        )
+
+        transition_scores = model.compute_transition_scores(
+            sequences=outputs.sequences, scores=outputs.scores, beam_indices=outputs.beam_indices
+        )
+        if is_pt:
+            transition_scores = transition_scores.cpu().numpy()
+            outputs.sequences_scores = outputs.sequences_scores.cpu().numpy()
+
+        self.assertTrue(np.allclose(np.sum(transition_scores, axis=-1), outputs.sequences_scores))
