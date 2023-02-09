@@ -989,7 +989,8 @@ class TFGenerationMixin:
             # 11. broadcast inputs to the desired number of beams
             input_ids = self._expand_to_num_beams(input_ids, num_beams=generation_config.num_beams)
 
-            if "encoder_outputs" in model_kwargs:
+            encoder_outputs = model_kwargs.get("encoder_outputs", None)
+            if encoder_outputs is not None and "last_hidden_state" in encoder_outputs:
                 model_kwargs["encoder_outputs"]["last_hidden_state"] = self._expand_to_num_beams(
                     model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=generation_config.num_beams
                 )
