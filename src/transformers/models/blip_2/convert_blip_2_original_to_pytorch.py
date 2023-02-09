@@ -147,7 +147,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     # load original model
     print("Loading original model...")
-    device = "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     original_model, vis_processors, _ = load_model_and_preprocess(
         name=name, model_type=type, is_eval=True, device=device
     )
@@ -184,7 +184,6 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     assert len(missing_keys) == 0
     assert unexpected_keys == ["qformer.embeddings.position_ids"]
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     image = load_demo_image()
     original_pixel_values = vis_processors["eval"](image).unsqueeze(0).to(device)
     input_ids = tokenizer(["\n"], return_tensors="pt").input_ids.to(device)
