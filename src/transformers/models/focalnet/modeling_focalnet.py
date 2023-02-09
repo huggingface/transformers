@@ -530,7 +530,7 @@ class FocalNetStage(nn.Module):
                     focal_level=focal_level,
                     focal_window=focal_window,
                     use_layerscale=config.use_layerscale,
-                    layerscale_value=1e-4,
+                    layerscale_value=config.layerscale_value,
                     use_post_layernorm=config.use_post_layernorm,
                     use_post_layernorm_in_modulation=config.use_post_layernorm_in_modulation,
                     normalize_modulator=config.normalize_modulator,
