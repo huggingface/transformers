@@ -5,8 +5,8 @@ A : (N, N) b : (N,) c : (N,) Return: [c^T A^i b for i in [L]]
 
 import torch
 import torch.nn.functional as F
-
 from einops import rearrange
+
 from transformers.models.h3.src.ops.toeplitz import causal_convolution
 
 

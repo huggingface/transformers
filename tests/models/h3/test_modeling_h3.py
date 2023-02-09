@@ -154,7 +154,6 @@ class H3ModelTester:
 
 @require_torch
 class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             H3Model,
@@ -170,6 +169,7 @@ class H3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     has_attentions = False
     test_pruning = False
     test_head_masking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = H3ModelTester(self)

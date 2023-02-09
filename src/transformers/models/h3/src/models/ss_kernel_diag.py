@@ -10,9 +10,9 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from einops import rearrange, repeat
 from opt_einsum import contract
+
 from transformers.models.h3.src.models.ssm_utils import OptimModule
 
 # This could be None if the CUDA import fails
@@ -68,7 +68,6 @@ class SSKernelDiag(OptimModule):
         bandlimit=None,
         force_real=False,
     ):
-
         super().__init__()
         self.L = L
         self.disc = disc

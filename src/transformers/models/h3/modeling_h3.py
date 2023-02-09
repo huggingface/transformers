@@ -564,7 +564,7 @@ class H3Model(H3PreTrainedModel):
 
                     return custom_forward
 
-                outputs = torch.utils.checkpoint.checkpoint(
+                torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
                     hidden_states,
                     residual,

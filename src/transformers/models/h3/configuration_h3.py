@@ -28,9 +28,10 @@ H3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class H3Config(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of an [`H3Model`]. It is used to instantiate a H3
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the H3 [stanford/H3-125m](https://huggingface.co/stanford/H3-125m) architecture.
+    This is the configuration class to store the configuration of an [`H3Model`]. It is used to instantiate a H3 model
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the H3
+    [stanford/H3-125m](https://huggingface.co/stanford/H3-125m) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

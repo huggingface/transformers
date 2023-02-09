@@ -7,9 +7,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from einops import rearrange
 from opt_einsum import contract
+
 from transformers.models.h3.src.models.ssm_utils import OptimModule
 
 

@@ -4,8 +4,8 @@
 import math
 
 import torch
-
 from einops import repeat
+
 from transformers.models.h3.src.models import hippo
 
 
