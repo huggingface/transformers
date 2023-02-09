@@ -849,7 +849,7 @@ class TFGenerationMixin:
             input_ids = inputs_tensor
 
         # 7. Prepare `max_length` depending on other stopping criteria.
-        input_ids_seq_length = input_ids.shape[-1]
+        input_ids_seq_length = shape_list(input_ids)[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
             warnings.warn(
@@ -869,18 +869,23 @@ class TFGenerationMixin:
                     UserWarning,
                 )
 
-        if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
-            raise ValueError(
-                f"Unfeasable length constraints: the minimum length ({generation_config.min_length}) is larger than"
-                f" the maximum length ({generation_config.max_length})"
-            )
-        if input_ids_seq_length >= generation_config.max_length:
-            input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
-            logger.warning(
-                f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
-                f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
-                " increasing`max_new_tokens`."
-            )
+        # If the input length is a tensor (i.e. dynamic length), skip length checks
+        if not isinstance(input_ids_seq_length, tf.Tensor):
+            if (
+                generation_config.min_length is not None
+                and generation_config.min_length > generation_config.max_length
+            ):
+                raise ValueError(
+                    f"Unfeasable length constraints: the minimum length ({generation_config.min_length}) is larger"
+                    f" than the maximum length ({generation_config.max_length})"
+                )
+            if input_ids_seq_length >= generation_config.max_length:
+                input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+                logger.warning(
+                    f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
+                    f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
+                    " increasing`max_new_tokens`."
+                )
 
         # 8. determine generation mode
         is_contrastive_search_gen_mode = (
