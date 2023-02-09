@@ -44,20 +44,12 @@ of information answers the question. The context comes from the output of an OCR
 Before you begin, make sure you have all the necessary libraries installed. LayoutLMv2 depends on detectron2, torchvision and tesseract.
 
 ```bash
-pip install -q transformers
+pip install -q transformers datasets
 ```
 
 ```bash
-pip install pyyaml==5.1
-pip install torch==1.8.0+cu101 torchvision==0.9.0+cu101 -f https://download.pytorch.org/whl/torch_stable.html
-
-# install detectron2 that matches pytorch 1.8
-# See https://detectron2.readthedocs.io/tutorials/install.html for instructions
-pip install -q detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu101/torch1.8/index.html
-```
-
-```bash
-pip install -q datasets
+pip install 'git+https://github.com/facebookresearch/detectron2.git'
+pip install torchvision
 ```
 
 ```bash
@@ -122,6 +114,7 @@ Here's what the individual fields represent:
 * `answer`: an answer matched by a different model which we will not use here
 
 Let's leave only English questions, and drop the answer feature which appears to contain predictions by another model.
+We'll also take the first of the answers from the set provided by the annotators. Alternatively, you can randomly sample it.
 
 ```py
 >>> updated_dataset = dataset.map(lambda example: {"question": example["query"]["en"]}, remove_columns=["query"])
@@ -217,6 +210,13 @@ start and which token is at the end of the answer.
 
 Let's start with that. Define a helper function that can find a sublist (the answer split into words) in a larger list (the words list).
 
+This function will take two lists as input, `words_list` and `answer_list`. It will then iterate over the `words_list` and check
+if the current word in the `words_list` (words_list[i]) is equal to the first word of answer_list (answer_list[0]) and if
+the sublist of `words_list` starting from the current word and of the same length as `answer_list` is equal `to answer_list`.
+If this condition is true, it means that a match has been found, and the function will record the match, its starting index (idx),
+and its ending index (idx + len(answer_list) - 1). If more than one match was found, the function will return only the first one.
+If no match is found, the function returns (`None`, 0, and 0).
+
 ```py
 >>> def subfinder(words_list, answer_list):
 ...     matches = []
@@ -273,18 +273,23 @@ With that in mind, let's create a function to encode a batch of examples in the 
 ...     words = examples["words"]
 ...     boxes = examples["boxes"]
 ...     answers = examples["answer"]
+
+...     # encode the batch of examples and initialize the start_positions and end_positions
 ...     encoding = tokenizer(questions, words, boxes, max_length=max_length, padding="max_length", truncation=True)
 ...     start_positions = []
 ...     end_positions = []
 
+...     # loop through the examples in the batch
 ...     for i in range(len(questions)):
 ...         cls_index = encoding["input_ids"][i].index(tokenizer.cls_token_id)
+
+...         # find the position of the answer in example's words
 ...         words_example = [word.lower() for word in words[i]]
 ...         answer = answers[i]
-...         print("Answer:", answer)
 ...         match, word_idx_start, word_idx_end = subfinder(words_example, answer.lower().split())
 
 ...         if match:
+...             # if match is found, use `token_type_ids` to find where words start in the encoding
 ...             token_type_ids = encoding["token_type_ids"][i]
 ...             token_start_index = 0
 ...             while token_type_ids[token_start_index] != 1:
@@ -298,28 +303,25 @@ With that in mind, let's create a function to encode a batch of examples in the 
 ...             start_position = cls_index
 ...             end_position = cls_index
 
+...             # loop over word_ids and increase `token_start_index` until it matches the answer position in words
+...             # once it matches, save the `token_start_index` as the `start_position` of the answer in the encoding
 ...             for id in word_ids:
 ...                 if id == word_idx_start:
 ...                     start_position = token_start_index
 ...                 else:
 ...                     token_start_index += 1
 
+...             # similarly loop over `word_ids` starting from the end to find the `end_position` of the answer
 ...             for id in word_ids[::-1]:
 ...                 if id == word_idx_end:
 ...                     end_position = token_end_index
 ...                 else:
 ...                     token_end_index -= 1
 
-...             print("True answer:", answer)
-...             reconstructed_answer = tokenizer.decode(encoding["input_ids"][i][start_position : end_position + 1])
 ...             start_positions.append(start_position)
 ...             end_positions.append(end_position)
-...             print("Reconstructed answer:", reconstructed_answer)
-...             print("-----------")
 
 ...         else:
-...             print("Answer not found in context")
-...             print("-----------")
 ...             start_positions.append(cls_index)
 ...             end_positions.append(cls_index)
 
@@ -355,7 +357,8 @@ Let's check what the features of the encoded dataset look like:
 
 Evaluation for document question answering requires a significant amount of postprocessing. To avoid taking up too much
 of your time, this guide skips the evaluation step. The [`~Trainer`] still calculates the evaluation loss during training so
-you're not completely in the dark about your model's performance.
+you're not completely in the dark about your model's performance. If you'd like to implement it yourself, check out the
+[Question Answering chapter](https://huggingface.co/course/chapter7/7?fw=pt#postprocessing) of Hugging Face course for inspiration.
 
 ## Train
 
@@ -414,15 +417,15 @@ Finally, bring everything together, and call [`~Trainer.train`]:
 ...     args=training_args,
 ...     data_collator=data_collator,
 ...     train_dataset=encoded_train_dataset,
+...     tokenizer = processor,
 ... )
 
 >>> trainer.train()
 ```
 
-To add the final model to 🤗 Hub, save the processor, create a model card, and call `push_to_hub`:
+To add the final model to 🤗 Hub, create a model card and call `push_to_hub`:
 
 ```py
->>> processor.save_pretrained(repo_id)
 >>> trainer.create_model_card()
 >>> trainer.push_to_hub()
 ```
