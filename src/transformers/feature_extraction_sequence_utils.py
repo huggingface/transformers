@@ -450,7 +450,6 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
     ) -> np.array:
         """Create a triangular filter bank.
 
-        #TODO this is the part that should be very well detailed
 
         Args:
             all_freqs (`np.array`):
@@ -495,15 +494,11 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         Note:
             Different banks of MEL filters were introduced in the litterature. The following variation are supported:
-                - MFCC FB-20: introduced in 1980 by Davis and Mermelstein [4]; Davis and Mermelstein assume sampling
-                  frequency of 10 kHz; speech bandwidth [0, 4600] Hz
-                - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) described in Young, 1995 [5]; Young uses a
-                  filter bank of 24 filters for speech bandwidth [0, 8000] Hz (sampling rate ≥ 16 kHz)
-                - MFCC FB-40: from the Auditory Toolbox for MATLAB [6] written by Slaney in 1998; Slaney assumes
-                  sampling rate of 16 kHz, and speech bandwidth [133, 6854] Hz
-                - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris, 2004 [3]; Skowronski and
-                  Harris assume sampling rate of 12.5 kHz and speech bandwidth [0, 6250] Hz
-
+                - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHz and a speech bandwidth of `[0, 4600]` Hz
+                - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) (1995) uses a filter bank of 24 filters for a speech bandwidth `[0, 8000]` Hz (sampling rate ≥ 16 kHz).
+                - MFCC FB-40: from the Auditory Toolbox for MATLAB written by Slaney in 1998, assumes a sampling rate of 16 kHz, and speech bandwidth [133, 6854] Hz. This version also includes an area normalization.
+                - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes sampling rate of 12.5 kHz and speech bandwidth [0, 6250] Hz
+            The default parameters of `torchaudio`'s mel filterbanks implement the `"htk"` filers while `torchlibrosa` uses the `"slaney"` implementation.
 
         Args:
             n_freqs (`int`):
@@ -598,6 +593,12 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         """
         Convert a mel spectrogram from power to db scale, this function is the numpy implementation of
         librosa.power_to_lb.
+        
+        Note: 
+            The motivation behind applying the log function on the mel spectrgram is that humans do not hear loudness on a linear scale.
+            Generally to double the percieved volume of a sound we need to put 8 times as much energy into it. This means that large variations 
+            in energy may not sound all that different if the sound is loud to begin with. This compression operation makes the mel features match
+            more closely what humans actually hear.
         """
         log_spec = 10 * np.log10(np.clip(mel_spectrogram, a_min=a_min, a_max=None))
         log_spec -= 10.0 * np.log10(np.maximum(a_min, ref))
@@ -629,7 +630,6 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             framed_waveform (`np.array` of shape (waveform.shape // self.hop_length , self.n_fft)):
                 The framed waveforms that can be fed to `np.fft`.
         """
-        # TODO: test if stereo audio works???
         frames = []
         for i in range(0, waveform.shape[0] + 1, self.hop_length):
             half_window = (self.n_fft - 1) // 2 + 1

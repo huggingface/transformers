@@ -52,7 +52,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
         chunk_length_s (`int`, defaults to 10):
             The maximum input lenght of the model in seconds. This is used to pad the audio.
         n_fft (`int`, defaults to 400):
-            Size of the Fourier transform. TODO will properly explain this
+            Size of the Fourier transform. This should be the length of a single frame in samples. 400 means that the fourrier transform is computed on 400 samples.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
         return_attention_mask (`bool`, *optional*, False):
@@ -155,7 +155,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
             - `self.mel_filters`: they correspond to the defaults parameters of `torchaduio` which can be obtained from
               calling `torchaudio.transforms.MelSpectrogram().mel_scale.fb`. These filters are used when `truncation`
               is set to `fuison`.
-            - `self.mel_filteres_slanney` : they correspond to the defaults parameters of `torchlibrosa` which used
+            - `self.mel_filteres_slaney` : they correspond to the defaults parameters of `torchlibrosa` which used
               `librosa.filters.mel` when computing the mel spectrogram. These filters were only used in the original
               implementation when the truncation mode is not `"fusion"`.
         """

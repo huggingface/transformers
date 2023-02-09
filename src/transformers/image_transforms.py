@@ -710,18 +710,29 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     return image
 
 
-def bilinear_interpolation(image, y, x):
+def bilinear_interpolation(image: np.ndarray, y:float, x:float):
+    # fmt: off
     """
     A bilinear interpolation of the estimated values of the `image` at non integer indexes `y` and `x`.
     
-    Original Image at Original Image at
-      x_1, y_1 x_1, y_2
-        +---+ +---+ | +-|-------------------------------|-+ | +---+ +---+
-            | | | Pixel at (x,y) where | | x and y non integers | | +---+ | | | | | | +---+ |
-        +---+ +---+ | +-|-------------------------------|-+ | +---+ +---+
+    
+    Original Image at                    Original Image at
+      x_1, y_1                             x_1, y_2 
+        +---+                               +---+       
+        | +-|-------------------------------|-+ |       
+        +---+                               +---+       
+            |                                   |         
+            |             Pixel at (x,y) where  |         
+            |             x and y non integers  |         
+            |                     +---+         |         
+            |                     |   |         |         
+            |                     +---+         |         
+        +---+                               +---+       
+        | +-|-------------------------------|-+ |       
+        +---+                               +---+       
                                                         
-    Original Image at Original Image at
-      x_1, y_2 x_2, y_2
+    Original Image at                    Original Image at
+      x_1, y_2                             x_2, y_2 
     
     The estimated value of the pixel is computed using the following equation :
     
@@ -732,6 +743,7 @@ def bilinear_interpolation(image, y, x):
     For more details about bilinear interplation, see [on the wikipedia
     page](https://en.wikipedia.org/wiki/Bilinear_interpolation)
     """
+    # fmt: on
     height = image.shape[0]
     width = image.shape[1]
 
@@ -755,16 +767,15 @@ def bilinear_interpolation(image, y, x):
     return new_pixel
 
 
-def np_bilinear_resize(image, new_height, new_width):
+def np_bilinear_resize(image:np.ndarray, new_height:int, new_width:int):
     """
     Taken from `[here](https://stackoverflow.com/questions/70024313/resize-using-bilinear-interpolation-in-python)`
-    with the torchvision.transforms.Resize(size=[chunk_frames, self.feature_size]) This function is not optimal in
-    terms of performances, but has the same results as the `torchvision.transforms.resize` function when called with
+    this is the equivalent of the `torchvision.transforms.Resize(size=[chunk_frames, self.feature_size])`. This function is not optimal in
+    terms of performances, but has the same results as `torchvision` counterpart when called with
     the default `bilinear` interpolation.
     """
-    new_image = np.zeros(
-        (new_height, new_width), image.dtype
-    )  # new_image = [[0 for _ in range(new_width)] for _ in range(new_height)]
+    # new_image = [[0 for _ in range(new_width)] for _ in range(new_height)]
+    new_image = np.zeros((new_height, new_width), image.dtype) 
 
     orig_height = image.shape[0]
     orig_width = image.shape[1]
