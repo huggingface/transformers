@@ -370,7 +370,7 @@ of the Hugging Face course for inspiration.
 
 Congratulations! You've successfully navigated the toughest part of this guide and now you are ready to train your own model.
 Training involves the following steps:
-* Load the model with [`AutoModelForQuestionAnswering`] using the same checkpoint as in the preprocessing.
+* Load the model with [`AutoModelForDocumentQuestionAnswering`] using the same checkpoint as in the preprocessing.
 * Define your training hyperparameters in [`TrainingArguments`].
 * Define a function to batch examples together, here the [`DefaultDataCollator`] will do just fine
 * Pass the training arguments to [`Trainer`] along with the model, dataset, and data collator.
