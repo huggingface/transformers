@@ -14,7 +14,14 @@
 
 import unittest
 
-from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING, TextGenerationPipeline, pipeline
+from transformers import (
+    MODEL_FOR_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    TextGenerationPipeline,
+    pipeline,
+)
 from transformers.testing_utils import (
     require_accelerate,
     require_tf,
@@ -312,3 +319,17 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
 
         pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device=0, torch_dtype=torch.float16)
         pipe("This is a test")
+
+    @require_torch
+    @require_accelerate
+    @require_torch_gpu
+    def test_pipeline_accelerate_top_p(self):
+        import torch
+
+        model_id = "hf-internal-testing/tiny-random-bloom"
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.float16)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+        pipe("This is a test", do_sample=True, top_p=0.5)
