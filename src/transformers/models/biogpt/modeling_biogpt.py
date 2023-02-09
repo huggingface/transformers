@@ -91,7 +91,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.opt.modeling_opt.BioGptLearnedPositionalEmbedding with BioGpt->BioGpt
+# Copied from transformers.models.opt.modeling_opt.OPTLearnedPositionalEmbedding with OPT->BioGpt
 class BioGptLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -754,6 +754,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel):
         return reordered_past
 
 
+# Copied from transformers.models.opt.modeling_opt.OPTForSequenceClassification with OPT->BioGpt
 @add_start_docstrings(
     """
     BioGPT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
