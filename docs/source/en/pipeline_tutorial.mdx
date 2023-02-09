@@ -271,12 +271,9 @@ using `device_map="auto"`
 ```py
 # pip install accelerate
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import pipeline
 
-model = AutoModelForCausalLM.from_pretrained("bigscience/bloom", torch_dtype=torch.bfloat16, device_map="auto")
-tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom")
-
-pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+pipe = pipeline(model="bigscience/bloom", torch_dtype=torch.bfloat16, device_map="auto")
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```
 
@@ -285,11 +282,8 @@ You can also pass 8-bit loaded models if you install `bitsandbytes` and add the 
 ```py
 # pip install accelerate bitsandbytes
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import pipeline
 
-model = AutoModelForCausalLM.from_pretrained("bigscience/bloom", device_map="auto", load_in_8bit=True)
-tokenizer = AutoTokenizer.from_pretrained("bigscience/bloom")
-
-pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+pipe = pipeline(model="bigscience/bloom", device_map="auto", model_kwargs={"load_in_8bit":True})
 output = pipe("This is a cool example!", do_sample=True, top_p=0.95)
 ```

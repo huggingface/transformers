@@ -326,10 +326,5 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
     def test_pipeline_accelerate_top_p(self):
         import torch
 
-        model_id = "hf-internal-testing/tiny-random-bloom"
-
-        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.float16)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-
-        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto", torch_dtype=torch.float16)
         pipe("This is a test", do_sample=True, top_p=0.5)
