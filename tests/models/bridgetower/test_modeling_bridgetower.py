@@ -227,6 +227,11 @@ class BridgeTowerModelTest(ModelTesterMixin, unittest.TestCase):
             model = BridgeTowerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @slow
+    def test_save_load_fast_init_from_base(self):
+        # Override as it is a slow test on this model
+        super().test_save_load_fast_init_from_base()
+
     # Override as extracting meaningful tensor from output is different for BridgeTower
     def test_save_load(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()

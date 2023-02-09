@@ -3305,6 +3305,7 @@ class ModelUtilsTest(TestCasePlus):
                 _ = ModelWithHead.from_pretrained(tmp_dir)
 
     @require_torch_gpu
+    @slow
     def test_pretrained_low_mem_new_config(self):
         # Checking for 1 model(the same one which was described in the issue) .
         model_ids = ["gpt2"]

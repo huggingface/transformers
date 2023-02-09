@@ -260,6 +260,7 @@ class TFRagTestMixin:
                 num_beams=2,
                 num_return_sequences=2,
                 decoder_start_token_id=config.generator.eos_token_id,
+                max_new_tokens=5,
             )
 
             self.assertIsNotNone(outputs)
