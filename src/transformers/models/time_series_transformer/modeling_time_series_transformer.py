@@ -334,15 +334,17 @@ class MeanScaler(nn.Module):
         default_scale = torch.where(self.default_scale > 0.0, self.default_scale, batch_scale)
 
         # apply default scale where there are no observations
-        torch.where(num_observed > 0, scale, default_scale)
+        scale = torch.where(num_observed > 0, scale, default_scale)
 
         # ensure the scale is at least `self.minimum_scale`
         scale = torch.clamp(scale, min=self.minimum_scale)
 
+        scaled_data = data / scale
+
         if not self.keepdim:
             scale = scale.squeeze(dim=self.dim)
 
-        return data / scale, torch.zeros_like(scale), scale
+        return scaled_data, torch.zeros_like(scale), scale
 
 
 class NOPScaler(nn.Module):
