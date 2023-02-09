@@ -36,7 +36,10 @@ The task illustrated in this tutorial is supported by the following model archit
 
 </Tip>
 
-LayoutLMv2 solves the document question answering task by adding a question answering head on top of the final hidden
+LayoutLMv2 solves the document question-answering task by adding a question-answering head on top of the final hidden
+states of the tokens, to predict the positions of the start and end tokens of the
+answer. In other words, the problem is treated as extractive question answering: given the context, extract which piece
+of information answers the question. The context comes from the output of an OCR engine, here it is Google's Tesseract.
 states of the tokens, in order to predict which token is at the start of the answer and which token is at the end of the
 answer. In other words, the problem is treated as extractive question answering: given the context, extract which piece
 of information answers the question. The context comes from the output of an OCR engine, here it is Google's Tesseract.
