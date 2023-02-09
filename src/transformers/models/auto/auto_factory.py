@@ -582,6 +582,10 @@ class _LazyAutoMapping(OrderedDict):
         self._extra_content = {}
         self._modules = {}
 
+    def __len__(self):
+        common_keys = set(self._config_mapping.keys()).intersection(self._model_mapping.keys())
+        return len(common_keys) + len(self._extra_content)
+
     def __getitem__(self, key):
         if key in self._extra_content:
             return self._extra_content[key]
