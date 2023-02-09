@@ -761,13 +761,7 @@ class TvltModel(TvltPreTrainedModel):
 
         pixel_embedding_output, pixel_mask = self.pixel_embeddings(pixel_values, pixel_mask)
 
-        (
-            audio_embedding_output,
-            audio_mask,
-        ) = self.audio_embeddings(
-            audio_values,
-            audio_mask,
-        )
+        audio_embedding_output, audio_mask = self.audio_embeddings(audio_values, audio_mask)
 
         # Mask pixel if mask_pixel is True
         pixel_label_masks = None
