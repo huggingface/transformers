@@ -774,7 +774,7 @@ class Pipeline(_ScikitCompat):
             else:
                 self.device = torch.device(f"cuda:{device}")
         else:
-            self.device = device
+            self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
         self.binary_output = binary_output
 
