@@ -355,7 +355,6 @@ class XmodModelTester:
 
 @require_torch
 class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             XmodForCausalLM,

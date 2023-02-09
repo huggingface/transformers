@@ -148,7 +148,7 @@ class XmodConfig(PretrainedConfig):
         ln_before_adapter=True,
         languages=("en_XX",),
         default_language=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
