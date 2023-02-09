@@ -2820,8 +2820,8 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.dtype, torch.float32)
         # XXX: some models don't have `torch_dtype` in `config.json` so we can't test those at the moment
         # test via config's dtype
-        #model = AutoModel.from_pretrained(TINY_T5, torch_dtype="config")
-        #self.assertEqual(model.dtype, torch.float32)
+        # model = AutoModel.from_pretrained(TINY_T5, torch_dtype="config")
+        # self.assertEqual(model.dtype, torch.float32)
         # test forcing an explicit dtype
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
@@ -2829,9 +2829,6 @@ class ModelUtilsTest(TestCasePlus):
         # test model whose first param is not of a floating type, but int
         model = AutoModel.from_pretrained(TINY_BERT_FOR_TOKEN_CLASSIFICATION, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
-
-
-
 
     def test_no_super_init_config_and_model(self):
         config = NoSuperInitConfig(attribute=32)
