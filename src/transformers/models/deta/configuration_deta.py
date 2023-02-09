@@ -143,7 +143,6 @@ class DetaConfig(PretrainedConfig):
         decoder_ffn_dim=1024,
         decoder_attention_heads=8,
         encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
         is_encoder_decoder=True,
         activation_function="relu",
         d_model=256,
@@ -199,7 +198,6 @@ class DetaConfig(PretrainedConfig):
         self.init_std = init_std
         self.init_xavier_std = init_xavier_std
         self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         # deformable attributes
