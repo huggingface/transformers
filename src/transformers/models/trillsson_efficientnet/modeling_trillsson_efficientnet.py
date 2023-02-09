@@ -62,87 +62,6 @@ def make_divisible(filters, divisor=8, min_value=None) -> int:
     return new_filters
 
 
-def loaf_tf_weights_in_trillsson_efficientnet(self, model, tf_saved_model_path):
-    """Load TensorFlow model in a pytorch model."""
-    try:
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error("Tensorflow is not installed. Please install it to load the weights.")
-        raise
-    # load the weights from the tensorflow checkpoint
-    init_vars = tf.saved_model.load(tf_saved_model_path)
-    tf_weights = {}
-    for variable in init_vars.variables:
-        logger.info(f"Loading TF weight {variable.name} with shape {variable.shape}")
-        tf_weights[variable.name] = variable.numpy()
-    current_block = -1
-    current_block_index = ""
-    current_block_type = ""
-    name = ""
-    for vars_name in list(tf_weights.keys()):
-        m_name = vars_name.split("_", 1)  # max split = 1
-        pointer = model
-        array = tf_weights[vars_name]
-        for block_type in ["stem", "top", "block", "dense"]:
-            if block_type in m_name[0]:
-                current_block_type = block_type
-        if current_block_type != "dense":
-            pointer = getattr(pointer, current_block_type)
-            if current_block_type == "block":
-                block_index = m_name[0][-2:]
-                if block_index != current_block_index:
-                    current_block_index = block_index
-                    current_block += 1
-                pointer = pointer[current_block]
-                scope_names = m_name[1].split("/")
-            else:
-                scope_names = vars_name.split("/")
-            if "se" in scope_names[0]:
-                pointer = getattr(pointer, "se")
-            for name in scope_names:
-                if name in ["kernel:0", "gamma:0", "depthwise_kernel:0"]:
-                    pointer = getattr(pointer, "weight")
-                elif name in ["beta:0", "bias:0"]:
-                    pointer = getattr(pointer, "bias")
-                elif name == "moving_mean:0":
-                    pointer = getattr(pointer, "running_mean")
-                elif name == "moving_variance:0":
-                    pointer = getattr(pointer, "running_var")
-                else:
-                    pointer = getattr(pointer, name)
-        else:
-            pointer = getattr(pointer, "dense")
-            name = m_name[0].split("/")[1]
-            if name == "kernel:0":
-                pointer = getattr(pointer, "weight")
-            else:
-                pointer = getattr(pointer, "bias")
-
-        if name == "depthwise_kernel:0":
-            array = np.transpose(array, (3, 2, 0, 1))
-            array = np.transpose(array, (1, 0, 2, 3))
-        elif "kernel:0" in name:
-            if len(pointer.shape) == 2:  # copying into linear layer
-                array = array.squeeze().transpose()
-            else:
-                array = np.transpose(array, (3, 2, 0, 1))
-
-        try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-
-        pointer.data = torch.from_numpy(array.astype(np.float32))
-        tf_weights.pop(vars_name, None)
-
-    logger.info(f"Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}.")
-    return model
-
-
 class Conv2DSamePadding(nn.Conv2d):
     """2D Convolutions same padding like TensorFlow,"""
 
@@ -299,9 +218,13 @@ class TrillssonInvertedResidual(nn.Module):
             groups=hidden_dim,
             bias=False,
         )
-        self.bn = nn.BatchNorm2d(num_features=hidden_dim, eps=self.config.norm_eps, momentum=self.config.norm_momentum)
+        self.normalization = nn.BatchNorm2d(
+            num_features=hidden_dim, eps=self.config.norm_eps, momentum=self.config.norm_momentum
+        )
         if self.use_se:
-            self.se = TrillssonSqueezeExcitation(config=self.config, in_channels=in_channels, out_channels=hidden_dim)
+            self.squeeze_excitation = TrillssonSqueezeExcitation(
+                config=self.config, in_channels=in_channels, out_channels=hidden_dim
+            )
             self.project_conv = Conv2DSamePadding(
                 in_channels=hidden_dim, out_channels=out_channels, kernel_size=1, stride=1, padding=0, bias=False
             )
@@ -318,10 +241,10 @@ class TrillssonInvertedResidual(nn.Module):
         else:
             hidden_states = input_features
         hidden_states = self.dwconv2(hidden_states)
-        hidden_states = self.bn(hidden_states)
+        hidden_states = self.normalization(hidden_states)
         hidden_states = self.activation(hidden_states)
         if self.use_se:
-            hidden_states = self.se(hidden_states)
+            hidden_states = self.squeeze_excitation(hidden_states)
             hidden_states = self.project_conv(hidden_states)
             hidden_states = self.project_bn(hidden_states)
             if self.identity:
@@ -375,7 +298,9 @@ class TrillssonFusedInvertedResiduals(nn.Module):
             )
 
         if self.use_se:
-            self.se = TrillssonSqueezeExcitation(config=self.config, in_channels=in_channels, out_channels=hidden_dim)
+            self.squeeze_excitation = TrillssonSqueezeExcitation(
+                config=self.config, in_channels=in_channels, out_channels=hidden_dim
+            )
         self.gradient_checkpointing = False
 
     def forward(self, input_features):
@@ -387,7 +312,7 @@ class TrillssonFusedInvertedResiduals(nn.Module):
             hidden_states = input_features
 
         if self.use_se:
-            hidden_states = self.se(hidden_states)
+            hidden_states = self.squeeze_excitation(hidden_states)
         hidden_states = self.project_conv(hidden_states)
         hidden_states = self.project_bn(hidden_states)
         if self.expand_ratio == 1:
@@ -407,7 +332,6 @@ class TrillssonEfficientNetPreTrainedModel(PreTrainedModel):
     """
 
     config_class = TrillssonEfficientNetConfig
-    load_tf_weights = loaf_tf_weights_in_trillsson_efficientnet
     base_model_prefix = "trillsson_efficientnet"
     supports_gradient_checkpointing = True
 
@@ -559,7 +483,6 @@ class TrillssonEfficientNetModel(TrillssonEfficientNetPreTrainedModel):
             hidden_states = layer_module(hidden_states)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-
         hidden_states = self.top(hidden_states)
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -576,7 +499,6 @@ class TrillssonEfficientNetModel(TrillssonEfficientNetPreTrainedModel):
 
         hidden_states = torch.mean(hidden_states, dim=1, keepdim=False)
         last_hidden_state = self.dense(hidden_states)
-
         if not return_dict:
             return tuple(v for v in [last_hidden_state, pooled_output, all_hidden_states] if v is not None)
 

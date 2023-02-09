@@ -141,17 +141,7 @@ class TrillssonEfficientNetFeatureExtractor(SequenceFeatureExtractor):
         return pad_raw_speech
 
     @staticmethod
-    def stabilized_log(data: np.ndarray, floor: float, additive_offset: float):
-        """Stabilized MelSpectrogram"""
-        return np.log(np.maximum(data, floor) + additive_offset)
-
-    @staticmethod
-    def rescale(input_array: np.ndarray, rate: float = 1.0 / 128.0, offset: int = -1):
-        """Rescale the input array"""
-        return input_array * rate + offset
-
-    @staticmethod
-    def hann_window(window_length, periodic=True, a=0.5, b=0.5, dtype=np.float32):
+    def hann_window(window_length, periodic=True, dtype=np.float32):
         """Generate a [Hann window][hann]."""
 
         if window_length == 1:
@@ -162,7 +152,7 @@ class TrillssonEfficientNetFeatureExtractor(SequenceFeatureExtractor):
         count = np.arange(window_length, dtype=dtype)
         cos_arg_np = 2 * np.pi * count / n
 
-        return (a - b * np.cos(cos_arg_np)).astype(dtype)
+        return (0.5 - 0.5 * np.cos(cos_arg_np)).astype(dtype)
 
     @staticmethod
     def _infer_frame_shape(signal, frame_length, frame_step, pad_end, axis=-1):
@@ -217,18 +207,19 @@ class TrillssonEfficientNetFeatureExtractor(SequenceFeatureExtractor):
 
             return input_tensor
 
-    def _mel_to_hertz(self, mel_values):
-        """Converts frequencies in `mel_values` from the mel scale to linear scale."""
-        return self.mel_break_frequency_hertz * (np.exp(mel_values / self.mel_high_frequency_q) - 1.0)
-
-    def _hertz_to_mel(self, frequencies_hertz):
-        """Converts frequencies in `frequencies_hertz` in Hertz to the mel scale."""
-        return self.mel_high_frequency_q * np.log(1.0 + (frequencies_hertz / self.mel_break_frequency_hertz))
+    def convert_frequency(self, frequencies, to_mel_scale=True):
+        """Converts frequencies to the mel scale (if `to_mel_scale`) or from the mel scale to Hertz (if not
+        `to_mel_scale`)."""
+        if to_mel_scale:
+            return self.mel_high_frequency_q * np.log(1.0 + (frequencies / self.mel_break_frequency_hertz))
+        else:
+            return self.mel_break_frequency_hertz * (np.exp(frequencies / self.mel_high_frequency_q) - 1.0)
 
     def frame(self, signal, frame_length, frame_step, pad_end=False, pad_value=0, axis=-1):
         """Expands `signal`'s `axis` dimension into frames of `frame_length`"""
 
-        assert signal.ndim >= 1, "Expect input waveform is not None"
+        if not signal.ndim >= 1:
+            raise ValueError("Expect input waveform is not None")
 
         result_shape = self._infer_frame_shape(signal, frame_length, frame_step, pad_end, axis)
         signal_shape = signal.shape
@@ -295,8 +286,8 @@ class TrillssonEfficientNetFeatureExtractor(SequenceFeatureExtractor):
         )
 
         # Check the result shape
-        if result_shape:
-            assert result_shape == frames.shape, f"{result_shape}, {frames.shape}"
+        if result_shape != frames.shape:
+            raise ValueError(f"Expect results shape {result_shape}, but got {frames.shape}")
 
         return frames
 
@@ -317,14 +308,16 @@ class TrillssonEfficientNetFeatureExtractor(SequenceFeatureExtractor):
         bands_to_zero = 1
         nyquist_hertz = sample_rate / 2.0
         linear_frequencies = np.linspace(0.0, nyquist_hertz, num_spectrogram_bins, dtype=dtype)[bands_to_zero:]
-        spectrogram_bins_mel = np.expand_dims(self._hertz_to_mel(linear_frequencies), 1)
+        spectrogram_bins_mel = np.expand_dims(self.convert_frequency(linear_frequencies), 1)
 
         # Compute num_mel_bins triples of (lower_edge, center, upper_edge). The
         # center of each band is the lower and upper edge of the adjacent bands.
         # Accordingly, we divide [lower_edge_hertz, upper_edge_hertz] into
         # num_mel_bins + 2 pieces.
         band_edges_mel = self.frame(
-            np.linspace(self._hertz_to_mel(lower_edge_hertz), self._hertz_to_mel(upper_edge_hertz), num_mel_bins + 2),
+            np.linspace(
+                self.convert_frequency(lower_edge_hertz), self.convert_frequency(upper_edge_hertz), num_mel_bins + 2
+            ),
             frame_length=3,
             frame_step=1,
         )
@@ -386,10 +379,11 @@ class TrillssonEfficientNetFeatureExtractor(SequenceFeatureExtractor):
             upper_edge_hertz=self.f_max,
             dtype=np.float32,
         )
-
         mel = spectrogram @ to_mel
         mel = np.transpose(mel, (0, 2, 1)).astype(np.float32)
-        log_mel = self.stabilized_log(mel, self.log_floor, self.log_additive_offset)
+
+        # stabilized mel spectrogram
+        log_mel = np.log(np.maximum(mel, self.log_floor) + self.log_additive_offset)
         return log_mel
 
     def compute_feature(
@@ -427,7 +421,7 @@ class TrillssonEfficientNetFeatureExtractor(SequenceFeatureExtractor):
             mel_speech = np.transpose(mel_speech, (1, 2, 0))
             # rescale
             if self.do_normalize:
-                mel_speech = self.rescale(mel_speech)
+                mel_speech = mel_speech * (1.0 / 128.0) - 1.0
             extracted_input_values.append(mel_speech)
 
         return extracted_input_values
