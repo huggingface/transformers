@@ -74,17 +74,17 @@ class PipelineTesterMixin:
 
     def run_task_tests(self, task):
         if self.framework not in self.supported_frameworks:
-            self.skipTest(
+            raise ValueError(
                 f"Test is skipped: Could not determined the framework. This should be in {self.supported_frameworks}, "
                 f"but got {self.framework})."
             )
 
         if task not in pipeline_test_mapping:
-            self.skipTest(f"Test is skipped: task {task} is not in the mapping `pipeline_test_mapping`.")
+            raise ValueError(f"Test is skipped: task {task} is not in the mapping `pipeline_test_mapping`.")
         model_mapping = pipeline_test_mapping[task]["mapping"][self.framework]
         # `_LazyAutoMapping` always has length 0: we need to call `keys()` first before getting the length!
         if model_mapping is None or len(list(model_mapping.keys())) == 0:
-            self.skipTest(
+            raise ValueError(
                 f"Test is skipped: No model architecture under framework `{self.framework}` is found for the task"
                 f" `{task}`."
             )
@@ -96,7 +96,7 @@ class PipelineTesterMixin:
         # If `config_class` is irrelevant to the pipeline task, we will skip the tests
         model_architectures = model_mapping.get(self.config_class, None)
         if model_architectures is None:
-            self.skipTest(
+            raise ValueError(
                 f"Test is skipped: No model architecture under framework {self.framework} with the configuration class "
                 f"`{self.config_class.__name__}` is found for the task `{task}`."
             )
@@ -143,15 +143,9 @@ class PipelineTesterMixin:
         if processor_name is not None:
             processor_class = getattr(transformers_module, processor_name)
             # If the required packages (like `Pillow`) are not installed, this will fail.
-            try:
-                processor = processor_class.from_pretrained(repo_id)
-            except Exception:
-                self.skipTest(f"Test is skipped: Could not load the processor from `{repo_id}` with `processor_name`.")
+            processor = processor_class.from_pretrained(repo_id)
 
-        try:
-            model = model_architecture.from_pretrained(repo_id)
-        except Exception:
-            self.skipTest(f"Test is skipped: Could not load the model from `{repo_id}` with `{model_architecture}`.")
+        model = model_architecture.from_pretrained(repo_id)
 
         # validate
         validate_test_components(self, model, tokenizer, processor)
@@ -163,10 +157,6 @@ class PipelineTesterMixin:
         task_test = pipeline_test_mapping[task]["test"]()
 
         pipeline, examples = task_test.get_test_pipeline(model, tokenizer, processor)
-        if pipeline is None:
-            # The test can disable itself, but it should be very marginal
-            # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
-            self.skipTest("Test is skipped: Could not get the pipeline for testing.")
 
         task_test.run_pipeline_test(pipeline, examples)
 
@@ -229,7 +219,7 @@ def validate_test_components(test_case, model, tokenizer, processor):
             )
         # TODO: Remove tiny models from the Hub which have problematic tokenizers (but still keep this block)
         if config_vocab_size is not None and len(tokenizer) > config_vocab_size:
-            test_case.skipTest(
+            raise ValueError(
                 f"Test is skipped: tokenizer (`{tokenizer.__class__.__name__}`) has {len(tokenizer)} tokens which is "
                 f"greater than `config_vocab_size` ({config_vocab_size}). Something is wrong."
             )
