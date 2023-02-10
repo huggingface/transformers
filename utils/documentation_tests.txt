@@ -222,4 +222,5 @@ src/transformers/models/yolos/configuration_yolos.py
 src/transformers/models/yolos/modeling_yolos.py
 src/transformers/models/x_clip/modeling_x_clip.py
 src/transformers/models/yoso/configuration_yoso.py
+src/transformers/models/timesformer/configuration_timesformer.py
 src/transformers/pipelines/
