@@ -207,10 +207,10 @@ _import_structure = {
         "ChineseCLIPVisionConfig",
     ],
     "models.clap": [
-        "Clap_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ClapAudioConfig",
         "ClapConfig",
         "ClapFeatureExtractor",
+        "Clap_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ClapProcessor",
         "ClapTextConfig",
     ],
@@ -1232,11 +1232,11 @@ else:
     )
     _import_structure["models.clap"].extend(
         [
-            "Clap_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ClapAudioModel",
             "ClapAudioModelWithProjection",
             "ClapModel",
             "ClapPreTrainedModel",
+            "Clap_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ClapTextModel",
             "ClapTextModelWithProjection",
         ]

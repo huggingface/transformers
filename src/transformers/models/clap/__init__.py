@@ -22,9 +22,9 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_clap": [
-        "Clap_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ClapAudioConfig",
         "ClapConfig",
+        "Clap_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ClapTextConfig",
     ],
     "feature_extraction_clap": ["ClapFeatureExtractor"],
