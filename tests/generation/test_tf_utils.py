@@ -20,6 +20,7 @@ from transformers import is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from .test_framework_agnostic import GenerationIntegrationTestsMixin
+from ..test_modeling_tf_common import floats_tensor
 
 
 if is_tf_available():
@@ -140,6 +141,7 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
             "LogitsProcessorList": TFLogitsProcessorList,
             "MinLengthLogitsProcessor": TFMinLengthLogitsProcessor,
             "create_tensor_fn": tf.convert_to_tensor,
+            "floats_tensor": floats_tensor,
             "return_tensors": "tf",
         }
 

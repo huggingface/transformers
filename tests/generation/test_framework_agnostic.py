@@ -16,6 +16,7 @@ class GenerationIntegrationTestsMixin:
         "LogitsProcessorList": None,
         "MinLengthLogitsProcessor": None,
         "create_tensor_fn": None,
+        "floats_tensor": None,
         "return_tensors": None,
     }
 
@@ -486,3 +487,28 @@ class GenerationIntegrationTestsMixin:
         input_ids = tokenizer(article, return_tensors=return_tensors).input_ids
         with self.assertRaises(ValueError):
             model.generate(input_ids, input_ids=input_ids)
+
+    def test_generate_too_many_encoder_kwargs(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+
+        article = """I need input_ids to generate"""
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        model = model_cls.from_pretrained("hf-internal-testing/tiny-random-bart", max_length=10)
+        input_ids = tokenizer(article, return_tensors=return_tensors).input_ids
+        with self.assertRaises(ValueError):
+            model.generate(input_ids=input_ids, inputs_embeds=input_ids)
+
+    def test_generate_input_values_as_encoder_kwarg(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+        floats_tensor = self.framework_dependent_parameters["floats_tensor"]
+
+        input_values = floats_tensor((2, 250))
+        model = SpeechEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
+        model = model.to(torch_device)
+        output_sequences_kwargs = model.generate(input_values=input_values, max_length=5).cpu()
+        output_sequences = model.generate(input_values, max_length=5).cpu()
+
+        self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
+        self.assertEqual(output_sequences.shape, (2, 5))
