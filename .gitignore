@@ -165,4 +165,5 @@ tags
 # DS_Store (MacOS)
 .DS_Store
 
-Informer2020/
+# ruff
+.ruff_cache

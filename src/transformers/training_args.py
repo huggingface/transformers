@@ -432,6 +432,10 @@ class TrainingArguments:
                     FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
                      If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the
                      forward pass.
+                - limit_all_gathers (`bool`, *optional*, defaults to `False`)
+                    FSDP's limit_all_gathers (useful only when `fsdp` field is passed).
+                     If `"True"`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight
+                     all-gathers.
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
