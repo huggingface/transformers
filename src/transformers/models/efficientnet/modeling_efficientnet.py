@@ -328,19 +328,18 @@ class EfficientNetBlock(nn.Module):
 
         if self.expand:
             self.expansion = EfficientNetExpansionLayer(
-                config=config, 
-                in_dim=in_dim, 
-                out_dim=expand_in_dim, 
-                stride=stride
+                config=config, in_dim=in_dim, out_dim=expand_in_dim, stride=stride
             )
-            
+
         self.depthwise_conv = EfficientNetDepthwiseLayer(
             config=config,
             in_dim=expand_in_dim if self.expand else in_dim,
             stride=stride,
             kernel_size=kernel_size,
         )
-        self.squeeze_excite = EfficientNetSqueezeExciteLayer(config=config, in_dim=in_dim, expand_dim=expand_in_dim, expand=self.expand)
+        self.squeeze_excite = EfficientNetSqueezeExciteLayer(
+            config=config, in_dim=in_dim, expand_dim=expand_in_dim, expand=self.expand
+        )
         self.projection = EfficientNetFinalLayer(
             config=config,
             in_dim=expand_in_dim if self.expand else in_dim,
@@ -370,12 +369,7 @@ class EfficientNetEncoder(nn.Module):
         config ([`EfficientNetConfig`]): Model configuration class.
     """
 
-    def __init__(
-        self,
-        config: EfficientNetConfig,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
-    ):
+    def __init__(self, config: EfficientNetConfig):
         super().__init__()
         self.config = config
         self.depth_coefficient = config.depth_coefficient
@@ -414,11 +408,28 @@ class EfficientNetEncoder(nn.Module):
                 curr_block_num += 1
 
         self.blocks = nn.ModuleList(blocks)
+        self.top_conv = nn.Conv2d(
+            in_channels=out_dim,
+            out_channels=round_filters(config, 1280),
+            kernel_size=1,
+            padding="same",
+            bias=False,
+        )
+        self.top_bn = nn.BatchNorm2d(num_features=1280)
+        self.top_activation = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = False,
+    ) -> torch.Tensor:
         for block in self.blocks:
             hidden_states = block(hidden_states)
 
+        hidden_states = self.top_conv(hidden_states)
+        hidden_states = self.top_bn(hidden_states)
+        hidden_states = self.top_activation(hidden_states)
         return hidden_states
 
 
@@ -466,7 +477,7 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
             self.pooler = nn.AvgPool2d(config.hidden_dim)
         else:
             self.pooler = nn.MaxPool2d(config.hidden_dim)
-        
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -530,7 +541,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         self.efficientnet = EfficientNetModel(config)
         # Classifier head
         self.dropout = nn.Dropout(p=config.dropout_rate)
-        self.classifier = nn.Linear(config.hidden_sizes[-1], num_labels) if num_labels > 0 else nn.Identity()
+        self.classifier = nn.Linear(1280, num_labels) if num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()

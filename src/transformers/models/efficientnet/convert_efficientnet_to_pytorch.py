@@ -14,7 +14,7 @@
 # limitations under the License.
 """Convert EfficientNet checkpoints from the original repository.
 
-URL: https://github.com/facebookresearch/ConvNeXt"""
+URL: https://github.com/keras-team/keras/blob/v2.11.0/keras/applications/efficientnet.py"""
 
 
 import argparse
@@ -29,7 +29,12 @@ import requests
 from huggingface_hub import hf_hub_download
 import tensorflow as tf
 from tensorflow.keras.applications.efficientnet import *
-from transformers import EfficientNetImageProcessor, EfficientNetConfig, EfficientNetForImageClassification
+from transformers import (
+    EfficientNetImageProcessor,
+    EfficientNetConfig,
+    EfficientNetModel,
+    EfficientNetForImageClassification,
+)
 from transformers.utils import logging
 
 
@@ -37,25 +42,25 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 model_classes = {
-    'b0': EfficientNetB0,
-    'b1': EfficientNetB1,
-    'b2': EfficientNetB2,
-    'b3': EfficientNetB3,
-    'b4': EfficientNetB4,
-    'b5': EfficientNetB5,
-    'b6': EfficientNetB6,
-    'b7': EfficientNetB7,
+    "b0": EfficientNetB0,
+    "b1": EfficientNetB1,
+    "b2": EfficientNetB2,
+    "b3": EfficientNetB3,
+    "b4": EfficientNetB4,
+    "b5": EfficientNetB5,
+    "b6": EfficientNetB6,
+    "b7": EfficientNetB7,
 }
 
 CONFIG_MAP = {
-    'b0': {"width_coef": 1.0, "depth_coef": 1.0, "image_size": 224, "dropout_rate": 0.2},
-    'b1': {"width_coef": 1.0, "depth_coef": 1.1, "image_size": 240, "dropout_rate": 0.2},
-    'b2': {"width_coef": 1.1, "depth_coef": 1.2, "image_size": 260, "dropout_rate": 0.3},
-    'b3': {"width_coef": 1.2, "depth_coef": 1.4, "image_size": 300, "dropout_rate": 0.3},
-    'b4': {"width_coef": 1.4, "depth_coef": 1.8, "image_size": 380, "dropout_rate": 0.4},
-    'b5': {"width_coef": 1.6, "depth_coef": 2.2, "image_size": 456, "dropout_rate": 0.4},
-    'b6': {"width_coef": 1.8, "depth_coef": 2.6, "image_size": 528, "dropout_rate": 0.5},
-    'b7': {"width_coef": 2.0, "depth_coef": 3.1, "image_size": 600, "dropout_rate": 0.5},
+    "b0": {"width_coef": 1.0, "depth_coef": 1.0, "image_size": 224, "dropout_rate": 0.2},
+    "b1": {"width_coef": 1.0, "depth_coef": 1.1, "image_size": 240, "dropout_rate": 0.2},
+    "b2": {"width_coef": 1.1, "depth_coef": 1.2, "image_size": 260, "dropout_rate": 0.3},
+    "b3": {"width_coef": 1.2, "depth_coef": 1.4, "image_size": 300, "dropout_rate": 0.3},
+    "b4": {"width_coef": 1.4, "depth_coef": 1.8, "image_size": 380, "dropout_rate": 0.4},
+    "b5": {"width_coef": 1.6, "depth_coef": 2.2, "image_size": 456, "dropout_rate": 0.4},
+    "b6": {"width_coef": 1.8, "depth_coef": 2.6, "image_size": 528, "dropout_rate": 0.5},
+    "b7": {"width_coef": 2.0, "depth_coef": 3.1, "image_size": 600, "dropout_rate": 0.5},
 }
 
 
@@ -74,8 +79,6 @@ def get_efficientnet_config(model_name):
 
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
-    config.hidden_sizes = hidden_sizes
-    config.depths = depths
     return config
 
 
@@ -89,10 +92,11 @@ def prepare_img():
 def convert_image_processor(model_name):
     size = CONFIG_MAP[model_name]["image_size"]
     preprocessor = EfficientNetImageProcessor(
-        size={"height": size, "width": size}, 
+        size={"height": size, "width": size},
         do_center_crop=False,
     )
     return preprocessor
+
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def rename_keys(original_param_names):
@@ -102,17 +106,59 @@ def rename_keys(original_param_names):
     block_name_mapping = {b: str(i) for b, i in zip(block_names, range(num_blocks))}
 
     rename_keys = []
-    rename_keys.append("stem_conv/kernel:0", "embeddings.convolution.weight")
-    rename_keys.append("stem_bn/gamma:0", "embeddings.batchnorm.weight")
-    rename_keys.append("stem_bn/beta:0", "embeddings.batchnorm.bias")
+    rename_keys.append(("stem_conv/kernel:0", "embeddings.convolution.weight"))
+    rename_keys.append(("stem_bn/gamma:0", "embeddings.batchnorm.weight"))
+    rename_keys.append(("stem_bn/beta:0", "embeddings.batchnorm.bias"))
 
-    for b in range(block_names):
+    for b in block_names:
         hf_b = block_name_mapping[b]
-        rename_keys.append((f"block{b}_se_expand/kernel:0", f"encoder.blocks.{hf_b}.expansion.expand_conv.weight"))
-        rename_keys.append((f"block{b}_se_expand/bias:0", f"encoder.blocks.{hf_b}.expansion.expand_conv.bias"))
+        rename_keys.append((f"block{b}_expand_conv/kernel:0", f"encoder.blocks.{hf_b}.expansion.expand_conv.weight"))
+        rename_keys.append((f"block{b}_expand_bn/gamma:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.weight"))
+        rename_keys.append((f"block{b}_expand_bn/beta:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.bias"))
+        rename_keys.append(
+            (f"block{b}_dwconv/depthwise_kernel:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_conv.weight")
+        )
+        rename_keys.append((f"block{b}_bn/gamma:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.weight"))
+        rename_keys.append((f"block{b}_bn/beta:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.bias"))
+        rename_keys.append((f"block{b}_se_reduce/kernel:0", f"encoder.blocks.{hf_b}.squeeze_excite.reduce.weight"))
+        rename_keys.append((f"block{b}_se_reduce/bias:0", f"encoder.blocks.{hf_b}.squeeze_excite.reduce.bias"))
+        rename_keys.append((f"block{b}_se_expand/kernel:0", f"encoder.blocks.{hf_b}.squeeze_excite.expand.weight"))
+        rename_keys.append((f"block{b}_se_expand/bias:0", f"encoder.blocks.{hf_b}.squeeze_excite.expand.bias"))
+        rename_keys.append(
+            (f"block{b}_project_conv/kernel:0", f"encoder.blocks.{hf_b}.projection.project_conv.weight")
+        )
+        rename_keys.append((f"block{b}_project_bn/gamma:0", f"encoder.blocks.{hf_b}.projection.project_bn.weight"))
+        rename_keys.append((f"block{b}_project_bn/beta:0", f"encoder.blocks.{hf_b}.projection.project_bn.bias"))
 
-    key_mapping = {item[0]: item[1] for item in rename_keys}
+    rename_keys.append((f"top_conv/kernel:0", "encoder.top_conv.weight"))
+    rename_keys.append((f"top_bn/gamma:0", "encoder.top_bn.weight"))
+    rename_keys.append((f"top_bn/beta:0", "encoder.top_bn.bias"))
+
+    key_mapping = {}
+    for item in rename_keys:
+        if item[0] in original_param_names:
+            key_mapping[item[0]] = "efficientnet." + item[1]
+
+    key_mapping["predictions/kernel:0"] = "classifier.weight"
+    key_mapping["predictions/bias:0"] = "classifier.bias"
     return key_mapping
+
+
+def replace_params(hf_params, tf_params, key_mapping):
+    for key, value in tf_params.items():
+        hf_key = key_mapping[key]
+        if "embedding/kernel" in key:
+            new_hf_value = torch.from_numpy(value).permute(3, 2, 0, 1)
+        elif "depthwise_kernel" in key:
+            new_hf_value = torch.from_numpy(value).permute(2, 3, 0, 1)
+        elif "kernel" in key:
+            new_hf_value = torch.from_numpy(np.transpose(value))
+        else:
+            new_hf_value = torch.from_numpy(value)
+
+        # Replace HF parameters with original TF model parameters
+        assert hf_params[hf_key].shape == new_hf_value.shape
+        hf_params[hf_key].copy_(new_hf_value)
 
 
 @torch.no_grad()
@@ -131,74 +177,51 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path):
         classifier_activation="softmax",
     )
 
-    vars = original_model.trainable_variables
-    var_names = [v.name for v in if vars]
-    key_mapping = rename_keys(var_names)
-
-    # Define EfficientNet configuration based on URL
-    config, expected_shape = get_efficientnet_config(checkpoint_url)
-    # load original state_dict from URL
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
-    # rename keys
-    for key in state_dict.copy().keys():
-        val = state_dict.pop(key)
-        state_dict[rename_key(key)] = val
-    # Add prefix to all keys expect classifier head
-    for key in state_dict.copy().keys():
-        val = state_dict.pop(key)
-        if not key.startswith("classifier"):
-            key = "efficientnet." + key
-        state_dict[key] = val
+    tf_params = original_model.trainable_variables
+    tf_param_names = [v.name for v in tf_params]
+    tf_params = {param.name: param.numpy() for param in tf_params}
 
     # Load HuggingFace model
     config = get_efficientnet_config(model_name)
-    model = EfficientNetForImageClassification(config)
-    model.load_state_dict(state_dict)
-    model.eval()
+    hf_model = EfficientNetForImageClassification(config).eval()
+    hf_params = hf_model.state_dict()
+
+    # Create src-to-dst parameter name mapping dictionary
+    key_mapping = rename_keys(tf_param_names)
+    replace_params(hf_params, tf_params, key_mapping)
 
     # Initialize preprocessor and preprocess input image
     preprocessor = convert_image_processor(model_name)
     inputs = preprocessor(images=prepare_img(), return_tensors="pt")
 
-    logits = model(pixel_values).logits
+    # HF model inference
+    hf_model.eval()
+    with torch.no_grad():
+        outputs = hf_model(**inputs)
+    hf_logits = outputs.logits[0].detach().numpy()
 
-    # note: the logits below were obtained without center cropping
-    if model_name == "b0":
-        expected_logits = torch.tensor([-0.1210, -0.6605, 0.1918])
-    elif model_name == "b1":
-        expected_logits = torch.tensor([-0.4473, -0.1847, -0.6365])
-    elif model_name == "b2":
-        expected_logits = torch.tensor([0.4525, 0.7539, 0.0308])
-    elif model_name == "b3":
-        expected_logits = torch.tensor([0.3561, 0.6350, -0.0384])
-    elif model_name == "b4":
-        expected_logits = torch.tensor([0.4174, -0.0989, 0.1489])
-    elif model_name == "b5":
-        expected_logits = torch.tensor([0.2513, -0.1349, -0.1613])
-    elif model_name == "b6":
-        expected_logits = torch.tensor([1.2980, 0.3631, -0.1198])
-    elif model_name == "b7":
-        expected_logits = torch.tensor([1.2963, 0.1227, 0.1723])
-    else:
-        raise ValueError(f"Unknown version: {model_name}")
+    # Original model inference
+    model.trainable = False
+    image_size = CONFIG_MAP[model_name]["image_size"]
+    img = image.load_img(img_path, target_size=(image_size, image_size))
+    x = image.img_to_array(img)
+    x = np.expand_dims(x, axis=0)
+    original_logits = original_model.predict(x)
 
-    assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
-    assert logits.shape == expected_shape
+    # Check whether original and HF model outputs match  -> np.allclose
+    assert np.allclose(original_logits, hf_logits, atol=1e-3), "The predicted logits are not the same."
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    # Create folder to save model
+    if not os.path.isdir(pytorch_dump_folder_path):
+        os.mkdir(pytorch_dump_folder_path)
 
-    print("Pushing model to the hub...")
-    model_name = "efficientnet-" + model_name
+    # Save converted model and feature extractor
+    hf_model.save_pretrained(pytorch_dump_folder_path)
+    preprocessor.save_pretrained(pytorch_dump_folder_path)
 
-    model.push_to_hub(
-        repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-        organization="adirik",
-        commit_message="Add model",
-    )
+    # Push model and feature extractor to hub
+    preprocessor.push_to_hub(model_name)
+    hf_model.push_to_hub(model_name)
 
 
 if __name__ == "__main__":

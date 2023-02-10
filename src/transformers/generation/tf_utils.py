@@ -2746,13 +2746,7 @@ class TFGenerationMixin:
             generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables
         ):
             maximum_iterations = max_length - cur_len
-            (
-                generated,
-                _,
-                cur_len,
-                _,
-                _,
-            ) = tf.while_loop(
+            (generated, _, cur_len, _, _,) = tf.while_loop(
                 contrastive_search_cond_fn,
                 contrastive_search_body_fn,
                 (generated, finished_sequences, cur_len, model_kwargs, next_step_cached_variables),

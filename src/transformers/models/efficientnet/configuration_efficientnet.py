@@ -120,7 +120,7 @@ class EfficientNetConfig(PretrainedConfig):
         dropout_rate=0.5,
         drop_connect_rate=0.2,
         out_features=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
