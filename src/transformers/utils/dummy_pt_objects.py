@@ -6033,13 +6033,6 @@ class TvltForPreTraining(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class TvltForQuestionAnswering(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class TvltModel(metaclass=DummyObject):
     _backends = ["torch"]
 
