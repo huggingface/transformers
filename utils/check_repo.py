@@ -286,7 +286,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPVisionModel",
     "AltRobertaModel",
     "TvltForAudioVisualClassification",
-    "TvltForQuestionAnswering",
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
