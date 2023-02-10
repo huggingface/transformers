@@ -1189,7 +1189,7 @@ Next try to increase the BS to as large as you can, since the higher the batch s
 
 Now the performance optimization game starts. You can turn off some offload features or step down in ZeRO stages and increase/decrease BS and again measure your effective throughput. Rinse and repeat until satisfied.
 
-Don't spend forever on it, but if you're about to start a 3 months training - do spend a few days on it to find the most effective throughput-wise setup. So that your training cost will be the lowest and you will finish training faster. In the current crazy-paced ML world, if it takes you an extra month to train something you are likely to miss a golden opportunity. Of course, this is only me sharing an observation and in no way I'm trying to rush you. Before beginning to train BLOOM-176 I spent 2 days on this process and was able to increase throughput from 90 to 150 TFLOPs! This saved us more than one month of training time.
+Don't spend forever on it, but if you're about to start a 3 months training - do spend a few days on it to find the most effective throughput-wise setup. So that your training cost will be the lowest and you will finish training faster. In the current crazy-paced ML world, if it takes you an extra month to train something you are likely to miss a golden opportunity. Of course, this is only me sharing an observation and in no way I'm trying to rush you. Before beginning to train BLOOM-176B I spent 2 days on this process and was able to increase throughput from 90 to 150 TFLOPs! This effort saved us more than one month of training time.
 
 Other quick random performance notes:
 - if you are training something from scratch always try to have tensors with shapes that are divisible by 16 (e.g. hidden size). For batch size try divisible by 2 at least. There are [wave and tile quanitization](https://developer.nvidia.com/blog/optimizing-gpu-performance-tensor-cores/) divisibility that is hardware-specific if you want to squeeze even higher performance from your GPUs.
@@ -1474,7 +1474,30 @@ As of `deepspeed==0.6.0` the bf16 support is new and experimental.
 
 If you use [gradient accumulation](#gradient-accumulation) with bf16-enabled, you need to be aware that it'll accumulate gradients in bf16, which may not be what you want due to this format's low precision, as it may lead to a lossy accumulation.
 
+A work is being done to fix that and provide an option to use a higher precision `dtype` (fp16 or fp32).
+
 </Tip>
+
+
+### NCCL Collectives
+
+There is the `dtype` of the training regime and there is a separate `dtype` that is used for communication collectives like various reduction and gathering/scattering operations.
+
+All gather/scatter ops are performed in the same `dtype` the data is in, so if you're using bf16 training regime it gets gathered in bf16 - gathering is a non-lossy operation.
+
+Various reduce operations can be quite lossy, for example when gradients are averaged across multiple-gpus, if the communications are done in fp16 or bf16 the outcome is likely be lossy - since when one ads multiple numbers in low precision the result isn't exact. More so with bf16 as it has a lower precision than fp16. Often fp16 is good enough as the loss is minimal when averaging grads which are typically very small. Therefore, by default for half precision training fp16 is used as the default for reduction operations. But you have full control over this functionality and if you choose you can add a small overhead and ensure that reductions will be using fp32 as the accumulation dtype and only when the result is ready it'll get downcast to the half precision `dtype` you're training in.
+
+In order to override the default you simply add a new configuration entry:
+
+```json
+{
+    "communication_data_type": "fp32"
+}
+```
+The valid values as of this writing are "fp16", "bfp16", "fp32".
+
+note: stage zero 3 had a bug with regards to bf16 comm dtype that was fixed in `deepspeed==0.8.1`
+
 
 
 ### apex
