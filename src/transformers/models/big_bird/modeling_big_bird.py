@@ -727,7 +727,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         inner_band_product += (1.0 - band_mask) * attn_mask_penalty
         first_band_product += (1.0 - to_mask[:, :, :, :to_block_size].unsqueeze(3)) * attn_mask_penalty
         last_band_product += (1.0 - to_mask[:, :, :, -to_block_size:].unsqueeze(3)) * attn_mask_penalty
-        rand_band_product += (1.0 - rand_mask[:, :, 1:-1]) * attn_mask_penalty
+        rand_band_product += (~ rand_mask[:, :, 1:-1]) * attn_mask_penalty
 
         # completing attention scores matrix for all q[-2:2]
         band_product = torch.cat(
