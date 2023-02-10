@@ -207,7 +207,8 @@ class CLAPAudioModelOutput(ModelOutput):
         embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -243,7 +244,8 @@ class CLAPAudioModelOutputWithProjection(ModelOutput):
         embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
