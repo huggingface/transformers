@@ -3580,3 +3580,17 @@ def get_disk_only_shard_files(device_map, sharded_metadata):
         files_content[filename].append(device_map[weight_name])
 
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
+
+
+def get_very_first_layer(node):
+    """
+    Returns very first layer of given model
+    """
+    try:
+        next_node = next(node.children())
+        if isinstance(next_node, torch.nn.Module) and next_node is not node:
+            return get_very_first_layer(next_node)
+        else:
+            return node
+    except StopIteration:
+        return node
