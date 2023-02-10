@@ -806,15 +806,13 @@ class ProbSparseAttention(nn.Module):
 
         # __prob_QK
         # calculate the sampled Q_K
-        # K_expand = key_states.unsqueeze(2).expand(-1, L_Q, L_K, -1) # torch.Size([52, 14, 14, 4])
-        index_sample = torch.randint(0, L_K, (U_part,)) # torch.Size([14])
+        index_sample = torch.randint(low=0, high=L_K, size=(U_part,)) # torch.Size([U_part])
 
         # real U = U_part(factor*ln(L_k))*L_q
-        K_sample = key_states[:, index_sample, :] # torch.Size([52, 14, 4])
-        Q_K_sample = torch.bmm(query_states, K_sample.transpose(1, 2))
-        # torch.Size([52, 14, 4]) x torch.Size([52, 4, 14])
+        K_sample = key_states[:, index_sample, :]  # torch.Size([bsz * self.num_heads, U_part, channel])
+        Q_K_sample = torch.bmm(query_states, K_sample.transpose(1, 2)) # torch.Size([bsz * self.num_heads, L_Q, U_part])
 
-        # find the Top_k query with sparisty measurement
+        # find the Top_k query with sparsity measurement
         M = Q_K_sample.max(dim=-1)[0] - torch.div(Q_K_sample.sum(dim=-1), L_K)
         M_top = M.topk(u, sorted=False)[1]
 
@@ -831,7 +829,7 @@ class ProbSparseAttention(nn.Module):
         attn_weights = torch.bmm(Q_reduce, key_states.transpose(1, 2))
 
         src_len = key_states.size(1)
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+        if attn_weights.size() != (bsz * self.num_heads, u, src_len):
             raise ValueError(
                 f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
                 f" {attn_weights.size()}"
