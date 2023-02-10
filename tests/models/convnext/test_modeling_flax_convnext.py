@@ -24,9 +24,9 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 
 
 if is_flax_available():
-
     import jax
     import jax.numpy as jnp
+
     from transformers import FlaxConvNextForImageClassification, FlaxConvNextModel
 
 if is_vision_available():
@@ -125,7 +125,6 @@ class FlaxConvNextModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxConvNextModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxConvNextModel, FlaxConvNextForImageClassification) if is_flax_available() else ()
 
     has_attentions = False
@@ -189,9 +188,9 @@ class FlaxConvNextModelTest(FlaxModelTesterMixin, unittest.TestCase):
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
-            # Flax ConvNext's feature maps are of shape (batch_size, height, width, num_channels)
+            # Flax ConvNext's feature maps are transposed to shape (batch_size, num_channels, height, width)
             self.assertListEqual(
-                list(hidden_states[0].shape[-3:-1]),
+                list(hidden_states[0].shape[-2:]),
                 [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
             )
 

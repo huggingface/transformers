@@ -90,8 +90,6 @@ class FlaxImageClassifierOutputWithNoAttention(ModelOutput):
     Base class for outputs of image classification models.
 
     Args:
-        loss (`jnp.ndarray` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
         logits (`jnp.ndarray` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (`tuple(jnp.ndarray)`, *optional*, returned when `output_hidden_states=True` is passed or when

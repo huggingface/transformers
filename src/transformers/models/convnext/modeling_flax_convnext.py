@@ -15,11 +15,10 @@
 
 from typing import Optional, Tuple, Union
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import random
@@ -147,6 +146,53 @@ class FlaxConvNextLayer(nn.Module):
         return x
 
 
+class FlaxNextLayerCollection(nn.Module):
+    config: ConvNextConfig
+    out_channels: int
+    depth: int = 2
+    drop_path_rates: list = None
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        drop_path_rates = self.drop_path_rates or [0.0] * self.depth
+        self.layers = [
+            FlaxConvNextLayer(
+                self.config, dim=self.out_channels, drop_path=drop_path_rates[j], name=str(j), dtype=self.dtype
+            )
+            for j in range(self.depth)
+        ]
+
+    def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
+        for layer_module in self.layers:
+            hidden_states = layer_module(hidden_states)
+        return hidden_states
+
+
+class FlaxDownsamplingLayerCollection(nn.Module):
+    config: ConvNextConfig
+    out_channels: int
+    kernel_size: int = 2
+    stride: int = 2
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.layers = [
+            nn.LayerNorm(epsilon=1e-6, dtype=self.dtype, name="0"),
+            nn.Conv(
+                self.out_channels,
+                kernel_size=[self.kernel_size, self.kernel_size],
+                strides=[self.stride, self.stride],
+                dtype=self.dtype,
+                name="1",
+            ),
+        ]
+
+    def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
+        for layer_module in self.layers:
+            hidden_states = layer_module(hidden_states)
+        return hidden_states
+
+
 class FlaxConvNextStage(nn.Module):
     """ConvNeXT stage, consisting of an optional downsampling layer + multiple residual blocks.
 
@@ -170,25 +216,18 @@ class FlaxConvNextStage(nn.Module):
 
     def setup(self):
         if self.in_channels != self.out_channels or self.stride > 1:
-            self.downsampling_layer = nn.Sequential(
-                [
-                    nn.LayerNorm(epsilon=1e-6, dtype=self.dtype),
-                    nn.Conv(
-                        self.out_channels,
-                        kernel_size=[self.kernel_size, self.kernel_size],
-                        strides=[self.stride, self.stride],
-                        dtype=self.dtype,
-                    ),
-                ]
+            self.downsampling_layer = FlaxDownsamplingLayerCollection(
+                config=self.config, out_channels=self.out_channels, kernel_size=self.kernel_size, stride=self.stride
             )
         else:
             self.downsampling_layer = None
-        drop_path_rates = self.drop_path_rates or [0.0] * self.depth
-        self.layers = nn.Sequential(
-            [
-                FlaxConvNextLayer(self.config, dim=self.out_channels, drop_path=drop_path_rates[j], dtype=self.dtype)
-                for j in range(self.depth)
-            ]
+
+        self.layers = FlaxNextLayerCollection(
+            self.config,
+            out_channels=self.out_channels,
+            depth=self.depth,
+            drop_path_rates=self.drop_path_rates,
+            dtype=self.dtype,
         )
 
     def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
@@ -198,13 +237,11 @@ class FlaxConvNextStage(nn.Module):
         return hidden_states
 
 
-class FlaxConvNextEncoder(nn.Module):
+class FlaxStageCollection(nn.Module):
     config: ConvNextConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        stages = []
-
         # np.split requires list with entries indicating where along axis the array is split
         sections = (np.cumsum(self.config.depths) - self.config.depths)[1:]
 
@@ -216,22 +253,50 @@ class FlaxConvNextEncoder(nn.Module):
             )
         ]
 
-        prev_chs = self.config.hidden_sizes[0]
-        for i in range(self.config.num_stages):
-            out_chs = self.config.hidden_sizes[i]
-            stage = FlaxConvNextStage(
+        prev_channels = [
+            self.config.hidden_sizes[0],
+            *[self.config.hidden_sizes[i] for i in range(self.config.num_stages - 1)],
+        ]
+
+        self.stages = [
+            FlaxConvNextStage(
                 self.config,
-                in_channels=prev_chs,
-                out_channels=out_chs,
+                in_channels=prev_channels[i],
+                out_channels=self.config.hidden_sizes[i],
                 stride=2 if i > 0 else 1,
                 depth=self.config.depths[i],
                 drop_path_rates=drop_path_rates[i],
+                name=str(i),
                 dtype=self.dtype,
             )
-            stages.append(stage)
-            prev_chs = out_chs
+            for i in range(self.config.num_stages)
+        ]
 
-        self.stages = stages
+    def __call__(
+        self,
+        hidden_states: jnp.ndarray,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
+    ) -> Tuple[jnp.ndarray, Tuple]:
+        all_hidden_states = () if output_hidden_states else None
+
+        for i, layer_module in enumerate(self.stages):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (
+                    hidden_states.transpose(0, 3, 1, 2),
+                )  # transpose to fix pytorch equivalence tests
+
+            hidden_states = layer_module(hidden_states)
+
+        return hidden_states, all_hidden_states
+
+
+class FlaxConvNextEncoder(nn.Module):
+    config: ConvNextConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.stages = FlaxStageCollection(self.config, self.dtype)
 
     def __call__(
         self,
@@ -239,16 +304,12 @@ class FlaxConvNextEncoder(nn.Module):
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, FlaxBaseModelOutputWithNoAttention]:
-        all_hidden_states = () if output_hidden_states else None
-
-        for i, layer_module in enumerate(self.stages):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            hidden_states = layer_module(hidden_states)
+        hidden_states, all_hidden_states = self.stages(hidden_states, output_hidden_states, return_dict)
 
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states = all_hidden_states + (
+                hidden_states.transpose(0, 3, 1, 2),
+            )  # transpose to fix pytorch equivalence tests
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
@@ -277,7 +338,7 @@ class FlaxConvNextPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if input_shape is None:
