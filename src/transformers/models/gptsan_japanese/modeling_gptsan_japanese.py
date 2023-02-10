@@ -872,8 +872,8 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
 # Since the prefix part refers back and forth, it can also work as an MLM. The part after that can be used for text generation as LM.
 #
 # ex;
-# input tokens 0re: x_token = tokenizer.encode("ぁぃぅぇ")
-# m0sk is;
+# input tokens are: x_token = tokenizer.encode("ぁぃぅぇ")
+# mask is;
 # SOT | 1 0 0 0 0 0 |
 # SEG | 1 1 0 0 0 0 |
 # ぁ  | 1 1 1 0 0 0 |
@@ -881,8 +881,8 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
 # ぅ  | 1 1 1 1 1 0 |
 # ぇ  | 1 1 1 1 1 1 |
 #
-# input tokens 0re: x_token = tokenizer.encode("", prefix_text="ぁぃぅぇ")
-# m0sk is;
+# input tokens are: x_token = tokenizer.encode("", prefix_text="ぁぃぅぇ")
+# mask is;
 # SOT | 1 1 1 1 1 0 |
 # ぁ  | 1 1 1 1 1 0 |
 # ぃ  | 1 1 1 1 1 0 |
@@ -890,8 +890,8 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
 # ぇ  | 1 1 1 1 1 0 |
 # SEG | 1 1 1 1 1 1 |
 #
-# input tokens 0re: x_token = tokenizer.encode("ぅぇ", prefix_text="ぁぃ")
-# m0sk is;
+# input tokens are: x_token = tokenizer.encode("ぅぇ", prefix_text="ぁぃ")
+# mask is;
 # SOT | 1 1 1 0 0 0 |
 # ぁ  | 1 1 1 0 0 0 |
 # ぃ  | 1 1 1 0 0 0 |
@@ -1072,7 +1072,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
             .transpose(1, 2)
             .long()
         )
-        # When padding with padding_side="left", zeross line up on the left side of attention_mask, so position_embeddings is shifted accordingly
+        # When padding with padding_side="left", zeros line up on the left side of attention_mask, so position_embeddings is shifted accordingly
         gather_position -= (1 - attention_mask).argmin(dim=-1).unsqueeze(1).unsqueeze(2)
         gather_position = torch.clip(gather_position, num_pasts_contexts, self.config.max_position_embeddings - 1)
 
