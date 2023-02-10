@@ -39,7 +39,7 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
-    from transformers import TvltForAudioVisualClassification, TvltForPreTraining, TvltForQuestionAnswering, TvltModel
+    from transformers import TvltForAudioVisualClassification, TvltForPreTraining, TvltModel
     from transformers.models.tvlt.modeling_tvlt import TVLT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
 else:
@@ -224,14 +224,6 @@ class TvltModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.expected_seq_len, self.hidden_size)
         )
 
-    def create_and_check_for_question_answering(self, config, pixel_values, audio_values, pixel_mask, audio_mask):
-        model = TvltForQuestionAnswering(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, audio_values, pixel_mask=pixel_mask, audio_mask=audio_mask)
-        result = model(pixel_values, audio_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
     def create_and_check_for_audiovisual_classification(
         self, config, pixel_values, audio_values, pixel_mask, audio_mask
     ):
@@ -332,9 +324,7 @@ class TvltModelTester:
 @unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "TVLT is only available in torch v1.10+")
 class TvltModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TvltModel, TvltForPreTraining, TvltForQuestionAnswering, TvltForAudioVisualClassification)
-        if is_torch_available()
-        else ()
+        (TvltModel, TvltForPreTraining, TvltForAudioVisualClassification) if is_torch_available() else ()
     )
 
     fx_compatible = False
@@ -344,16 +334,12 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     main_input_name = "pixel_values"
 
-    # TvltForQuestionAnswering, TvltForAudioVisualClassification and TvltForPreTraining require special treatment
+    # TvltForAudioVisualClassification and TvltForPreTraining require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=True):
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
-            if model_class.__name__ == "TvltForQuestionAnswering":
-                inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size,), dtype=torch.long, device=torch_device
-                )
-            elif model_class.__name__ == "TvltForAudioVisualClassification":
+            if model_class.__name__ == "TvltForAudioVisualClassification":
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size,), dtype=torch.long, device=torch_device
                 )
@@ -418,10 +404,6 @@ class TvltModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_question_answering(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
     def test_for_audiovisual_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -591,8 +573,8 @@ class TvltModelIntegrationTest(unittest.TestCase):
             TvltFeatureExtractor(),
         )
 
-    def test_inference_for_question_answering(self):
-        model = TvltForQuestionAnswering.from_pretrained("TVLT/tvlt-base").to(torch_device)
+    def test_inference_for_base_model(self):
+        model = TvltModel.from_pretrained("ZinengTang/tvlt-base").to(torch_device)
 
         image_processor, audio_feature_extractor = self.default_feature_extractor
         video = prepare_video()
@@ -602,16 +584,19 @@ class TvltModelIntegrationTest(unittest.TestCase):
         inputs = dict()
         inputs.update(video_inputs)
         inputs.update(audio_inputs)
+
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((1, 1))
-        self.assertEqual(outputs.logits.shape, expected_shape)
+        expected_last_hidden_state_slice = torch.tensor([[-0.0186, -0.0691], [0.0242, -0.0398]])
+        self.assertTrue(
+            torch.allclose(outputs.last_hidden_state[:, :2, :2], expected_last_hidden_state_slice, atol=1e-4)
+        )
 
     def test_inference_for_audiovisual_classification(self):
-        model = TvltForAudioVisualClassification.from_pretrained("TVLT/tvlt-base").to(torch_device)
+        model = TvltForAudioVisualClassification.from_pretrained("ZinengTang/tvlt-base").to(torch_device)
 
         image_processor, audio_feature_extractor = self.default_feature_extractor
         video = prepare_video()
@@ -627,11 +612,11 @@ class TvltModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((1, 1))
-        self.assertEqual(outputs.logits.shape, expected_shape)
+        expected_logits = torch.tensor([[0.7068]])
+        self.assertTrue(torch.allclose(outputs.logits, expected_logits, atol=1e-4))
 
     def test_inference_for_pretraining(self):
-        model = TvltForPreTraining.from_pretrained("TVLT/tvlt-base").to(torch_device)
+        model = TvltForPreTraining.from_pretrained("ZinengTang/tvlt-base").to(torch_device)
 
         image_processor, audio_feature_extractor = self.default_feature_extractor
         video = prepare_video()

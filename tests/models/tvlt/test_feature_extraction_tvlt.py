@@ -21,6 +21,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import torch
 
 from transformers import is_datasets_available, is_speech_available
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
@@ -196,5 +197,8 @@ class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         input_speech = self._load_datasamples(1)
         feaure_extractor = TvltFeatureExtractor()
         audio_values = feaure_extractor(input_speech, return_tensors="pt").audio_values
-        print(audio_values.shape)
+
         self.assertTrue(audio_values.shape, [1, 1, 192, 128])
+
+        expected_slice = torch.tensor([[-0.3032, -0.2708], [-0.4434, -0.4007]])
+        self.assertTrue(torch.allclose(audio_values[0, 0, :2, :2], expected_slice, atol=1e-4))

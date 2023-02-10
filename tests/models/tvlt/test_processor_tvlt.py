@@ -35,7 +35,7 @@ from transformers import TvltProcessor
 @require_torch
 class TvltProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "TVLT/tvlt-base"
+        self.checkpoint = "ZinengTang/tvlt-base"
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_image_processor(self, **kwargs):
