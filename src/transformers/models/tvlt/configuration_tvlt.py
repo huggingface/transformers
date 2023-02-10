@@ -147,9 +147,9 @@ class TvltConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        if not audio_mask_type in ("frame-level", "patch_level"):
+        if audio_mask_type not in ("frame-level", "patch_level"):
             raise ValueError(
-                "audio_mask_type must be one of two acceptable strategies - {'frame_level', 'patch-level') " 
+                "audio_mask_type must be one of two acceptable strategies - {'frame_level', 'patch-level') "
                 f"got {audio_mask_type}"
             )
 
