@@ -312,7 +312,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
 
-        # mono
         input_features = [self._np_extract_fbank_features(waveform) for waveform in input_features[0]]
 
         if isinstance(input_features[0], List):
