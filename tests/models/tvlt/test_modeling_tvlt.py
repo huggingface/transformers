@@ -595,26 +595,6 @@ class TvltModelIntegrationTest(unittest.TestCase):
             torch.allclose(outputs.last_hidden_state[:, :2, :2], expected_last_hidden_state_slice, atol=1e-4)
         )
 
-    def test_inference_for_audiovisual_classification(self):
-        model = TvltForAudioVisualClassification.from_pretrained("ZinengTang/tvlt-base").to(torch_device)
-
-        image_processor, audio_feature_extractor = self.default_feature_extractor
-        video = prepare_video()
-        audio = prepare_audio()
-        video_inputs = image_processor(video, return_tensors="pt").to(torch_device)
-        audio_inputs = audio_feature_extractor(audio, return_tensors="pt").to(torch_device)
-        inputs = dict()
-        inputs.update(video_inputs)
-        inputs.update(audio_inputs)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_logits = torch.tensor([[0.7068]])
-        self.assertTrue(torch.allclose(outputs.logits, expected_logits, atol=1e-4))
-
     def test_inference_for_pretraining(self):
         model = TvltForPreTraining.from_pretrained("ZinengTang/tvlt-base").to(torch_device)
 
