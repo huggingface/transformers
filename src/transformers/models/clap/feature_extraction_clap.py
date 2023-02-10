@@ -42,7 +42,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
     Args:
         feature_size (`int`, defaults to 80):
             The feature dimension of the extracted MEL spectrograms. This corresponds to the number of frequency bins
-            (intervals) that are computer, for each fourrier step.
+            (intervals) that are computed, for each Fourier step.
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz). This only serves
             to warn users if the audio fed to the feature extractor does not have the same sampling rate.
@@ -73,7 +73,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             of the original mel obtained from the padded audio.
                 - `rand_trunc` will select a random crop of the mel spectrogram.
         padding (`str`, *optional*):
-            Padding pattern for shorter audio inputs. Three patterns were originaly implemented:
+               Padding pattern for shorter audio inputs. Three patterns were originally implemented:
                 - `repeatpad`: the audio is repeated, and then padded to fit the `max_length`.
                 - `repeat`: the audio is repeated and then cut to fit the `max_length`
                 - `pad`: the audio is padded.
@@ -152,7 +152,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
         Compute the log-Mel spectrogram of the provided `waveform` using the `hanning` window. In Clap, two different
-        banks of filters are used depending on the truncation pattern:
+        filter banks are used depending on the truncation pattern:
             - `self.mel_filters`: they correspond to the defaults parameters of `torchaduio` which can be obtained from
               calling `torchaudio.transforms.MelSpectrogram().mel_scale.fb`. These filters are used when `truncation`
               is set to `fuison`.
@@ -274,7 +274,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 copy of the original mel obtained from the padded audio.
                     - `rand_trunc` will select a random crop of the mel spectrogram.
             padding (`str`, *optional*):
-                Padding pattern for shorter audio inputs. Three patterns were originaly implemented:
+               Padding pattern for shorter audio inputs. Three patterns were originally implemented:
                     - `repeatpad`: the audio is repeated, and then padded to fit the `max_length`.
                     - `repeat`: the audio is repeated and then cut to fit the `max_length`
                     - `pad`: the audio is padded.
