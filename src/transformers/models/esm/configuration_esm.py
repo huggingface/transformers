@@ -120,7 +120,7 @@ class EsmConfig(PretrainedConfig):
         is_folding_model=False,
         esmfold_config=None,
         vocab_list=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, mask_token_id=mask_token_id, **kwargs)
 

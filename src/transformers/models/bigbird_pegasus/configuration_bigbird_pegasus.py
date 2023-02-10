@@ -158,7 +158,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         block_size=64,
         num_random_blocks=3,
         use_bias=False,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

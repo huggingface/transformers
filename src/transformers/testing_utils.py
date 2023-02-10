@@ -35,6 +35,7 @@ from typing import Iterator, List, Optional, Union
 from unittest import mock
 
 import huggingface_hub
+
 from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
@@ -777,6 +778,7 @@ def get_tests_dir(append_path=None):
 # Helper functions for dealing with testing text outputs
 # The original code came from:
 # https://github.com/fastai/fastai/blob/master/tests/utils/text.py
+
 
 # When any function contains print() calls that get overwritten, like progress bars,
 # a special care needs to be applied, since under pytest -s captured output (capsys

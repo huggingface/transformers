@@ -266,7 +266,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         max_source_positions=5000,
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.hidden_size = hidden_size
