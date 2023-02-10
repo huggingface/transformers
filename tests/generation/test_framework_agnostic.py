@@ -499,16 +499,32 @@ class GenerationIntegrationTestsMixin:
         with self.assertRaises(ValueError):
             model.generate(input_ids=input_ids, inputs_embeds=input_ids)
 
-    def test_generate_input_values_as_encoder_kwarg(self):
-        model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
-        return_tensors = self.framework_dependent_parameters["return_tensors"]
+    def test_generate_input_features_as_encoder_kwarg(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForSpeechSeq2Seq"]
         floats_tensor = self.framework_dependent_parameters["floats_tensor"]
+        is_pt = not model_cls.__name__.startswith("TF")
 
-        input_values = floats_tensor((2, 250))
-        model = SpeechEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
+        input_features = floats_tensor((3, 80, 60))
+        model = model_cls.from_pretrained("hf-internal-testing/tiny-random-WhisperForConditionalGeneration")
+        if is_pt:
+            input_features.to(torch_device)
+            model = model.to(torch_device)
+
+        output_sequences_kwargs = model.generate(input_features=input_features, max_length=5)
+        output_sequences = model.generate(input_features, max_length=5)
+        if is_pt:
+            output_sequences_kwargs = output_sequences_kwargs.cpu().numpy()
+            output_sequences = output_sequences.cpu().numpy()
+
+        self.assertTrue(np.array_equal(output_sequences, output_sequences_kwargs))
+        self.assertEqual(output_sequences.shape, (3, 5))
+
+    def test_generate_pixel_values_as_encoder_kwarg(self):
+        pixel_values = floats_tensor((2, 3, 30, 30))
+        model = VisionEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-vision-encoder-decoder")
         model = model.to(torch_device)
-        output_sequences_kwargs = model.generate(input_values=input_values, max_length=5).cpu()
-        output_sequences = model.generate(input_values, max_length=5).cpu()
+        output_sequences_kwargs = model.generate(pixel_values=pixel_values, max_length=5).cpu()
+        output_sequences = model.generate(pixel_values, max_length=5).cpu()
 
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
         self.assertEqual(output_sequences.shape, (2, 5))

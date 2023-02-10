@@ -28,6 +28,7 @@ if is_tf_available():
 
     from transformers import (
         TFAutoModelForCausalLM,
+        TFAutoModelForSpeechSeq2Seq,
         TFAutoModelForSeq2SeqLM,
         TFLogitsProcessorList,
         TFMinLengthLogitsProcessor,
@@ -137,6 +138,7 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
     if is_tf_available():
         framework_dependent_parameters = {
             "AutoModelForCausalLM": TFAutoModelForCausalLM,
+            "AutoModelForSpeechSeq2Seq": TFAutoModelForSpeechSeq2Seq,
             "AutoModelForSeq2SeqLM": TFAutoModelForSeq2SeqLM,
             "LogitsProcessorList": TFLogitsProcessorList,
             "MinLengthLogitsProcessor": TFMinLengthLogitsProcessor,

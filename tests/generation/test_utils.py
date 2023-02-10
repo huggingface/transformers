@@ -30,13 +30,13 @@ if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
         AutoModelForSeq2SeqLM,
+        AutoModelForSpeechSeq2Seq,
         AutoTokenizer,
         BartForConditionalGeneration,
         BartTokenizer,
         GPT2LMHeadModel,
         GPT2Tokenizer,
         ImageGPTForCausalImageModeling,
-        Speech2TextForConditionalGeneration,
         SpeechEncoderDecoderModel,
         VisionEncoderDecoderModel,
         top_k_top_p_filtering,
@@ -1790,6 +1790,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     if is_torch_available():
         framework_dependent_parameters = {
             "AutoModelForCausalLM": AutoModelForCausalLM,
+            "AutoModelForSpeechSeq2Seq": AutoModelForSpeechSeq2Seq,
             "AutoModelForSeq2SeqLM": AutoModelForSeq2SeqLM,
             "LogitsProcessorList": LogitsProcessorList,
             "MinLengthLogitsProcessor": MinLengthLogitsProcessor,
@@ -2094,7 +2095,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertEqual(output, [{"generated_text": "Hello I believe in in in number"}])
 
     def test_generate_non_nlp_input_ids_as_kwarg(self):
-        # PT-only test: AFAIK there is no non-NLP model architecture in TF that supports `input_ids` as its only input
+        # PT-only test: AFAIK there's no non-NLP model architecture in TF that supports `input_ids` as its only input
         model = ImageGPTForCausalImageModeling.from_pretrained(
             "hf-internal-testing/tiny-random-imagegpt", max_length=10
         ).to(torch_device)
@@ -2106,22 +2107,13 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
         self.assertEqual(output_sequences.shape, (3, 10))
 
-    def test_generate_input_features_as_encoder_kwarg(self):
-        input_features = floats_tensor((3, 20, 24))
-        model = Speech2TextForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-speech_to_text")
+    def test_generate_input_values_as_encoder_kwarg(self):
+        # PT-only test: AFAIK there's no generate-capable architecture in TF that supports `input_values` as its input
+        input_values = floats_tensor((2, 250))
+        model = SpeechEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-speech-encoder-decoder")
         model = model.to(torch_device)
-        output_sequences_kwargs = model.generate(input_features=input_features, max_length=5).cpu()
-        output_sequences = model.generate(input_features, max_length=5).cpu()
-
-        self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
-        self.assertEqual(output_sequences.shape, (3, 5))
-
-    def test_generate_pixel_values_as_encoder_kwarg(self):
-        pixel_values = floats_tensor((2, 3, 30, 30))
-        model = VisionEncoderDecoderModel.from_pretrained("hf-internal-testing/tiny-random-vision-encoder-decoder")
-        model = model.to(torch_device)
-        output_sequences_kwargs = model.generate(pixel_values=pixel_values, max_length=5).cpu()
-        output_sequences = model.generate(pixel_values, max_length=5).cpu()
+        output_sequences_kwargs = model.generate(input_values=input_values, max_length=5).cpu()
+        output_sequences = model.generate(input_values, max_length=5).cpu()
 
         self.assertListEqual(output_sequences.tolist(), output_sequences_kwargs.tolist())
         self.assertEqual(output_sequences.shape, (2, 5))
