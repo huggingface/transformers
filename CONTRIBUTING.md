@@ -337,7 +337,12 @@ $ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_
 $ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
-Like the slow tests, custom tokenizer tests are skipped but you can set the `RUN_CUSTOM_TOKENIZERS` environment variable to `yes` to run them.
+Like the slow tests, there are other environment variables available which not enabled by default during testing:
+- `RUN_CUSTOM_TOKENIZERS`: Enables tests for custom tokenizers.
+- `RUN_PT_FLAX_CROSS_TESTS`: Enables tests for PyTorch + Flax integration.
+- `RUN_PT_TF_CROSS_TESTS`: Enables tests for TensorFlow + PyTorch integration.
+
+More environment variables and additional information can be found in the [testing_utils.py](src/transformers/testing_utils.py).
 
 🤗 Transformers uses `pytest` as a test runner only. It doesn't use any
 `pytest`-specific features in the test suite itself.
