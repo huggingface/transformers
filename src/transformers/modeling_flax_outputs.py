@@ -99,7 +99,6 @@ class FlaxImageClassifierOutputWithNoAttention(ModelOutput):
             called feature maps) of the model at the output of each stage.
     """
 
-    loss: Optional[jnp.ndarray] = None
     logits: jnp.ndarray = None
     hidden_states: Optional[Tuple[jnp.ndarray]] = None
 
