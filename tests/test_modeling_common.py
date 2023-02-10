@@ -3119,7 +3119,6 @@ class ModelUtilsTest(TestCasePlus):
             )
         self.assertIsNotNone(model)
 
-    @require_safetensors
     def test_checkpoint_variant_save_load(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             model = BertModel.from_pretrained(
