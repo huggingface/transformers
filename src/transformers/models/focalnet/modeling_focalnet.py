@@ -557,23 +557,14 @@ class FocalNetStage(nn.Module):
     def forward(self, hidden_states: torch.Tensor, input_dimensions: Tuple[int, int]) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for layer_module in self.layers:
-            # TODO use this
-            # layer_outputs = layer_module(hidden_states, input_dimensions)
             hidden_states = layer_module(hidden_states, input_dimensions)
-            # hidden_states = layer_outputs[0]
-
-            # if print_values:
-            #     print(f"Hidden states after block {i}:", hidden_states[0, :3, :3])
 
         hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:
             H, W = input_dimensions
             hidden_states = hidden_states.transpose(1, 2).reshape(hidden_states_before_downsampling.shape[0], -1, H, W)
-            # if print_values:
-            #     print("Hidden states before downsampling:", hidden_states[0, 0, :3, :3])
             hidden_states, output_dimensions = self.downsample(hidden_states)
-            # if print_values:
-            #     print("Hidden states after downsampling:", hidden_states[0, :3, :3])
+
         else:
             output_dimensions = (height, width, height, width)
 
@@ -643,22 +634,17 @@ class FocalNetEncoder(nn.Module):
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
+                stage_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(stage_module),
                     hidden_states,
                     input_dimensions,
                 )
             else:
-                layer_outputs = stage_module(hidden_states, input_dimensions)
+                stage_outputs = stage_module(hidden_states, input_dimensions)
 
-            hidden_states = layer_outputs[0]
-            hidden_states_before_downsampling = layer_outputs[1]
-            output_dimensions = layer_outputs[2]
-
-            if i == 0:
-                print("Height and width:", output_dimensions)
-                print(f"Hidden states after layer {i}:", hidden_states.shape)
-                print(f"First values of hidden states after layer {i}:", hidden_states[0, :3, :3])
+            hidden_states = stage_outputs[0]
+            hidden_states_before_downsampling = stage_outputs[1]
+            output_dimensions = stage_outputs[2]
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
 
@@ -792,9 +778,6 @@ class FocalNetModel(FocalNetPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         embedding_output, input_dimensions = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-
-        print("Shape of embeddings:", embedding_output.shape)
-        print("First values of embeddings:", embedding_output[0, :3, :3])
 
         encoder_outputs = self.encoder(
             embedding_output,
