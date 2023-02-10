@@ -2405,11 +2405,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if torch_dtype is not None:
                 if isinstance(torch_dtype, str):
                     if torch_dtype == "auto":
-                        if (
-                            hasattr(config, "torch_dtype")
-                            and config.torch_dtype is not None
-                            and isinstance(config.torch_dtype, torch.dtype)
-                        ):
+                        if hasattr(config, "torch_dtype") and config.torch_dtype is not None:
                             torch_dtype = config.torch_dtype
                             logger.info(f"Will use torch_dtype={torch_dtype} as defined in 'config.json'")
                         else:
