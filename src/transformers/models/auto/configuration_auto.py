@@ -192,6 +192,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaConfig"),
         ("xlm-roberta-xl", "XLMRobertaXLConfig"),
         ("xlnet", "XLNetConfig"),
+        ("xmod", "XmodConfig"),
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
     ]
@@ -345,6 +346,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("xlm-prophetnet", "XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("xlm-roberta", "XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("xlnet", "XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("xmod", "XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yolos", "YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("yoso", "YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
     ]
@@ -540,6 +542,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xlnet", "XLNet"),
         ("xls_r", "XLS-R"),
         ("xlsr_wav2vec2", "XLSR-Wav2Vec2"),
+        ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
     ]

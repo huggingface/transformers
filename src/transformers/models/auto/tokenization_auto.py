@@ -326,6 +326,13 @@ else:
                 ),
             ),
             (
+                "xmod",
+                (
+                    "XLMRobertaTokenizer" if is_sentencepiece_available() else None,
+                    "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
                 "yoso",
                 (
                     "AlbertTokenizer" if is_sentencepiece_available() else None,
