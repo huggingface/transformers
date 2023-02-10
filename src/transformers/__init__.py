@@ -180,6 +180,13 @@ _import_structure = {
         "BlipTextConfig",
         "BlipVisionConfig",
     ],
+    "models.blip_2": [
+        "BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Blip2Config",
+        "Blip2Processor",
+        "Blip2QFormerConfig",
+        "Blip2VisionConfig",
+    ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
     "models.bort": [],
     "models.bridgetower": [
@@ -1148,6 +1155,15 @@ else:
             "BlipPreTrainedModel",
             "BlipTextModel",
             "BlipVisionModel",
+        ]
+    )
+    _import_structure["models.blip_2"].extend(
+        [
+            "BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Blip2ForConditionalGeneration",
+            "Blip2PreTrainedModel",
+            "Blip2QFormerModel",
+            "Blip2VisionModel",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -3645,6 +3661,13 @@ if TYPE_CHECKING:
         BlipTextConfig,
         BlipVisionConfig,
     )
+    from .models.blip_2 import (
+        BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Blip2Config,
+        Blip2Processor,
+        Blip2QFormerConfig,
+        Blip2VisionConfig,
+    )
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
     from .models.bridgetower import (
         BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4497,6 +4520,13 @@ if TYPE_CHECKING:
             BlipPreTrainedModel,
             BlipTextModel,
             BlipVisionModel,
+        )
+        from .models.blip_2 import (
+            BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Blip2ForConditionalGeneration,
+            Blip2PreTrainedModel,
+            Blip2QFormerModel,
+            Blip2VisionModel,
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
