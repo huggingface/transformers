@@ -147,6 +147,12 @@ class TvltConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
+        if not audio_mask_type in ("frame-level", "patch_level"):
+            raise ValueError(
+                "audio_mask_type must be one of two acceptable strategies - {'frame_level', 'patch-level') " 
+                f"got {audio_mask_type}"
+            )
+
         self.image_size = image_size
         self.spectrogram_length = spectrogram_length
         self.frequency_length = frequency_length
@@ -175,8 +181,6 @@ class TvltConfig(PretrainedConfig):
         self.pixel_mask_ratio = pixel_mask_ratio
         self.audio_mask_ratio = audio_mask_ratio
         self.audio_mask_type = audio_mask_type
-        if not isinstance(audio_mask_type, str):
-            raise TypeError("audio_mask_type must be a string and is either frame-level or patch-level")
 
         self.task_matching = task_matching
         self.task_mae = task_mae
