@@ -445,11 +445,20 @@ class BigBirdBlockSparseAttention(nn.Module):
     def generate_one_table(self, o_table, start_i, end_i, num_rand_blocks):
         return list(permutations(o_table[start_i:end_i], num_rand_blocks))
 
-    """
-    This function is used to generate the permutations table. The difference between it and _bigbird_block_rand_mask
-    is that it will generate all possible permutations rather than choosing one for each iteration.
-    """
     def generate_rand_attn_tables(self, from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx):
+        """
+        This function is used to generate the permutations table. The generate rules are similar with the function self._bigbird_block_rand_mask. Function self._bigbird_block_rand_mask only gnerates one permutation for each iteration, but this function will generate all possible permutations for each iteration by replacing np.random.permutation with itertools.permutations. All the permutations are stored in self.rand_attn_tables.
+
+        Args:
+            from_seq_length: int. length of from sequence.
+            to_seq_length: int. length of to sequence.
+            from_block_size: int. size of block in from sequence.
+            to_block_size: int. size of block in to sequence.
+            num_rand_blocks: int. Number of random chunks per row.
+            last_idx: if -1 then num_rand_blocks blocks chosen anywhere in to sequence,
+            if positive then num_rand_blocks blocks chosen only up to last_idx.
+
+        """
         all_tables = self.rand_attn_tables
         middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
         last = to_seq_length // to_block_size - 1
@@ -1088,8 +1097,19 @@ class BigBirdBlockSparseAttention(nn.Module):
         return plan_from_length, plan_num_rand_blocks
 
     def _bigbird_block_rand_mask_fast(self, 
-            from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx, n_heads
+            from_seq_length, from_block_size, num_rand_blocks, n_heads
         ): 
+        """
+        A fast path to create adjacency list of random attention. The permutation list is pre-computed by self.generate_rand_attn_tables and stored in self.rand_attn_tables. This function choose one of the adjacency list from the pre-computed list.
+
+        Args:
+            from_seq_length: int. length of from sequence.
+            from_block_size: int. size of block in from sequence.
+            num_rand_blocks: int. Number of random chunks per row.
+
+        Returns:
+            adjacency list of size from_seq_length//from_block_size-2 by num_rand_blocks
+        """
         rand_attn = [ np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32) for _ in range(n_heads)]
         for i in range(1, from_seq_length // from_block_size - 1):
             rand_i = np.random.randint(len(self.rand_attn_tables[i-1]), size=n_heads)
