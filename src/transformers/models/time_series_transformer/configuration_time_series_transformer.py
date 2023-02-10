@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Time Series Transformer model configuration"""
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -56,8 +56,9 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         input_size (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
-        scaling (`string`, *optional* defaults to `mean`):
-            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`.
+        scaling (`string` or `bool`, *optional* defaults to `mean`):
+            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
+            scaler is set to "mean".
         lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
             The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4,
             5, 6, 7]`.
@@ -140,7 +141,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         distribution_output: str = "student_t",
         loss: str = "nll",
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
-        scaling: Optional[str] = "mean",
+        scaling: Optional[Union[str, bool]] = "mean",
         num_dynamic_real_features: int = 0,
         num_static_categorical_features: int = 0,
         num_static_real_features: int = 0,
