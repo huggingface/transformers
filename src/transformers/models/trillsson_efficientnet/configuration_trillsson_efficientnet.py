@@ -60,20 +60,6 @@ class TrillssonEfficientNetConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         norm_momentum (`float`, *optional*, defaults to 0.1):
             The momentum used by the layer normalization layers.
-        log_floor (`float`, *optional*, defaults to 1e-12):
-            The floor value for the log operation.
-        log_additive_offset (`float`, *optional*, defaults to 0.001):
-            The additive offset for the log operation.
-        window_length_secs (`float`, *optional*, defaults to 0.025):
-            The window length in seconds.
-        hop_length_secs (`float`, *optional*, defaults to 0.010):
-            The hop length in seconds.
-        f_max (`float`, *optional*, defaults to 7500.0):
-            The maximum frequency in Hz.
-        f_min (`float`, *optional*, defaults to 125.0):
-            The minimum frequency in Hz.
-        fft_length (`int`, *optional*):
-            The FFT length. If None, it will be computed from the window length.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.8):
             The dropout probability for the classifier.
         block_config (`list`, *optional*):
