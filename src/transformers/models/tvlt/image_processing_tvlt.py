@@ -311,6 +311,7 @@ class TvltImageProcessor(BaseImageProcessor):
         do_resize: bool = None,
         size: Dict[str, int] = None,
         patch_size: List[int] = None,
+        num_frames: int = None,
         resample: PILImageResampling = None,
         do_center_crop: bool = None,
         crop_size: Dict[str, int] = None,
@@ -334,8 +335,10 @@ class TvltImageProcessor(BaseImageProcessor):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after applying resize.
-            patch_size (`List[int]` *optional*, defaults to [16,16]):
+            patch_size (`List[int]` *optional*, defaults to self.patch_size):
                 The patch size of image patch embedding.
+            num_frames (`int` *optional*, defaults to self.num_frames):
+                The maximum number of video frames.    
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
@@ -396,6 +399,7 @@ class TvltImageProcessor(BaseImageProcessor):
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
         patch_size = patch_size if patch_size is not None else self.patch_size
+        num_frames = num_frames if patch_size is not None else self.num_frames
 
         if not valid_images(videos):
             raise ValueError(
