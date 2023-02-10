@@ -41,7 +41,6 @@ else:
         "TVLT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TvltModel",
         "TvltForPreTraining",
-        "TvltForQuestionAnswering",
         "TvltForAudioVisualClassification",
         "TvltPreTrainedModel",
     ]
@@ -76,7 +75,6 @@ if TYPE_CHECKING:
             TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TvltForAudioVisualClassification,
             TvltForPreTraining,
-            TvltForQuestionAnswering,
             TvltModel,
             TvltPreTrainedModel,
         )

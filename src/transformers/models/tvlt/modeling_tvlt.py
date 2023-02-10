@@ -43,11 +43,11 @@ from .configuration_tvlt import TvltConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TvltConfig"
-_CHECKPOINT_FOR_DOC = "murgelab/tvlt-base"
+_CHECKPOINT_FOR_DOC = "ZinengTang/tvlt-base"
 
 TVLT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "murgelab/tvlt-base",
-    # See all TVLT models at https://huggingface.co/murgelab/tvlt-base
+    "ZinengTang/tvlt-base",
+    # See all TVLT models at https://huggingface.co/ZinengTang/tvlt-base
 ]
 
 
@@ -150,9 +150,7 @@ class TvltForPreTrainingOutput(ModelOutput):
 
 
 def generate_pixel_mask_noise(pixel_values, pixel_mask=None, mask_ratio=0.75):
-    """
-    Generate noise for audio masking.
-    """
+    """Generate noise for audio masking."""
 
     batch_size, seq_len = pixel_values.shape[:2]
     noise = torch.rand((batch_size, seq_len))  # noise in [0, 1]
@@ -161,9 +159,7 @@ def generate_pixel_mask_noise(pixel_values, pixel_mask=None, mask_ratio=0.75):
 
 
 def generate_audio_mask_noise(audio_values, audio_mask=None, mask_ratio=0.75, mask_type="patch-level", freq_len=8):
-    """
-    Generate noise for audio masking.
-    """
+    """Generate noise for audio masking."""
 
     batch_size, seq_len = audio_values.shape[:2]
     if mask_type == "frame-level":
@@ -207,9 +203,7 @@ def random_masking(sequence, noise, len_keep, attention_masks=None):
 
 
 class TvltPixelEmbeddings(nn.Module):
-    """
-    Construct the patch and position embeddings.
-    """
+    """Construct the patch and position embeddings."""
 
     def __init__(self, config):
         super().__init__()
@@ -236,9 +230,7 @@ class TvltPixelEmbeddings(nn.Module):
 
 
 class TvltAudioEmbeddings(nn.Module):
-    """
-    Construct the patch and position embeddings.
-    """
+    """Construct the patch and position embeddings."""
 
     def __init__(self, config):
         super().__init__()
@@ -744,8 +736,8 @@ class TvltModel(TvltPreTrainedModel):
         >>> images = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
 
-        >>> processor = TvltProcessor.from_pretrained("TVLT/tvlt-base")
-        >>> model = TvltModel.from_pretrained("TVLT/tvlt-base")
+        >>> processor = TvltProcessor.from_pretrained("ZinengTang/tvlt-base")
+        >>> model = TvltModel.from_pretrained("ZinengTang/tvlt-base")
 
         >>> input_dict = processor(images, audio, sampling_rate=44100, return_tensors="pt")
 
@@ -1090,8 +1082,8 @@ class TvltForPreTraining(TvltPreTrainedModel):
         >>> images = list(np.random.randn(num_frames, 3, 224, 224))
         >>> images_mixed = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
-        >>> processor = TvltProcessor.from_pretrained("murgelab/tvlt-base")
-        >>> model = TvltForPreTraining.from_pretrained("murgelab/tvlt-base")
+        >>> processor = TvltProcessor.from_pretrained("ZinengTang/tvlt-base")
+        >>> model = TvltForPreTraining.from_pretrained("ZinengTang/tvlt-base")
         >>> input_dict = processor(
         ...     images, audio, images_mixed, sampling_rate=44100, mask_pixel=True, mask_audio=True, return_tensors="pt"
         ... )
@@ -1228,99 +1220,8 @@ class TvltMAEHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Tvlt Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the [CLS]
-    token) for question answering tasks, e.g. Audio-based VQA.
-    """,
-    TVLT_START_DOCSTRING,
-)
-class TvltForQuestionAnswering(TvltPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.tvlt = TvltModel(config)
-
-        # Classifier head
-        self.classifier = nn.Sequential(
-            nn.Linear(config.hidden_size, config.hidden_size * 2),
-            nn.LayerNorm(config.hidden_size * 2, eps=config.layer_norm_eps),
-            nn.GELU(),
-            nn.Linear(config.hidden_size * 2, config.num_labels),
-        )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(TVLT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values,
-        audio_values,
-        pixel_mask=None,
-        audio_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ) -> Union[tuple, SequenceClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
-            Labels for computing the question answering loss. Indices should be in `[0, ..., num_answer_choices-1]`
-            where num_answer_choices refers to the number of answer choices in question answering.
-
-        Return:
-
-        Examples:
-        ```python
-        >>> from transformers import TvltProcessor, TvltForQuestionAnswering
-        >>> import numpy as np
-        >>> import torch
-
-        >>> num_frames = 8
-        >>> images = list(np.random.randn(num_frames, 3, 224, 224))
-        >>> audio = list(np.random.randn(10000))  # Audio/speech-based question
-        >>> processor = TvltProcessor.from_pretrained("murgelab/tvlt-base")
-        >>> model = TvltForQuestionAnswering.from_pretrained("murgelab/tvlt-base")
-        >>> input_dict = processor(images, audio, sampling_rate=44100, return_tensors="pt")
-
-        >>> outputs = model(**input_dict)
-        >>> loss = outputs.loss
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.tvlt(
-            pixel_values,
-            audio_values,
-            pixel_mask=pixel_mask,
-            audio_mask=audio_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = outputs[0][:, 0]
-        logits = self.classifier(sequence_output)  # rank value
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[4:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    Tvlt Model transformer with a classifier head on top (a linear layer on top of the final hidden state of the [CLS]
-    token) for audiovisual classification tasks, e.g. CMU-MOSEI Sentiment Analysis and Audio to Video Retrieval.
+    Tvlt Model transformer with a classifier head on top (an MLP on top of the final hidden state of the [CLS] token)
+    for audiovisual classification tasks, e.g. CMU-MOSEI Sentiment Analysis and Audio to Video Retrieval.
     """,
     TVLT_START_DOCSTRING,
 )
@@ -1371,8 +1272,8 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
         >>> num_frames = 8
         >>> images = list(np.random.randn(num_frames, 3, 224, 224))
         >>> audio = list(np.random.randn(10000))
-        >>> processor = TvltProcessor.from_pretrained("murgelab/tvlt-base")
-        >>> model = TvltForAudioVisualClassification.from_pretrained("murgelab/tvlt-base")
+        >>> processor = TvltProcessor.from_pretrained("ZinengTang/tvlt-base")
+        >>> model = TvltForAudioVisualClassification.from_pretrained("ZinengTang/tvlt-base")
         >>> input_dict = processor(images, audio, sampling_rate=44100, return_tensors="pt")
 
         >>> outputs = model(**input_dict)

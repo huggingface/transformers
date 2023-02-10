@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "TVLT/tvlt-base": "https://huggingface.co/TVLT/tvlt-base/blob/main/config.json",
+    "ZinengTang/tvlt-base": "https://huggingface.co/ZinengTang/tvlt-base/blob/main/config.json",
 }
 
 
@@ -30,7 +30,7 @@ class TvltConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`TvltModel`]. It is used to instantiate a TVLT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the TVLT
-    [TVLT/tvlt-base](https://huggingface.co/TVLT/tvlt-base) architecture.
+    [TVLT/tvlt-base](https://huggingface.co/ZinengTang/tvlt-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -84,7 +84,7 @@ class TvltConfig(PretrainedConfig):
         decoder_intermediate_size (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
         pixel_mask_ratio (`float`, *optional*, defaults to 0.75):
-            image patch masking ratio.
+            Image patch masking ratio.
         audio_mask_ratio (`float`, *optional*, defaults to 0.15):
             Audio patch masking ratio.
         audio_mask_type (`str`, *optional*, defaults to `"frame-level"`):
@@ -101,10 +101,10 @@ class TvltConfig(PretrainedConfig):
     ```python
     >>> from transformers import TvltConfig, TvltModel
 
-    >>> # # Initializing a TVLT TVLT/tvlt-base style configuration
+    >>> # # Initializing a TVLT ZinengTang/tvlt-base style configuration
     >>> configuration = TvltConfig()
 
-    >>> # # Initializing a model (with random weights) from the TVLT/tvlt-base style configuration
+    >>> # # Initializing a model (with random weights) from the ZinengTang/tvlt-base style configuration
     >>> model = TvltModel(configuration)
 
     >>> # Accessing the model configuration
