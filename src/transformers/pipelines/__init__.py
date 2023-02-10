@@ -738,6 +738,11 @@ def pipeline(
                 'You cannot use both `pipeline(... device_map=..., model_kwargs={"device_map":...})` as those'
                 " arguments might conflict, use only one.)"
             )
+        if device is not None:
+            logger.warning(
+                "Both `device` and `device_map` are specified. `device` will override `device_map`. You"
+                " will most likely encounter unexpected behavior. Please remove `device` and keep `device_map`."
+            )
         model_kwargs["device_map"] = device_map
     if torch_dtype is not None:
         if "torch_dtype" in model_kwargs:
