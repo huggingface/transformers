@@ -624,43 +624,6 @@ class GenerationIntegrationTestsMixin:
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
 
-    def test_eos_token_id_int_and_list_top_k_top_sampling(self):
-        model_cls = self.framework_dependent_parameters["AutoModelForCausalLM"]
-        return_tensors = self.framework_dependent_parameters["return_tensors"]
-        set_seed = self.framework_dependent_parameters["set_seed"]
-        is_pt = not model_cls.__name__.startswith("TF")
-
-        generation_kwargs = {
-            "do_sample": True,
-            "num_beams": 1,
-            "top_p": 0.7,
-            "top_k": 10,
-            "temperature": 0.7,
-        }
-        # Note: random-based tests naturally have framework-dependent results.
-        expectation = 15
-        if is_pt:
-            eos_token_id = 846
-        else:
-            eos_token_id = 319
-
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        text = """Hello, my dog is cute and"""
-        tokens = tokenizer(text, return_tensors=return_tensors)
-        model = model_cls.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        if is_pt:
-            model = model.to(torch_device)
-            tokens = tokens.to(torch_device)
-
-        set_seed(0)
-        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
-        self.assertTrue(expectation == len(generated_tokens[0]))
-
-        set_seed(0)
-        eos_token_id = [eos_token_id, 198]
-        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
-        self.assertTrue(expectation == len(generated_tokens[0]))
-
     def test_eos_token_id_int_and_list_beam_search(self):
         model_cls = self.framework_dependent_parameters["AutoModelForCausalLM"]
         return_tensors = self.framework_dependent_parameters["return_tensors"]

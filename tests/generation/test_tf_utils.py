@@ -27,6 +27,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
+        AutoTokenizer,
         TFAutoModelForCausalLM,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSpeechSeq2Seq,
@@ -147,7 +148,6 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
             "create_tensor_fn": tf.convert_to_tensor,
             "floats_tensor": floats_tensor,
             "return_tensors": "tf",
-            "set_seed": tf.random.set_seed,
         }
 
     @slow
@@ -235,3 +235,29 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
                 tf_func_outputs = serving_func(**inputs)["sequences"]
                 tf_model_outputs = test_model.generate(**inputs, max_new_tokens=max_new_tokens)
                 tf.debugging.assert_equal(tf_func_outputs, tf_model_outputs)
+
+    def test_eos_token_id_int_and_list_top_k_top_sampling(self):
+        # Has PT equivalent: this test relies on random sampling
+        generation_kwargs = {
+            "do_sample": True,
+            "num_beams": 1,
+            "top_p": 0.7,
+            "top_k": 10,
+            "temperature": 0.7,
+        }
+        expectation = 15
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        text = """Hello, my dog is cute and"""
+        tokens = tokenizer(text, return_tensors="tf")
+        model = TFAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+
+        tf.random.set_seed(0)
+        eos_token_id = 319
+        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        self.assertTrue(expectation == len(generated_tokens[0]))
+
+        tf.random.set_seed(0)
+        eos_token_id = [319, 198]
+        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        self.assertTrue(expectation == len(generated_tokens[0]))

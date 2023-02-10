@@ -1798,7 +1798,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             "create_tensor_fn": torch.tensor,
             "floats_tensor": floats_tensor,
             "return_tensors": "pt",
-            "set_seed": torch.manual_seed,
         }
 
     @slow
@@ -2468,3 +2467,29 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         outputs_from_rand_embeds = model.generate(input_ids, inputs_embeds=random_embeds)
         with self.assertRaises(AssertionError):
             self.assertListEqual(outputs_from_rand_embeds.tolist(), outputs_from_embeds.tolist())
+
+    def test_eos_token_id_int_and_list_top_k_top_sampling(self):
+        # Has TF equivalent: this test relies on random sampling
+        generation_kwargs = {
+            "do_sample": True,
+            "num_beams": 1,
+            "top_p": 0.7,
+            "top_k": 10,
+            "temperature": 0.7,
+        }
+        expectation = 15
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        text = """Hello, my dog is cute and"""
+        tokens = tokenizer(text, return_tensors="pt").to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+
+        torch.manual_seed(0)
+        eos_token_id = 846
+        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        self.assertTrue(expectation == len(generated_tokens[0]))
+
+        torch.manual_seed(0)
+        eos_token_id = [846, 198]
+        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        self.assertTrue(expectation == len(generated_tokens[0]))
