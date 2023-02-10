@@ -29,11 +29,11 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class CLAPFeatureExtractor(SequenceFeatureExtractor):
+class ClapFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Clap feature extractor.
 
-    This feature extractor inherits from [`CLAPFeatureExtractor`] which contains most of the main methods. Users should
+    This feature extractor inherits from [`ClapFeatureExtractor`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
     This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time

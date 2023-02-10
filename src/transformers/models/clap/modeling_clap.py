@@ -38,14 +38,14 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_clap import CLAPAudioConfig, CLAPConfig, CLAPTextConfig
+from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "laion-ai/clap-htsat-fused"
 
-CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
+Clap_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "laion-ai/clap-htsat-fused",
     "laion-ai/clap-htsat-unfused",
     # See all clap models at https://huggingface.co/models?filter=clap
@@ -157,7 +157,7 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
 
 @dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->Clap
-class CLAPTextModelOutput(ModelOutput):
+class ClapTextModelOutput(ModelOutput):
     """
     Base class for text model's outputs that also contains a pooling of the last hidden states.
 
@@ -186,9 +186,9 @@ class CLAPTextModelOutput(ModelOutput):
 
 
 @dataclass
-class CLAPAudioModelOutput(ModelOutput):
+class ClapAudioModelOutput(ModelOutput):
     """
-    CLAPAudio model output to mimic the output of the original implementation.
+    ClapAudio model output to mimic the output of the original implementation.
 
     Args:
         framewise_output (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
@@ -221,9 +221,9 @@ class CLAPAudioModelOutput(ModelOutput):
 
 
 @dataclass
-class CLAPAudioModelOutputWithProjection(ModelOutput):
+class ClapAudioModelOutputWithProjection(ModelOutput):
     """
-    CLAPAudio model output to mimic the output of the original implementation.
+    ClapAudio model output to mimic the output of the original implementation.
 
     Args:
         audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
@@ -260,7 +260,7 @@ class CLAPAudioModelOutputWithProjection(ModelOutput):
 
 @dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->Clap, vision->audio, Vision->Audio, image->audio
-class CLAPOutput(ModelOutput):
+class ClapOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -272,13 +272,13 @@ class CLAPOutput(ModelOutput):
             The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`CLAPTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
         audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The audio embeddings obtained by applying the projection layer to the pooled output of [`CLAPAudioModel`].
+            The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
         text_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLAPTextModel`].
+            The output of the [`ClapTextModel`].
         audio_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLAPAudioModel`].
+            The output of the [`ClapAudioModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -297,7 +297,7 @@ class CLAPOutput(ModelOutput):
 
 
 # Adapted from transformers.models.swin.modeling_swin.SwinDropPath
-class CLAPDropPath(nn.Module):
+class ClapDropPath(nn.Module):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is a slightly
     refactored version of the `SwinDropPath` implementation.
@@ -322,12 +322,12 @@ class CLAPDropPath(nn.Module):
 
 
 # Adapted from https://github.com/LAION-AI/Clap/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/feature_fusion.py#L133
-class CLAPAudioAFFBlock(nn.Module):
+class ClapAudioAFFBlock(nn.Module):
     r"""
     AFF Block from Clap, since in Clap we are always in 2D mode, it is not needed to implement the 1D version.
     """
 
-    def __init__(self, config: CLAPAudioConfig):
+    def __init__(self, config: ClapAudioConfig):
         super().__init__()
         channels = config.patch_embeds_hidden_size
         downsize_ratio = config.aff_block_r
@@ -361,13 +361,13 @@ class CLAPAudioAFFBlock(nn.Module):
         return output
 
 
-class CLAPAudioPatchEmbed(nn.Module):
+class ClapAudioPatchEmbed(nn.Module):
     """
     This module converts the hidden states reshaped as an image to patch embeddings ready to be passed to the
     Transformer block.
     """
 
-    def __init__(self, config: CLAPAudioConfig):
+    def __init__(self, config: ClapAudioConfig):
         super().__init__()
         img_size = (config.spec_size, config.spec_size) if isinstance(config.spec_size, int) else config.spec_size
         patch_size = (
@@ -400,7 +400,7 @@ class CLAPAudioPatchEmbed(nn.Module):
 
         self.norm = nn.LayerNorm(config.patch_embeds_hidden_size) if config.enable_patch_layer_norm else nn.Identity()
         if self.enable_fusion:
-            self.fusion_model = CLAPAudioAFFBlock(config)
+            self.fusion_model = ClapAudioAFFBlock(config)
             self.mel_conv2d = nn.Conv2d(
                 config.patch_embed_input_channels,
                 config.patch_embeds_hidden_size,
@@ -475,8 +475,8 @@ class CLAPAudioPatchEmbed(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->CLAPAudio
-class CLAPAudioSelfAttention(nn.Module):
+# Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->ClapAudio
+class ClapAudioSelfAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
         if dim % num_heads != 0:
@@ -547,7 +547,7 @@ class CLAPAudioSelfAttention(nn.Module):
         attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in CLAPAudioModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in ClapAudioModel forward() function)
             mask_shape = attention_mask.shape[0]
             attention_scores = attention_scores.view(
                 batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim
@@ -576,8 +576,8 @@ class CLAPAudioSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->CLAPAudio
-class CLAPAudioSelfOutput(nn.Module):
+# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->ClapAudio
+class ClapAudioSelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(dim, dim)
@@ -590,12 +590,12 @@ class CLAPAudioSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->CLAPAudio
-class CLAPAudioAttention(nn.Module):
+# Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->ClapAudio
+class ClapAudioAttention(nn.Module):
     def __init__(self, config, dim, num_heads, window_size):
         super().__init__()
-        self.self = CLAPAudioSelfAttention(config, dim, num_heads, window_size)
-        self.output = CLAPAudioSelfOutput(config, dim)
+        self.self = ClapAudioSelfAttention(config, dim, num_heads, window_size)
+        self.output = ClapAudioSelfOutput(config, dim)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -629,8 +629,8 @@ class CLAPAudioAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->CLAPAudio
-class CLAPAudioIntermediate(nn.Module):
+# Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->ClapAudio
+class ClapAudioIntermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(dim, int(config.mlp_ratio * dim))
@@ -645,8 +645,8 @@ class CLAPAudioIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->CLAPAudio
-class CLAPAudioOutput(nn.Module):
+# Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->ClapAudio
+class ClapAudioOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
         self.dense = nn.Linear(int(config.mlp_ratio * dim), dim)
@@ -658,8 +658,8 @@ class CLAPAudioOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinLayer with SwinDropPath->CLAPDropPath, Swin->CLAPAudio
-class CLAPAudioLayer(nn.Module):
+# Copied from transformers.models.swin.modeling_swin.SwinLayer with SwinDropPath->ClapDropPath, Swin->ClapAudio
+class ClapAudioLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -667,11 +667,11 @@ class CLAPAudioLayer(nn.Module):
         self.window_size = config.window_size
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.attention = CLAPAudioAttention(config, dim, num_heads, window_size=self.window_size)
-        self.drop_path = CLAPDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.attention = ClapAudioAttention(config, dim, num_heads, window_size=self.window_size)
+        self.drop_path = ClapDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.intermediate = CLAPAudioIntermediate(config, dim)
-        self.output = CLAPAudioOutput(config, dim)
+        self.intermediate = ClapAudioIntermediate(config, dim)
+        self.output = ClapAudioOutput(config, dim)
 
     def set_shift_and_window_size(self, input_resolution):
         if min(input_resolution) <= self.window_size:
@@ -782,15 +782,15 @@ class CLAPAudioLayer(nn.Module):
         return layer_outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->CLAPAudio
-class CLAPAudioStage(nn.Module):
+# Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->ClapAudio
+class ClapAudioStage(nn.Module):
     def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
         super().__init__()
         self.config = config
         self.dim = dim
         self.blocks = nn.ModuleList(
             [
-                CLAPAudioLayer(
+                ClapAudioLayer(
                     config=config,
                     dim=dim,
                     input_resolution=input_resolution,
@@ -842,8 +842,8 @@ class CLAPAudioStage(nn.Module):
         return stage_outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPatchMerging with Swin->CLAPAudio
-class CLAPAudioPatchMerging(nn.Module):
+# Copied from transformers.models.swin.modeling_swin.SwinPatchMerging with Swin->ClapAudio
+class ClapAudioPatchMerging(nn.Module):
     """
     Patch Merging Layer.
 
@@ -897,13 +897,13 @@ class CLAPAudioPatchMerging(nn.Module):
         return input_feature
 
 
-class CLAPAudioEncoder(nn.Module):
+class ClapAudioEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_layers = len(config.depths)
 
         self.config = config
-        self.patch_embed = CLAPAudioPatchEmbed(config)
+        self.patch_embed = ClapAudioPatchEmbed(config)
         self.enable_fusion = config.enable_fusion
         grid_size = self.patch_embed.grid_size
         self.patch_stride = self.patch_embed.patch_stride
@@ -919,14 +919,14 @@ class CLAPAudioEncoder(nn.Module):
 
         self.layers = nn.ModuleList(
             [
-                CLAPAudioStage(
+                ClapAudioStage(
                     config=config,
                     dim=int(config.hidden_size * 2**i_layer),
                     input_resolution=self.input_resolutions[i_layer],
                     depth=config.depths[i_layer],
                     num_heads=config.num_attention_heads[i_layer],
                     drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=CLAPAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
+                    downsample=ClapAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
                 )
                 for i_layer in range(self.num_layers)
             ]
@@ -953,7 +953,7 @@ class CLAPAudioEncoder(nn.Module):
     def reshape_mel2img(self, normalixed_input_features):
         """
         The input is 4 normalized log mel spectrograms. It is reshape to the common shape of images. Each channel
-        should represent 1 of the 4 crops of the spectrogram. For more details, refer to the `CLAPFeatureExtracor`.
+        should represent 1 of the 4 crops of the spectrogram. For more details, refer to the `ClapFeatureExtracor`.
         """
         _, _, time_steps, freq_steps = normalixed_input_features.shape
 
@@ -1008,7 +1008,7 @@ class CLAPAudioEncoder(nn.Module):
         output_hidden_states_before_downsampling: Optional[bool] = False,
         always_partition: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, CLAPAudioModelOutput]:
+    ) -> Union[Tuple, ClapAudioModelOutput]:
         input_features = input_features.transpose(1, 3)
         normalixed_input_features = self.bn0(input_features)
         normalixed_input_features = normalixed_input_features.transpose(1, 3)
@@ -1134,7 +1134,7 @@ class CLAPAudioEncoder(nn.Module):
                 all_reshaped_hidden_states,
             )
 
-        return CLAPAudioModelOutput(
+        return ClapAudioModelOutput(
             framewise_output=framewise_output,
             clipwise_output=torch.sigmoid(hidden_states),
             fine_grained_embedding=fine_grained_latent_output,
@@ -1144,7 +1144,7 @@ class CLAPAudioEncoder(nn.Module):
         )
 
 
-CLAP_START_DOCSTRING = r"""
+Clap_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -1154,12 +1154,12 @@ CLAP_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`CLAPConfig`]): Model configuration class with all the parameters of the model.
+        config ([`ClapConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-CLAP_TEXT_INPUTS_DOCSTRING = r"""
+Clap_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -1191,11 +1191,11 @@ CLAP_TEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-CLAP_AUDIO_INPUTS_DOCSTRING = r"""
+Clap_AUDIO_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returnes by the [`CLAPFeatureExtractor`] class that you can also
-            retrieve from [`AutoFeatureExtractor`]. See [`CLAPFeatureExtractor.__call__`] for details.
+            Input audio features. This should be returnes by the [`ClapFeatureExtractor`] class that you can also
+            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1206,7 +1206,7 @@ CLAP_AUDIO_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-CLAP_INPUTS_DOCSTRING = r"""
+Clap_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -1229,8 +1229,8 @@ CLAP_INPUTS_DOCSTRING = r"""
 
             [What are position IDs?](../glossary#position-ids)
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Input audio features. This should be returnes by the [`CLAPFeatureExtractor`] class that you can also
-            retrieve from [`AutoFeatureExtractor`]. See [`CLAPFeatureExtractor.__call__`] for details.
+            Input audio features. This should be returnes by the [`ClapFeatureExtractor`] class that you can also
+            retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -1244,8 +1244,8 @@ CLAP_INPUTS_DOCSTRING = r"""
 """
 
 
-class CLAPFusionBlock(nn.Module):
-    def __init__(self, config: CLAPTextConfig):
+class ClapFusionBlock(nn.Module):
+    def __init__(self, config: ClapTextConfig):
         super().__init__()
         self.config = config
         hidden_size = config.projection_dim
@@ -1261,8 +1261,8 @@ class CLAPFusionBlock(nn.Module):
         return hidden_states
 
 
-class CLAPProjectionLayer(nn.Module):
-    def __init__(self, config: CLAPAudioConfig):
+class ClapProjectionLayer(nn.Module):
+    def __init__(self, config: ClapAudioConfig):
         super().__init__()
         self.config = config
         hidden_size = config.projection_hidden_size
@@ -1279,12 +1279,12 @@ class CLAPProjectionLayer(nn.Module):
         return hidden_states
 
 
-class CLAPFusionLayer(nn.Module):
-    def __init__(self, config: CLAPTextConfig):
+class ClapFusionLayer(nn.Module):
+    def __init__(self, config: ClapTextConfig):
         super().__init__()
         self.config = config
 
-        self.layers = nn.ModuleList([CLAPFusionBlock(config) for _ in range(config.fusion_num_hidden_layers)])
+        self.layers = nn.ModuleList([ClapFusionBlock(config) for _ in range(config.fusion_num_hidden_layers)])
 
     def forward(self, hidden_states):
         for layer in self.layers:
@@ -1292,8 +1292,8 @@ class CLAPFusionLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->CLAPText
-class CLAPTextEmbeddings(nn.Module):
+# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->ClapText
+class ClapTextEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -1380,8 +1380,8 @@ class CLAPTextEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->CLAPText
-class CLAPTextSelfAttention(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->ClapText
+class ClapTextSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -1488,7 +1488,7 @@ class CLAPTextSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in CLAPTextModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in ClapTextModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -1516,7 +1516,7 @@ class CLAPTextSelfAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class CLAPTextSelfOutput(nn.Module):
+class ClapTextSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -1530,12 +1530,12 @@ class CLAPTextSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->CLAPText
-class CLAPTextAttention(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->ClapText
+class ClapTextAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = CLAPTextSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = CLAPTextSelfOutput(config)
+        self.self = ClapTextSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.output = ClapTextSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -1581,7 +1581,7 @@ class CLAPTextAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
-class CLAPTextIntermediate(nn.Module):
+class ClapTextIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -1597,7 +1597,7 @@ class CLAPTextIntermediate(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput
-class CLAPTextOutput(nn.Module):
+class ClapTextOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -1611,21 +1611,21 @@ class CLAPTextOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->CLAPText
-class CLAPTextLayer(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->ClapText
+class ClapTextLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = CLAPTextAttention(config)
+        self.attention = ClapTextAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = CLAPTextAttention(config, position_embedding_type="absolute")
-        self.intermediate = CLAPTextIntermediate(config)
-        self.output = CLAPTextOutput(config)
+            self.crossattention = ClapTextAttention(config, position_embedding_type="absolute")
+        self.intermediate = ClapTextIntermediate(config)
+        self.output = ClapTextOutput(config)
 
     def forward(
         self,
@@ -1698,12 +1698,12 @@ class CLAPTextLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->CLAPText
-class CLAPTextEncoder(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->ClapText
+class ClapTextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([CLAPTextLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([ClapTextLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -1796,7 +1796,7 @@ class CLAPTextEncoder(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler
-class CLAPTextPooler(nn.Module):
+class ClapTextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -1811,13 +1811,13 @@ class CLAPTextPooler(nn.Module):
         return pooled_output
 
 
-class CLAPPreTrainedModel(PreTrainedModel):
+class ClapPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = CLAPTextConfig
+    config_class = ClapTextConfig
     base_model_prefix = "clap"
     supports_gradient_checkpointing = False
     _keys_to_ignore_on_load_missing = [r"position_ids", r"logit_scale_a", r"logit_scale_t"]
@@ -1826,11 +1826,11 @@ class CLAPPreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         factor = self.config.initializer_factor
 
-        if isinstance(module, CLAPTextEmbeddings):
+        if isinstance(module, ClapTextEmbeddings):
             module.word_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.token_type_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, CLAPTextSelfAttention):
+        elif isinstance(module, ClapTextSelfAttention):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.query.weight, std=in_proj_std)
             nn.init.normal_(module.key.weight, std=in_proj_std)
@@ -1838,36 +1838,36 @@ class CLAPPreTrainedModel(PreTrainedModel):
         elif isinstance(
             module,
             (
-                CLAPTextSelfOutput,
-                CLAPTextOutput,
-                CLAPTextIntermediate,
-                CLAPTextPooler,
-                CLAPAudioSelfOutput,
-                CLAPAudioIntermediate,
-                CLAPAudioOutput,
+                ClapTextSelfOutput,
+                ClapTextOutput,
+                ClapTextIntermediate,
+                ClapTextPooler,
+                ClapAudioSelfOutput,
+                ClapAudioIntermediate,
+                ClapAudioOutput,
             ),
         ):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.dense.weight, std=in_proj_std)
-        elif isinstance(module, CLAPProjectionLayer):
+        elif isinstance(module, ClapProjectionLayer):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.linear1.weight, std=in_proj_std)
             nn.init.normal_(module.linear2.weight, std=in_proj_std)
-        elif isinstance(module, CLAPAudioPatchEmbed):
+        elif isinstance(module, ClapAudioPatchEmbed):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.proj.weight, std=in_proj_std)
-        elif isinstance(module, CLAPAudioSelfAttention):
+        elif isinstance(module, ClapAudioSelfAttention):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.query.weight, std=in_proj_std)
             nn.init.normal_(module.key.weight, std=in_proj_std)
             nn.init.normal_(module.value.weight, std=in_proj_std)
-        elif isinstance(module, CLAPAudioPatchMerging):
+        elif isinstance(module, ClapAudioPatchMerging):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.reduction.weight, std=in_proj_std)
-        elif isinstance(module, CLAPAudioEncoder):
+        elif isinstance(module, ClapAudioEncoder):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.head.weight, std=in_proj_std)
-        elif isinstance(module, CLAPFusionBlock):
+        elif isinstance(module, ClapFusionBlock):
             nn.init.normal_(module.linear.weight, std=factor * 0.02)
 
         if isinstance(module, nn.LayerNorm):
@@ -1880,30 +1880,30 @@ class CLAPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.weight, std=in_proj_std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        if isinstance(module, CLAPModel):
+        if isinstance(module, ClapModel):
             nn.init.normal_(module.logit_scale_a, std=factor * 0.02)
             nn.init.normal_(module.logit_scale_t, std=factor * 0.02)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, CLAPTextEncoder):
+        if isinstance(module, ClapTextEncoder):
             module.gradient_checkpointing = value
 
 
-class CLAPAudioModel(CLAPPreTrainedModel):
-    config_class = CLAPAudioConfig
+class ClapAudioModel(ClapPreTrainedModel):
+    config_class = ClapAudioConfig
     main_input_name = "input_features"
 
-    def __init__(self, config: CLAPAudioConfig):
+    def __init__(self, config: ClapAudioConfig):
         super().__init__(config)
-        self.audio_encoder = CLAPAudioEncoder(config)
+        self.audio_encoder = ClapAudioEncoder(config)
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_encoder.patch_embed.proj
 
-    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLAPAudioConfig)
+    @add_start_docstrings_to_model_forward(Clap_AUDIO_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ClapAudioConfig)
     def forward(
         self,
         input_features: Optional[torch.FloatTensor] = None,
@@ -1919,12 +1919,12 @@ class CLAPAudioModel(CLAPPreTrainedModel):
 
         ```python
         >>> from datasets import load_dataset
-        >>> from transformers import AutoProcessor, CLAPAudioModel
+        >>> from transformers import AutoProcessor, ClapAudioModel
 
         >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model = CLAPAudioModel.from_pretrained("laionai/clap-hsat-fused")
+        >>> model = ClapAudioModel.from_pretrained("laionai/clap-hsat-fused")
         >>> processor = AutoProcessor.from_pretrained("laionai/clap-hsat-fused")
 
         >>> inputs = processor(audios=audio_sample, return_tensors="pt")
@@ -1947,7 +1947,7 @@ class CLAPAudioModel(CLAPPreTrainedModel):
         )
 
 
-class CLAPTextModel(CLAPPreTrainedModel):
+class ClapTextModel(ClapPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -1963,18 +1963,18 @@ class CLAPTextModel(CLAPPreTrainedModel):
 
     """
 
-    config_class = CLAPTextConfig
+    config_class = ClapTextConfig
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->CLAPText
+    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->ClapText
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = CLAPTextEmbeddings(config)
-        self.encoder = CLAPTextEncoder(config)
+        self.embeddings = ClapTextEmbeddings(config)
+        self.encoder = ClapTextEncoder(config)
 
-        self.pooler = CLAPTextPooler(config) if add_pooling_layer else None
+        self.pooler = ClapTextPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2116,22 +2116,22 @@ class CLAPTextModel(CLAPPreTrainedModel):
         )
 
 
-@add_start_docstrings(CLAP_START_DOCSTRING)
-class CLAPModel(CLAPPreTrainedModel):
-    config_class = CLAPConfig
+@add_start_docstrings(Clap_START_DOCSTRING)
+class ClapModel(ClapPreTrainedModel):
+    config_class = ClapConfig
 
-    def __init__(self, config: CLAPConfig):
+    def __init__(self, config: ClapConfig):
         super().__init__(config)
 
-        if not isinstance(config.text_config, CLAPTextConfig):
+        if not isinstance(config.text_config, ClapTextConfig):
             raise ValueError(
-                "config.text_config is expected to be of type CLAPTextConfig but is of type"
+                "config.text_config is expected to be of type ClapTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.audio_config, CLAPAudioConfig):
+        if not isinstance(config.audio_config, ClapAudioConfig):
             raise ValueError(
-                "config.audio_config is expected to be of type CLAPAudioConfig but is of type"
+                "config.audio_config is expected to be of type ClapAudioConfig but is of type"
                 f" {type(config.audio_config)}."
             )
 
@@ -2145,18 +2145,18 @@ class CLAPModel(CLAPPreTrainedModel):
         self.text_hidden_size = text_config.hidden_size
         self.audio_hidden_size = audio_config.hidden_size
 
-        self.text_model = CLAPTextModel(text_config)
-        self.text_transform = CLAPFusionLayer(text_config)
-        self.text_projection = CLAPProjectionLayer(text_config)
+        self.text_model = ClapTextModel(text_config)
+        self.text_transform = ClapFusionLayer(text_config)
+        self.text_projection = ClapProjectionLayer(text_config)
 
-        self.audio_model = CLAPAudioModel(config=audio_config)
-        self.audio_transform = CLAPFusionLayer(audio_config)
-        self.audio_projection = CLAPProjectionLayer(audio_config)
+        self.audio_model = ClapAudioModel(config=audio_config)
+        self.audio_transform = ClapFusionLayer(audio_config)
+        self.audio_projection = ClapProjectionLayer(audio_config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(Clap_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2169,14 +2169,14 @@ class CLAPModel(CLAPPreTrainedModel):
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`CLAPTextModel`].
+            applying the projection layer to the pooled output of [`ClapTextModel`].
 
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, CLAPModel
+        >>> from transformers import AutoTokenizer, ClapModel
 
-        >>> model = CLAPModel.from_pretrained("laion-ai/clap-htsat-unfused")
+        >>> model = ClapModel.from_pretrained("laion-ai/clap-htsat-unfused")
         >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/clap-htsat-unfused")
 
         >>> inputs = tokenizer(["the sound of a cat", "the sound of a dog"], padding=True, return_tensors="pt")
@@ -2204,7 +2204,7 @@ class CLAPModel(CLAPPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(Clap_AUDIO_INPUTS_DOCSTRING)
     def get_audio_features(
         self,
         input_features: Optional[torch.Tensor] = None,
@@ -2234,8 +2234,8 @@ class CLAPModel(CLAPPreTrainedModel):
 
         return audio_features
 
-    @add_start_docstrings_to_model_forward(CLAP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLAPOutput, config_class=CLAPConfig)
+    @add_start_docstrings_to_model_forward(Clap_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ClapOutput, config_class=ClapConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2246,7 +2246,7 @@ class CLAPModel(CLAPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLAPOutput]:
+    ) -> Union[Tuple, ClapOutput]:
         r"""
         Returns:
 
@@ -2254,12 +2254,12 @@ class CLAPModel(CLAPPreTrainedModel):
 
         ```python
         >>> from dataset import load_dataset
-        >>> from transformers import AutoProcessor, CLAPModel
+        >>> from transformers import AutoProcessor, ClapModel
 
         >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model = CLAPModel.from_pretrained("laion-ai/clap-htst-unfused-base")
+        >>> model = ClapModel.from_pretrained("laion-ai/clap-htst-unfused-base")
         >>> processor = AutoProcessor.from_pretrained("laion-ai/clap-htst-unfused-base")
 
         >>> input_text = ["Sound of a dog", "Sound of vaccum cleaner"]
@@ -2319,7 +2319,7 @@ class CLAPModel(CLAPPreTrainedModel):
             output = (logits_per_audio, logits_per_text, text_embeds, audio_embeds, text_outputs, audio_outputs)
             return ((loss,) + output) if loss is not None else output
 
-        return CLAPOutput(
+        return ClapOutput(
             loss=loss,
             logits_per_audio=logits_per_audio,
             logits_per_text=logits_per_text,
@@ -2334,15 +2334,15 @@ class CLAPModel(CLAPPreTrainedModel):
     """
     Clap Text Model with a projection layer on top (a linear layer on top of the pooled output).
     """,
-    CLAP_START_DOCSTRING,
+    Clap_START_DOCSTRING,
 )
-class CLAPTextModelWithProjection(CLAPPreTrainedModel):
-    config_class = CLAPTextConfig
+class ClapTextModelWithProjection(ClapPreTrainedModel):
+    config_class = ClapTextConfig
 
-    def __init__(self, config: CLAPTextConfig):
+    def __init__(self, config: ClapTextConfig):
         super().__init__(config)
-        self.text_model = CLAPTextModel(config)
-        self.text_projection = CLAPProjectionLayer(config)
+        self.text_model = ClapTextModel(config)
+        self.text_projection = ClapProjectionLayer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2352,8 +2352,8 @@ class CLAPTextModelWithProjection(CLAPPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.word_embeddings = value
 
-    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLAPTextModelOutput, config_class=CLAPTextConfig)
+    @add_start_docstrings_to_model_forward(Clap_TEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ClapTextModelOutput, config_class=ClapTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2362,16 +2362,16 @@ class CLAPTextModelWithProjection(CLAPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLAPTextModelOutput]:
+    ) -> Union[Tuple, ClapTextModelOutput]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, CLAPTextModelWithProjection
+        >>> from transformers import AutoTokenizer, ClapTextModelWithProjection
 
-        >>> model = CLAPTextModelWithProjection.from_pretrained("laion-ai/clap-htsat-unfused")
+        >>> model = ClapTextModelWithProjection.from_pretrained("laion-ai/clap-htsat-unfused")
         >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/clap-htsat-unfused")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -2398,7 +2398,7 @@ class CLAPTextModelWithProjection(CLAPPreTrainedModel):
             outputs = (text_embeds, text_outputs[0]) + text_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
-        return CLAPTextModelOutput(
+        return ClapTextModelOutput(
             text_embeds=text_embeds,
             last_hidden_state=text_outputs.last_hidden_state,
             hidden_states=text_outputs.hidden_states,
@@ -2410,33 +2410,33 @@ class CLAPTextModelWithProjection(CLAPPreTrainedModel):
     """
     Clap Audio Model with a projection layer on top (a linear layer on top of the pooled output).
     """,
-    CLAP_START_DOCSTRING,
+    Clap_START_DOCSTRING,
 )
-class CLAPAudioModelWithProjection(CLAPPreTrainedModel):
-    config_class = CLAPAudioConfig
+class ClapAudioModelWithProjection(ClapPreTrainedModel):
+    config_class = ClapAudioConfig
     main_input_name = "input_features"
 
-    def __init__(self, config: CLAPAudioConfig):
+    def __init__(self, config: ClapAudioConfig):
         super().__init__(config)
 
-        self.audio_model = CLAPAudioModel(config)
+        self.audio_model = ClapAudioModel(config)
 
-        self.audio_projection = CLAPProjectionLayer(config)
+        self.audio_projection = ClapProjectionLayer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_model.audio_encoder.patch_embed.proj
 
-    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLAPAudioModelOutput, config_class=CLAPAudioConfig)
+    @add_start_docstrings_to_model_forward(Clap_AUDIO_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ClapAudioModelOutput, config_class=ClapAudioConfig)
     def forward(
         self,
         input_features: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLAPAudioModelOutput]:
+    ) -> Union[Tuple, ClapAudioModelOutput]:
         r"""
         Returns:
 
@@ -2444,10 +2444,10 @@ class CLAPAudioModelWithProjection(CLAPPreTrainedModel):
 
         ```python
         >>> from datasets import load_dataset
-        >>> from transformers import CLAPAudioModelWithProjection, CLAPProcessor
+        >>> from transformers import ClapAudioModelWithProjection, ClapProcessor
 
-        >>> model = CLAPAudioModelWithProjection.from_pretrained("laion-ai/clap-htsat-unfused")
-        >>> processor = CLAPProcessor.from_pretrained("laion-ai/clap-htsat-unfused")
+        >>> model = ClapAudioModelWithProjection.from_pretrained("laion-ai/clap-htsat-unfused")
+        >>> processor = ClapProcessor.from_pretrained("laion-ai/clap-htsat-unfused")
 
         >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
@@ -2477,7 +2477,7 @@ class CLAPAudioModelWithProjection(CLAPPreTrainedModel):
             outputs = (audio_embeds, *audio_outputs)
             return outputs
 
-        return CLAPAudioModelOutputWithProjection(
+        return ClapAudioModelOutputWithProjection(
             audio_embeds=audio_embeds,
             framewise_output=audio_outputs.framewise_output,
             clipwise_output=audio_outputs.clipwise_output,

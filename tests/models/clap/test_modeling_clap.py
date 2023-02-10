@@ -23,7 +23,7 @@ import unittest
 import numpy as np
 from datasets import load_dataset
 
-from transformers import CLAPAudioConfig, CLAPConfig, CLAPProcessor, CLAPTextConfig
+from transformers import ClapAudioConfig, ClapConfig, ClapProcessor, ClapTextConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available
 
@@ -42,16 +42,16 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
-        CLAPAudioModel,
-        CLAPAudioModelWithProjection,
-        CLAPModel,
-        CLAPTextModel,
-        CLAPTextModelWithProjection,
+        ClapAudioModel,
+        ClapAudioModelWithProjection,
+        ClapModel,
+        ClapTextModel,
+        ClapTextModelWithProjection,
     )
-    from transformers.models.clap.modeling_clap import CLAP_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.clap.modeling_clap import Clap_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-class CLAPAudioModelTester:
+class ClapAudioModelTester:
     def __init__(
         self,
         parent,
@@ -110,7 +110,7 @@ class CLAPAudioModelTester:
         return config, input_features
 
     def get_config(self):
-        return CLAPAudioConfig(
+        return ClapAudioConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_mel_bins=self.num_mel_bins,
@@ -132,7 +132,7 @@ class CLAPAudioModelTester:
         )
 
     def create_and_check_model(self, config, input_features):
-        model = CLAPAudioModel(config=config)
+        model = ClapAudioModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -144,7 +144,7 @@ class CLAPAudioModelTester:
         )
 
     def create_and_check_model_with_projection(self, config, input_features):
-        model = CLAPAudioModelWithProjection(config=config)
+        model = ClapAudioModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -159,26 +159,26 @@ class CLAPAudioModelTester:
 
 
 @require_torch
-class CLAPAudioModelTest(ModelTesterMixin, unittest.TestCase):
+class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Clap does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (CLAPAudioModel, CLAPAudioModelWithProjection) if is_torch_available() else ()
+    all_model_classes = (ClapAudioModel, ClapAudioModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = CLAPAudioModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLAPAudioConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = ClapAudioModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ClapAudioConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="CLAPAudioModel does not use inputs_embeds")
+    @unittest.skip(reason="ClapAudioModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -224,7 +224,7 @@ class CLAPAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    @unittest.skip(reason="CLAPAudioModel does not output any loss term in the forward pass")
+    @unittest.skip(reason="ClapAudioModel does not output any loss term in the forward pass")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -248,37 +248,37 @@ class CLAPAudioModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
-    @unittest.skip(reason="CLAPAudioModel does not output any loss term in the forward pass")
+    @unittest.skip(reason="ClapAudioModel does not output any loss term in the forward pass")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="CLAPAudioModel does not output any loss term in the forward pass")
+    @unittest.skip(reason="ClapAudioModel does not output any loss term in the forward pass")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="CLAPAudioModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="ClapAudioModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="CLAPAudioModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="ClapAudioModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLAPAudioModel.from_pretrained(model_name)
+        for model_name in Clap_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClapAudioModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLAPAudioModelWithProjection.from_pretrained(model_name)
+        for model_name in Clap_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClapAudioModelWithProjection.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertTrue(hasattr(model, "visual_projection"))
 
 
-class CLAPTextModelTester:
+class ClapTextModelTester:
     def __init__(
         self,
         parent,
@@ -338,7 +338,7 @@ class CLAPTextModelTester:
         return config, input_ids, input_mask
 
     def get_config(self):
-        return CLAPTextConfig(
+        return ClapTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             projection_hidden_size=self.hidden_size,
@@ -354,7 +354,7 @@ class CLAPTextModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):
-        model = CLAPTextModel(config=config)
+        model = ClapTextModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -364,7 +364,7 @@ class CLAPTextModelTester:
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, input_ids, input_mask):
-        model = CLAPTextModelWithProjection(config=config)
+        model = ClapTextModelWithProjection(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -381,15 +381,15 @@ class CLAPTextModelTester:
 
 
 @require_torch
-class CLAPTextModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (CLAPTextModel, CLAPTextModelWithProjection) if is_torch_available() else ()
+class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (ClapTextModel, ClapTextModelWithProjection) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = CLAPTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLAPTextConfig, hidden_size=37)
+        self.model_tester = ClapTextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ClapTextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -402,41 +402,41 @@ class CLAPTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
-    @unittest.skip(reason="CLAPTextModel does not output any loss term in the forward pass")
+    @unittest.skip(reason="ClapTextModel does not output any loss term in the forward pass")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="CLAPTextModel does not output any loss term in the forward pass")
+    @unittest.skip(reason="ClapTextModel does not output any loss term in the forward pass")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="CLAPTextModel does not use inputs_embeds")
+    @unittest.skip(reason="ClapTextModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="CLAPTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="ClapTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="CLAPTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="ClapTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLAPTextModel.from_pretrained(model_name)
+        for model_name in Clap_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClapTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLAPTextModelWithProjection.from_pretrained(model_name)
+        for model_name in Clap_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClapTextModelWithProjection.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertTrue(hasattr(model, "text_projection"))
 
 
-class CLAPModelTester:
+class ClapModelTester:
     def __init__(self, parent, text_kwargs=None, audio_kwargs=None, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
@@ -444,8 +444,8 @@ class CLAPModelTester:
             audio_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = CLAPTextModelTester(parent, **text_kwargs)
-        self.audio_model_tester = CLAPAudioModelTester(parent, **audio_kwargs)
+        self.text_model_tester = ClapTextModelTester(parent, **text_kwargs)
+        self.audio_model_tester = ClapAudioModelTester(parent, **audio_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -457,12 +457,12 @@ class CLAPModelTester:
         return config, input_ids, attention_mask, input_features
 
     def get_config(self):
-        return CLAPConfig.from_text_audio_configs(
+        return ClapConfig.from_text_audio_configs(
             self.text_model_tester.get_config(), self.audio_model_tester.get_config(), projection_dim=64
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, input_features):
-        model = CLAPModel(config).to(torch_device).eval()
+        model = ClapModel(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(input_ids, input_features, attention_mask)
         self.parent.assertEqual(
@@ -485,8 +485,8 @@ class CLAPModelTester:
 
 
 @require_torch
-class CLAPModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (CLAPModel,) if is_torch_available() else ()
+class ClapModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (ClapModel,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -494,7 +494,7 @@ class CLAPModelTest(ModelTesterMixin, unittest.TestCase):
     test_attention_outputs = False
 
     def setUp(self):
-        self.model_tester = CLAPModelTester(self)
+        self.model_tester = ClapModelTester(self)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -512,7 +512,7 @@ class CLAPModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="CLAPModel does not have input/output embeddings")
+    @unittest.skip(reason="ClapModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -594,28 +594,28 @@ class CLAPModelTest(ModelTesterMixin, unittest.TestCase):
     def test_load_audio_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Save CLAPConfig and check if we can load CLAPAudioConfig from it
+        # Save ClapConfig and check if we can load ClapAudioConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            audio_config = CLAPAudioConfig.from_pretrained(tmp_dir_name)
+            audio_config = ClapAudioConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.audio_config.to_dict(), audio_config.to_dict())
 
-        # Save CLAPConfig and check if we can load CLAPTextConfig from it
+        # Save ClapConfig and check if we can load ClapTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            text_config = CLAPTextConfig.from_pretrained(tmp_dir_name)
+            text_config = ClapTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLAPModel.from_pretrained(model_name)
+        for model_name in Clap_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ClapModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @slow
 @require_torch
-class CLAPModelIntegrationTest(unittest.TestCase):
+class ClapModelIntegrationTest(unittest.TestCase):
     paddings = ["repeatpad", "repeat", "pad"]
 
     def test_integration_unfused(self):
@@ -630,8 +630,8 @@ class CLAPModelIntegrationTest(unittest.TestCase):
 
         model_id = "ybelkada/clap-htsat-unfused"
 
-        model = CLAPModel.from_pretrained(model_id).to(torch_device)
-        processor = CLAPProcessor.from_pretrained(model_id)
+        model = ClapModel.from_pretrained(model_id).to(torch_device)
+        processor = ClapProcessor.from_pretrained(model_id)
 
         for padding in self.paddings:
             inputs = processor(audios=audio_sample["audio"]["array"], return_tensors="pt", padding=padding).to(
@@ -657,8 +657,8 @@ class CLAPModelIntegrationTest(unittest.TestCase):
 
         model_id = "ybelkada/clap-htsat-fused"
 
-        model = CLAPModel.from_pretrained(model_id).to(torch_device)
-        processor = CLAPProcessor.from_pretrained(model_id)
+        model = ClapModel.from_pretrained(model_id).to(torch_device)
+        processor = ClapProcessor.from_pretrained(model_id)
 
         for padding in self.paddings:
             inputs = processor(

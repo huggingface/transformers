@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers import CLAPFeatureExtractor
+from transformers import ClapFeatureExtractor
 from transformers.testing_utils import require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torch_available
 
@@ -51,7 +51,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 @require_torch
 @require_torchaudio
 # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTester with Whisper->Clap
-class CLAPFeatureExtractionTester(unittest.TestCase):
+class ClapFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -110,11 +110,11 @@ class CLAPFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_torchaudio
 # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest with Whisper->Clap
-class CLAPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = CLAPFeatureExtractor
+class ClapFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+    feature_extraction_class = ClapFeatureExtractor
 
     def setUp(self):
-        self.feat_extract_tester = CLAPFeatureExtractionTester(self)
+        self.feat_extract_tester = ClapFeatureExtractionTester(self)
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
@@ -206,7 +206,7 @@ class CLAPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         # fmt: on
         MEL_BIN = [963, 963, 161]
         input_speech = self._load_datasamples(1)
-        feaure_extractor = CLAPFeatureExtractor()
+        feaure_extractor = ClapFeatureExtractor()
         for padding, EXPECTED_VALUES, idx_in_mel in zip(
             ["repeat", "repeatpad", None], EXPECTED_INPUT_FEATURES, MEL_BIN
         ):
@@ -259,7 +259,7 @@ class CLAPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
         # fmt: on
 
         input_speech = self._load_datasamples(1)
-        feaure_extractor = CLAPFeatureExtractor()
+        feaure_extractor = ClapFeatureExtractor()
         for padding, EXPECTED_VALUES in zip(["repeat", "repeatpad", None], EXPECTED_INPUT_FEATURES):
             input_features = feaure_extractor(
                 input_speech, return_tensors="pt", truncation="rand_trunc", padding=padding

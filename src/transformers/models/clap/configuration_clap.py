@@ -24,14 +24,14 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+Clap_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "laion-ai/base": "https://huggingface.co/laion-ai/base/resolve/main/config.json",
 }
 
 
-class CLAPTextConfig(PretrainedConfig):
+class ClapTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLAPTextModel`] or a [`TFCLAPTextModel`]. It is
+    This is the configuration class to store the configuration of a [`ClapTextModel`] or a [`TFClapTextModel`]. It is
     used to instantiate a RoBERTa model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the RoBERTa
     [roberta-base](https://huggingface.co/roberta-base) architecture.
@@ -43,7 +43,7 @@ class CLAPTextConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the RoBERTa model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`CLAPTextModel`].
+            `inputs_ids` passed when calling [`ClapTextModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -63,7 +63,7 @@ class CLAPTextConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`CLAPTextModel`] or [`TFCLAPTextModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`ClapTextModel`] or [`TFClapTextModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -85,13 +85,13 @@ class CLAPTextConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import CLAPTextConfig, CLAPTextModel
+    >>> from transformers import ClapTextConfig, ClapTextModel
 
     >>> # Initializing a RoBERTa configuration
-    >>> configuration = CLAPTextConfig()
+    >>> configuration = ClapTextConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = CLAPTextModel(configuration)
+    >>> model = ClapTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -148,7 +148,7 @@ class CLAPTextConfig(PretrainedConfig):
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the text config dict if we are loading from CLAPConfig
+        # get the text config dict if we are loading from ClapConfig
         if config_dict.get("model_type") == "clap":
             config_dict = config_dict["text_config"]
 
@@ -161,9 +161,9 @@ class CLAPTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class CLAPAudioConfig(PretrainedConfig):
+class ClapAudioConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLAPAudioModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`ClapAudioModel`]. It is used to instantiate a
     Clap audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the audio encoder of the Clap
     [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
@@ -175,10 +175,10 @@ class CLAPAudioConfig(PretrainedConfig):
         window_size (`int`, *optional*, defaults to 8):
             [description]
         num_mel_bins (`int`, *optional*, defaults to 64):
-            Number of mel features used per frames. Should correspond to the value used in the `CLAPProcessor` class.
+            Number of mel features used per frames. Should correspond to the value used in the `ClapProcessor` class.
         spec_size (`int`, *optional*, defaults to 256):
             Desired input size of the spectrogram that the model supports. It can be different from the output of the
-            `CLAPFeatureExtractor`, in which case the input features will be resized. Corresponds to the `image_size`
+            `ClapFeatureExtractor`, in which case the input features will be resized. Corresponds to the `image_size`
             of the audio models.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -236,13 +236,13 @@ class CLAPAudioConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLAPAudioConfig, CLAPAudioModel
+    >>> from transformers import ClapAudioConfig, ClapAudioModel
 
-    >>> # Initializing a CLAPAudioConfig with laion-ai/base style configuration
-    >>> configuration = CLAPAudioConfig()
+    >>> # Initializing a ClapAudioConfig with laion-ai/base style configuration
+    >>> configuration = ClapAudioConfig()
 
-    >>> # Initializing a CLAPAudioModel (with random weights) from the laion-ai/base style configuration
-    >>> model = CLAPAudioModel(configuration)
+    >>> # Initializing a ClapAudioModel (with random weights) from the laion-ai/base style configuration
+    >>> model = ClapAudioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -315,7 +315,7 @@ class CLAPAudioConfig(PretrainedConfig):
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the audio config dict if we are loading from CLAPConfig
+        # get the audio config dict if we are loading from ClapConfig
         if config_dict.get("model_type") == "clap":
             config_dict = config_dict["audio_config"]
 
@@ -328,9 +328,9 @@ class CLAPAudioConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class CLAPConfig(PretrainedConfig):
+class ClapConfig(PretrainedConfig):
     r"""
-    [`CLAPConfig`] is the configuration class to store the configuration of a [`CLAPModel`]. It is used to instantiate
+    [`ClapConfig`] is the configuration class to store the configuration of a [`ClapModel`]. It is used to instantiate
     a Clap model according to the specified arguments, defining the text model and audio model configs. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Clap
     [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
@@ -340,9 +340,9 @@ class CLAPConfig(PretrainedConfig):
 
     Args:
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLAPTextConfig`].
+            Dictionary of configuration options used to initialize [`ClapTextConfig`].
         audio_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`CLAPAudioConfig`].
+            Dictionary of configuration options used to initialize [`ClapAudioConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and audio projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
@@ -361,25 +361,25 @@ class CLAPConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLAPConfig, CLAPModel
+    >>> from transformers import ClapConfig, ClapModel
 
-    >>> # Initializing a CLAPConfig with laion-ai/base style configuration
-    >>> configuration = CLAPConfig()
+    >>> # Initializing a ClapConfig with laion-ai/base style configuration
+    >>> configuration = ClapConfig()
 
-    >>> # Initializing a CLAPModel (with random weights) from the laion-ai/base style configuration
-    >>> model = CLAPModel(configuration)
+    >>> # Initializing a ClapModel (with random weights) from the laion-ai/base style configuration
+    >>> model = ClapModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a CLAPConfig from a CLAPTextConfig and a CLAPAudioConfig
-    >>> from transformers import CLAPTextConfig, CLAPAudioConfig
+    >>> # We can also initialize a ClapConfig from a ClapTextConfig and a ClapAudioConfig
+    >>> from transformers import ClapTextConfig, ClapAudioConfig
 
-    >>> # Initializing a CLAPText and CLAPAudioConfig configuration
-    >>> config_text = CLAPTextConfig()
-    >>> config_audio = CLAPAudioConfig()
+    >>> # Initializing a ClapText and ClapAudioConfig configuration
+    >>> config_text = ClapTextConfig()
+    >>> config_audio = ClapAudioConfig()
 
-    >>> config = CLAPConfig.from_text_audio_configs(config_text, config_audio)
+    >>> config = ClapConfig.from_text_audio_configs(config_text, config_audio)
     ```"""
 
     model_type = "clap"
@@ -408,14 +408,14 @@ class CLAPConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the CLAPTextConfig with default values.")
+            logger.info("text_config is None. Initializing the ClapTextConfig with default values.")
 
         if audio_config is None:
             audio_config = {}
-            logger.info("audio_config is None. initializing the CLAPAudioConfig with default values.")
+            logger.info("audio_config is None. initializing the ClapAudioConfig with default values.")
 
-        self.text_config = CLAPTextConfig(**text_config)
-        self.audio_config = CLAPAudioConfig(**audio_config)
+        self.text_config = ClapTextConfig(**text_config)
+        self.audio_config = ClapAudioConfig(**audio_config)
 
         self.text_config.fusion_num_hidden_layers = fusion_num_hidden_layers
         self.audio_config.fusion_num_hidden_layers = fusion_num_hidden_layers
@@ -435,13 +435,13 @@ class CLAPConfig(PretrainedConfig):
         self.num_hidden_layers = self.text_config.num_hidden_layers + len(self.audio_config.depths)
 
     @classmethod
-    def from_text_audio_configs(cls, text_config: CLAPTextConfig, audio_config: CLAPAudioConfig, **kwargs):
+    def from_text_audio_configs(cls, text_config: ClapTextConfig, audio_config: ClapAudioConfig, **kwargs):
         r"""
-        Instantiate a [`CLAPConfig`] (or a derived class) from clap text model configuration and clap audio model
+        Instantiate a [`ClapConfig`] (or a derived class) from clap text model configuration and clap audio model
         configuration.
 
         Returns:
-            [`CLAPConfig`]: An instance of a configuration object
+            [`ClapConfig`]: An instance of a configuration object
         """
 
         return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)

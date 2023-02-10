@@ -1464,45 +1464,45 @@ class ChineseCLIPVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+Clap_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class CLAPAudioModel(metaclass=DummyObject):
+class ClapAudioModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class CLAPAudioModelWithProjection(metaclass=DummyObject):
+class ClapAudioModelWithProjection(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class CLAPModel(metaclass=DummyObject):
+class ClapModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class CLAPPreTrainedModel(metaclass=DummyObject):
+class ClapPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class CLAPTextModel(metaclass=DummyObject):
+class ClapTextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class CLAPTextModelWithProjection(metaclass=DummyObject):
+class ClapTextModelWithProjection(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

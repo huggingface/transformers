@@ -22,7 +22,7 @@ logger = logging.get_logger(__name__)
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ZeroShotAudioClassificationPipeline(ChunkPipeline):
     """
-    Zero shot audio classification pipeline using `CLAPModel`. This pipeline predicts the class of an audio when you
+    Zero shot audio classification pipeline using `ClapModel`. This pipeline predicts the class of an audio when you
     provide an audio and a set of `candidate_labels`.
 
     Example:

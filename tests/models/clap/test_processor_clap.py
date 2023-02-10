@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import CLAPFeatureExtractor, CLAPProcessor, RobertaTokenizer, RobertaTokenizerFast
+from transformers import ClapFeatureExtractor, ClapProcessor, RobertaTokenizer, RobertaTokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_torchaudio
 
 from .test_feature_extraction_clap import floats_list
@@ -24,7 +24,7 @@ from .test_feature_extraction_clap import floats_list
 
 @require_torchaudio
 @require_sentencepiece
-class CLAPProcessorTest(unittest.TestCase):
+class ClapProcessorTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint = "ybelkada/clap-htsat-unfused"
         self.tmpdirname = tempfile.mkdtemp()
@@ -33,7 +33,7 @@ class CLAPProcessorTest(unittest.TestCase):
         return RobertaTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return CLAPFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return ClapFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -42,25 +42,25 @@ class CLAPProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
-        processor = CLAPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClapProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         processor.save_pretrained(self.tmpdirname)
-        processor = CLAPProcessor.from_pretrained(self.tmpdirname)
+        processor = ClapProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, RobertaTokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, CLAPFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, ClapFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = CLAPProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = ClapProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
 
-        processor = CLAPProcessor.from_pretrained(
+        processor = ClapProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
@@ -68,13 +68,13 @@ class CLAPProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, RobertaTokenizerFast)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, CLAPFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, ClapFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLAPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClapProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         raw_speech = floats_list((3, 1000))
 
@@ -88,7 +88,7 @@ class CLAPProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLAPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClapProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "This is a test string"
 
@@ -103,7 +103,7 @@ class CLAPProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLAPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClapProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -116,7 +116,7 @@ class CLAPProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = CLAPProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = ClapProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         self.assertListEqual(
             processor.model_input_names[2:],

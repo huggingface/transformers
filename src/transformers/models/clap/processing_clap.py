@@ -20,20 +20,20 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
-class CLAPProcessor(ProcessorMixin):
+class ClapProcessor(ProcessorMixin):
     r"""
     Constructs a Clap processor which wraps a Clap feature extractor and a Clap tokenizer into a single processor.
 
-    [`CLAPProcessor`] offers all the functionalities of [`CLAPFeatureExtractor`] and [`CLAPTokenizerFast`]. See the
-    [`~CLAPProcessor.__call__`] and [`~CLAPProcessor.decode`] for more information.
+    [`ClapProcessor`] offers all the functionalities of [`ClapFeatureExtractor`] and [`ClapTokenizerFast`]. See the
+    [`~ClapProcessor.__call__`] and [`~ClapProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`CLAPFeatureExtractor`]):
+        feature_extractor ([`ClapFeatureExtractor`]):
             The audio processor is a required input.
-        tokenizer ([`CLAPTokenizerFast`]):
+        tokenizer ([`ClapTokenizerFast`]):
             The tokenizer is a required input.
     """
-    feature_extractor_class = "CLAPFeatureExtractor"
+    feature_extractor_class = "ClapFeatureExtractor"
     tokenizer_class = ("RobertaTokenizer", "RobertaTokenizerFast")
 
     def __init__(self, feature_extractor, tokenizer):
@@ -42,9 +42,9 @@ class CLAPProcessor(ProcessorMixin):
     def __call__(self, text=None, audios=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to CLAPTokenizerFast's [`~CLAPTokenizerFast.__call__`] if `text` is not `None` to encode
+        and `kwargs` arguments to ClapTokenizerFast's [`~ClapTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
-        CLAPFeatureExtractor's [`~CLAPFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
+        ClapFeatureExtractor's [`~ClapFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
 
         Args:
@@ -97,14 +97,14 @@ class CLAPProcessor(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to CLAPTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to ClapTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to CLAPTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to ClapTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)

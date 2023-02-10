@@ -19,7 +19,7 @@ import re
 import torch
 from Clap import create_model
 
-from transformers import AutoFeatureExtractor, CLAPConfig, CLAPModel
+from transformers import AutoFeatureExtractor, ClapConfig, ClapModel
 
 
 KEYS_TO_MODIFY_MAPPING = {
@@ -101,9 +101,9 @@ def convert_clap_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     state_dict = clap_model.state_dict()
     state_dict = rename_state_dict(state_dict)
 
-    transformers_config = CLAPConfig()
+    transformers_config = ClapConfig()
     transformers_config.audio_config.enable_fusion = enable_fusion
-    model = CLAPModel(transformers_config)
+    model = ClapModel(transformers_config)
 
     model.load_state_dict(state_dict, strict=False)
 

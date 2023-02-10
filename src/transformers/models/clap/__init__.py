@@ -22,14 +22,14 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_clap": [
-        "CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "CLAPAudioConfig",
-        "CLAPConfig",
-        "CLAPTextConfig",
+        "Clap_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ClapAudioConfig",
+        "ClapConfig",
+        "ClapTextConfig",
     ],
-    "feature_extraction_clap": ["CLAPFeatureExtractor"],
-    "processing_clap": ["CLAPProcessor"],
-    "tokenization_clap": ["CLAPTokenizer"],
+    "feature_extraction_clap": ["ClapFeatureExtractor"],
+    "processing_clap": ["ClapProcessor"],
+    "tokenization_clap": ["ClapTokenizer"],
 }
 
 try:
@@ -39,25 +39,25 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_clap"] = [
-        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "CLAPModel",
-        "CLAPPreTrainedModel",
-        "CLAPTextModel",
-        "CLAPTextModelWithProjection",
-        "CLAPAudioModel",
-        "CLAPAudioModelWithProjection",
+        "Clap_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ClapModel",
+        "ClapPreTrainedModel",
+        "ClapTextModel",
+        "ClapTextModelWithProjection",
+        "ClapAudioModel",
+        "ClapAudioModelWithProjection",
     ]
 
 if TYPE_CHECKING:
     from .configuration_clap import (
-        CLAP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CLAPAudioConfig,
-        CLAPConfig,
-        CLAPTextConfig,
+        Clap_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ClapAudioConfig,
+        ClapConfig,
+        ClapTextConfig,
     )
-    from .feature_extraction_clap import CLAPFeatureExtractor
-    from .processing_clap import CLAPProcessor
-    from .tokenization_clap import CLAPTokenizer
+    from .feature_extraction_clap import ClapFeatureExtractor
+    from .processing_clap import ClapProcessor
+    from .tokenization_clap import ClapTokenizer
 
     try:
         if not is_torch_available():
@@ -66,13 +66,13 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_clap import (
-            CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CLAPAudioModel,
-            CLAPAudioModelWithProjection,
-            CLAPModel,
-            CLAPPreTrainedModel,
-            CLAPTextModel,
-            CLAPTextModelWithProjection,
+            Clap_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClapAudioModel,
+            ClapAudioModelWithProjection,
+            ClapModel,
+            ClapPreTrainedModel,
+            ClapTextModel,
+            ClapTextModelWithProjection,
         )
 
 else:
