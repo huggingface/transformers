@@ -216,7 +216,6 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
             position_ids = tf.broadcast_to(position_ids, shape=input_shape)
             # when self.config.reset_position_index_per_cell is set to True, create relative position embeddings
             if self.reset_position_index_per_cell:
-
                 # shape (batch_size, seq_len)
                 col_index = IndexMap(token_type_ids[:, :, 1], self.config.type_vocab_sizes[1], batch_dims=1)
                 # shape (batch_size, seq_len)
@@ -779,7 +778,6 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:

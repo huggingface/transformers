@@ -144,7 +144,7 @@ class MCTCTConfig(PretrainedConfig):
         conv_channels=None,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.vocab_size = vocab_size

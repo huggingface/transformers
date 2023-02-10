@@ -179,7 +179,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         eos_token="<eos>",
         additional_special_tokens=["<formula>"],
         language="en",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             special=special,
@@ -643,7 +643,6 @@ class LMShuffledIterator(object):
 
 class LMMultiFileIterator(LMShuffledIterator):
     def __init__(self, paths, vocab, bsz, bptt, device="cpu", ext_len=None, shuffle=False):
-
         self.paths = paths
         self.vocab = vocab
 

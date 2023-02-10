@@ -73,7 +73,6 @@ class GenerationUtilsTest(unittest.TestCase):
 
     @timeout_decorator.timeout(10)
     def test_postprocess_next_token_scores_large_bad_words_list(self):
-
         config = self.config
         model = self.model
         # Initialize an input id tensor with batch size 8 and sequence length 12

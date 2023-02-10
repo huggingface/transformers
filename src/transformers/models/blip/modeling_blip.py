@@ -1036,7 +1036,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         pixel_values: torch.FloatTensor,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        **generate_kwargs
+        **generate_kwargs,
     ) -> torch.LongTensor:
         r"""
         Overrides *generate* function to be able to use the model as a conditional generator
@@ -1263,7 +1263,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
         attention_mask: Optional[torch.LongTensor] = None,
-        **generate_kwargs
+        **generate_kwargs,
     ) -> torch.LongTensor:
         r"""
         Overrides *generate* function to be able to use the model as a conditional generator

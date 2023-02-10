@@ -26,12 +26,12 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
+import evaluate
 import numpy as np
 import tensorflow as tf
 from datasets import load_dataset
 from PIL import Image
 
-import evaluate
 import transformers
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
