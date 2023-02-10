@@ -80,13 +80,13 @@ class PipelineTesterMixin:
                 A task name. This should be a key in the mapping `pipeline_test_mapping`.
         """
         if self.framework not in self.supported_frameworks:
-            self.skipTest(
+            raise ValueError(
                 f"Test is skipped: Could not determined the framework. This should be in {self.supported_frameworks}, "
                 f"but got `{self.framework}`)."
             )
 
         if task not in pipeline_test_mapping:
-            self.skipTest(f"Test is skipped: task {task} is not in the mapping `pipeline_test_mapping`.")
+            raise ValueError(f"Test is skipped: task {task} is not in the mapping `pipeline_test_mapping`.")
         model_mapping = pipeline_test_mapping[task]["mapping"][self.framework]
         # `_LazyAutoMapping` always has length 0: we need to call `keys()` first before getting the length!
         if model_mapping is None or len(list(model_mapping.keys())) == 0:
