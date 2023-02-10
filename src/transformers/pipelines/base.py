@@ -749,7 +749,7 @@ class Pipeline(_ScikitCompat):
         framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
-        device: Union[int, str, "torch.device"] = -1,
+        device: Union[int, str, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
@@ -764,6 +764,19 @@ class Pipeline(_ScikitCompat):
         self.image_processor = image_processor
         self.modelcard = modelcard
         self.framework = framework
+
+        if self.framework == "pt" and device is not None:
+            self.model = self.model.to(device=device)
+
+        if device is None:
+            # `accelerate` device map
+            hf_device_map = getattr(self.model, "hf_device_map", None)
+            if hf_device_map is not None:
+                # Take the first device used by `accelerate`.
+                device = next(iter(hf_device_map.values()))
+            else:
+                device = -1
+
         if is_torch_available() and self.framework == "pt":
             if isinstance(device, torch.device):
                 self.device = device
@@ -774,13 +787,9 @@ class Pipeline(_ScikitCompat):
             else:
                 self.device = torch.device(f"cuda:{device}")
         else:
-            self.device = device
+            self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
         self.binary_output = binary_output
-
-        # Special handling
-        if self.framework == "pt" and self.device.type != "cpu":
-            self.model = self.model.to(self.device)
 
         # Update config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
