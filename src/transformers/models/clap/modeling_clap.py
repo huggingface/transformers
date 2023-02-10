@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CLAP model."""
+""" PyTorch Clap model."""
 import collections
 import math
 from dataclasses import dataclass
@@ -52,7 +52,7 @@ CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L176
+# Adapted from https://github.com/LAION-AI/Clap/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L176
 def do_mixup(hidden_states, mixup_lambda):
     """
     MIXUP is a data augmentation method, proposed by Hongyi Zhang et al on 25 Oct. 2017.
@@ -73,7 +73,7 @@ def do_mixup(hidden_states, mixup_lambda):
     return out
 
 
-# Adapted from: https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L191
+# Adapted from: https://github.com/LAION-AI/Clap/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L191
 def interpolate(hidden_states, ratio):
     """
     Interpolate data in time domain. This is used to compensate the resolution reduction in downsampling of a CNN.
@@ -90,7 +90,7 @@ def interpolate(hidden_states, ratio):
     return upsampled
 
 
-# Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L249
+# Adapted from https://github.com/LAION-AI/Clap/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L249
 def window_partition(hidden_states, window_size):
     """
     Returns the resized hidden states. The output shape should be `(batch_size * num_windows, window_size, window_size,
@@ -111,7 +111,7 @@ def window_partition(hidden_states, window_size):
     return windows
 
 
-# Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L263
+# Adapted from https://github.com/LAION-AI/Clap/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L263
 def window_reverse(windows, window_size, height, width):
     """
     Args:
@@ -156,7 +156,7 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->CLAP
+# Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->Clap
 class CLAPTextModelOutput(ModelOutput):
     """
     Base class for text model's outputs that also contains a pooling of the last hidden states.
@@ -259,7 +259,7 @@ class CLAPAudioModelOutputWithProjection(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->CLAP, vision->audio, Vision->Audio, image->audio
+# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->Clap, vision->audio, Vision->Audio, image->audio
 class CLAPOutput(ModelOutput):
     """
     Args:
@@ -321,10 +321,10 @@ class CLAPDropPath(nn.Module):
         return output
 
 
-# Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/feature_fusion.py#L133
+# Adapted from https://github.com/LAION-AI/Clap/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/feature_fusion.py#L133
 class CLAPAudioAFFBlock(nn.Module):
     r"""
-    AFF Block from CLAP, since in CLAP we are always in 2D mode, it is not needed to implement the 1D version.
+    AFF Block from Clap, since in Clap we are always in 2D mode, it is not needed to implement the 1D version.
     """
 
     def __init__(self, config: CLAPAudioConfig):
@@ -2182,7 +2182,7 @@ class CLAPModel(CLAPPreTrainedModel):
         >>> inputs = tokenizer(["the sound of a cat", "the sound of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        # Use CLAP model's config for some fields (if specified) instead of those of audio & text components.
+        # Use Clap model's config for some fields (if specified) instead of those of audio & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2270,7 +2270,7 @@ class CLAPModel(CLAPPreTrainedModel):
         >>> logits_per_audio = outputs.logits_per_audio  # this is the audio-text similarity score
         >>> probs = logits_per_audio.softmax(dim=-1)  # we can take the softmax to get the label probabilities
         ```"""
-        # Use CLAP model's config for some fields (if specified) instead of those of audio & text components.
+        # Use Clap model's config for some fields (if specified) instead of those of audio & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2332,7 +2332,7 @@ class CLAPModel(CLAPPreTrainedModel):
 
 @add_start_docstrings(
     """
-    CLAP Text Model with a projection layer on top (a linear layer on top of the pooled output).
+    Clap Text Model with a projection layer on top (a linear layer on top of the pooled output).
     """,
     CLAP_START_DOCSTRING,
 )
@@ -2408,7 +2408,7 @@ class CLAPTextModelWithProjection(CLAPPreTrainedModel):
 
 @add_start_docstrings(
     """
-    CLAP Audio Model with a projection layer on top (a linear layer on top of the pooled output).
+    Clap Audio Model with a projection layer on top (a linear layer on top of the pooled output).
     """,
     CLAP_START_DOCSTRING,
 )

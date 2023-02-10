@@ -134,7 +134,7 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
         candidate_label = model_inputs.pop("candidate_label")
         outputs = self.model(**model_inputs)
 
-        # CLAP does crossproduct scoring by default, so we're only
+        # Clap does crossproduct scoring by default, so we're only
         # interested in the results where audio and text and in the same
         # batch position.
         diag = torch.diagonal

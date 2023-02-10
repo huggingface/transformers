@@ -25,7 +25,7 @@ from .test_pipelines_common import PipelineTestCaseMeta
 @require_torch
 class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     # Deactivating auto tests since we don't have a good MODEL_FOR_XX mapping,
-    # and only CLAP would be there for now.
+    # and only Clap would be there for now.
     # model_mapping = {CLAPConfig: CLAPModel}
 
     @require_torch

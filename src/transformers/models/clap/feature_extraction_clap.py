@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for CLAP."""
+"""Feature extractor class for Clap."""
 
 
 import copy
@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 
 class CLAPFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a CLAP feature extractor.
+    Constructs a Clap feature extractor.
 
     This feature extractor inherits from [`CLAPFeatureExtractor`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
@@ -151,7 +151,7 @@ class CLAPFeatureExtractor(SequenceFeatureExtractor):
 
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
-        Compute the log-Mel spectrogram of the provided `waveform` using the `hanning` window. In CLAP, two different
+        Compute the log-Mel spectrogram of the provided `waveform` using the `hanning` window. In Clap, two different
         banks of filters are used depending on the truncation pattern:
             - `self.mel_filters`: they correspond to the defaults parameters of `torchaduio` which can be obtained from
               calling `torchaudio.transforms.MelSpectrogram().mel_scale.fb`. These filters are used when `truncation`

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" CLAP model configuration"""
+""" Clap model configuration"""
 
 import copy
 import os
@@ -164,8 +164,8 @@ class CLAPTextConfig(PretrainedConfig):
 class CLAPAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLAPAudioModel`]. It is used to instantiate a
-    CLAP audio encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the CLAP
+    Clap audio encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Clap
     [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -331,8 +331,8 @@ class CLAPAudioConfig(PretrainedConfig):
 class CLAPConfig(PretrainedConfig):
     r"""
     [`CLAPConfig`] is the configuration class to store the configuration of a [`CLAPModel`]. It is used to instantiate
-    a CLAP model according to the specified arguments, defining the text model and audio model configs. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the CLAP
+    a Clap model according to the specified arguments, defining the text model and audio model configs. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Clap
     [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -346,7 +346,7 @@ class CLAPConfig(PretrainedConfig):
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and audio projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original CLAP implementation.
+            The inital value of the *logit_scale* paramter. Default is used as per the original Clap implementation.
         fusion_num_hidden_layers (`int`, *optional*, defaults to 2):
             [description]
         projection_dim (`int`, *optional*, defaults to 512):

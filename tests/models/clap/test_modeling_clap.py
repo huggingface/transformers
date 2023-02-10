@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch CLAP model. """
+""" Testing suite for the PyTorch Clap model. """
 
 
 import inspect
@@ -161,7 +161,7 @@ class CLAPAudioModelTester:
 @require_torch
 class CLAPAudioModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as CLAP does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as Clap does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
@@ -516,7 +516,7 @@ class CLAPModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for CLAP
+    # override as the `logit_scale` parameter initilization is different for Clap
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -554,7 +554,7 @@ class CLAPModelTest(ModelTesterMixin, unittest.TestCase):
 
             try:
                 input_ids = inputs_dict["input_ids"]
-                input_features = inputs_dict["input_features"]  # CLAP needs input_features
+                input_features = inputs_dict["input_features"]  # Clap needs input_features
                 traced_model = torch.jit.trace(model, (input_ids, input_features))
             except RuntimeError:
                 self.fail("Couldn't trace module.")

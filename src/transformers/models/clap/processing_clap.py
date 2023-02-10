@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Audio/Text processor class for CLAP
+Audio/Text processor class for Clap
 """
 
 from ...processing_utils import ProcessorMixin
@@ -22,7 +22,7 @@ from ...tokenization_utils_base import BatchEncoding
 
 class CLAPProcessor(ProcessorMixin):
     r"""
-    Constructs a CLAP processor which wraps a CLAP feature extractor and a CLAP tokenizer into a single processor.
+    Constructs a Clap processor which wraps a Clap feature extractor and a Clap tokenizer into a single processor.
 
     [`CLAPProcessor`] offers all the functionalities of [`CLAPFeatureExtractor`] and [`CLAPTokenizerFast`]. See the
     [`~CLAPProcessor.__call__`] and [`~CLAPProcessor.decode`] for more information.
