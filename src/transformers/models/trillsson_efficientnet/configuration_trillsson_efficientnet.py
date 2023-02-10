@@ -103,13 +103,6 @@ class TrillssonEfficientNetConfig(PretrainedConfig):
         initializer_range=0.02,
         norm_eps=0.001,
         norm_momentum=0.1,
-        log_floor=1e-12,
-        log_additive_offset=0.001,
-        window_length_secs=0.025,
-        hop_length_secs=0.010,
-        f_max=7500.0,
-        f_min=125.0,
-        fft_length=None,
         classifier_dropout_prob=0.8,
         block_configs=None,
         **kwargs
@@ -137,12 +130,5 @@ class TrillssonEfficientNetConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.norm_eps = norm_eps
         self.norm_momentum = norm_momentum
-        self.log_floor = log_floor
-        self.log_additive_offset = log_additive_offset
-        self.window_length_secs = window_length_secs
-        self.hop_length_secs = hop_length_secs
-        self.f_max = f_max
-        self.f_min = f_min
-        self.fft_length = fft_length
         self.classifier_dropout_prob = classifier_dropout_prob
         self.block_configs = block_configs
