@@ -207,10 +207,10 @@ _import_structure = {
         "ChineseCLIPVisionConfig",
     ],
     "models.clap": [
+        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ClapAudioConfig",
         "ClapConfig",
         "ClapFeatureExtractor",
-        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ClapProcessor",
         "ClapTextConfig",
     ],
