@@ -83,6 +83,13 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             raise ValueError("trainer_config_process() wasn't called yet to tell dtype")
         return self._dtype
 
+    def is_auto(self, ds_key_long):
+        val = self.get_value(ds_key_long)
+        if val is None:
+            return False
+        else:
+            return val == "auto"
+
     def fill_match(self, ds_key_long, hf_val, hf_key=None, must_match=True):
         """
         A utility method that massages the config file and can optionally verify that the values match.
@@ -176,12 +183,34 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         Now we can complete the configuration process.
         """
         # zero
-        hidden_size = model.config.hidden_size
-        self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
-        if self.is_zero3():
-            # automatically assign the optimal config values based on model config
-            self.fill_only("zero_optimization.stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
-            self.fill_only("zero_optimization.stage3_param_persistence_threshold", 10 * hidden_size)
+
+        # deal with config keys that use `auto` value and rely on model's hidden_size
+        hidden_size_based_keys = [
+            "zero_optimization.reduce_bucket_size",
+            "zero_optimization.stage3_prefetch_bucket_size",
+            "zero_optimization.stage3_param_persistence_threshold",
+        ]
+        hidden_size_auto_keys = [x for x in hidden_size_based_keys if self.is_auto(x)]
+
+        if len(hidden_size_auto_keys) > 0:
+            if hasattr(model.config, "hidden_size"):
+                hidden_size = model.config.hidden_size
+            elif hasattr(model.config, "hidden_sizes"):
+                # if there are many hidden sizes pick the largest one
+                hidden_size = max(model.config.hidden_sizes)
+            else:
+                raise ValueError(
+                    "The model's config file has neither `hidden_size` nor `hidden_sizes` entry, "
+                    "therefore it's not possible to automatically fill out the following `auto` entries "
+                    f"in the DeepSpeed config file: {hidden_size_auto_keys}. You can fix that by replacing "
+                    "`auto` values for these keys with an integer value of your choice."
+                )
+
+            self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
+            if self.is_zero3():
+                # automatically assign the optimal config values based on model config
+                self.fill_only("zero_optimization.stage3_prefetch_bucket_size", 0.9 * hidden_size * hidden_size)
+                self.fill_only("zero_optimization.stage3_param_persistence_threshold", 10 * hidden_size)
 
         # scheduler
         self.fill_match("scheduler.params.total_num_steps", num_training_steps, "num_training_steps (calculated)")
