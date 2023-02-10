@@ -819,12 +819,8 @@ class ProbSparseAttention(nn.Module):
         # use the reduced Q to calculate Q_K
         # factor*ln(L_q)
         # Q_reduce = query_states[:, M_top, :]
-        Q_reduce = torch.gather(
-            input=query_states, dim=0, index=torch.tile(M_top[:, :, None], (1, 1, query_states.shape[2]))
-        )
-        # Eli: might be more nice
-        # dim_for_slice = torch.arange(query_states.size(0)).unsqueeze(-1)
-        # Q_reduce = query_states[dim_for_slice, M_top]
+        dim_for_slice = torch.arange(query_states.size(0)).unsqueeze(-1)
+        Q_reduce = query_states[dim_for_slice, M_top]
 
         attn_weights = torch.bmm(Q_reduce, key_states.transpose(1, 2))
 
