@@ -1181,15 +1181,15 @@ First of all set batch size to 1 (you can always use gradient accumulation for a
 
 9. If you still OOM you could add more hardware or enable ZeRO-Infinity - that is switch offloads `offload_param` and  `offload_optimizer` to `nvme`. You need to make sure it's a very fast nvme. As an anecdote I was able to infer BLOOM-176B on a tiny GPU using ZeRO-Infinity except it was extremely slow. But it worked!
 
-You can of course work through these steps in reverse or try bi-secting it.
+You can, of course, work through these steps in reverse by starting with the most GPU memory efficient config and then going backwards. Or try bi-secting it.
 
-Now once you have your BS=1 working, measure your effective throughput.
+Once you have your BS=1 not leading to OOM, measure your effective throughput.
 
 Next try to increase the BS to as large as you can, since the higher the batch size the more efficient the GPUs are as they perform the best when matrices they multiply are huge.
 
-Now the performance optimization game starts. You can turn off some offload features or step down in ZeRO stages and increase/decrease BS and again measure your effective throughput.
+Now the performance optimization game starts. You can turn off some offload features or step down in ZeRO stages and increase/decrease BS and again measure your effective throughput. Rinse and repeat until satisfied.
 
-Don't spend forever on it, but if you're about to start a 3 months training - do spend a few days on it to find the most effective throughput-wise setup. So that your training cost will be the lowest and you will finish training faster. In the current crazy-paced ML world, if it takes you an extra month to train something you are likely to miss a golden opportunity. Of course, this is only me sharing an observation and in no way I'm trying to rush you.
+Don't spend forever on it, but if you're about to start a 3 months training - do spend a few days on it to find the most effective throughput-wise setup. So that your training cost will be the lowest and you will finish training faster. In the current crazy-paced ML world, if it takes you an extra month to train something you are likely to miss a golden opportunity. Of course, this is only me sharing an observation and in no way I'm trying to rush you. Before beginning to train BLOOM-176 I spent 2 days on this process and was able to increase throughput from 90 to 150 TFLOPs! This saved us more than one month of training time.
 
 Other quick random performance notes:
 - if you are training something from scratch always try to have tensors with shapes that are divisible by 16 (e.g. hidden size). For batch size try divisible by 2 at least. There are [wave and tile quanitization](https://developer.nvidia.com/blog/optimizing-gpu-performance-tensor-cores/) divisibility that is hardware-specific if you want to squeeze even higher performance from your GPUs.
