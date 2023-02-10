@@ -19,8 +19,8 @@ import unittest
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf, slow
 
-from .test_framework_agnostic import GenerationIntegrationTestsMixin
 from ..test_modeling_tf_common import floats_tensor
+from .test_framework_agnostic import GenerationIntegrationTestsMixin
 
 
 if is_tf_available():
@@ -28,8 +28,9 @@ if is_tf_available():
 
     from transformers import (
         TFAutoModelForCausalLM,
-        TFAutoModelForSpeechSeq2Seq,
         TFAutoModelForSeq2SeqLM,
+        TFAutoModelForSpeechSeq2Seq,
+        TFAutoModelForVision2Seq,
         TFLogitsProcessorList,
         TFMinLengthLogitsProcessor,
         tf_top_k_top_p_filtering,
@@ -140,15 +141,18 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
             "AutoModelForCausalLM": TFAutoModelForCausalLM,
             "AutoModelForSpeechSeq2Seq": TFAutoModelForSpeechSeq2Seq,
             "AutoModelForSeq2SeqLM": TFAutoModelForSeq2SeqLM,
+            "AutoModelForVision2Seq": TFAutoModelForVision2Seq,
             "LogitsProcessorList": TFLogitsProcessorList,
             "MinLengthLogitsProcessor": TFMinLengthLogitsProcessor,
             "create_tensor_fn": tf.convert_to_tensor,
             "floats_tensor": floats_tensor,
             "return_tensors": "tf",
+            "set_seed": tf.random.set_seed,
         }
 
     @slow
     def test_generate_tf_function_export_fixed_input_length(self):
+        # TF-only test: tf.saved_model export
         test_model = TFAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         input_length = 2
         max_new_tokens = 2
@@ -191,6 +195,7 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
 
     @slow
     def test_generate_tf_function_export_fixed_batch_size(self):
+        # TF-only test: tf.saved_model export
         test_model = TFAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         batch_size = 1
         max_new_tokens = 2
