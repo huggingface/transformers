@@ -1191,7 +1191,9 @@ Now the performance optimization game starts. You can turn off some offload feat
 
 Don't spend forever on it, but if you're about to start a 3 months training - do spend a few days on it to find the most effective throughput-wise setup. So that your training cost will be the lowest and you will finish training faster. In the current crazy-paced ML world, if it takes you an extra month to train something you are likely to miss a golden opportunity. Of course, this is only me sharing an observation and in no way I'm trying to rush you. Before beginning to train BLOOM-176B I spent 2 days on this process and was able to increase throughput from 90 to 150 TFLOPs! This effort saved us more than one month of training time.
 
-Other quick random performance notes:
+These notes were written primarily for the training mode, but they should mostly apply for inference as well. For example, during inference Gradient Checkpointing is a no-op since it is only useful during training.
+
+Other quick related performance notes:
 - if you are training something from scratch always try to have tensors with shapes that are divisible by 16 (e.g. hidden size). For batch size try divisible by 2 at least. There are [wave and tile quanitization](https://developer.nvidia.com/blog/optimizing-gpu-performance-tensor-cores/) divisibility that is hardware-specific if you want to squeeze even higher performance from your GPUs.
 
 
