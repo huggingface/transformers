@@ -24,7 +24,6 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 import torch.nn.functional as F
 
-from ...activations import ACT2FN, gelu
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -476,7 +475,7 @@ class GatedCrossAttention(nn.Module):
         query,
         key: Optional[torch.Tensor],
         value: Optional[torch.Tensor],
-        padding_mask: Optional[torch.Tensor] = None,
+        padding_mask: Optional[torch.Tensor] = None, ## NOT USED
         key_padding_mask: Optional[torch.Tensor] = None,
         incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]] = None,
         need_weights: bool = False,
@@ -1348,15 +1347,15 @@ class MegaEmbeddings(nn.Module):
     This is also designed to work with 
     """
 
-    def __init__(self, config):
+    def __init__(self, config: MegaConfig):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
-
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.register_buffer(
-            "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
-        )
+        self.use_token_types = config.add_token_type_embeddings
+        if self.use_token_types:
+            self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+            self.register_buffer(
+                "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
+            )
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -1364,48 +1363,38 @@ class MegaEmbeddings(nn.Module):
     def forward(
         self, input_ids=None, token_type_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
-
-        if input_ids is not None:
+        if (input_ids is None) and (inputs_embeds is None):
+            raise ValueError("Must provide one of input_ids or inputs_embeds")
+        elif input_ids is not None:
             input_shape = input_ids.size()
+            
+            # get the word embeddings if only IDs are provided
+            inputs_embeds = self.word_embeddings(input_ids)
         else:
             input_shape = inputs_embeds.size()[:-1]
 
-        seq_length = input_shape[1]
+        # the original Mega implementation did not include token type embeddings, so we add
+        # an option to use them if desired
+        if self.use_token_types:
+            # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
+            # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
+            # issue #5664
+            if token_type_ids is None:
+                if hasattr(self, "token_type_ids"):
+                    seq_length = input_shape[1]
+                    buffered_token_type_ids = self.token_type_ids[:, :seq_length]
+                    buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
+                    token_type_ids = buffered_token_type_ids_expanded
+                else:
+                    token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
-        # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
-        # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
-        # issue #5664
-        if token_type_ids is None:
-            if hasattr(self, "token_type_ids"):
-                buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
-        embeddings = inputs_embeds + token_type_embeddings
+            # access token type embeddings
+            token_type_embeddings = self.token_type_embeddings(token_type_ids)
+            # add the token type embeddings to the word embeddings
+            embeddings = inputs_embeds + token_type_embeddings
+        else:
+            embeddings = inputs_embeds
         return embeddings
-
-    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
-        """
-        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
-
-        Args:
-            inputs_embeds: torch.Tensor
-
-        Returns: torch.Tensor
-        """
-        input_shape = inputs_embeds.size()[:-1]
-        sequence_length = input_shape[1]
-
-        position_ids = torch.arange(
-            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
-        )
-        return position_ids.unsqueeze(0).expand(input_shape)
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Mega
@@ -2814,19 +2803,3 @@ class MegaForQuestionAnswering(MegaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
-    """
-    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
-    are ignored. This is modified from fairseq's `utils.make_positions`.
-
-    Args:
-        x: torch.Tensor x:
-
-    Returns: torch.Tensor
-    """
-    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-    mask = input_ids.ne(padding_idx).int()
-    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
-    return incremental_indices.long() + padding_idx

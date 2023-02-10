@@ -2,8 +2,9 @@
 
 ## Configuration
 * Modify my config class (from the colab notebook) to work like the auto-generated one
-* Add `is_decoder` to config (since encoder/decoder will use separate configs)
-* Possibly add explicit `use_nffn` and `use_cross_attention` args as well instead of implying based on other args
+* Possibly add explicit `use_nffn` args as well instead of implying based on other args
+* `is_decoder` and `add_cross_attention` are already part of the `PretrainedConfig` parent class
+* Either remove the `initializer_range` arg, or use it to init
 
 ## Mega source code
 * Possibly combine `MegaEncoderLayer` and `MegaDecoderLayer` into a single class
@@ -16,6 +17,8 @@
   * `MegaIntermediate` (unnecessary)
   * `MegaOutput`
 * To modify
+  * `MegaEmbeddings` - add optional token type embeddings  
   * `MegaLayer` - start with something like this for the combined encoder/decoder layer
     * There's also a nice handling of cross-attention already
+    * If `output_attentions`, do we want self-attention or cross attention? both?
   * `MegaPretrainedModel` - initialization, remove checkpointing (?)
