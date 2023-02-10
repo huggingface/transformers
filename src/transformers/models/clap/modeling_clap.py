@@ -155,13 +155,6 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, labels)
 
 
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clap, image->audio
-def clap_loss(similarity: torch.Tensor) -> torch.Tensor:
-    caption_loss = contrastive_loss(similarity)
-    audio_loss = contrastive_loss(similarity.t())
-    return (caption_loss + audio_loss) / 2.0
-
-
 @dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->CLAP
 class CLAPTextModelOutput(ModelOutput):
@@ -2318,7 +2311,9 @@ class CLAPModel(CLAPPreTrainedModel):
 
         loss = None
         if return_loss:
-            loss = clap_loss(logits_per_text)
+            caption_loss = contrastive_loss(logits_per_text)
+            audio_loss = contrastive_loss(logits_per_text.t())
+            loss = (caption_loss + audio_loss) / 2.0
 
         if not return_dict:
             output = (logits_per_audio, logits_per_text, text_embeds, audio_embeds, text_outputs, audio_outputs)
