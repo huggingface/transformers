@@ -570,38 +570,59 @@ class TimesformerModel(TimesformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from decord import VideoReader, cpu
+        >>> import av
         >>> import numpy as np
 
-        >>> from transformers import AutoFeatureExtractor, TimesformerModel
+        >>> from transformers import AutoImageProcessor, TimesformerModel
         >>> from huggingface_hub import hf_hub_download
+
+        >>> np.random.seed(0)
+
+
+        >>> def read_video_pyav(container, start_index, end_index):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (container): PyAV container.
+        ...         start_index (int): the starting frame.
+        ...         end_index (int): the ending frame.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames.
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)
         ...     start_idx = end_idx - converted_len
-        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
-        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
-        ...     return indices
+        ...     return start_idx, end_idx - 1
 
 
         >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
         >>> file_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+        >>> container = av.open(file_path)
 
         >>> # sample 8 frames
-        >>> videoreader.seek(0)
-        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=4, seg_len=len(videoreader))
-        >>> video = videoreader.get_batch(indices).asnumpy()
+        >>> start_idx, end_idx = sample_frame_indices(
+        ...     clip_len=8, frame_sample_rate=1, seg_len=container.streams.video[0].frames
+        ... )
+        >>> video = read_video_pyav(container, start_idx, end_idx)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = TimesformerModel.from_pretrained("facebook/timesformer-base-finetuned-k400")
 
         >>> # prepare video for the model
-        >>> inputs = feature_extractor(list(video), return_tensors="pt")
+        >>> inputs = image_processor(list(video), return_tensors="pt")
 
         >>> # forward pass
         >>> outputs = model(**inputs)
@@ -676,40 +697,59 @@ class TimesformerForVideoClassification(TimesformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from decord import VideoReader, cpu
+        >>> import av
         >>> import torch
         >>> import numpy as np
 
-        >>> from transformers import AutoFeatureExtractor, TimesformerForVideoClassification
+        >>> from transformers import AutoImageProcessor, TimesformerForVideoClassification
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
+
+
+        >>> def read_video_pyav(container, start_index, end_index):
+        ...     '''
+        ...     Decode the video with PyAV decoder.
+        ...     Args:
+        ...         container (container): PyAV container.
+        ...         start_index (int): the starting frame.
+        ...         end_index (int): the ending frame.
+        ...     Returns:
+        ...         result (np.ndarray): np array of decoded frames.
+        ...     '''
+        ...     frames = []
+        ...     container.seek(0)
+        ...     for i, frame in enumerate(container.decode(video=0)):
+        ...         if i > end_index:
+        ...             break
+        ...         if i >= start_index:
+        ...             frames.append(frame)
+        ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)
         ...     start_idx = end_idx - converted_len
-        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
-        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
-        ...     return indices
+        ...     return start_idx, end_idx - 1
 
 
         >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
         >>> file_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+        >>> container = av.open(file_path)
 
         >>> # sample 8 frames
-        >>> videoreader.seek(0)
-        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=4, seg_len=len(videoreader))
-        >>> video = videoreader.get_batch(indices).asnumpy()
+        >>> start_idx, end_idx = sample_frame_indices(
+        ...     clip_len=8, frame_sample_rate=1, seg_len=container.streams.video[0].frames
+        ... )
+        >>> video = read_video_pyav(container, start_idx, end_idx)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
         >>> model = TimesformerForVideoClassification.from_pretrained("facebook/timesformer-base-finetuned-k400")
 
-        >>> inputs = feature_extractor(list(video), return_tensors="pt")
+        >>> inputs = image_processor(list(video), return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
