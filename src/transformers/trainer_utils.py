@@ -363,6 +363,7 @@ class SchedulerType(ExplicitEnum):
     POLYNOMIAL = "polynomial"
     CONSTANT = "constant"
     CONSTANT_WITH_WARMUP = "constant_with_warmup"
+    INVERSE_SQRT = "inverse_sqrt"
 
 
 class TrainerMemoryTracker:
@@ -645,9 +646,9 @@ def find_executable_batch_size(
 
     if auto_find_batch_size:
         requires_backends(find_executable_batch_size, "accelerate")
-        import accelerate.memory_utils as mem_utils
+        from accelerate.utils import find_executable_batch_size as accelerate_find_executable_batch_size
 
-        return mem_utils.find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
+        return accelerate_find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
 
     return functools.partial(function, batch_size=starting_batch_size)
 

@@ -1512,9 +1512,11 @@ class GitForCausalLM(GitPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=True, **kwargs):
-        # cut decoder_input_ids if past is used
-        if past is not None:
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
+        # cut decoder_input_ids if past_key_values is used
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1526,12 +1528,12 @@ class GitForCausalLM(GitPreTrainedModel):
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": kwargs.get("pixel_values", None),
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
