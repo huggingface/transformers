@@ -582,25 +582,7 @@ class TrainingArguments:
             The mode to use in `torch.compile`. If set to any value, `torch_compile` will be set to `True`.
 
             Possible choices are `"default"`, `"reduce-overhead"` and `"max-autotune"`.
-            
-        xla_fsdp (`str`, `dict`, *optional*):
-            Use PyTorch/XLA Fully Sharded Data Parallel Training
-
-            For a complete list of options, please see [here](
-            https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py).
-
-            This is an experimental feature and its API may evolve in the future. The value is the location of config
-            file (e.g., `fsdp_config.json`).
-        xla_fsdp_min_num_params (`int`, *optional*, defaults to `0`):
-            Automatically recursively wrap layers with XLA FSDP if they have at least the specified number of parameters. This setting may only be used with xla_fsdp. It is
-            one of two (mutually exclusive) training arguments that determines an auto wrap policy for XLA FSDP; the other is xla_fsdp_transformer_layer_cls_to_wrap.
-        xla_fsdp_transformer_layer_cls_to_wrap (`List[str]`, *optional*):
-            Automatically recursively wrap layers with XLA FSDP if their transformer layer class name matches one in the specified list (case-sensitive). This setting
-            may only be used with xla_fsdp. It is one of two (mutually exclusive) training arguments that determines an auto wrap policy for XLA FSDP; the other is
-            xla_fsdp_min_num_params.
-        xla_fsdp_grad_ckpt (`bool`, *optional*, defaults to `False`):
-            Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be used with
-            xla_fsdp when an auto wrapping policy is specified through xla_fsdp_min_num_params or xla_fsdp_transformer_layer_cls_to_wrap.
+        
     
 
     """
@@ -1359,31 +1341,35 @@ class TrainingArguments:
             warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
 
         self.fsdp_config["fsdp_min_num_params"] = max(
-            getattr(self.fsdp_config, "fsdp_min_num_params", 0), self.fsdp_min_num_params
+            self.fsdp_config.get("fsdp_min_num_params", 0), self.fsdp_min_num_params
         )
+
+        # if fsdp_config["fsdp_transformer_layer_cls_to_wrap"] is specified as a string, convert it to a list with a single object
+        if isinstance(self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None), str):
+            self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = [self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]]
 
         if self.fsdp_transformer_layer_cls_to_wrap is not None:
             warnings.warn("using `--fsdp_transformer_layer_cls_to_wrap` is deprecated. Use fsdp_config instead ", FutureWarning)
-            self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = getattr(self.fsdp_config, "fsdp_transformer_layer_cls_to_wrap", [])+[self.fsdp_transformer_layer_cls_to_wrap]
+            self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", [])+[self.fsdp_transformer_layer_cls_to_wrap]
 
         if len(self.fsdp) == 0 and self.fsdp_config["fsdp_min_num_params"] > 0:
             warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
 
-        if len(self.fsdp) == 0 and self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] is not None:
+        if len(self.fsdp) == 0 and self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
             warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
 
         if (
             len(self.fsdp) > 0
             and self.fsdp_config["fsdp_min_num_params"] > 0
-            and self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] is not None
+            and self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None
         ):
             raise ValueError(
                 "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
             )
-        self.fsdp_config["xla"] = getattr(self.fsdp_config, "xla", False)
-        self.fsdp_config["xla_fsdp_grad_ckpt"] = getattr(self.fsdp_config, "xla_fsdp_grad_ckpt", False)
+        self.fsdp_config["xla"] = self.fsdp_config.get("xla", False)
+        self.fsdp_config["xla_fsdp_grad_ckpt"] = self.fsdp_config.get("xla_fsdp_grad_ckpt", False)
         if self.fsdp_config["xla"]:
-            if self.fsdp is not "":
+            if len(self.fsdp) > 0:
                 # gather fsdp configuration parameters into a dictionary from specified json file
                 with io.open(self.fsdp_config["xla_fsdp_settings"], "r", encoding="utf-8") as f:
                     self.xla_fsdp_config = json.load(f)

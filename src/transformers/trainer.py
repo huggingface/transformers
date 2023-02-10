@@ -1437,9 +1437,9 @@ class Trainer:
                         auto_wrap_policy = functools.partial(
                             size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
                         )
-                    elif self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] is not None:
+                    elif self.args.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
                         transformer_cls_to_wrap = set()
-                        for layer_class in self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]:
+                        for layer_class in self.args.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]:
                             transformer_cls = get_module_class_from_name(model, layer_class)
                             if transformer_cls is None:
                                 raise Exception("Could not find the transformer layer class to wrap in the model.")
@@ -1484,9 +1484,9 @@ class Trainer:
                     auto_wrap_policy = functools.partial(
                         size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
                     )
-                elif self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] is not None:
+                elif self.args.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
                     transformer_cls_to_wrap = set()
-                    for layer_class in self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]:
+                    for layer_class in self.args.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]:
                         transformer_cls = get_module_class_from_name(model, layer_class)
                         if transformer_cls is None:
                             raise Exception("Could not find the transformer layer class to wrap in the model.")
