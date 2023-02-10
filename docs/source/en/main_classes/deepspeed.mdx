@@ -275,11 +275,11 @@ Notes:
 
 <a id='deepspeed-multi-node'></a>
 
-### Deployment with multiple GPUs
+### Deployment with multiple Nodes
 
-The information in this section isn't not specific to the DeepSpeed integration and is applicable to any multi-node program. But DeepSpeed provides a `deepspeed` launcher that is easier to use than other launchers.
+The information in this section isn't not specific to the DeepSpeed integration and is applicable to any multi-node program. But DeepSpeed provides a `deepspeed` launcher that is easier to use than other launchers unless you are in a SLURM environment.
 
-For the duration of this section let's assume that you have 2 nodes with 8 gpus each. And you can reach the first node with `ssh hostname1` and second node with `ssh hostname2`, and both must be able to reach each other via ssh locally without a password.
+For the duration of this section let's assume that you have 2 nodes with 8 gpus each. And you can reach the first node with `ssh hostname1` and second node with `ssh hostname2`, and both must be able to reach each other via ssh locally without a password. Of course, you will need to rename these host (node) names to the actual host names you are working with.
 
 #### The torch.distributed.run launcher
 
@@ -298,7 +298,7 @@ For more information please see [torchrun](https://pytorch.org/docs/stable/elast
 
 #### The deepspeed launcher
 
-To use the `deepspeed` launcher instead, you have to first create a `hostname` file:
+To use the `deepspeed` launcher instead, you have to first create a `hostfile` file:
 
 ```
 hostname1 slots=8
@@ -307,7 +307,7 @@ hostname2 slots=8
 and then you can launch it as:
 
 ```bash
-deepspeed --num_gpus 8 --num_nodes 2 --hostfile hostname --master_addr hostname1 --master_port=9901 \
+deepspeed --num_gpus 8 --num_nodes 2 --hostfile hostfile --master_addr hostname1 --master_port=9901 \
 your_program.py <normal cl args> --deepspeed ds_config.json
 ```
 
@@ -318,7 +318,7 @@ For more information please see [Resource Configuration (multi-node)](https://ww
 
 #### Launching in a SLURM environment
 
-In the SLURM environment the following approach can be used. The following is a slurm script: `launch.slurm` - you will need to adapt it to your environment:
+In the SLURM environment the following approach can be used. The following is a slurm script `launch.slurm` which you will need to adapt it to your specific SLURM environment.
 
 ```bash
 #SBATCH --job-name=test-nodes        # name
