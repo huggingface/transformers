@@ -381,6 +381,8 @@
         title: Transformer XL
       - local: model_doc/ul2
         title: UL2
+      - local: model_doc/xmod
+        title: X-MOD
       - local: model_doc/xglm
         title: XGLM
       - local: model_doc/xlm

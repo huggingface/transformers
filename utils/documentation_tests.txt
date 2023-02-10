@@ -217,6 +217,8 @@ src/transformers/models/xlm/configuration_xlm.py
 src/transformers/models/xlm_roberta/configuration_xlm_roberta.py
 src/transformers/models/xlm_roberta_xl/configuration_xlm_roberta_xl.py
 src/transformers/models/xlnet/configuration_xlnet.py
+src/transformers/models/xmod/configuration_xmod.py
+src/transformers/models/xmod/modeling_xmod.py
 src/transformers/models/yolos/configuration_yolos.py
 src/transformers/models/yolos/modeling_yolos.py
 src/transformers/models/x_clip/modeling_x_clip.py

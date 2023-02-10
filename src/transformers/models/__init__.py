@@ -194,6 +194,7 @@ from . import (
     xlm_roberta,
     xlm_roberta_xl,
     xlnet,
+    xmod,
     yolos,
     yoso,
 )
