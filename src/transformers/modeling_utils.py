@@ -2407,7 +2407,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if torch_dtype == "auto":
                         if hasattr(config, "torch_dtype") and config.torch_dtype is not None:
                             torch_dtype = config.torch_dtype
-                            logger.info(f"Will use torch_dtype={torch_dtype} as defined in 'config.json'")
+                            logger.info(f"Will use torch_dtype={torch_dtype} as defined in model's config object")
                         else:
                             if is_sharded and "dtype" in sharded_metadata:
                                 torch_dtype = sharded_metadata["dtype"]
@@ -2418,7 +2418,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                 torch_dtype = get_state_dict_dtype(one_state_dict)
                                 del one_state_dict  # free CPU memory
                             logger.info(
-                                f"Since the `torch_dtype` can't be found in 'config.json' will use torch_dtype={torch_dtype} as derived from model weights"
+                                "Since the `torch_dtype` can't be found in model's config object, "
+                                "therefore will use torch_dtype={torch_dtype} as derived from model's weights"
                             )
                     else:
                         raise ValueError(
