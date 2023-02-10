@@ -297,7 +297,7 @@ class CLAPDropPath(nn.Module):
     """
 
     def __init__(self, drop_prob=None):
-        super(CLAPDropPath, self).__init__()
+        super().__init__()
         self.drop_prob = drop_prob
 
     def forward(self, hidden_states):
@@ -321,7 +321,7 @@ class CLAPAudioAFFBlock(nn.Module):
     """
 
     def __init__(self, config: CLAPAudioConfig):
-        super(CLAPAudioAFFBlock, self).__init__()
+        super().__init__()
         channels = config.patch_embeds_hidden_size
         downsize_ratio = config.aff_block_r
         inter_channels = int(channels // downsize_ratio)

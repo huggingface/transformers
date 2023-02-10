@@ -43,7 +43,7 @@ class CLAPTextConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the RoBERTa model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`CLAPTextModel`] or [`TFCLAPTextModel`].
+            `inputs_ids` passed when calling [`CLAPTextModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):

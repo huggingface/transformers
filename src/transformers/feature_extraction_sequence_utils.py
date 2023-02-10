@@ -522,7 +522,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                 Scale to use: `htk` or `slaney`. (Default: `htk`)
 
         Returns:
-            Tensor: Triangular filter banks (fb matrix) of size (`n_freqs`, `n_mels`) meaning number of frequencies to
+            `numpy.ndarray`: Triangular filter banks (fb matrix) of size (`n_freqs`, `n_mels`) meaning number of frequencies to
             highlight/apply to x the number of filterbanks. Each column is a filterbank so that assuming there is a
             matrix A of size (..., `n_freqs`), the applied result would be `A * melscale_fbanks(A.size(-1), ...)`.
 
