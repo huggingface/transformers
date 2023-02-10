@@ -1360,7 +1360,7 @@ class GenerationTesterMixin:
 
             # Sample constraints
             min_id = 3
-            max_id = self.model_tester.vocab_size
+            max_id = model.config.vocab_size
             force_tokens = torch.randint(min_id, max_id, (1, 2)).tolist()[0]
             constraints = [
                 PhrasalConstraint(force_tokens),
