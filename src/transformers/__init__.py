@@ -210,7 +210,7 @@ _import_structure = {
         "ClapAudioConfig",
         "ClapConfig",
         "ClapFeatureExtractor",
-        "Clap_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ClapProcessor",
         "ClapTextConfig",
     ],
@@ -3707,7 +3707,7 @@ if TYPE_CHECKING:
         ChineseCLIPVisionConfig,
     )
     from .models.clap import (
-        Clap_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
         ClapAudioConfig,
         ClapConfig,
         ClapFeatureExtractor,

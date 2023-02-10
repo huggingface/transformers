@@ -24,7 +24,7 @@ _import_structure = {
     "configuration_clap": [
         "ClapAudioConfig",
         "ClapConfig",
-        "Clap_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ClapTextConfig",
     ],
     "feature_extraction_clap": ["ClapFeatureExtractor"],
@@ -50,7 +50,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_clap import (
-        Clap_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
         ClapAudioConfig,
         ClapConfig,
         ClapTextConfig,

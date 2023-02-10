@@ -24,7 +24,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-Clap_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = {
     "laion-ai/base": "https://huggingface.co/laion-ai/base/resolve/main/config.json",
 }
 
