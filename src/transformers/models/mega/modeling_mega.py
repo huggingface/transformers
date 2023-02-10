@@ -1342,9 +1342,7 @@ class MegaDecoderLayer(nn.Module):
 class MegaEmbeddings(nn.Module):
     """
     Mega's basic implementation does not incorporate token type embeddings, so this is
-    a stripped-down version of RoBERTa's embeddings.
-
-    This is also designed to work with 
+    a stripped-down version of RoBERTa's embeddings which optionally includes token types
     """
 
     def __init__(self, config: MegaConfig):
@@ -1361,7 +1359,7 @@ class MegaEmbeddings(nn.Module):
         self.padding_idx = config.pad_token_id
 
     def forward(
-        self, input_ids=None, token_type_ids=None, inputs_embeds=None, past_key_values_length=0
+        self, input_ids=None, token_type_ids=None, inputs_embeds=None
     ):
         if (input_ids is None) and (inputs_embeds is None):
             raise ValueError("Must provide one of input_ids or inputs_embeds")
@@ -1398,6 +1396,8 @@ class MegaEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Mega
+# possibly not needed at all, but helpful for reference to understand how it's supposed to work for cross-attn
+# this is the interesting part that's wrapped up by the *Attention module, but with a linear layer + norm added
 class MegaSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -1597,21 +1597,7 @@ class MegaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
-class MegaIntermediate(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
+# deleted *Intermediate function here because it's replaced by the NFFN
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput
 class MegaOutput(nn.Module):

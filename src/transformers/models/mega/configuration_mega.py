@@ -168,7 +168,7 @@ class MegaConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.relative_positional_bias = relative_positional_bias
-        # self.use_cache = use_cache
+        self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
 
 
