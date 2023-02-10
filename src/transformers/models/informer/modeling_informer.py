@@ -827,11 +827,12 @@ class ProbSparseAttention(nn.Module):
         src_len = key_states.size(1)
         if attn_weights.size() != (bsz * self.num_heads, u, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f"Attention weights should be of size {(bsz * self.num_heads, u, src_len)}, but is"
                 f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
+            # TODO: change tgt_len to u
             if attention_mask.size() != (bsz, 1, tgt_len, src_len):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
@@ -842,6 +843,7 @@ class ProbSparseAttention(nn.Module):
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
+            # TODO: change tgt_len to u
             if layer_head_mask.size() != (self.num_heads,):
                 raise ValueError(
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
@@ -855,14 +857,28 @@ class ProbSparseAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, u, src_len)
+            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, u, src_len)
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        # The authors didn't use attention dropout.
+        # Not removing this yet, waiting for Kashif approval
+        # attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        # attn_output = torch.bmm(attn_probs, value_states)
+        attn_output = torch.bmm(attn_weights, value_states)
 
-        attn_output = torch.bmm(attn_probs, value_states)
+        # Build final output
+        # reimplemented from the original:
+        # https://github.com/zhouhaoyi/Informer2020/blob/ac59c7447135473fb2aafeafe94395f884d5c7a5/models/attn.py#L70
+        if attention_mask is not None:
+            v_aggregated = value_states.mean(dim=-2)
+        else:
+            v_aggregated = value_states.cumsum(dim=-2)
+
+        # TODO: combine v_aggregated with attn_output to create the new attn_output
+        # https://github.com/zhouhaoyi/Informer2020/blob/ac59c7447135473fb2aafeafe94395f884d5c7a5/models/attn.py#L90
+        attn_output = v_aggregated
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
