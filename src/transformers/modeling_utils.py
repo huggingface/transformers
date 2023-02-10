@@ -2418,8 +2418,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                 torch_dtype = get_state_dict_dtype(one_state_dict)
                                 del one_state_dict  # free CPU memory
                             logger.info(
-                                "Since the `torch_dtype` can't be found in model's config object, "
-                                "therefore will use torch_dtype={torch_dtype} as derived from model's weights"
+                                "Since the `torch_dtype` attribute can't be found in model's config object, "
+                                "will use torch_dtype={torch_dtype} as derived from model's weights"
                             )
                     else:
                         raise ValueError(
