@@ -300,8 +300,7 @@ class MeanScaler(nn.Module):
         keepdim (`bool`, *optional*, defaults to `False`):
             Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
         default_scale (`float`, *optional*, defaults to `None`):
-            Default scale that is used for elements that are constantly zero. If `None`, we use the
-            scale of the batch.
+            Default scale that is used for elements that are constantly zero. If `None`, we use the scale of the batch.
         minimum_scale (`float`, *optional*, defaults to 1e-10):
             Default minimum possible scale that is used for any item.
     """
