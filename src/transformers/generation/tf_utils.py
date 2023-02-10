@@ -2420,7 +2420,7 @@ class TFGenerationMixin:
             # To prevent these just finished sequences from being added to the current sequences
             # set of active beam search sequences, set their log probs to a very large negative value.
             if eos_token_id is None:
-                eos_in_next_token = tf.zeros(topk_sequences[:, :, cur_len].shape)
+                eos_in_next_token = tf.zeros(topk_sequences[:, :, cur_len].shape, dtype=tf.bool)
             else:
                 eos_in_next_token = tf.math.reduce_any(
                     tf.equal(
