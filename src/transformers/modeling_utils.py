@@ -1877,7 +1877,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
 
-
                 <Tip>
 
                 To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
@@ -1912,17 +1911,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                   `dtype`, ignoring the model's `config.torch_dtype` if one exists. If not specified
                   - the model will get loaded in `torch.float` (fp32).
 
-                2. `"config"`- use the `torch_dtype` specified in the `config.json` file that comes with the model. If
-                   `config.torch_dtype` isn't in `config.json` the program will assert.
+                2. `"auto"` - A `torch_dtype` entry in the `config.json` file of the model will be
+                  attempted to be used. If this entry isn't found then next check the `dtype` of the first weight in
+                  the checkpoint that's of a floating point type and use that as `dtype`. This will load the model
+                  using the `dtype` it was saved in at the end of the training. It can't be used as an indicator of how
+                  the model was trained. Since it could be trained in one of half precision dtypes, but saved in fp32.
 
-                3. `"auto"` - check the `dtype` of the first weight in the checkpoint that's of a
-                  floating point type and use that as `dtype`. This will load the model using the `dtype` it was saved
-                  in at the end of the training. It can't be used as an indicator of how the model was trained. Since
-                  it could be trained in one of half precision dtypes but saved in fp32.
+                <Tip>
 
-                Note: for some models the `dtype` they were trained in is unknown - you may try to check the model's
-                paper or reach out to the authors and ask them to add this information to the model's card and to
-                insert the `torch_dtype` entry in `config.json` on the hub.
+                For some models the `dtype` they were trained in is unknown - you may try to check the model's paper or
+                reach out to the authors and ask them to add this information to the model's card and to insert the
+                `torch_dtype` entry in `config.json` on the hub.
+
+                </Tip>
 
             device_map (`str` or `Dict[str, Union[int, str, torch.device]]`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
@@ -2382,27 +2383,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if torch_dtype is not None:
                 if isinstance(torch_dtype, str):
-                    if torch_dtype == "config":
-                        if hasattr(config, "torch_dtype"):
+                    if torch_dtype == "auto":
+                        if (
+                            hasattr(config, "torch_dtype")
+                            and config.torch_dtype is not None
+                            and isinstance(config.torch_dtype, torch.dtype)
+                        ):
                             torch_dtype = config.torch_dtype
+                            logger.info(f"Will use torch_dtype={torch_dtype} as defined in 'config.json'")
                         else:
-                            raise ValueError(
-                                'Cannot resolve torch_dtype="config" as `torch_dtype` cannot be found in `config.json`. '
-                                "Please either fix `config.json` to include a `torch_dtype` entry if it is under your control, and if not, "
-                                'either use an explicit torch `dtype` or "auto" or remove this argument altogether and then `torch.float` will be used'
+                            if is_sharded and "dtype" in sharded_metadata:
+                                torch_dtype = sharded_metadata["dtype"]
+                            elif not is_sharded:
+                                torch_dtype = get_state_dict_dtype(state_dict)
+                            else:
+                                one_state_dict = load_state_dict(resolved_archive_file[0])
+                                torch_dtype = get_state_dict_dtype(one_state_dict)
+                                del one_state_dict  # free CPU memory
+                            logger.info(
+                                f"Since the `torch_dtype` can't be found in 'config.json' will use torch_dtype={torch_dtype} as derived from model weights"
                             )
-                    elif torch_dtype == "auto":
-                        if is_sharded and "dtype" in sharded_metadata:
-                            torch_dtype = sharded_metadata["dtype"]
-                        elif not is_sharded:
-                            torch_dtype = get_state_dict_dtype(state_dict)
-                        else:
-                            one_state_dict = load_state_dict(resolved_archive_file[0])
-                            torch_dtype = get_state_dict_dtype(one_state_dict)
-                            del one_state_dict  # free CPU memory
                     else:
                         raise ValueError(
-                            f'`torch_dtype` can be one of torch `dtype`, `"config"` or `"auto"`, but received {torch_dtype}'
+                            f'`torch_dtype` can be either `torch.dtype` or `"auto"`, but received {torch_dtype}'
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
