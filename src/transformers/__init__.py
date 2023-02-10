@@ -1107,7 +1107,7 @@ else:
         [
             "BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BioGptForCausalLM",
-            "BioGptForSequenceClassification"
+            "BioGptForSequenceClassification",
             "BioGptModel",
             "BioGptPreTrainedModel",
         ]
