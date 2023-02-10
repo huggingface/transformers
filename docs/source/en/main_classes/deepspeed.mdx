@@ -1166,13 +1166,12 @@ Stage 0 (DDP) < Stage 1 < Stage 2 < Stage 2 + offload < Stage 3 < Stage 3 + offl
 
 So when you want to get the fastest execution while fitting into minimal number of GPUs, here is the process you could follow. We start with the fastest approach and if running into GPU OOM we then go to the next slower approach, but which will use less GPU memory. And so on and so forth.
 
+First of all set batch size to 1 (you can always use gradient accumulation for any desired effective batch size).
 
-First of all set batch size to 1 (you can always use gradient accumulation for any desired effective batch size)
-
-1. Enable `--gradient_checkpointing 1`. if OOM then
-2. Try zero stage 2 first. if OOM then
-3. Try stage 2 + `offload_optimizer` - if OOM then
-4. Switch to zero 3 - if OOM then
+1. Enable `--gradient_checkpointing 1` (HF Trainer) or directly `model.gradient_checkpointing_enable()` - if OOM then
+2. Try ZeRO stage 2 first. if OOM then
+3. Try ZeRO stage 2 + `offload_optimizer` - if OOM then
+4. Switch to ZeRO stage 3 - if OOM then
 5. Enable `offload_param` to `cpu` - if OOM then
 6. Enable `offload_optimizer` to `cpu` - if OOM then
 
