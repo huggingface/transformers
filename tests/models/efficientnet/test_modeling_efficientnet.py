@@ -29,7 +29,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import EfficientNetBackbone, EfficientNetForImageClassification, EfficientNetModel
+    from transformers import EfficientNetForImageClassification, EfficientNetModel
     from transformers.models.efficientnet.modeling_efficientnet import EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 

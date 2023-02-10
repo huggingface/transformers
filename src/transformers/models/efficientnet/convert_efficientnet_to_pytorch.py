@@ -16,24 +16,22 @@
 
 URL: https://github.com/keras-team/keras/blob/v2.11.0/keras/applications/efficientnet.py"""
 
-
 import argparse
 import json
-from pathlib import Path
+import os
 
-import torch
 import numpy as np
-from PIL import Image
-
 import requests
+import tensorflow.keras.applications.efficientnet as efficientnet
+import torch
 from huggingface_hub import hf_hub_download
-import tensorflow as tf
-from tensorflow.keras.applications.efficientnet import *
+from PIL import Image
+from tensorflow.keras.preprocessing import image
+
 from transformers import (
-    EfficientNetImageProcessor,
     EfficientNetConfig,
-    EfficientNetModel,
     EfficientNetForImageClassification,
+    EfficientNetImageProcessor,
 )
 from transformers.utils import logging
 
@@ -42,14 +40,14 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 model_classes = {
-    "b0": EfficientNetB0,
-    "b1": EfficientNetB1,
-    "b2": EfficientNetB2,
-    "b3": EfficientNetB3,
-    "b4": EfficientNetB4,
-    "b5": EfficientNetB5,
-    "b6": EfficientNetB6,
-    "b7": EfficientNetB7,
+    "b0": efficientnet.EfficientNetB0,
+    "b1": efficientnet.EfficientNetB1,
+    "b2": efficientnet.EfficientNetB2,
+    "b3": efficientnet.EfficientNetB3,
+    "b4": efficientnet.EfficientNetB4,
+    "b5": efficientnet.EfficientNetB5,
+    "b6": efficientnet.EfficientNetB6,
+    "b7": efficientnet.EfficientNetB7,
 }
 
 CONFIG_MAP = {
@@ -130,9 +128,9 @@ def rename_keys(original_param_names):
         rename_keys.append((f"block{b}_project_bn/gamma:0", f"encoder.blocks.{hf_b}.projection.project_bn.weight"))
         rename_keys.append((f"block{b}_project_bn/beta:0", f"encoder.blocks.{hf_b}.projection.project_bn.bias"))
 
-    rename_keys.append((f"top_conv/kernel:0", "encoder.top_conv.weight"))
-    rename_keys.append((f"top_bn/gamma:0", "encoder.top_bn.weight"))
-    rename_keys.append((f"top_bn/beta:0", "encoder.top_bn.bias"))
+    rename_keys.append(("top_conv/kernel:0", "encoder.top_conv.weight"))
+    rename_keys.append(("top_bn/gamma:0", "encoder.top_bn.weight"))
+    rename_keys.append(("top_bn/beta:0", "encoder.top_bn.bias"))
 
     key_mapping = {}
     for item in rename_keys:
@@ -201,9 +199,9 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path):
     hf_logits = outputs.logits[0].detach().numpy()
 
     # Original model inference
-    model.trainable = False
+    original_model.trainable = False
     image_size = CONFIG_MAP[model_name]["image_size"]
-    img = image.load_img(img_path, target_size=(image_size, image_size))
+    img = prepare_img().resize((image_size, image_size))
     x = image.img_to_array(img)
     x = np.expand_dims(x, axis=0)
     original_logits = original_model.predict(x)

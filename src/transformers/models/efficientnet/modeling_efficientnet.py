@@ -25,17 +25,15 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-    BackboneOutput,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
-from ...modeling_utils import BackboneMixin, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_efficientnet import EfficientNetConfig
 
@@ -537,7 +535,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         num_labels = config.num_labels
-
+        self.config = config
         self.efficientnet = EfficientNetModel(config)
         # Classifier head
         self.dropout = nn.Dropout(p=config.dropout_rate)
@@ -571,7 +569,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         outputs = self.efficientnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
-        pooled_output = self.dropout(p=config.dropout_rate)
+        pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
         loss = None
