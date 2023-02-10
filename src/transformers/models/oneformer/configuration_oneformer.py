@@ -83,8 +83,6 @@ class OneFormerConfig(PretrainedConfig):
             List containing the strides for feature maps in the encoder.
         task_seq_len (`int`, *optional*, defaults to 77)
             Sequence length for tokenizing text list input.
-        max_seq_len (`int`, *optional*, defaults to 77)
-            Sequence length for tokenizing task input.
         text_encoder_width (`int`, *optional*, defaults to 256)
             Hidden size for text encoder.
         text_encoder_context_length (`int`, *optional*, defaults to 77):
@@ -165,7 +163,6 @@ class OneFormerConfig(PretrainedConfig):
         output_auxiliary_logits: bool = True,
         strides: Optional[list] = [4, 8, 16, 32],
         task_seq_len: int = 77,
-        max_seq_len: int = 77,
         text_encoder_width: int = 256,
         text_encoder_context_length: int = 77,
         text_encoder_num_layers: int = 6,
@@ -229,7 +226,6 @@ class OneFormerConfig(PretrainedConfig):
         self.output_auxiliary_logits = output_auxiliary_logits
         self.strides = strides
         self.task_seq_len = task_seq_len
-        self.max_seq_len = max_seq_len
         self.text_encoder_width = text_encoder_width
         self.text_encoder_context_length = text_encoder_context_length
         self.text_encoder_num_layers = text_encoder_num_layers

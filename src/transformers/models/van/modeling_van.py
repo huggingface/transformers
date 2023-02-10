@@ -374,7 +374,7 @@ class VanPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            nn.init.trunc_normal_(module.weight, std=0.02)
+            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 nn.init.constant_(module.bias, 0)
         elif isinstance(module, nn.LayerNorm):

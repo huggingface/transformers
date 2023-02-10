@@ -64,8 +64,6 @@ class DinatConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
-        patch_norm (`bool`, *optional*, defaults to `True`):
-            Whether or not to add layer normalization after patch embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -112,7 +110,6 @@ class DinatConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         drop_path_rate=0.1,
         hidden_act="gelu",
-        patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         layer_scale_init_value=0.0,
@@ -135,7 +132,6 @@ class DinatConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.drop_path_rate = drop_path_rate
         self.hidden_act = hidden_act
-        self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         # we set the hidden_size attribute in order to make Dinat work with VisionEncoderDecoderModel

@@ -168,8 +168,6 @@ class SpeechT5Config(PretrainedConfig):
             The maximum sequence length of text features that this model might ever be used with.
         encoder_max_relative_position (`int`, *optional*, defaults to 160):
             Maximum distance for relative position embedding in the encoder.
-        decoder_max_relative_position (`int`, *optional*, defaults to 160):
-            Maximum distance for relative position embedding in the dencoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -243,7 +241,6 @@ class SpeechT5Config(PretrainedConfig):
         max_speech_positions=4000,
         max_text_positions=450,
         encoder_max_relative_position=160,
-        decoder_max_relative_position=160,
         use_cache=True,
         is_encoder_decoder=True,
         **kwargs,
@@ -314,7 +311,6 @@ class SpeechT5Config(PretrainedConfig):
         self.max_speech_positions = max_speech_positions
         self.max_text_positions = max_text_positions
         self.encoder_max_relative_position = encoder_max_relative_position
-        self.decoder_max_relative_position = decoder_max_relative_position
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
 
