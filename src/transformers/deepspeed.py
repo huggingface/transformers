@@ -141,6 +141,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         else:
             fp16_backend = None
 
+        if args.save_on_each_node:
+            # deepspeed uses shared storage by default. Let's override this setting if save_on_each_node == True
+            self.config["checkpoint"] = self.config.get("checkpoint", {})
+            self.config["checkpoint"]["use_node_local_storage"] = args.save_on_each_node
+
         # amp: similar to the pytorch native amp - it has a bunch of optional params but we won't set
         # any here unless the user did the work
         self.fill_match(

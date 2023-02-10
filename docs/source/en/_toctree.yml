@@ -83,6 +83,10 @@
       title: Object detection
     title: Computer Vision
   - sections:
+    - local: tasks/image_captioning
+      title: Image captioning
+    title: Multimodal
+  - sections:
     - local: performance
       title: Overview
     - local: perf_train_gpu_one
@@ -381,6 +385,8 @@
         title: Transformer XL
       - local: model_doc/ul2
         title: UL2
+      - local: model_doc/xmod
+        title: X-MOD
       - local: model_doc/xglm
         title: XGLM
       - local: model_doc/xlm
