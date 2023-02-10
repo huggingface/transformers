@@ -433,7 +433,8 @@ class _BaseAutoModelClass:
         hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
         if not isinstance(config, PretrainedConfig):
             kwargs_copy = copy.deepcopy(kwargs)
-            # ensure not to pollute the config object with torch_dtype="auto" - since it's meaningless in the context of the config object - torch.dtype values are acceptable
+            # ensure not to pollute the config object with torch_dtype="auto" - since it's
+            # meaningless in the context of the config object - torch.dtype values are acceptable
             if kwargs_copy.get("torch_dtype", None) == "auto":
                 _ = kwargs_copy.pop("torch_dtype")
 
