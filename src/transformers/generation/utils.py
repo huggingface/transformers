@@ -2225,6 +2225,10 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
+            #add next_tokens to inputs_embeds if using embeds to generate
+            if model_kwargs.get("decoder_inputs_embeds") is not None:
+                next_tokens_embed = self.decoder.get_input_embeddings()(next_tokens) * self.decoder.model.decoder.embed_scale
+                model_kwargs["decoder_inputs_embeds"] = torch.cat([model_kwargs["decoder_inputs_embeds"], next_tokens_embed.unsqueeze(1)], dim=-2)
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:

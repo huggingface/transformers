@@ -653,11 +653,19 @@ class VisionEncoderDecoderModel(PreTrainedModel):
     ):
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
         decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
+        if kwargs.get("decoder_inputs_embeds") is not None:
+            decoder_inputs["input_ids"] = None
+            decoder_inputs_embeds = self.decoder.prepare_inputs_for_generation(kwargs.get("decoder_inputs_embeds"), past_key_values=past_key_values)
+            decoder_inputs_embeds = decoder_inputs_embeds["input_ids"]
+        else:
+            decoder_inputs_embeds = None
+
         input_dict = {
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
             "decoder_input_ids": decoder_inputs["input_ids"],
             "encoder_outputs": encoder_outputs,
+            "decoder_inputs_embeds": decoder_inputs_embeds,
             "past_key_values": decoder_inputs["past_key_values"],
             "use_cache": use_cache,
         }
