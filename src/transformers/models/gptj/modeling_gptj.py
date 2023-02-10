@@ -790,13 +790,13 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
-            
+
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
-            
+
         model_inputs.update(
             {
                 "past_key_values": past_key_values,
@@ -806,7 +806,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
                 "token_type_ids": token_type_ids,
             }
         )
-            
+
         return model_inputs
 
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
