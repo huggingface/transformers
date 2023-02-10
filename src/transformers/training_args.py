@@ -1905,6 +1905,171 @@ class TrainingArguments:
 
         return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}
 
+    # The following methods are there to simplify the instantiation of `TrainingArguments`
+    def set_evaluate(
+        self,
+        strategy: Union[str, IntervalStrategy] = "no",
+        steps: int = 500,
+        accumulation_steps: Optional[int] = None,
+        delay: Optional[float] = None,
+        jit_mode: bool = False,
+    ):
+        """
+        A method that regroups all arguments linked to the evaluation.
+
+        Args:
+            strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
+                The evaluation strategy to adopt during training. Possible values are:
+
+                    - `"no"`: No evaluation is done during training.
+                    - `"steps"`: Evaluation is done (and logged) every `steps`.
+                    - `"epoch"`: Evaluation is done at the end of each epoch.
+
+                Setting a `strategy` different from `"no"` will set `self.do_eval` to `True`.
+            steps (`int`, *optional*, defaults to 500):
+                Number of update steps between two evaluations if `strategy="steps"`.
+            accumulation_steps (`int`, *optional*):
+                Number of predictions steps to accumulate the output tensors for, before moving the results to the CPU.
+                If left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster
+                but requires more memory).
+            delay (`float`, *optional*):
+                Number of epochs or steps to wait for before the first evaluation can be performed, depending on the
+                evaluation_strategy.
+            jit_mode (`bool`, *optional*):
+                Whether or not to use PyTorch jit trace for inference.
+
+        Example:
+
+        ```py
+        >>> from transformers import TrainingArguments
+
+        >>> args = TrainingArguments("working_dir")
+        >>> args = args.set_evaluate(strategy="steps", steps=100)
+        >>> args.eval_steps
+        100
+        ```
+        """
+        self.evaluation_strategy = IntervalStrategy(strategy)
+        self.do_eval = self.evaluation_strategy != IntervalStrategy.NO
+        self.eval_steps = steps
+        self.eval_accumulation_steps = accumulation_steps
+        self.eval_delay = delay
+        self.jit_mode_eval = jit_mode
+        return self
+
+    def set_save(
+        self,
+        strategy: Union[str, IntervalStrategy] = "steps",
+        steps: int = 500,
+        total_limit: Optional[int] = None,
+        on_each_node: bool = False,
+    ):
+        """
+        A method that regroups all arguments linked to the evaluation.
+
+        Args:
+            strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
+                The checkpoint save strategy to adopt during training. Possible values are:
+
+                    - `"no"`: No save is done during training.
+                    - `"epoch"`: Save is done at the end of each epoch.
+                    - `"steps"`: Save is done every `save_steps`.
+
+            steps (`int`, *optional*, defaults to 500):
+                Number of updates steps before two checkpoint saves if `strategy="steps"`.
+            total_limit (`int`, *optional*):
+                If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
+                `output_dir`.
+            on_each_node (`bool`, *optional*, defaults to `False`):
+                When doing multi-node distributed training, whether to save models and checkpoints on each node, or
+                only on the main one.
+
+                This should not be activated when the different nodes use the same storage as the files will be saved
+                with the same names for each node.
+
+        Example:
+
+        ```py
+        >>> from transformers import TrainingArguments
+
+        >>> args = TrainingArguments("working_dir")
+        >>> args = args.set_save(strategy="steps", steps=100)
+        >>> args.save_steps
+        100
+        ```
+        """
+        self.save_strategy = IntervalStrategy(strategy)
+        self.save_steps = steps
+        self.save_total_limit = total_limit
+        self.save_on_each_node = on_each_node
+        return self
+
+    def set_logging(
+        self,
+        strategy: Union[str, IntervalStrategy] = "steps",
+        steps: int = 500,
+        level: str = "passive",
+        first_step: bool = False,
+        nan_inf_filter: bool = False,
+        on_each_node: bool = False,
+        replica_level: str = "passive",
+    ):
+        """
+        A method that regroups all arguments linked to the evaluation.
+
+        Args:
+            strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
+                The logging strategy to adopt during training. Possible values are:
+
+                    - `"no"`: No save is done during training.
+                    - `"epoch"`: Save is done at the end of each epoch.
+                    - `"steps"`: Save is done every `save_steps`.
+
+            steps (`int`, *optional*, defaults to 500):
+                Number of update steps between two logs if `strategy="steps"`.
+            level (`str`, *optional*, defaults to `"passive"`):
+                Logger log level to use on the main process. Possible choices are the log levels as strings: `"debug"`,
+                `"info"`, `"warning"`, `"error"` and `"critical"`, plus a `"passive"` level which doesn't set anything
+                and lets the application set the level.
+            first_step (`bool`, *optional*, defaults to `False`):
+                Whether to log and evaluate the first `global_step` or not.
+            nan_inf_filter (`bool`, *optional*, defaults to `True`):
+                Whether to filter `nan` and `inf` losses for logging. If set to `True` the loss of every step that is
+                `nan` or `inf` is filtered and the average loss of the current logging window is taken instead.
+
+                <Tip>
+
+                `nan_inf_filter` only influences the logging of loss values, it does not change the behavior the
+                gradient is computed or applied to the model.
+
+                </Tip>
+
+            on_each_node (`bool`, *optional*, defaults to `True`):
+                In multinode distributed training, whether to log using `log_level` once per node, or only on the main
+                node.
+            replica_level (`str`, *optional*, defaults to `"passive"`):
+                Logger log level to use on replicas. Same choices as `log_level`
+
+        Example:
+
+        ```py
+        >>> from transformers import TrainingArguments
+
+        >>> args = TrainingArguments("working_dir")
+        >>> args = args.set_loggimg(strategy="steps", steps=100)
+        >>> args.logging_steps
+        100
+        ```
+        """
+        self.logging_strategy = IntervalStrategy(strategy)
+        self.logging_steps = steps
+        self.log_level = level
+        self.logging_first_step = first_step
+        self.logging_nan_inf_filter = nan_inf_filter
+        self.log_on_each_node = on_each_node
+        self.log_level_replica = replica_level
+        return self
+
 
 class ParallelMode(Enum):
     NOT_PARALLEL = "not_parallel"
