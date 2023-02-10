@@ -338,7 +338,7 @@ class TvltImageProcessor(BaseImageProcessor):
             patch_size (`List[int]` *optional*, defaults to self.patch_size):
                 The patch size of image patch embedding.
             num_frames (`int` *optional*, defaults to self.num_frames):
-                The maximum number of video frames.    
+                The maximum number of video frames.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
