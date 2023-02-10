@@ -1232,11 +1232,11 @@ else:
     )
     _import_structure["models.clap"].extend(
         [
+            "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ClapAudioModel",
             "ClapAudioModelWithProjection",
             "ClapModel",
             "ClapPreTrainedModel",
-            "Clap_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ClapTextModel",
             "ClapTextModelWithProjection",
         ]
@@ -4603,7 +4603,7 @@ if TYPE_CHECKING:
             ChineseCLIPVisionModel,
         )
         from .models.clap import (
-            Clap_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
             ClapAudioModel,
             ClapAudioModelWithProjection,
             ClapModel,

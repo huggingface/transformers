@@ -39,7 +39,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_clap"] = [
-        "Clap_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ClapModel",
         "ClapPreTrainedModel",
         "ClapTextModel",
@@ -66,7 +66,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_clap import (
-            Clap_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
             ClapAudioModel,
             ClapAudioModelWithProjection,
             ClapModel,

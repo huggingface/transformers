@@ -45,7 +45,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "laion-ai/clap-htsat-fused"
 
-Clap_PRETRAINED_MODEL_ARCHIVE_LIST = [
+CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "laion-ai/clap-htsat-fused",
     "laion-ai/clap-htsat-unfused",
     # See all clap models at https://huggingface.co/models?filter=clap

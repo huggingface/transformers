@@ -48,7 +48,7 @@ if is_torch_available():
         ClapTextModel,
         ClapTextModelWithProjection,
     )
-    from transformers.models.clap.modeling_clap import Clap_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.clap.modeling_clap import CLAP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ClapAudioModelTester:
@@ -266,13 +266,13 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in Clap_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ClapAudioModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in Clap_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ClapAudioModelWithProjection.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertTrue(hasattr(model, "visual_projection"))
@@ -424,13 +424,13 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in Clap_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ClapTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
     def test_model_with_projection_from_pretrained(self):
-        for model_name in Clap_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ClapTextModelWithProjection.from_pretrained(model_name)
             self.assertIsNotNone(model)
             self.assertTrue(hasattr(model, "text_projection"))
@@ -608,7 +608,7 @@ class ClapModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in Clap_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ClapModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
