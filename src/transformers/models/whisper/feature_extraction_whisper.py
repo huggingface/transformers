@@ -319,7 +319,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         else:
             padded_inputs["input_features"] = input_features
 
-        # todo
         if return_attention_mask:
             # rescale from sample (48000) to feature (3000)
             padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
