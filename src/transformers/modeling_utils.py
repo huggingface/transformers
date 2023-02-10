@@ -1718,11 +1718,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
             # in distributed settings to avoid race conditions.
             weights_no_suffix = weights_name.replace(".bin", "").replace(".safetensors", "")
+
+            # make sure that file to be deleted matches format of sharded file, e.g. pytorch_model-00001-of-00005
+            filename_no_suffix = filename.replace(".bin", "").replace(".safetensors", "")
+            reg = re.compile("(.*?)-\d{5}-of-\d{5}")
+
             if (
                 filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
                 and filename not in shards.keys()
                 and is_main_process
+                and reg.fullmatch(filename_no_suffix) is not None
             ):
                 os.remove(full_filename)
 
