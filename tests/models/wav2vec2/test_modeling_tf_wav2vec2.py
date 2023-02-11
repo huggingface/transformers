@@ -26,8 +26,8 @@ import unittest
 import numpy as np
 import pytest
 from datasets import load_dataset
-
 from huggingface_hub import snapshot_download
+
 from transformers import Wav2Vec2Config, is_tf_available
 from transformers.testing_utils import (
     CaptureLogger,
@@ -53,6 +53,7 @@ if is_tf_available():
 
 if is_pyctcdecode_available():
     import pyctcdecode.decoder
+
     from transformers import Wav2Vec2ProcessorWithLM
     from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
@@ -62,7 +63,6 @@ if is_librosa_available():
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -283,7 +283,6 @@ class TFWav2Vec2ModelTester:
 
 @require_tf
 class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (TFWav2Vec2Model, TFWav2Vec2ForCTC) if is_tf_available() else ()
     test_resize_embeddings = False
     test_head_masking = False
@@ -370,18 +369,15 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_training(*config_and_inputs)
 
-    # Wav2Vec2 has no inputs_embeds
+    @unittest.skip(reason="Wav2Vec2 has no input embeddings")
     def test_inputs_embeds(self):
         pass
 
-    # Wav2Vec2 cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Wav2Vec2 has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Wav2Vec2 has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="Wav2Vec2 has no input embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -390,13 +386,19 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
+    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
     def test_dataset_conversion(self):
-        pass
+        default_batch_size = self.model_tester.batch_size
+        self.model_tester.batch_size = 2
+        super().test_dataset_conversion()
+        self.model_tester.batch_size = default_batch_size
 
-    @unittest.skip(reason="Training goes OOM and crashes with the default options!")
+    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
     def test_keras_fit(self):
-        pass
+        default_batch_size = self.model_tester.batch_size
+        self.model_tester.batch_size = 2
+        super().test_dataset_conversion()
+        self.model_tester.batch_size = default_batch_size
 
 
 @require_tf
@@ -498,18 +500,15 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_training(*config_and_inputs)
 
-    # Wav2Vec2 has no inputs_embeds
+    @unittest.skip(reason="Wav2Vec2 has no input embeddings")
     def test_inputs_embeds(self):
         pass
 
-    # Wav2Vec2 cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Wav2Vec2 has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Wav2Vec2 has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="Wav2Vec2 has no input embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -518,13 +517,19 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
-    @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
+    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
     def test_dataset_conversion(self):
-        pass
+        default_batch_size = self.model_tester.batch_size
+        self.model_tester.batch_size = 2
+        super().test_dataset_conversion()
+        self.model_tester.batch_size = default_batch_size
 
-    @unittest.skip(reason="Training goes OOM and crashes with the default options!")
+    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
     def test_keras_fit(self):
-        pass
+        default_batch_size = self.model_tester.batch_size
+        self.model_tester.batch_size = 2
+        super().test_dataset_conversion()
+        self.model_tester.batch_size = default_batch_size
 
 
 @require_tf

@@ -24,10 +24,10 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import datasets
+import evaluate
 import numpy as np
 from datasets import load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,

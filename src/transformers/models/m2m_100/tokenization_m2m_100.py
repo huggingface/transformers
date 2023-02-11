@@ -193,7 +193,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        return len(self.encoder) + len(self.lang_token_to_id) + self.num_madeup_words
+        return len(self.encoder) + len(self.lang_token_to_id)
 
     @property
     def src_lang(self) -> str:

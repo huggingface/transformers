@@ -21,10 +21,10 @@ import unittest
 from typing import List, Tuple
 
 import numpy as np
-
-import transformers
 from huggingface_hub import HfFolder, delete_repo, set_access_token
 from requests.exceptions import HTTPError
+
+import transformers
 from transformers import BertConfig, is_flax_available, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
@@ -48,6 +48,7 @@ if is_flax_available():
     from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
     from flax.serialization import from_bytes
     from flax.traverse_util import flatten_dict, unflatten_dict
+
     from transformers import (
         FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -283,7 +284,6 @@ class FlaxModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-
                 # Output all for aggressive testing
                 config.output_hidden_states = True
                 config.output_attentions = self.has_attentions
@@ -336,7 +336,6 @@ class FlaxModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-
                 # Output all for aggressive testing
                 config.output_hidden_states = True
                 config.output_attentions = self.has_attentions
@@ -581,7 +580,6 @@ class FlaxModelTesterMixin:
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-
                     self.assertEqual(jitted_output.shape, output.shape)
 
     def test_forward_signature(self):
@@ -664,6 +662,9 @@ class FlaxModelTesterMixin:
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_attention_outputs(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 

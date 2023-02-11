@@ -93,7 +93,6 @@ class TFDebertaV2XSoftmax(tf.keras.layers.Layer):
         self.axis = axis
 
     def call(self, inputs: tf.Tensor, mask: tf.Tensor):
-
         rmask = tf.logical_not(tf.cast(mask, tf.bool))
         output = tf.where(rmask, float("-inf"), inputs)
         output = stable_softmax(output, self.axis)
@@ -416,7 +415,6 @@ class TFDebertaV2Encoder(tf.keras.layers.Layer):
         rel_embeddings = self.get_rel_embedding()
         output_states = next_kv
         for i, layer_module in enumerate(self.layer):
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (output_states,)
 
@@ -713,7 +711,6 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
         return outputs
 
     def disentangled_att_bias(self, query_layer, key_layer, relative_pos, rel_embeddings, scale_factor):
-
         if relative_pos is None:
             q = shape_list(query_layer)[-2]
             relative_pos = build_relative_position(
@@ -1036,7 +1033,6 @@ class TFDebertaV2MainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:

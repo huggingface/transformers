@@ -1692,7 +1692,6 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ):
-
         if input_ids is not None and not isinstance(input_ids, tf.Tensor):
             input_ids = tf.convert_to_tensor(input_ids, dtype=tf.int64)
         elif input_ids is not None:
@@ -2060,7 +2059,6 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[TFLongformerBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-
         outputs = self.longformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -2393,7 +2391,6 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
     ) -> Union[TFLongformerSequenceClassifierOutput, Tuple[tf.Tensor]]:
-
         if input_ids is not None and not isinstance(input_ids, tf.Tensor):
             input_ids = tf.convert_to_tensor(input_ids, dtype=tf.int64)
         elif input_ids is not None:

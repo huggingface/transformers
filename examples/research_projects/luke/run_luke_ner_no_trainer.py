@@ -27,14 +27,14 @@ from pathlib import Path
 
 import datasets
 import torch
+from accelerate import Accelerator, DistributedDataParallelKwargs
 from datasets import ClassLabel, load_dataset, load_metric
+from huggingface_hub import Repository
+from luke_utils import DataCollatorForLukeTokenClassification, is_punctuation, padding_tensor
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator, DistributedDataParallelKwargs
-from huggingface_hub import Repository
-from luke_utils import DataCollatorForLukeTokenClassification, is_punctuation, padding_tensor
 from transformers import (
     AdamW,
     LukeConfig,

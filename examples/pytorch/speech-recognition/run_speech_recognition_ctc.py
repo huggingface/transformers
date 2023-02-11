@@ -12,6 +12,7 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
+# limitations under the License.
 
 """ Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
 
@@ -26,11 +27,11 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
 import datasets
+import evaluate
 import numpy as np
 import torch
 from datasets import DatasetDict, load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -708,7 +709,6 @@ def main():
 
     # Training
     if training_args.do_train:
-
         # use last checkpoint if exist
         if last_checkpoint is not None:
             checkpoint = last_checkpoint

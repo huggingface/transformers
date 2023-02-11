@@ -92,7 +92,7 @@ class ResNetConfig(PretrainedConfig):
         hidden_act="relu",
         downsample_in_first_stage=False,
         out_features=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:
@@ -118,7 +118,6 @@ class ResNetConfig(PretrainedConfig):
 
 
 class ResNetOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property
