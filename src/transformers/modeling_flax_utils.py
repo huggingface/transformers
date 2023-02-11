@@ -837,14 +837,32 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 # keep the params on CPU if we don't want to initialize
                 state = jax.tree_util.tree_map(lambda x: jax.device_put(x, jax.devices("cpu")[0]), state)
 
-        # if model is base model only use model_prefix key
-        if cls.base_model_prefix not in dict(model.params_shape_tree) and cls.base_model_prefix in state:
-            state = state[cls.base_model_prefix]
+        if "params" in state and "batch_stats" in state:  # if flax model contains batch norm layers
+            # if model is base model only use model_prefix key
+            if (
+                cls.base_model_prefix not in dict(model.params_shape_tree["params"])
+                and cls.base_model_prefix in state["params"]
+            ):
+                state["params"] = state["params"][cls.base_model_prefix]
+                state["batch_stats"] = state["batch_stats"][cls.base_model_prefix]
 
-        # if model is head model and we are loading weights from base model
-        # we initialize new params dict with base_model_prefix
-        if cls.base_model_prefix in dict(model.params_shape_tree) and cls.base_model_prefix not in state:
-            state = {cls.base_model_prefix: state}
+            # if model is head model and we are loading weights from base model
+            # we initialize new params dict with base_model_prefix
+            if (
+                cls.base_model_prefix in dict(model.params_shape_tree["params"])
+                and cls.base_model_prefix not in state["params"]
+            ):
+                state = {"params": {cls.base_model_prefix: state["params"]}, "batch_stats": state["batch_stats"]}
+
+        else:
+            # if model is base model only use model_prefix key
+            if cls.base_model_prefix not in dict(model.params_shape_tree) and cls.base_model_prefix in state:
+                state = state[cls.base_model_prefix]
+
+            # if model is head model and we are loading weights from base model
+            # we initialize new params dict with base_model_prefix
+            if cls.base_model_prefix in dict(model.params_shape_tree) and cls.base_model_prefix not in state:
+                state = {cls.base_model_prefix: state}
 
         # flatten dicts
         state = flatten_dict(state)
