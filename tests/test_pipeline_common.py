@@ -1,10 +1,9 @@
 import copy
 import importlib
+import json
 import os
 import random
 from pathlib import Path
-
-import requests
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipelineTests
@@ -31,9 +30,10 @@ for task, task_info in pipeline_test_mapping.items():
     }
 
 
-# Download tiny model summary (used to avoid requesting from Hub too many times)
-url = "https://huggingface.co/datasets/hf-internal-testing/tiny-random-model-summary/raw/main/processor_classes.json"
-tiny_model_summary = requests.get(url).json()
+TINY_MODEL_SUMMARY_FILE_PATH = os.path.join(Path(__file__).parent.parent, "tests/utils/tiny_model_summary.json")
+with open(TINY_MODEL_SUMMARY_FILE_PATH) as fp:
+    tiny_model_summary = json.load(fp)
+
 
 PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent, "src/transformers")
 
