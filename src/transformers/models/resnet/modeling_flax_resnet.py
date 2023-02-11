@@ -171,6 +171,27 @@ class FlaxResNetShortCut(nn.Module):
         return hidden_state
 
 
+class FlaxResNetBasicLayerCollection(nn.Module):
+    in_channels: int
+    out_channels: int
+    stride: int = 1
+    activation: Optional[str] = "relu"
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+
+        self.layer = [
+            FlaxResNetConvLayer(self.in_channels, self.out_channels, stride=self.stride, dtype=self.dtype),
+            FlaxResNetConvLayer(self.out_channels, self.out_channels, activation=None, dtype=self.dtype),
+        ]
+
+    def __call__(self, hidden_state: jnp.ndarray, train: bool = False) -> jnp.ndarray:
+
+        for layer in self.layer:
+            hidden_state = layer(hidden_state, train=train)
+        return hidden_state
+
+
 class FlaxResNetBasicLayer(nn.Module):
     """
     A classic ResNet's residual layer composed by two `3x3` convolutions.
@@ -189,11 +210,12 @@ class FlaxResNetBasicLayer(nn.Module):
             if should_apply_shortcut
             else None
         )
-        self.layer = nn.Sequential(
-            [
-                FlaxResNetConvLayer(self.in_channels, self.out_channels, stride=self.stride, dtype=self.dtype),
-                FlaxResNetConvLayer(self.out_channels, self.out_channels, activation=None, dtype=self.dtype),
-            ]
+        self.layer = FlaxResNetBasicLayerCollection(
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            stride=self.stride,
+            activation=self.activation,
+            dtype=self.dtype,
         )
         self.activation_func = ACT2FN[self.activation]
 
@@ -207,6 +229,32 @@ class FlaxResNetBasicLayer(nn.Module):
 
         if self.activation_func is not None:
             hidden_state = self.activation_func(hidden_state)
+        return hidden_state
+
+
+class FlaxResNetBottleNeckLayerCollection(nn.Module):
+    in_channels: int
+    out_channels: int
+    stride: int = 1
+    activation: Optional[str] = "relu"
+    reduction: int = 4
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        reduces_channels = self.out_channels // self.reduction
+
+        self.layer = [
+            FlaxResNetConvLayer(self.in_channels, reduces_channels, kernel_size=1, dtype=self.dtype, name="0"),
+            FlaxResNetConvLayer(reduces_channels, reduces_channels, stride=self.stride, dtype=self.dtype, name="1"),
+            FlaxResNetConvLayer(
+                reduces_channels, self.out_channels, kernel_size=1, activation=None, dtype=self.dtype, name="2"
+            ),
+        ]
+
+    def __call__(self, hidden_state: jnp.ndarray, train: bool = False) -> jnp.ndarray:
+
+        for layer in self.layer:
+            hidden_state = layer(hidden_state, train=train)
         return hidden_state
 
 
@@ -226,17 +274,20 @@ class FlaxResNetBottleNeckLayer(nn.Module):
 
     def setup(self):
         should_apply_shortcut = self.in_channels != self.out_channels or self.stride != 1
-        reduces_channels = self.out_channels // self.reduction
         self.shortcut = (
             FlaxResNetShortCut(self.in_channels, self.out_channels, stride=self.stride, dtype=self.dtype)
             if should_apply_shortcut
             else None
         )
-        self.layer = [
-            FlaxResNetConvLayer(self.in_channels, reduces_channels, kernel_size=1, dtype=self.dtype),
-            FlaxResNetConvLayer(reduces_channels, reduces_channels, stride=self.stride, dtype=self.dtype),
-            FlaxResNetConvLayer(reduces_channels, self.out_channels, kernel_size=1, activation=None, dtype=self.dtype),
-        ]
+
+        self.layer = FlaxResNetBottleNeckLayerCollection(
+            self.in_channels,
+            self.out_channels,
+            stride=self.stride,
+            activation=self.activation,
+            reduction=self.reduction,
+            dtype=self.dtype,
+        )
 
         self.activation_func = ACT2FN[self.activation]
 
@@ -245,15 +296,14 @@ class FlaxResNetBottleNeckLayer(nn.Module):
 
         if self.shortcut is not None:
             residual = self.shortcut(residual, train=train)
-        for layer in self.layer:
-            hidden_state = layer(hidden_state, train=train)
+        hidden_state = self.layer(hidden_state, train)
         hidden_state += residual
         if self.activation_func is not None:
             hidden_state = self.activation_func(hidden_state)
         return hidden_state
 
 
-class FlaxResNetStage(nn.Module):
+class FlaxResNetStageLayersCollection(nn.Module):
     """
     A ResNet stage composed by stacked layers.
     """
@@ -277,10 +327,17 @@ class FlaxResNetStage(nn.Module):
                 stride=self.stride,
                 activation=self.config.hidden_act,
                 dtype=self.dtype,
+                name="0",
             ),
             *[
-                layer(self.out_channels, self.out_channels, activation=self.config.hidden_act, dtype=self.dtype)
-                for _ in range(self.depth - 1)
+                layer(
+                    self.out_channels,
+                    self.out_channels,
+                    activation=self.config.hidden_act,
+                    dtype=self.dtype,
+                    name=str(i + 1),
+                )
+                for i in range(self.depth - 1)
             ],
         ]
 
@@ -291,7 +348,33 @@ class FlaxResNetStage(nn.Module):
         return hidden_state
 
 
-class FlaxResNetEncoder(nn.Module):
+class FlaxResNetStage(nn.Module):
+    """
+    A ResNet stage composed by stacked layers.
+    """
+
+    config: ResNetConfig
+    in_channels: int
+    out_channels: int
+    stride: int = 2
+    depth: int = 2
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.layers = FlaxResNetStageLayersCollection(
+            self.config,
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            stride=self.stride,
+            depth=self.depth,
+            dtype=self.dtype,
+        )
+
+    def __call__(self, x: jnp.ndarray, train: bool = False) -> jnp.ndarray:
+        return self.layers(x, train=train)
+
+
+class FlaxResNetStageCollection(nn.Module):
     config: ResNetConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -305,10 +388,11 @@ class FlaxResNetEncoder(nn.Module):
                 stride=2 if self.config.downsample_in_first_stage else 1,
                 depth=self.config.depths[0],
                 dtype=self.dtype,
+                name="0",
             ),
             *[
-                FlaxResNetStage(self.config, in_channels, out_channels, depth=depth, dtype=self.dtype)
-                for (in_channels, out_channels), depth in zip(in_out_channels, self.config.depths[1:])
+                FlaxResNetStage(self.config, in_channels, out_channels, depth=depth, dtype=self.dtype, name=str(i + 1))
+                for i, ((in_channels, out_channels), depth) in enumerate(zip(in_out_channels, self.config.depths[1:]))
             ],
         ]
 
@@ -323,12 +407,33 @@ class FlaxResNetEncoder(nn.Module):
 
         for stage_module in self.stages:
             if output_hidden_states:
-                hidden_states = hidden_states + (hidden_state,)
+                hidden_states = hidden_states + (hidden_state.transpose(0, 3, 1, 2),)
 
             hidden_state = stage_module(hidden_state, train=train)
 
+        return hidden_state, hidden_states
+
+
+class FlaxResNetEncoder(nn.Module):
+    config: ResNetConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.stages = FlaxResNetStageCollection(self.config, dtype=self.dtype)
+
+    def __call__(
+        self,
+        hidden_state: jnp.ndarray,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+        train: bool = False,
+    ) -> FlaxBaseModelOutputWithNoAttention:
+        hidden_state, hidden_states = self.stages(
+            hidden_state, output_hidden_states=output_hidden_states, return_dict=return_dict, train=train
+        )
+
         if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
+            hidden_states = hidden_states + (hidden_state.transpose(0, 3, 1, 2),)
 
         if not return_dict:
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
@@ -453,7 +558,11 @@ class FlaxResNetModule(nn.Module):
             window_shape=(last_hidden_state.shape[1], last_hidden_state.shape[2]),
             strides=(last_hidden_state.shape[1], last_hidden_state.shape[2]),
             padding=((0, 0), (0, 0)),
-        )
+        ).transpose(
+            0, 3, 1, 2
+        )  # fixing pytorch integration tests
+
+        last_hidden_state = last_hidden_state.transpose(0, 3, 1, 2)  # fixing pytorch integration tests
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -499,6 +608,19 @@ append_replace_return_docstrings(
 )
 
 
+class FlaxResNetClassifierCollection(nn.Module):
+
+    config: ResNetConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype, name="1")
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+
+        return self.classifier(x)
+
+
 class FlaxResNetForImageClassificationModule(nn.Module):
     config: ResNetConfig
     dtype: jnp.dtype = jnp.float32
@@ -507,8 +629,8 @@ class FlaxResNetForImageClassificationModule(nn.Module):
         self.resnet = FlaxResNetModule(config=self.config, dtype=self.dtype)
 
         if self.config.num_labels > 0:
-            self.classifier = nn.Dense(
-                self.config.num_labels,
+            self.classifier = FlaxResNetClassifierCollection(
+                self.config,
                 dtype=self.dtype,
             )
         else:

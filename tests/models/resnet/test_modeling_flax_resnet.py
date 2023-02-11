@@ -19,6 +19,7 @@ from transformers import ResNetConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 from transformers.utils import cached_property, is_vision_available
 
+from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 
 
@@ -87,10 +88,10 @@ class FlaxResNetModelTester(unittest.TestCase):
         model = FlaxResNetModel(config=config)
         result = model(pixel_values)
 
-        # Output shape (b, h, w, c)
+        # Output shape (b, c, h, w)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.image_size // 32, self.image_size // 32, self.hidden_sizes[-1]),
+            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values):
@@ -114,13 +115,25 @@ class FlaxResNetModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (FlaxResNetModel, FlaxResNetForImageClassification) if is_flax_available() else ()
 
-    test_mismatched_shapes = False
     is_encoder_decoder = False
     test_head_masking = False
     has_attentions = False
 
     def setUp(self) -> None:
         self.model_tester = FlaxResNetModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ResNetConfig, has_text_modality=False)
+
+    def test_config(self):
+        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
+
+    def create_and_test_config_common_properties(self):
+        return
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -136,10 +149,6 @@ class FlaxResNetModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ResNet does not support input and output embeddings")
     def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip(reason="ResNet does not support attention outputs")
-    def test_attention_outputs(self):
         pass
 
     def test_forward_signature(self):
@@ -191,6 +200,7 @@ class FlaxResNetModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():
