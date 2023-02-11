@@ -2426,6 +2426,10 @@ else:
             "TvltPreTrainedModel",
         ]
     )
+    _import_structure["models.UDOP"].extend(
+        ["UDOPDualForConditionalGeneration", "UDOPDualStack", "UDOPEncoderModel", "UDOPModel", "UDOPPreTrainedModel",
+         "UDOPUniStack", "UDOPUnimodelForConditionalGeneration"]
+    )
     _import_structure["models.unispeech"].extend(
         [
             "UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST",
