@@ -682,7 +682,7 @@ else:
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
-    _import_structure["models.UDOP"].append("UdopTokenizer")
+    _import_structure["models.udop"].append("UdopTokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
