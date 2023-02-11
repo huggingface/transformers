@@ -628,7 +628,8 @@ class VisionEncoderDecoderModel(PreTrainedModel):
             print("I'M HERE!")
             print(f"labels.shape: {labels.shape}")
             print(f"logits shape: {logits.reshape(-1, self.decoder.config.vocab_size).shape}")
-            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
+            # loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
+            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
 
         if not return_dict:
             if loss is not None:
