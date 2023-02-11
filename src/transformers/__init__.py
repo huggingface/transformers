@@ -582,6 +582,7 @@ _import_structure = {
         "add_end_docstrings",
         "add_start_docstrings",
         "is_apex_available",
+        "is_bitsandbytes_available",
         "is_datasets_available",
         "is_decord_available",
         "is_faiss_available",
@@ -608,6 +609,7 @@ _import_structure = {
         "logging",
     ],
     "utils.bitsandbytes": [],
+    "utils.bitsandbytes_config": ["BitsandbytesConfig"],
 }
 
 # sentencepiece-backed objects
@@ -4055,6 +4057,7 @@ if TYPE_CHECKING:
         add_end_docstrings,
         add_start_docstrings,
         is_apex_available,
+        is_bitsandbytes_available,
         is_datasets_available,
         is_decord_available,
         is_faiss_available,
@@ -4080,6 +4083,15 @@ if TYPE_CHECKING:
         is_vision_available,
         logging,
     )
+
+    # bitsandbytes config
+    try:
+        if not is_bitsandbytes_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        raise ValueError("bitsandbytes is not installed. Please install it with `pip install bitsandbytes`.")
+    else:
+        from .utils.bitsandbytes_config import BitsandbytesConfig
 
     try:
         if not is_sentencepiece_available():
@@ -6445,6 +6457,7 @@ if TYPE_CHECKING:
             FlaxXLMRobertaModel,
             FlaxXLMRobertaPreTrainedModel,
         )
+
 
 else:
     import sys
