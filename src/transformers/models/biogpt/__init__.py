@@ -32,6 +32,7 @@ else:
         "BioGptForCausalLM",
         "BioGptModel",
         "BioGptPreTrainedModel",
+        "BioGptForSequenceClassification",
     ]
 
 
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
             BioGptForCausalLM,
             BioGptModel,
             BioGptPreTrainedModel,
+            BioGptForSequenceClassification,
         )
 
 

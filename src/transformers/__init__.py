@@ -1117,6 +1117,7 @@ else:
             "BioGptForCausalLM",
             "BioGptModel",
             "BioGptPreTrainedModel",
+            "BioGptForSequenceClassification",
         ]
     )
     _import_structure["models.bit"].extend(
@@ -3660,7 +3661,12 @@ if TYPE_CHECKING:
     from .models.bertweet import BertweetTokenizer
     from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
     from .models.bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
-    from .models.biogpt import BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, BioGptConfig, BioGptTokenizer
+    from .models.biogpt import (
+        BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, 
+        BioGptConfig,
+        BioGptTokenizer, 
+        BioGptForSequenceClassification
+    )
     from .models.bit import BIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BitConfig
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
@@ -4504,6 +4510,7 @@ if TYPE_CHECKING:
             BioGptForCausalLM,
             BioGptModel,
             BioGptPreTrainedModel,
+            BioGptForSequenceClassification,
         )
         from .models.bit import (
             BIT_PRETRAINED_MODEL_ARCHIVE_LIST,
