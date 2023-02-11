@@ -89,7 +89,7 @@ if TYPE_CHECKING:
             UDOPDualForConditionalGeneration,
             UDOPEncoderModel,
             UDOPPreTrainedModel,
-            UDOPUnimodelForConditionalGeneration
+            UDOPUnimodelForConditionalGeneration,
         )
 else:
     import sys

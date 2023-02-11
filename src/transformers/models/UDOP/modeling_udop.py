@@ -1,12 +1,18 @@
+import copy
+import logging
 import math
 import random
 import warnings
-from abc import abstractmethod, ABC
-from typing import Union
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any, Dict, Optional, Sequence, Tuple, Union
+
+import torch
+from torch import Tensor, nn
 
 from transformers import PreTrainedModel, add_start_docstrings
 from transformers.activations import ACT2FN
-from transformers.modeling_outputs import Seq2SeqModelOutput
+from transformers.modeling_outputs import BaseModelOutput, Seq2SeqModelOutput
 from transformers.pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from transformers.utils import (
     DUMMY_INPUTS,
@@ -17,18 +23,9 @@ from transformers.utils import (
 )
 from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
 
-import copy
-import logging
-from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence, Tuple
-
-import torch
-from torch import Tensor, nn
-
-from transformers.modeling_outputs import BaseModelOutput
-
 from .configuration_udop import UdopConfig
 from .mae.build import mae_model
+
 
 # from .embedding.relative.relative import (
 #     RelativePositionBias1D,
@@ -262,10 +259,10 @@ def get_relative_position_bucket(relative_position, bidirectional=True, num_buck
 
     Translate relative position to a bucket number for relative attention. The relative position is defined as
     memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
-    position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
-    small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
-    positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
-    This should allow for more graceful generalization to longer sequences than the model has been trained on
+    position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for small
+    absolute relative_position and larger buckets for larger absolute relative_positions. All relative positions
+    >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket. This should
+    allow for more graceful generalization to longer sequences than the model has been trained on
 
     Args:
         relative_position: an int32 Tensor
@@ -291,9 +288,9 @@ def get_relative_position_bucket(relative_position, bidirectional=True, num_buck
 
     # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
     relative_position_if_large = max_exact + (
-            torch.log(relative_position.float() / max_exact)
-            / math.log(max_distance / max_exact)
-            * (num_buckets - max_exact)
+        torch.log(relative_position.float() / max_exact)
+        / math.log(max_distance / max_exact)
+        * (num_buckets - max_exact)
     ).to(torch.long)
     relative_position_if_large = torch.min(
         relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
@@ -378,38 +375,32 @@ def collate_vlembed(
         attention_mask = torch.cat([attention_mask, visual_attention_mask], 1)
     return inputs_embeds, seg_data, attention_mask
 
+
 # @dataclass
 # class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
 #     """
-#     Args:
-#     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
-#         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-#             Sequence of hidden-states at the output of the last layer of the model. If `past_key_values` is used only
-#             the last hidden-state of the sequences of shape `(batch_size, 1, hidden_size)` is output.
-#         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or
-#         when `config.use_cache=True`):
-#             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-#             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-#             `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-#             encoder_sequence_length, embed_size_per_head)`. Contains pre-computed hidden-states (key and values in the
-#             self-attention blocks and optionally if `config.is_encoder_decoder=True` in the cross-attention blocks)
-#             that can be used (see `past_key_values` input) to speed up sequential decoding.
-#         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or
-#         when `config.output_hidden_states=True`):
-#             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-#             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
-#             the model at the output of each layer plus the optional initial embedding outputs.
-#         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when
-#         `config.output_attentions=True`):
-#             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-#             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-#             the self-attention heads.
-#         cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and
-#         `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-#             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-#             sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-#             used to compute the weighted average in the cross-attention heads.
-#     """
+# Args: # Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding). #
+last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`): # Sequence of
+hidden-states at the output of the last layer of the model. If `past_key_values` is used only # the last hidden-state
+of the sequences of shape `(batch_size, 1, hidden_size)` is output. # past_key_values
+(`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or # when
+`config.use_cache=True`): # Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2
+tensors of shape # `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if #
+`config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads, # encoder_sequence_length,
+embed_size_per_head)`. Contains pre-computed hidden-states (key and values in the # self-attention blocks and
+optionally if `config.is_encoder_decoder=True` in the cross-attention blocks) # that can be used (see `past_key_values`
+input) to speed up sequential decoding. # hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when
+`output_hidden_states=True` is passed or # when `config.output_hidden_states=True`): # Tuple of `torch.FloatTensor`
+(one for the output of the embeddings, if the model has an embedding layer, + # one for the output of each layer) of
+shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of # the model at the output of each layer plus the
+optional initial embedding outputs. # attentions (`tuple(torch.FloatTensor)`, *optional*, returned when
+`output_attentions=True` is passed or when # `config.output_attentions=True`): # Tuple of `torch.FloatTensor` (one for
+each layer) of shape `(batch_size, num_heads, sequence_length, # sequence_length)`. Attentions weights after the
+attention softmax, used to compute the weighted average in # the self-attention heads. # cross_attentions
+(`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and # `config.add_cross_attention=True`
+is passed or when `config.output_attentions=True`): # Tuple of `torch.FloatTensor` (one for each layer) of shape
+`(batch_size, num_heads, sequence_length, # sequence_length)`. Attentions weights of the decoder's cross-attention
+layer, after the attention softmax, # used to compute the weighted average in the cross-attention heads. #"""
 #
 #     last_hidden_state: torch.FloatTensor = None
 #     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -559,6 +550,7 @@ class RelativePositionBiasAggregated(nn.Module):
 
         return x
 
+
 class RelativePositionBiasHorizontal(RelativePositionBiasBase):
     def __init__(self, scaling_factor=100, max_distance=100, **kwargs):
         """
@@ -596,6 +588,7 @@ class RelativePositionBiasVertical(RelativePositionBiasBase):
 
         return self.get_relative_position(vertical_position)
 
+
 BIAS_CLASSES = {
     "1d": RelativePositionBias1D,
     "horizontal": RelativePositionBiasHorizontal,
@@ -625,6 +618,7 @@ def create_relative_bias(config: UdopConfig) -> Sequence[RelativePositionBiasBas
             bias_list.append(BIAS_CLASSES[bias_type](**bias_kwargs))  # type: ignore
 
     return bias_list
+
 
 class CellEmbeddings(nn.Module):
     def __init__(self, max_2d_position_embeddings=501, hidden_size=1024, ccat=False):
@@ -664,6 +658,7 @@ class CellEmbeddings(nn.Module):
             )
 
         return embeddings
+
 
 @dataclass
 class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
@@ -1248,7 +1243,10 @@ class UDOPPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, UDOPLayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, (UDOPModel, UDOPDualForConditionalGeneration, UDOPEncoderModel, UDOPUnimodelForConditionalGeneration)):
+        elif isinstance(
+            module,
+            (UDOPModel, UDOPDualForConditionalGeneration, UDOPEncoderModel, UDOPUnimodelForConditionalGeneration),
+        ):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
@@ -1288,7 +1286,7 @@ class UDOPPreTrainedModel(PreTrainedModel):
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (UDOPAttention, UDOPDualStack,UDOPUniStack)):
+        if isinstance(module, (UDOPAttention, UDOPDualStack, UDOPUniStack)):
             module.gradient_checkpointing = value
 
     def _shift_right(self, input_ids):
