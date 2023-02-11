@@ -5685,8 +5685,6 @@ if TYPE_CHECKING:
         from .models.udop import (
             UDOPUnimodelForConditionalGeneration,
             UDOPDualForConditionalGeneration,
-            UDOPEncoderModel,
-            UDOPPreTrainedModel,
         )
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
