@@ -245,19 +245,22 @@ class TFGenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTests
             "top_k": 10,
             "temperature": 0.7,
         }
-        expectation = 15
+        expectation = 14
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         text = """Hello, my dog is cute and"""
         tokens = tokenizer(text, return_tensors="tf")
         model = TFAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
-        tf.random.set_seed(0)
-        eos_token_id = 319
-        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        eos_token_id = 638
+        # forces the generation to happen on CPU, to avoid GPU-related quirks
+        with tf.device(":/CPU:0"):
+            tf.random.set_seed(0)
+            generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
 
-        tf.random.set_seed(0)
-        eos_token_id = [319, 198]
-        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        eos_token_id = [638, 198]
+        with tf.device(":/CPU:0"):
+            tf.random.set_seed(0)
+            generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
