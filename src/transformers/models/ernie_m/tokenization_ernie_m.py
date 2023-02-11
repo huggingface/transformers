@@ -14,8 +14,6 @@
 # limitations under the License.
 """Tokenization classes for Ernie-M."""
 
-# Some of the code is Copied from original paddlenlp repository.(https://github.com/PaddlePaddle/PaddleNLP/blob/develop/paddlenlp/transformers/ernie_m/tokenizer.py)
-# and Albert directory.(https://github.com/huggingface/transformers/blob/main/src/transformers/models/albert/tokenization_albert.py)
 import io
 import unicodedata
 from typing import List, Optional
@@ -60,6 +58,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
+# Adapted from paddlenlp.transformers.ernie_m.tokenizer.ErnieMTokenizer
 class ErnieMTokenizer(PreTrainedTokenizer):
     r"""
     Constructs a Ernie-M tokenizer. It uses the `sentencepiece` tools to cut the words to sub-words.
@@ -184,19 +183,19 @@ class ErnieMTokenizer(PreTrainedTokenizer):
             if piece == SPIECE_UNDERLINE:
                 continue
             lst_i = 0
-            for i, c in enumerate(piece):
-                if c == SPIECE_UNDERLINE:
+            for i, chunk in enumerate(piece):
+                if chunk == SPIECE_UNDERLINE:
                     continue
-                if self.is_ch_char(c) or self.is_punct(c):
+                if self.is_ch_char(chunk) or self.is_punct(chunk):
                     if i > lst_i and piece[lst_i:i] != SPIECE_UNDERLINE:
                         new_pieces.append(piece[lst_i:i])
-                    new_pieces.append(c)
+                    new_pieces.append(chunk)
                     lst_i = i + 1
-                elif c.isdigit() and i > 0 and not piece[i - 1].isdigit():
+                elif chunk.isdigit() and i > 0 and not piece[i - 1].isdigit():
                     if i > lst_i and piece[lst_i:i] != SPIECE_UNDERLINE:
                         new_pieces.append(piece[lst_i:i])
                     lst_i = i
-                elif not c.isdigit() and i > 0 and piece[i - 1].isdigit():
+                elif not chunk.isdigit() and i > 0 and piece[i - 1].isdigit():
                     if i > lst_i and piece[lst_i:i] != SPIECE_UNDERLINE:
                         new_pieces.append(piece[lst_i:i])
                     lst_i = i
@@ -275,9 +274,9 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         Args:
             token_ids_0 (`List[int]`):
                 List of ids of the first sequence.
-            token_ids_1 (`List[int]`, *optinal*):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`str`, *optional*):
+            already_has_special_tokens (`str`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
         Returns:
             `List[int]`:
@@ -305,8 +304,10 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         building: those.
 
         Args:
-            token_ids_0 (`List[int]`): The first tokenized sequence. token_ids_1 (`List[int]`, *optional*): The second
-            tokenized sequence.
+            token_ids_0 (`List[int]`):
+                The first tokenized sequence.
+            token_ids_1 (`List[int]`, *optional*):
+                The second tokenized sequence.
         Returns:
             `List[int]`: The token type ids.
         """
@@ -330,9 +331,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         """
         is_alpha
         """
-        if "a" <= char <= "z":
-            return True
-        if "A" <= char <= "Z":
+        if ("a" <= char <= "z") or ("A" <= char <= "Z"):
             return True
         return False
 

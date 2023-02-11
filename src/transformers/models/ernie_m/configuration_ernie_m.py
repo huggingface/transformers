@@ -54,7 +54,7 @@ class ErnieMConfig(PretrainedConfig):
             Dimensionality of the feed-forward (ff) layer in the encoder. Input tensors to feed-forward layers are
             firstly projected from hidden_size to intermediate_size, and then projected back to hidden_size. Typically
             intermediate_size is larger than hidden_size.
-        hidden_act (`str`, *optional*, defaults to "gelu"):
+        hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the feed-forward layer. `"gelu"`, `"relu"` and any other torch
             supported activation functions are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -68,7 +68,7 @@ class ErnieMConfig(PretrainedConfig):
             of an input sequence.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        classifier_dropout (`float`, *optional*, defaults to 0.1):
+        classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the normal initializer for initializing all weight matrices.

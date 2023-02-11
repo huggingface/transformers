@@ -51,40 +51,10 @@ ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class ErnieMPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = ErnieMConfig
-    base_model_prefix = "ernie_m"
-    supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ErnieMEncoder):
-            module.gradient_checkpointing = value
-
-
 # Adapted from paddlenlp.transformers.ernie_m.modeling.ErnieEmbeddings
 class ErnieMEmbeddings(nn.Module):
+    """Construct the embeddings from word and position embeddings."""
+
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -122,182 +92,6 @@ class ErnieMEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
 
         return embeddings
-
-
-class ErnieMEncoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList([ErnieMEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-
-    def forward(
-        self,
-        input_embeds: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
-        hidden_states = () if output_hidden_states else None
-        attentions = () if output_attentions else None
-
-        output = input_embeds
-        if output_hidden_states:
-            hidden_states = hidden_states + (output,)
-        for i, layer in enumerate(self.layers):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            past_key_value = past_key_values[i] if past_key_values is not None else None
-
-            output, opt_attn_weights = layer(
-                hidden_states=output,
-                attention_mask=attention_mask,
-                head_mask=layer_head_mask,
-                past_key_value=past_key_value,
-            )
-
-            if output_hidden_states:
-                hidden_states = hidden_states + (output,)
-            if output_attentions:
-                attentions = attentions + (opt_attn_weights,)
-
-        last_hidden_state = output
-        if not return_dict:
-            return tuple(v for v in [last_hidden_state, hidden_states, attentions] if v is not None)
-
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=last_hidden_state, hidden_states=hidden_states, attentions=attentions
-        )
-
-
-class ErnieMEncoderLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        # to mimic paddlenlp implementation
-        dropout = 0.1 if config.hidden_dropout_prob is None else config.hidden_dropout_prob
-        act_dropout = config.hidden_dropout_prob if config.act_dropout is None else config.act_dropout
-
-        self.self_attn = ErnieMAttention(config)
-        self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.dropout = nn.Dropout(act_dropout)
-        self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout1 = nn.Dropout(dropout)
-        self.dropout2 = nn.Dropout(dropout)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = True,
-    ):
-        residual = hidden_states
-        if output_attentions:
-            hidden_states, attention_opt_weights = self.self_attn(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-            )
-
-        else:
-            hidden_states = self.self_attn(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-            )
-        hidden_states = residual + self.dropout1(hidden_states)
-        hidden_states = self.norm1(hidden_states)
-        residual = hidden_states
-
-        hidden_states = self.linear1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.linear2(hidden_states)
-        hidden_states = residual + self.dropout2(hidden_states)
-        hidden_states = self.norm2(hidden_states)
-
-        if output_attentions:
-            return hidden_states, attention_opt_weights
-        else:
-            return hidden_states
-
-
-class ErnieMAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
-        super().__init__()
-        self.self_attn = ErnieMSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self_attn.num_attention_heads, self.self_attn.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self_attn.q_proj = prune_linear_layer(self.self_attn.q_proj, index)
-        self.self_attn.k_proj = prune_linear_layer(self.self_attn.k_proj, index)
-        self.self_attn.v_proj = prune_linear_layer(self.self_attn.v_proj, index)
-        self.out_proj = prune_linear_layer(self.out_proj, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self_attn.num_attention_heads = self.self_attn.num_attention_heads - len(heads)
-        self.self_attn.all_head_size = self.self_attn.attention_head_size * self.self_attn.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
-        self_outputs = self.self_attn(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
-            output_attentions,
-        )
-        attention_output = self.out_proj(self_outputs[0])
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
-
-
-class ErnieMPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        # As described in ErnieM repository(paddlenlp)
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->ErnieM,self.value->self.v_proj,self.key->self.k_proj,self.query->self.q_proj
@@ -435,7 +229,219 @@ class ErnieMSelfAttention(nn.Module):
         return outputs
 
 
+class ErnieMAttention(nn.Module):
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__()
+        self.self_attn = ErnieMSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.pruned_heads = set()
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.self_attn.num_attention_heads, self.self_attn.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.self_attn.q_proj = prune_linear_layer(self.self_attn.q_proj, index)
+        self.self_attn.k_proj = prune_linear_layer(self.self_attn.k_proj, index)
+        self.self_attn.v_proj = prune_linear_layer(self.self_attn.v_proj, index)
+        self.out_proj = prune_linear_layer(self.out_proj, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.self_attn.num_attention_heads = self.self_attn.num_attention_heads - len(heads)
+        self.self_attn.all_head_size = self.self_attn.attention_head_size * self.self_attn.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        self_outputs = self.self_attn(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            past_key_value,
+            output_attentions,
+        )
+        attention_output = self.out_proj(self_outputs[0])
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
+
+
+class ErnieMEncoderLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        # to mimic paddlenlp implementation
+        dropout = 0.1 if config.hidden_dropout_prob is None else config.hidden_dropout_prob
+        act_dropout = config.hidden_dropout_prob if config.act_dropout is None else config.act_dropout
+
+        self.self_attn = ErnieMAttention(config)
+        self.linear1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.dropout = nn.Dropout(act_dropout)
+        self.linear2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+        if isinstance(config.hidden_act, str):
+            self.activation = ACT2FN[config.hidden_act]
+        else:
+            self.activation = config.hidden_act
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = True,
+    ):
+        residual = hidden_states
+        if output_attentions:
+            hidden_states, attention_opt_weights = self.self_attn(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+            )
+
+        else:
+            hidden_states = self.self_attn(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+            )
+        hidden_states = residual + self.dropout1(hidden_states)
+        hidden_states = self.norm1(hidden_states)
+        residual = hidden_states
+
+        hidden_states = self.linear1(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.linear2(hidden_states)
+        hidden_states = residual + self.dropout2(hidden_states)
+        hidden_states = self.norm2(hidden_states)
+
+        if output_attentions:
+            return hidden_states, attention_opt_weights
+        else:
+            return hidden_states
+
+
+class ErnieMEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList([ErnieMEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+
+    def forward(
+        self,
+        input_embeds: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+        hidden_states = () if output_hidden_states else None
+        attentions = () if output_attentions else None
+
+        output = input_embeds
+        if output_hidden_states:
+            hidden_states = hidden_states + (output,)
+        for i, layer in enumerate(self.layers):
+            layer_head_mask = head_mask[i] if head_mask is not None else None
+            past_key_value = past_key_values[i] if past_key_values is not None else None
+
+            output, opt_attn_weights = layer(
+                hidden_states=output,
+                attention_mask=attention_mask,
+                head_mask=layer_head_mask,
+                past_key_value=past_key_value,
+            )
+
+            if output_hidden_states:
+                hidden_states = hidden_states + (output,)
+            if output_attentions:
+                attentions = attentions + (opt_attn_weights,)
+
+        last_hidden_state = output
+        if not return_dict:
+            return tuple(v for v in [last_hidden_state, hidden_states, attentions] if v is not None)
+
+        return BaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=last_hidden_state, hidden_states=hidden_states, attentions=attentions
+        )
+
+
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->ErnieM
+class ErnieMPooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
+class ErnieMPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = ErnieMConfig
+    base_model_prefix = "ernie_m"
+    supports_gradient_checkpointing = True
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, ErnieMEncoder):
+            module.gradient_checkpointing = value
+
+
 ERNIE_M_START_DOCSTRING = r"""
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
@@ -701,6 +707,96 @@ class ErnieMForSequenceClassification(ErnieMPreTrainedModel):
 
 
 @add_start_docstrings(
+    """ErnieM Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
+    ERNIE_M_START_DOCSTRING,
+)
+class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.__init__ with Bert->ErnieM,bert->ernie_m
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.ernie_m = ErnieMModel(config)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, 1)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(ERNIE_M_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=MultipleChoiceModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
+            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
+            `input_ids` above)
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+
+        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
+            else None
+        )
+
+        outputs = self.ernie_m(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = outputs[1]
+
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+        reshaped_logits = logits.view(-1, num_choices)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels)
+
+        if not return_dict:
+            output = (reshaped_logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return MultipleChoiceModelOutput(
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
     """ErnieM Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.""",
     ERNIE_M_START_DOCSTRING,
@@ -873,96 +969,6 @@ class ErnieMForQuestionAnswering(ErnieMPreTrainedModel):
             loss=total_loss,
             start_logits=start_logits,
             end_logits=end_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """ErnieM Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks.""",
-    ERNIE_M_START_DOCSTRING,
-)
-class ErnieMForMultipleChoice(ErnieMPreTrainedModel):
-    # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.__init__ with Bert->ErnieM,bert->ernie_m
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.ernie_m = ErnieMModel(config)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, 1)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(ERNIE_M_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MultipleChoiceModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = True,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
-        inputs_embeds = (
-            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
-            if inputs_embeds is not None
-            else None
-        )
-
-        outputs = self.ernie_m(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = outputs[1]
-
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-        reshaped_logits = logits.view(-1, num_choices)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

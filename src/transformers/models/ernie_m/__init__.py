@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2023 The HuggingFace and Baidu Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,21 +14,20 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available, is_torch_available
 
 
 _import_structure = {
     "configuration_ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
-    "tokenization_ernie_m": ["ErnieMTokenizer"],
 }
 
 try:
-    if not is_tokenizers_available():
+    if not is_sentencepiece_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
-    pass
+    _import_structure["tokenization_ernie_m"] = ["ErnieMTokenizer"]
 
 try:
     if not is_torch_available():
@@ -54,15 +49,14 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
-    from .tokenization_ernie_m import ErnieMTokenizer
 
     try:
-        if not is_tokenizers_available():
+        if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
-        pass
+        from .tokenization_ernie_m import ErnieMTokenizer
 
     try:
         if not is_torch_available():
