@@ -15,14 +15,14 @@
 
 import argparse
 
-from transformers.models.UDOP import UdopDualForConditionalGeneration, UdopUnimodelForConditionalGeneration
+from transformers.models.UDOP import UDOPDualForConditionalGeneration, UdopUnimodelForConditionalGeneration
 
 
 def convert_udop_checkpoint(pytorch_model_path, udop_type, pytorch_dump_path):
     if udop_type == "uni":
         model = UdopUnimodelForConditionalGeneration.from_pretrained(pytorch_model_path)
     else:
-        model = UdopDualForConditionalGeneration.from_pretrained(pytorch_model_path)
+        model = UDOPDualForConditionalGeneration.from_pretrained(pytorch_model_path)
 
     model.save_pretrained(pytorch_dump_path)
 

@@ -29,7 +29,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config", "T5OnnxConfig"]}
+_import_structure = {"configuration_udop": ["UdopConfig"]}
 
 try:
     if not is_sentencepiece_available():
@@ -37,7 +37,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_t5"] = ["T5Tokenizer"]
+    _import_structure["tokenization_udop"] = ["UdopTokenizer"]
 
 try:
     if not is_tokenizers_available():
@@ -45,7 +45,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_t5_fast"] = ["T5TokenizerFast"]
+    _import_structure["tokenization_udop_fast"] = ["UdopTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -53,13 +53,10 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_t5"] = [
-        "T5_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "T5EncoderModel",
-        "T5ForConditionalGeneration",
-        "T5Model",
-        "T5PreTrainedModel",
-        "load_tf_weights_in_t5",
+    _import_structure["modeling_udop"] = [
+        "UDOPEncoderModel",
+        "UDOPDualForConditionalGeneration",
+        "UDOPUnimodelForConditionalGeneration",
     ]
 
 if TYPE_CHECKING:
@@ -79,120 +76,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_udop import UdopTokenizerFast
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_udop_dual import (  # T5_PRETRAINED_MODEL_ARCHIVE_LIST,; T5Model,
-            UdopDualForConditionalGeneration,
-            UDOPEncoderModel,
-            UDOPPreTrainedModel,
-        )
-        from .modeling_udop_uni import UDOPPreTrainedModel, UdopUnimodelForConditionalGeneration  # T5Model,
-
-else:
-    import sys
-
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
-# Copyright 2020 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_udop"] = ["T5Tokenizer"]
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_t5_fast"] = ["T5TokenizerFast"]
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_t5"] = [
-        "T5_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "T5EncoderModel",
-        "T5ForConditionalGeneration",
-        "T5Model",
-        "T5PreTrainedModel",
-        "load_tf_weights_in_t5",
-    ]
-
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_t5"] = [
-        "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TFT5EncoderModel",
-        "TFT5ForConditionalGeneration",
-        "TFT5Model",
-        "TFT5PreTrainedModel",
-    ]
-
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_flax_t5"] = [
-        "FlaxT5EncoderModel",
-        "FlaxT5ForConditionalGeneration",
-        "FlaxT5Model",
-        "FlaxT5PreTrainedModel",
-    ]
-
-
-if TYPE_CHECKING:
-    from .configuration_udop import Udop_PRETRAINED_CONFIG_ARCHIVE_MAP, UdopConfig
-
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
         from .tokenization_udop import UdopTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
         from .tokenization_udop_fast import UdopTokenizerFast
 
     try:
@@ -201,15 +85,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_t5 import (
-            T5_PRETRAINED_MODEL_ARCHIVE_LIST,
-            T5EncoderModel,
-            T5ForConditionalGeneration,
-            T5Model,
-            T5PreTrainedModel,
-            load_tf_weights_in_t5,
+        from .modeling_udop import (  # T5_PRETRAINED_MODEL_ARCHIVE_LIST,; T5Model,
+            UDOPDualForConditionalGeneration,
+            UDOPEncoderModel,
+            UDOPPreTrainedModel,
+            UDOPUnimodelForConditionalGeneration
         )
-
 else:
     import sys
 
