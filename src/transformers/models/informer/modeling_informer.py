@@ -871,13 +871,17 @@ class ProbSparseAttention(nn.Module):
         # Build final output
         # reimplemented from the original:
         # https://github.com/zhouhaoyi/Informer2020/blob/ac59c7447135473fb2aafeafe94395f884d5c7a5/models/attn.py#L70
-        if attention_mask is not None:
-            v_aggregated = value_states.mean(dim=-2)
+        if attention_mask is None:
+            v_aggregated = value_states.mean(dim=1)
+            v_aggregated = v_aggregated.unsqueeze(dim=1).expand(bsz * self.num_heads, L_Q, v_aggregated.size(-1))
         else:
-            v_aggregated = value_states.cumsum(dim=-2)
+            v_aggregated = value_states.cumsum(dim=1)
 
-        # TODO: combine v_aggregated with attn_output to create the new attn_output
         # https://github.com/zhouhaoyi/Informer2020/blob/ac59c7447135473fb2aafeafe94395f884d5c7a5/models/attn.py#L90
+        dim_for_slice = torch.arange(v_aggregated.size(0)).unsqueeze(-1)
+        v_aggregated[dim_for_slice, M_top, :] = attn_output
+
+        # Rename final output
         attn_output = v_aggregated
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
