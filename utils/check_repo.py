@@ -53,6 +53,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "DetaEncoder",  # Building part of bigger (tested) model.
     "DetaDecoder",  # Building part of bigger (tested) model.
     "GraphormerEncoder",  # Building part of bigger (tested) model.
@@ -172,6 +173,9 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "Blip2ForConditionalGeneration",
+    "Blip2QFormerModel",
+    "Blip2VisionModel",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
@@ -446,7 +450,7 @@ def get_model_test_files():
             path = os.path.join(target_dir, file_or_dir)
             if os.path.isfile(path):
                 filename = os.path.split(path)[-1]
-                if "test_modeling" in filename and not os.path.splitext(filename)[0] in _ignore_files:
+                if "test_modeling" in filename and os.path.splitext(filename)[0] not in _ignore_files:
                     file = os.path.join(*path.split(os.sep)[1:])
                     test_files.append(file)
 

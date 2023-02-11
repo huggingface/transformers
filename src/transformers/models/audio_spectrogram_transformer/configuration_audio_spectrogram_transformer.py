@@ -105,7 +105,7 @@ class ASTConfig(PretrainedConfig):
         time_stride=10,
         max_length=1024,
         num_mel_bins=128,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

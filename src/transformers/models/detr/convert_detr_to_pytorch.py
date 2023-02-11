@@ -19,11 +19,11 @@ import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import DetrConfig, DetrForObjectDetection, DetrForSegmentation, DetrImageProcessor, ResNetConfig
 from transformers.utils import logging
 
@@ -60,7 +60,6 @@ def get_detr_config(model_name):
 
 
 def create_rename_keys(config):
-
     # here we list all keys to be renamed (original name on the left, our name on the right)
     rename_keys = []
 

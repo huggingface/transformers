@@ -98,7 +98,7 @@ class BeamScorer(ABC):
         next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
-        **kwargs
+        **kwargs,
     ) -> Tuple[torch.Tensor]:
         raise NotImplementedError("This is an abstract method.")
 
@@ -111,7 +111,7 @@ class BeamScorer(ABC):
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         max_length: int,
-        **kwargs
+        **kwargs,
     ) -> torch.LongTensor:
         raise NotImplementedError("This is an abstract method.")
 
@@ -574,7 +574,6 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 batch_beam_idx = batch_idx * self.group_size + next_index
                 # add to generated hypotheses if end of sentence
                 if (eos_token_id is not None) and (next_token.item() in eos_token_id):
-
                     # if beam_token does not belong to top num_beams tokens, it should not be added
                     is_beam_token_worse_than_top_num_beams = beam_token_rank >= self.group_size
                     if is_beam_token_worse_than_top_num_beams:

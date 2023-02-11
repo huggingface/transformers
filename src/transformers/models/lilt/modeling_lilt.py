@@ -239,7 +239,6 @@ class LiltSelfAttention(nn.Module):
         head_mask=None,
         output_attentions=False,
     ):
-
         layout_value_layer = self.transpose_for_scores(self.layout_value(layout_inputs), r=self.channel_shrink_ratio)
         layout_key_layer = self.transpose_for_scores(self.layout_key(layout_inputs), r=self.channel_shrink_ratio)
         layout_query_layer = self.transpose_for_scores(self.layout_query(layout_inputs), r=self.channel_shrink_ratio)

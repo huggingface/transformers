@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Factory function to build auto-model classes."""
+import copy
 import importlib
 from collections import OrderedDict
 
@@ -431,12 +432,18 @@ class _BaseAutoModelClass:
         ]
         hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
         if not isinstance(config, PretrainedConfig):
+            kwargs_copy = copy.deepcopy(kwargs)
+            # ensure not to pollute the config object with torch_dtype="auto" - since it's
+            # meaningless in the context of the config object - torch.dtype values are acceptable
+            if kwargs_copy.get("torch_dtype", None) == "auto":
+                _ = kwargs_copy.pop("torch_dtype")
+
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path,
                 return_unused_kwargs=True,
                 trust_remote_code=trust_remote_code,
                 **hub_kwargs,
-                **kwargs,
+                **kwargs_copy,
             )
         if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
             if not trust_remote_code:
@@ -581,6 +588,10 @@ class _LazyAutoMapping(OrderedDict):
         self._model_mapping = model_mapping
         self._extra_content = {}
         self._modules = {}
+
+    def __len__(self):
+        common_keys = set(self._config_mapping.keys()).intersection(self._model_mapping.keys())
+        return len(common_keys) + len(self._extra_content)
 
     def __getitem__(self, key):
         if key in self._extra_content:

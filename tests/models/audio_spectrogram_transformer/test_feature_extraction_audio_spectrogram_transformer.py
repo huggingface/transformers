@@ -102,7 +102,6 @@ class ASTFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_torchaudio
 class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-
     feature_extraction_class = ASTFeatureExtractor
 
     def setUp(self):

@@ -91,7 +91,7 @@ class RetriBertConfig(PretrainedConfig):
         share_encoders=True,
         projection_dim=128,
         pad_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

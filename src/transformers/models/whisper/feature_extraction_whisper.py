@@ -15,8 +15,8 @@
 """
 Feature extractor class for Whisper
 """
-
-from typing import List, Optional, Union
+import copy
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from numpy.fft import fft
@@ -66,7 +66,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         n_fft=400,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             feature_size=feature_size,
@@ -225,7 +225,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         padding: Optional[str] = "max_length",
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
@@ -322,3 +322,16 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["feature_extractor_type"] = self.__class__.__name__
+        if "mel_filters" in output:
+            del output["mel_filters"]
+        return output

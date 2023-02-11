@@ -6,18 +6,18 @@ from dataclasses import field
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
-import numpy as np
-from datasets import DatasetDict, load_dataset
-from tqdm import tqdm
-
 import flax
 import jax
 import jax.numpy as jnp
 import librosa
+import numpy as np
 import optax
+from datasets import DatasetDict, load_dataset
 from flax import jax_utils, traverse_util
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
+from tqdm import tqdm
+
 from transformers import (
     FlaxWav2Vec2ForPreTraining,
     HfArgumentParser,

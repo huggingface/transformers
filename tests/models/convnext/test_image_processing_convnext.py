@@ -77,7 +77,6 @@ class ConvNextImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class ConvNextImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = ConvNextImageProcessor if is_vision_available() else None
 
     def setUp(self):
