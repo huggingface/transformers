@@ -682,6 +682,7 @@ else:
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
+    _import_structure["models.UDOP"].append("UdopTokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -4259,6 +4260,7 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
+        from .models.UDOP import UdopTokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -4322,6 +4324,7 @@ if TYPE_CHECKING:
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
         from .models.whisper import WhisperTokenizerFast
+        from .models.udop import UdopTokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
