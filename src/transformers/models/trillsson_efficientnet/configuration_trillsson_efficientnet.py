@@ -91,7 +91,7 @@ class TrillssonEfficientNetConfig(PretrainedConfig):
         norm_momentum=0.1,
         classifier_dropout_prob=0.8,
         block_configs=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

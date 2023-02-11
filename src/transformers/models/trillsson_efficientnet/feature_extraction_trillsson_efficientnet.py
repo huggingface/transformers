@@ -85,7 +85,7 @@ class TrillssonEfficientNetFeatureExtractor(SequenceFeatureExtractor):
         mel_high_frequency_q=1127.0,
         mel_break_frequency_hertz=700.0,
         fft_length=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.return_attention_mask = return_attention_mask
@@ -437,7 +437,7 @@ class TrillssonEfficientNetFeatureExtractor(SequenceFeatureExtractor):
         pad_mode: Optional[str] = "symmetric",
         return_tensors: Optional[Union[str, TensorType]] = None,
         padding: Optional[bool] = False,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to compute and prepare for the model one or several sequence(s). sequences.
