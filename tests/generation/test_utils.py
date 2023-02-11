@@ -2657,8 +2657,10 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             self.assertListEqual(outputs_from_rand_embeds.tolist(), outputs_from_embeds.tolist())
 
         # input_ids is not a required input -- if we don't pass it, the newly generated tokens will be the same
-        outputs_from_embeds_wo_ids = model.generate(inputs_embeds=inputs_embeds)
+        outputs_from_embeds_wo_ids = model.generate(
+            inputs_embeds=inputs_embeds, max_new_tokens=20 - inputs_embeds.shape[1]
+        )
         self.assertListEqual(
             outputs_from_embeds[:, inputs_embeds.shape[1] :].tolist(),
-            outputs_from_embeds_wo_ids[:, inputs_embeds.shape[1] :].tolist(),
+            outputs_from_embeds_wo_ids[:, 1:].tolist(),
         )
