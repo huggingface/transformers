@@ -530,6 +530,7 @@ class GenerationMixin:
         # input_ids (`inputs_embeds` will be used in the 1st generation step, as opposed to `input_ids`)
         # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
         # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
+        new_input_ids_shape = None
         if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
             if not self.config.is_encoder_decoder:
                 has_inputs_embeds_forwarding = "inputs_embeds" in set(
@@ -541,6 +542,7 @@ class GenerationMixin:
                         "doesn't have its forwarding implemented. See the GPT2 implementation for an example "
                         "(https://github.com/huggingface/transformers/pull/21405), and feel free to open a PR with it!"
                     )
+                new_input_ids_shape = (model_kwargs["inputs_embeds"].shape[0], model_kwargs["inputs_embeds"].shape[1])
             else:
                 if inputs is not None:
                     raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
@@ -548,8 +550,9 @@ class GenerationMixin:
 
         # 4. if `inputs` is still None, try to create `input_ids` from BOS token
         if inputs is None:
-            inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
-
+            inputs = self._prepare_input_ids_for_generation(
+                bos_token_id, model_kwargs.get("encoder_outputs"), new_input_ids_shape
+            )
         return inputs, input_name, model_kwargs
 
     def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
@@ -559,7 +562,10 @@ class GenerationMixin:
         return logits
 
     def _prepare_input_ids_for_generation(
-        self, bos_token_id: Optional[int], encoder_outputs: Optional[ModelOutput]
+        self,
+        bos_token_id: Optional[int],
+        encoder_outputs: Optional[ModelOutput],
+        new_input_ids_shape: Optional[Tuple[int, int]],
     ) -> torch.LongTensor:
         if self.config.is_encoder_decoder and encoder_outputs is not None:
             # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
@@ -568,7 +574,9 @@ class GenerationMixin:
 
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
-        return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
+
+        new_input_ids_shape = new_input_ids_shape if new_input_ids_shape is not None else (1, 1)
+        return torch.ones(new_input_ids_shape, dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
         self,
