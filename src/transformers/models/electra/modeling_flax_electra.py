@@ -1213,7 +1213,7 @@ class FlaxElectraSequenceSummary(nn.Module):
             self.summary = nn.Dense(num_classes, dtype=self.dtype)
 
         activation_string = getattr(self.config, "summary_activation", None)
-        self.activation = ACT2FN[activation_string] if activation_string else lambda x: x
+        self.activation = ACT2FN[activation_string] if activation_string else lambda x: x  # noqa F407
 
         self.first_dropout = identity
         if hasattr(self.config, "summary_first_dropout") and self.config.summary_first_dropout > 0:
