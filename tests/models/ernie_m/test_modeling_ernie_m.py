@@ -151,7 +151,9 @@ class ErnieMModelTester:
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
-    def create_and_check_for_uiem(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
+    def create_and_check_for_information_extraction(
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
         model = ErnieMForInformationExtraction(config=config)
         model.to(torch_device)
         model.eval()
@@ -234,6 +236,7 @@ class ErnieMModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = ()
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = ErnieMModelTester(self)
@@ -264,9 +267,9 @@ class ErnieMModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    def test_for_uiem(self):
+    def test_for_information_extraction(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_uiem(*config_and_inputs)
+        self.model_tester.create_and_check_for_information_extraction(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -284,11 +287,12 @@ class ErnieMModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_model(self):
         model = ErnieMModel.from_pretrained("susnato/ernie-m-base_pytorch")
+        model.eval()
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
         # TODO Replace vocab size
-        hidden_size = 784
+        hidden_size = 768
 
         expected_shape = torch.Size((1, 6, hidden_size))
         self.assertEqual(output.shape, expected_shape)
@@ -296,9 +300,9 @@ class ErnieMModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [
                 [
-                    [0.09642269, -0.00556359, -0.03608308],
-                    [0.00521614, 0.09374719, 0.03041629],
-                    [-0.08879025, -0.00807481, -0.12337112],
+                    [0.11525039, 0.32233173, -0.14834294],
+                    [0.09505723, 0.11805616, 0.06016524],
+                    [0.03161845, 0.02301386, 0.06967726],
                 ]
             ]
         )

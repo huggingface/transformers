@@ -15,13 +15,17 @@
 """Tokenization classes for Ernie-M."""
 
 import io
+import os
 import unicodedata
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import logging
 
+
+logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 
@@ -32,7 +36,7 @@ RESOURCE_FILES_NAMES = {
     "vocab_file": "vocab.txt",
 }
 
-PRETRAINED_RESOURCE_FILES_MAP = {
+PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "ernie-m-base": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
         "ernie-m-large": "https://huggingface.co/susnato/ernie-m-base_pytorch/blob/main/vocab.txt",
@@ -46,15 +50,11 @@ PRETRAINED_RESOURCE_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "ernie-m-base": 514,
     "ernie-m-large": 514,
-    "uie-m-base": 514,
-    "uie-m-large": 514,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
     "ernie-m-base": {"do_lower_case": False},
     "ernie-m-large": {"do_lower_case": False},
-    "uie-m-base": {"do_lower_case": False},
-    "uie-m-large": {"do_lower_case": False},
 }
 
 
@@ -64,10 +64,10 @@ class ErnieMTokenizer(PreTrainedTokenizer):
     Constructs a Ernie-M tokenizer. It uses the `sentencepiece` tools to cut the words to sub-words.
 
     Args:
-        vocab_file (`str`):
-            The file path of the vocabulary.
         sentencepiece_model_file (`str`):
             The file path of sentencepiece model.
+        vocab_file (`str`, *optional*):
+            The file path of the vocabulary.
         do_lower_case (`str`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
@@ -91,13 +91,13 @@ class ErnieMTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_resource_files_map = PRETRAINED_RESOURCE_FILES_MAP
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     resource_files_names = RESOURCE_FILES_NAMES
 
     def __init__(
         self,
-        vocab_file,
         sentencepiece_model_ckpt,
+        vocab_file=None,
         do_lower_case=False,
         encoding="utf8",
         unk_token="[UNK]",
@@ -105,13 +105,13 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it and
         # is included in the raw text, there should be a match in a non-normalized sentence.
 
-        self.sentencepiece_model_ckpt = {} if sentencepiece_model_ckpt is None else sentencepiece_model_ckpt
-
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         super().__init__(
             do_lower_case=do_lower_case,
             unk_token=unk_token,
@@ -119,14 +119,21 @@ class ErnieMTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
-            sp_model_kwargs=self.sentencepiece_model_ckpt,
+            vocab_file=vocab_file,
+            encoding=encoding,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
         self.do_lower_case = do_lower_case
-        self.sp_model = spm.SentencePieceProcessor()
+        self.sentencepiece_model_ckpt = sentencepiece_model_ckpt
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(sentencepiece_model_ckpt)
-        self.vocab = self.load_vocab(filepath=vocab_file)
+
+        # to mimic paddlenlp.transformers.ernie_m.tokenizer.ErnieMTokenizer functioning
+        if vocab_file is not None:
+            self.vocab = self.load_vocab(filepath=vocab_file)
+        else:
+            self.vocab = dict((self.sp_model.id_to_piece(id), id) for id in range(self.sp_model.get_piece_size()))
         self.reverse_vocab = dict((v, k) for k, v in self.vocab.items())
 
     def get_offset_mapping(self, text):
@@ -163,25 +170,52 @@ class ErnieMTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return self.sp_model.vocab_size()
+        return len(self.vocab)
 
     def get_vocab(self):
-        return dict(self.vocab.token_to_idx, **self.added_tokens_encoder)
+        return dict(self.vocab, **self.added_tokens_encoder)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(self.sentencepiece_model_ckpt)
 
     def clean_text(self, text):
         """Performs invalid character removal and whitespace cleanup on text."""
         return "".join((self.SP_CHAR_MAPPING.get(c, c) for c in text))
 
-    def _tokenize(self, text, sample=False):
+    def _tokenize(self, text, enable_sampling=False, nbest_size=64, alpha=0.1):
         """Tokenize a string."""
-        if not sample:
+
+        if self.sp_model_kwargs.get("enable_sampling") is True:
+            enable_sampling = True
+        if self.sp_model_kwargs.get("alpha") is not None:
+            alpha = self.sp_model_kwargs.get("alpha")
+        if self.sp_model_kwargs.get("nbest_size") is not None:
+            nbest_size = self.sp_model_kwargs.get("nbest_size")
+
+        if not enable_sampling:
             pieces = self.sp_model.EncodeAsPieces(text)
         else:
-            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
+            pieces = self.sp_model.SampleEncodeAsPieces(text, nbest_size, alpha)
         new_pieces = []
-        for piece in pieces:
+        for pi, piece in enumerate(pieces):
             if piece == SPIECE_UNDERLINE:
-                continue
+                if not pieces[pi + 1].startswith(SPIECE_UNDERLINE) and pi != 0:
+                    new_pieces.append(SPIECE_UNDERLINE)
+                    continue
+                else:
+                    continue
             lst_i = 0
             for i, chunk in enumerate(piece):
                 if chunk == SPIECE_UNDERLINE:
@@ -208,13 +242,6 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
-    def _convert_token_to_id(self, token):
-        return self.vocab[token]
-
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        return self.reverse_vocab[index]
-
     def convert_ids_to_string(self, ids):
         """
         Converts a sequence of tokens (strings for sub-words) in a single string.
@@ -222,6 +249,15 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         tokens = self.convert_ids_to_tokens(ids)
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
+
+    # to mimic paddlenlp.transformers.ernie_m.tokenizer.ErnieMTokenizer functioning
+    def _convert_token_to_id(self, token):
+        return self.vocab.get(token, self.vocab.get(self.unk_token))
+
+    # to mimic paddlenlp.transformers.ernie_m.tokenizer.ErnieMTokenizer functioning
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        return self.reverse_vocab.get(index, self.unk_token)
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         r"""
@@ -363,3 +399,29 @@ class ErnieMTokenizer(PreTrainedTokenizer):
                 token_to_idx[token] = int(index)
 
         return token_to_idx
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        index = 0
+        if os.path.isdir(save_directory):
+            vocab_file = os.path.join(
+                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            )
+        else:
+            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
+        with open(vocab_file, "w", encoding="utf-8") as writer:
+            for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
+                if index != token_index:
+                    logger.warning(
+                        f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."
+                        " Please check that the vocabulary is not corrupted!"
+                    )
+                    index = token_index
+                writer.write(token + "\n")
+                index += 1
+
+        tokenizer_model_file = os.path.join(save_directory, "sentencepiece.bpe.model")
+        with open(tokenizer_model_file, "wb") as fi:
+            content_spiece_model = self.sp_model.serialized_model_proto()
+            fi.write(content_spiece_model)
+
+        return (vocab_file,)
