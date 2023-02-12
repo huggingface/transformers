@@ -5,6 +5,8 @@ import os
 import random
 from pathlib import Path
 
+from transformers import PreTrainedModel, TFPreTrainedModel
+
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipelineTests
 from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
@@ -49,28 +51,8 @@ transformers_module = spec.loader.load_module()
 
 class PipelineTesterMixin:
     model_tester = None
+    pipieline_model_mapping = None
     supported_frameworks = ["pt", "tf"]
-
-    @property
-    def framework(self):
-        framework = None
-        if "ModelTesterMixin" in set(x.__name__ for x in self.__class__.__bases__):
-            framework = "pt"
-        elif "TFModelTesterMixin" in set(x.__name__ for x in self.__class__.__bases__):
-            framework = "tf"
-        return framework
-
-    @property
-    def config_class(self):
-        config = None
-        method = getattr(self.model_tester, "get_config", None)
-        if method is not None:
-            config = method()
-        if config is None:
-            method = getattr(self.model_tester, "prepare_config_and_inputs", None)
-            if method is not None:
-                config = method()[0]
-        return config.__class__ if config is not None else None
 
     def run_task_tests(self, task):
         """Run pipeline tests for a specific `task`
@@ -79,36 +61,11 @@ class PipelineTesterMixin:
             task (`str`):
                 A task name. This should be a key in the mapping `pipeline_test_mapping`.
         """
-        if self.framework not in self.supported_frameworks:
-            raise ValueError(
-                f"Test is skipped: Could not determined the framework. This should be in {self.supported_frameworks}, "
-                f"but got `{self.framework}`)."
-            )
-
-        if task not in pipeline_test_mapping:
-            raise ValueError(f"Test is skipped: task {task} is not in the mapping `pipeline_test_mapping`.")
-        model_mapping = pipeline_test_mapping[task]["mapping"][self.framework]
-        # `_LazyAutoMapping` always has length 0: we need to call `keys()` first before getting the length!
-        if model_mapping is None or len(list(model_mapping.keys())) == 0:
-            self.skipTest(
-                f"Test is skipped: No model architecture under framework `{self.framework}` is found for the task"
-                f" `{task}`."
-            )
-
-        if self.config_class is None:
-            raise ValueError("self.config_class should not be `None`!")
-
-        # Get model-specific architecture for the task.
-        # If `config_class` is irrelevant to the pipeline task, we will skip the tests
-        model_architectures = model_mapping.get(self.config_class, None)
-        if model_architectures is None:
-            self.skipTest(
-                f"Test is skipped: No model architecture under framework `{self.framework}` with the configuration class "
-                f"`{self.config_class.__name__}` is found for the task `{task}`."
-            )
-
-        if not isinstance(model_architectures, tuple):
+        model_architectures = self.pipieline_model_mapping[task]
+        if issubclass(model_architectures, (PreTrainedModel, TFPreTrainedModel)):
             model_architectures = (model_architectures,)
+        if not isinstance(model_architectures, tuple):
+            raise ValueError(f"`model_architectures` must be a tuple. Got {type(model_architectures)} instead.")
 
         for model_architecture in model_architectures:
             model_arch_name = model_architecture.__name__
@@ -227,16 +184,19 @@ class PipelineTesterMixin:
         run_batch_test(pipeline, examples)
 
     def test_pipeline_feature_extraction(self):
-        self.run_task_tests(task="feature-extraction")
+        if "feature-extraction" in self.pipieline_model_mapping:
+            self.run_task_tests(task="feature-extraction")
 
     def test_pipeline_audio_classification(self):
         self.run_task_tests(task="audio-classification")
 
     def test_pipeline_fill_mask(self):
-        self.run_task_tests(task="fill-mask")
+        if "fill-mask" in self.pipieline_model_mapping:
+            self.run_task_tests(task="fill-mask")
 
     def test_pipeline_image_classification(self):
-        self.run_task_tests(task="image-classification")
+        if "image-classification" in self.pipieline_model_mapping:
+            self.run_task_tests(task="image-classification")
 
     def test_pipeline_text_classification(self):
         self.run_task_tests(task="text-classification")
