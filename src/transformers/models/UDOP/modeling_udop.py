@@ -28,7 +28,6 @@ from .configuration_udop import UdopConfig
 from functools import partial
 
 import torch
-import torch.nn as nn
 from itertools import repeat
 import collections.abc
 from torch import nn as nn
