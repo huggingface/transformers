@@ -834,21 +834,19 @@ class ProbSparseAttention(nn.Module):
         # Original impl don't apply attention_mask to the encoder, only for the decoder
         # For the decoder, it creates a casual mask sliced with M_top (ProbMask)
         if self.is_decoder:
-            prob_mask = ProbMask(B=bsz, H=self.num_heads, L=L_Q , index=M_top, scores=attn_weights)  # size = (bsz, 1, u, src_len)
-            attn_weights = attn_weights.view(bsz, self.num_heads, u, src_len) + prob_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, u, src_len)
+            prob_mask = _prepare_decoder_prob_attention_mask(L=L_Q, M_top=M_top, scores=attn_weights)
+            attn_weights.masked_fill_(prob_mask, -np.inf)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
-            # TODO: change tgt_len to u
             if layer_head_mask.size() != (self.num_heads,):
                 raise ValueError(
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
                     f" {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, u, src_len)
+            attn_weights = attn_weights.view(bsz * self.num_heads, u, src_len)
 
         if output_attentions:
             # this operation is a bit awkward, but it's required to
@@ -900,17 +898,19 @@ class ProbSparseAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# source: https://github.com/zhouhaoyi/Informer2020/blob/main/utils/masking.py
-class ProbMask:
-    def __init__(self, B, H, L, index, scores, device="cpu"):
-        _mask = torch.ones(L, scores.shape[-1], dtype=torch.bool).to(device).triu(1)
-        _mask_ex = _mask[None, None, :].expand(B, H, L, scores.shape[-1])
-        indicator = _mask_ex[torch.arange(B)[:, None, None], torch.arange(H)[None, :, None], index, :].to(device)
-        self._mask = indicator.view(scores.shape).to(device)
+def _prepare_decoder_prob_attention_mask(L, M_top, scores):
+    # create triangular matrix
+    triangular_matrix = torch.ones(L, scores.shape[-1], dtype=torch.bool).to(scores.device).triu(1)
 
-    @property
-    def mask(self):
-        return self._mask
+    # add batch*num_heads dim to the triangular_matrix
+    triangular_mask = triangular_matrix[None, :].expand(scores.size(0), L, scores.shape[-1])
+
+    # slice the triangular_mask with M_top
+    dim_for_slice = torch.arange(triangular_mask.size(0)).unsqueeze(-1)
+    prob_mask = triangular_mask[dim_for_slice, M_top].to(scores.device)
+
+    return prob_mask.to(scores.device)
+
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
 class ConvLayer(nn.Module):
