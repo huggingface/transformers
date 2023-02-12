@@ -42,7 +42,6 @@ if is_torch_available():
         UDOPModel,
         UdopTokenizer,
         UDOPEncoderModel,
-        UDOPDualForConditionalGeneration,
         UDOPUnimodelForConditionalGeneration,
     )
 
