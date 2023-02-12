@@ -17,8 +17,8 @@
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -106,7 +106,6 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = Pix2StructImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -220,7 +219,6 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
 @require_torch
 @require_vision
 class Pix2StructImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = Pix2StructImageProcessor if is_vision_available() else None
 
     def setUp(self):

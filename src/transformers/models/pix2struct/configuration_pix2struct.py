@@ -179,7 +179,6 @@ class Pix2StructTextConfig(PretrainedConfig):
     def from_pretrained(
         cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from Pix2StructConfig
@@ -305,7 +304,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
     def from_pretrained(
         cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from Pix2StructConfig
@@ -377,9 +375,6 @@ class Pix2StructConfig(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
-        projection_dim=768,
-        logit_scale_init_value=2.6592,
-        image_text_hidden_size=256,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -412,15 +407,11 @@ class Pix2StructConfig(PretrainedConfig):
 
         self.text_config.encoder_hidden_size = self.vision_config.hidden_size
 
-        self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
 
         self.text_config.initializer_range = self.initializer_range
         self.vision_config.initializer_range = self.initializer_range
-
-        self.image_text_hidden_size = image_text_hidden_size
 
     @classmethod
     def from_text_vision_configs(

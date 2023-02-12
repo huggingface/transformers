@@ -16,17 +16,17 @@
 import argparse
 import re
 
-import torch
-from PIL import Image
-from torchvision import transforms
-from torchvision.transforms.functional import InterpolationMode
-
 import requests
+import torch
 
 # git clone https://github.com/salesforce/PIX2STRUCT.git
 from models.pix2struct import pix2struct_decoder
 from models.pix2struct_itm import pix2struct_itm
 from models.pix2struct_vqa import pix2struct_vqa
+from PIL import Image
+from torchvision import transforms
+from torchvision.transforms.functional import InterpolationMode
+
 from transformers import (
     Pix2StructConfig,
     Pix2StructForConditionalGeneration,

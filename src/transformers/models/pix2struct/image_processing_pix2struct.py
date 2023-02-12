@@ -69,7 +69,6 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     def __init__(
         self, patch_size: Dict[str, int] = [16, 16], do_normalize: bool = True, do_convert_rgb: bool = True, **kwargs
     ) -> None:
-
         super().__init__(**kwargs)
         self.patch_size = patch_size
         self.do_normalize = do_normalize

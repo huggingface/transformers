@@ -74,7 +74,6 @@ class Pix2StructLayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -363,41 +362,6 @@ class Pix2StructVisionEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-
-# class Pix2StructVisionPreTrainedModel(PreTrainedModel):
-#     """
-#     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-#     models.
-#     """
-
-#     config_class = Pix2StructConfig
-#     base_model_prefix = "pix2struct_encoder"
-#     main_input_name = "pixel_embeds"
-#     supports_gradient_checkpointing = True
-#     _no_split_modules = ["Pix2StructVisionLayer"]
-
-#     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, Pix2StructLayerNorm]) -> None:
-#         """Initialize the weights"""
-#         if isinstance(module, (nn.Linear, nn.Conv2d)):
-#             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-#             # `trunc_normal_cpu` not implemented in `half` issues
-#             module.weight.data = nn.init.trunc_normal_(
-#                 module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-#             ).to(module.weight.dtype)
-#             if module.bias is not None:
-#                 module.bias.data.zero_()
-#         elif isinstance(module, Pix2StructLayerNorm):
-#             if module.weight is not None:
-#                 module.weight.data.fill_(1.0)
-#         elif isinstance(module, nn.Embedding):
-#             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-#             if module.padding_idx is not None:
-#                 module.weight.data[module.padding_idx].zero_()
-
-#     def _set_gradient_checkpointing(self, module: Pix2StructVisionEncoder, value: bool = False) -> None:
-#         if isinstance(module, Pix2StructVisionEncoder):
-#             module.gradient_checkpointing = value
 
 
 class Pix2StructPreTrainedModel(PreTrainedModel):
@@ -1016,7 +980,6 @@ class Pix2StructTextBlock(nn.Module):
         output_attentions=False,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -1522,19 +1485,6 @@ Pix2StructText_ENCODER_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
-
-
-# class Pix2StructPreTrainedModel(PreTrainedModel):
-#     config_class = Pix2StructConfig
-#     base_model_prefix = "pix2struct"
-#     main_input_name = "pixel_embeds"
-
-#     def _init_weights(self, module):
-#         """Initialize the weights"""
-#         if isinstance(module, Pix2StructVisionModel):
-#             module.init_weights()
-#         elif isinstance(module, Pix2StructTextModel):
-#             module.init_weights()
 
 
 # Warning message for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask

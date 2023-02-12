@@ -79,7 +79,6 @@ class Pix2StructProcessor(ProcessorMixin):
 
         # Get only text
         if images is None:
-
             self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(
                 text=text,

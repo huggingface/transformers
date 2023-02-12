@@ -21,8 +21,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -297,7 +297,6 @@ class Pix2StructTextModelTester:
 
 @require_torch
 class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (Pix2StructTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -341,7 +340,6 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 class Pix2StructTextImageModelsModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
-
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
