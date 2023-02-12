@@ -852,7 +852,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 cls.base_model_prefix in dict(model.params_shape_tree["params"])
                 and cls.base_model_prefix not in state["params"]
             ):
-                state = {"params": {cls.base_model_prefix: state["params"]}, "batch_stats": state["batch_stats"]}
+                state = {
+                    "params": {cls.base_model_prefix: state["params"]},
+                    "batch_stats": {cls.base_model_prefix: state["batch_stats"]},
+                }
 
         else:
             # if model is base model only use model_prefix key
@@ -871,6 +874,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         missing_keys = model.required_params - set(state.keys())
         unexpected_keys = set(state.keys()) - model.required_params
+
+        # Disabling warning when porting pytorch weights to flax, flax does not uses num_batches_tracked
+        for unexpected_key in unexpected_keys.copy():
+            if "num_batches_tracked" in unexpected_key[-1]:
+                unexpected_keys.remove(unexpected_key)
 
         if missing_keys and not _do_init:
             logger.warning(
