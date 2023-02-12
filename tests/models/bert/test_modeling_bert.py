@@ -445,15 +445,19 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     all_generative_model_classes = (BertLMHeadModel,) if is_torch_available() else ()
 
-    pipieline_model_mapping = {
-        "feature-extraction": BertModel,
-        "fill-mask": BertForMaskedLM,
-        "question-answering": BertForQuestionAnswering,
-        "text-classification": BertForSequenceClassification,
-        "text-generation": BertLMHeadModel,
-        "token-classification": BertForTokenClassification,
-        "zero-shot": BertForSequenceClassification,
-    }
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": BertModel,
+            "fill-mask": BertForMaskedLM,
+            "question-answering": BertForQuestionAnswering,
+            "text-classification": BertForSequenceClassification,
+            "text-generation": BertLMHeadModel,
+            "token-classification": BertForTokenClassification,
+            "zero-shot": BertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     fx_compatible = True
 

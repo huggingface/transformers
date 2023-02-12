@@ -608,15 +608,19 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
         else ()
     )
 
-    pipieline_model_mapping = {
-        "feature-extraction": TFBertModel,
-        "fill-mask": TFBertForMaskedLM,
-        "question-answering": TFBertForQuestionAnswering,
-        "text-classification": TFBertForSequenceClassification,
-        "text-generation": TFBertLMHeadModel,
-        "token-classification": TFBertForTokenClassification,
-        "zero-shot": TFBertForSequenceClassification,
-    }
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": TFBertModel,
+            "fill-mask": TFBertForMaskedLM,
+            "question-answering": TFBertForQuestionAnswering,
+            "text-classification": TFBertForSequenceClassification,
+            "text-generation": TFBertLMHeadModel,
+            "token-classification": TFBertForTokenClassification,
+            "zero-shot": TFBertForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
 
     test_head_masking = False
     test_onnx = True

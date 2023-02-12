@@ -193,10 +193,14 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
 
-    pipieline_model_mapping = {
-        "feature-extraction": ViTModel,
-        "image-classification": ViTForImageClassification,
-    }
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": ViTModel,
+            "image-classification": ViTForImageClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     fx_compatible = True
 
