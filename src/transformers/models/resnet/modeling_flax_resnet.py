@@ -395,7 +395,6 @@ class FlaxResNetStageCollection(nn.Module):
         self,
         hidden_state: jnp.ndarray,
         output_hidden_states: bool = False,
-        return_dict: bool = True,
         train: bool = False,
     ) -> FlaxBaseModelOutputWithNoAttention:
         hidden_states = () if output_hidden_states else None
@@ -423,9 +422,7 @@ class FlaxResNetEncoder(nn.Module):
         return_dict: bool = True,
         train: bool = False,
     ) -> FlaxBaseModelOutputWithNoAttention:
-        hidden_state, hidden_states = self.stages(
-            hidden_state, output_hidden_states=output_hidden_states, return_dict=return_dict, train=train
-        )
+        hidden_state, hidden_states = self.stages(hidden_state, output_hidden_states=output_hidden_states, train=train)
 
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state.transpose(0, 3, 1, 2),)
@@ -646,13 +643,10 @@ class FlaxResNetForImageClassificationModule(nn.Module):
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
-        pooled_output = pooled_output.flatten()
-
         if self.classifier is not None:
-            logits = self.classifier(pooled_output)
+            logits = self.classifier(pooled_output[:, :, 0, 0])
         else:
             logits = pooled_output
-        logits = logits.reshape(1, self.config.num_labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
