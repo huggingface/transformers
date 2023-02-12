@@ -24,9 +24,9 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
 
 
 if is_flax_available():
-
     import jax
     import jax.numpy as jnp
+
     from transformers.models.resnet.modeling_flax_resnet import FlaxResNetForImageClassification, FlaxResNetModel
 
 if is_vision_available():
@@ -51,7 +51,6 @@ class FlaxResNetModelTester(unittest.TestCase):
         num_labels=3,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
@@ -112,7 +111,6 @@ class FlaxResNetModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxResNetModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxResNetModel, FlaxResNetForImageClassification) if is_flax_available() else ()
 
     is_encoder_decoder = False

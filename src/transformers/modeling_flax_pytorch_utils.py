@@ -83,6 +83,16 @@ def rename_key_and_reshape_tensor(
     if pt_tuple_key[-1] in ["weight", "gamma"] and is_key_or_prefix_key_in_dict(renamed_pt_tuple_key):
         return renamed_pt_tuple_key, pt_tensor
 
+    # batch norm layer mean
+    renamed_pt_tuple_key = pt_tuple_key[:-1] + ("mean",)
+    if pt_tuple_key[-1] == "running_mean" and not is_key_or_prefix_key_in_dict(pt_tuple_key):
+        return renamed_pt_tuple_key, pt_tensor
+
+    # batch norm layer var
+    renamed_pt_tuple_key = pt_tuple_key[:-1] + ("var",)
+    if pt_tuple_key[-1] == "running_var" and not is_key_or_prefix_key_in_dict(pt_tuple_key):
+        return renamed_pt_tuple_key, pt_tensor
+
     # embedding
     renamed_pt_tuple_key = pt_tuple_key[:-1] + ("embedding",)
     if pt_tuple_key[-1] == "weight" and is_key_or_prefix_key_in_dict(renamed_pt_tuple_key):
@@ -122,12 +132,15 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # check if the model also contains batch norm layers
     if "params" in flax_model.params and "batch_stats" in flax_model.params:
         flax_model_params = flax_model.params["params"]
-        flax_state_dict = {"params": {}, "batch_stats": {}}
     else:
         flax_model_params = flax_model.params
-        flax_state_dict = {}
-
+    flax_state_dict = {}
     random_flax_state_dict = flatten_dict(flax_model_params)
+
+    # if model contains batch norm layers, add batch_stats keys,values to dict
+    if "params" in flax_model.params and "batch_stats" in flax_model.params:
+        random_flax_state_dict.update(flatten_dict(flax_model.params["batch_stats"]))
+
     load_model_with_head_into_base_model = (model_prefix not in flax_model_params) and (
         model_prefix in set([k.split(".")[0] for k in pt_state_dict.keys()])
     )
@@ -164,21 +177,22 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
         # add batch stats if the model contains batchnorm layers
         # TODO: Maybe we can improve add batch_stats stuff a little better
         if "params" in flax_model.params and "batch_stats" in flax_model.params:
-            if "running_mean" in flax_key[-1]:
+            if "mean" in flax_key[-1]:
                 flax_state_dict[("batch_stats",) + flax_key[:-1] + ("mean",)] = jnp.asarray(flax_tensor)
                 continue
-            if "running_var" in flax_key[-1]:
+            if "var" in flax_key[-1]:
                 flax_state_dict[("batch_stats",) + flax_key[:-1] + ("var",)] = jnp.asarray(flax_tensor)
                 continue
+            # not useful in flax but PyTorch requires this key for BatchNorm layers in later training
             if "num_batches_tracked" in flax_key[-1]:
-                flax_state_dict.pop("flax_key", None)
+                flax_state_dict.pop(flax_key, None)
+                # flax_state_dict[("batch_stats",) + flax_key[:-1] + ("num_batches_tracked",)] = jnp.asarray(flax_tensor)
                 continue
 
             # also add unexpected weight so that warning is thrown
             flax_state_dict[("params",) + flax_key] = jnp.asarray(flax_tensor)
 
         else:
-
             # also add unexpected weight so that warning is thrown
             flax_state_dict[flax_key] = jnp.asarray(flax_tensor)
 
@@ -329,6 +343,8 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
             flax_key_tuple = flax_key_tuple[:-1] + ("running_mean",)
         elif "var" in flax_key_tuple[-1]:
             flax_key_tuple = flax_key_tuple[:-1] + ("running_var",)
+        # elif "num_batches_tracked" in flax_key_tuple[-1]:
+        #     flax_key_tuple = flax_key_tuple[:-1] + ("num_batches_tracked",)
 
         if "params" in flax_state and "batch_stats" in flax_state:
             flax_key = ".".join(flax_key_tuple[1:])  # Remove the params/batch_stats header

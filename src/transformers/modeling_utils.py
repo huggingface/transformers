@@ -2730,6 +2730,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         missing_keys = list(set(expected_keys) - set(loaded_keys))
         unexpected_keys = list(set(loaded_keys) - set(expected_keys))
 
+        # for unexpected_key in unexpected_keys:
+        #     if "num_batches_tracked" in unexpected_key[-1]:
+        #         unexpected_keys.remove(unexpected_key)
+
         # Some models may have keys that are not in the state by design, removing them before needlessly warning
         # the user.
         if cls._keys_to_ignore_on_load_missing is not None:

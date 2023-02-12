@@ -122,7 +122,6 @@ class FlaxResNetEmbeddings(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-
         self.embedder = FlaxResNetConvLayer(
             self.config.num_channels,
             self.config.embedding_size,
@@ -179,14 +178,12 @@ class FlaxResNetBasicLayerCollection(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-
         self.layer = [
             FlaxResNetConvLayer(self.in_channels, self.out_channels, stride=self.stride, dtype=self.dtype),
             FlaxResNetConvLayer(self.out_channels, self.out_channels, activation=None, dtype=self.dtype),
         ]
 
     def __call__(self, hidden_state: jnp.ndarray, train: bool = False) -> jnp.ndarray:
-
         for layer in self.layer:
             hidden_state = layer(hidden_state, train=train)
         return hidden_state
@@ -252,7 +249,6 @@ class FlaxResNetBottleNeckLayerCollection(nn.Module):
         ]
 
     def __call__(self, hidden_state: jnp.ndarray, train: bool = False) -> jnp.ndarray:
-
         for layer in self.layer:
             hidden_state = layer(hidden_state, train=train)
         return hidden_state
@@ -316,7 +312,6 @@ class FlaxResNetStageLayersCollection(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-
         layer = FlaxResNetBottleNeckLayer if self.config.layer_type == "bottleneck" else FlaxResNetBasicLayer
 
         self.layers = [
@@ -462,7 +457,7 @@ class FlaxResNetPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if input_shape is None:
@@ -539,7 +534,6 @@ class FlaxResNetModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ) -> FlaxBaseModelOutputWithPoolingAndNoAttention:
-
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -609,7 +603,6 @@ append_replace_return_docstrings(
 
 
 class FlaxResNetClassifierCollection(nn.Module):
-
     config: ResNetConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -617,7 +610,6 @@ class FlaxResNetClassifierCollection(nn.Module):
         self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype, name="1")
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
-
         return self.classifier(x)
 
 
