@@ -46,6 +46,7 @@ if is_torch_available():
         UDOPUnimodelForConditionalGeneration,
     )
 
+
 class UDOPModelTester:
     def __init__(
         self,
@@ -521,7 +522,9 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (UDOPModel, UDOPUnimodelForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (UDOPUnimodelForConditionalGeneration,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (UDOPModel, UDOPUnimodelForConditionalGeneration) if is_torch_available() else ()
+    all_parallelizable_model_classes = (
+        (UDOPModel, UDOPUnimodelForConditionalGeneration) if is_torch_available() else ()
+    )
     fx_compatible = True
     test_pruning = False
     test_resize_embeddings = True
@@ -845,7 +848,9 @@ class T5ModelFp16Tests(unittest.TestCase):
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.bfloat16, device_map="auto")
+        model = UDOPUnimodelForConditionalGeneration.from_pretrained(
+            "t5-small", torch_dtype=torch.bfloat16, device_map="auto"
+        )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
@@ -864,7 +869,9 @@ class T5ModelFp16Tests(unittest.TestCase):
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
         # Load using `accelerate`
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.float16, device_map="auto")
+        model = UDOPUnimodelForConditionalGeneration.from_pretrained(
+            "t5-small", torch_dtype=torch.float16, device_map="auto"
+        )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
@@ -1301,7 +1308,9 @@ class T5ModelIntegrationTests(unittest.TestCase):
         )
         article = "summarize: " + article.strip()
         t5_tokenizer = AutoTokenizer.from_pretrained("flax-community/t5-base-cnn-dm")
-        t5_model = UDOPUnimodelForConditionalGeneration.from_pretrained("flax-community/t5-base-cnn-dm").to(torch_device)
+        t5_model = UDOPUnimodelForConditionalGeneration.from_pretrained("flax-community/t5-base-cnn-dm").to(
+            torch_device
+        )
         input_ids = t5_tokenizer(
             article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
         ).input_ids.to(torch_device)
