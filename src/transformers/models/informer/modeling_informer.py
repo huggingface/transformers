@@ -831,13 +831,16 @@ class ProbSparseAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, u, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, u, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, u, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, u, src_len)
+        # Original impl don't apply attention_mask to the input of the encoder, only for the decoder
+        # For the decoder, it creates a casual mask sliced with M_top
+        # if attention_mask is not None:
+        #     if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+        #         raise ValueError(
+        #             f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+        #         )
+        #
+        #     attn_weights = attn_weights.view(bsz, self.num_heads, u, src_len) + attention_mask
+        #     attn_weights = attn_weights.view(bsz * self.num_heads, u, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -870,7 +873,7 @@ class ProbSparseAttention(nn.Module):
         # Build final output
         # reimplemented from the original:
         # https://github.com/zhouhaoyi/Informer2020/blob/ac59c7447135473fb2aafeafe94395f884d5c7a5/models/attn.py#L70
-        if attention_mask is None:
+        if not self.is_decoder:
             v_aggregated = value_states.mean(dim=1)
             v_aggregated = v_aggregated.unsqueeze(dim=1).expand(bsz * self.num_heads, L_Q, v_aggregated.size(-1))
         else:
@@ -1590,26 +1593,6 @@ class InformerDecoder(InformerPreTrainedModel):
             )
 
         return combined_attention_mask
-
-    def _prepare_decoder_prob_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-            # create prob mask
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            combined_attention_mask = None
-            if input_shape[-1] > 1:
-                combined_attention_mask = _make_causal_mask( # TODO _make_prob_mask
-                    input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-                ).to(inputs_embeds.device)
-
-            if attention_mask is not None:
-                # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                    inputs_embeds.device
-                )
-                combined_attention_mask = (
-                    expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-                )
-
-            return combined_attention_mask
 
     def forward(
         self,
