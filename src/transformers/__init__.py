@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -183,6 +179,13 @@ _import_structure = {
         "BlipProcessor",
         "BlipTextConfig",
         "BlipVisionConfig",
+    ],
+    "models.blip_2": [
+        "BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Blip2Config",
+        "Blip2Processor",
+        "Blip2QFormerConfig",
+        "Blip2VisionConfig",
     ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
     "models.bort": [],
@@ -402,6 +405,7 @@ _import_structure = {
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
+        "Speech2TextProcessor",
     ],
     "models.speech_to_text_2": [
         "SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -414,6 +418,7 @@ _import_structure = {
         "SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP",
         "SpeechT5Config",
         "SpeechT5HifiGanConfig",
+        "SpeechT5Processor",
     ],
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
@@ -508,6 +513,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlm_roberta_xl": ["XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaXLConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
+    "models.xmod": ["XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP", "XmodConfig"],
     "models.yolos": ["YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP", "YolosConfig"],
     "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
     "onnx": [],
@@ -775,19 +781,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.gpt2"].append("TFGPT2Tokenizer")
-
-try:
-    if not (is_sentencepiece_available() and is_speech_available()):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_sentencepiece_and_speech_objects
-
-    _import_structure["utils.dummy_sentencepiece_and_speech_objects"] = [
-        name for name in dir(dummy_sentencepiece_and_speech_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
-    _import_structure["models.speecht5"].append("SpeechT5Processor")
 
 # Vision-specific objects
 try:
@@ -1171,6 +1164,15 @@ else:
             "BlipPreTrainedModel",
             "BlipTextModel",
             "BlipVisionModel",
+        ]
+    )
+    _import_structure["models.blip_2"].extend(
+        [
+            "BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Blip2ForConditionalGeneration",
+            "Blip2PreTrainedModel",
+            "Blip2QFormerModel",
+            "Blip2VisionModel",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -2583,6 +2585,19 @@ else:
             "load_tf_weights_in_xlnet",
         ]
     )
+    _import_structure["models.xmod"].extend(
+        [
+            "XMOD_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "XmodForCausalLM",
+            "XmodForMaskedLM",
+            "XmodForMultipleChoice",
+            "XmodForQuestionAnswering",
+            "XmodForSequenceClassification",
+            "XmodForTokenClassification",
+            "XmodModel",
+            "XmodPreTrainedModel",
+        ]
+    )
     _import_structure["models.yolos"].extend(
         [
             "YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2611,6 +2626,7 @@ else:
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
         "get_cosine_with_hard_restarts_schedule_with_warmup",
+        "get_inverse_sqrt_schedule",
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
@@ -3678,6 +3694,13 @@ if TYPE_CHECKING:
         BlipTextConfig,
         BlipVisionConfig,
     )
+    from .models.blip_2 import (
+        BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Blip2Config,
+        Blip2Processor,
+        Blip2QFormerConfig,
+        Blip2VisionConfig,
+    )
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
     from .models.bridgetower import (
         BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3881,7 +3904,11 @@ if TYPE_CHECKING:
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
-    from .models.speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
+    from .models.speech_to_text import (
+        SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Speech2TextConfig,
+        Speech2TextProcessor,
+    )
     from .models.speech_to_text_2 import (
         SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Speech2Text2Config,
@@ -3893,6 +3920,7 @@ if TYPE_CHECKING:
         SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP,
         SpeechT5Config,
         SpeechT5HifiGanConfig,
+        SpeechT5Processor,
     )
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
@@ -3971,6 +3999,7 @@ if TYPE_CHECKING:
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
     from .models.xlm_roberta_xl import XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaXLConfig
     from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+    from .models.xmod import XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP, XmodConfig
     from .models.yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
     from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
 
@@ -4209,15 +4238,6 @@ if TYPE_CHECKING:
         from .utils.dummy_keras_nlp_objects import *
     else:
         from .models.gpt2 import TFGPT2Tokenizer
-
-    try:
-        if not (is_speech_available() and is_sentencepiece_available()):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        from .utils.dummy_sentencepiece_and_speech_objects import *
-    else:
-        from .models.speech_to_text import Speech2TextProcessor
-        from .models.speecht5 import SpeechT5Processor
 
     try:
         if not is_vision_available():
@@ -4542,6 +4562,13 @@ if TYPE_CHECKING:
             BlipPreTrainedModel,
             BlipTextModel,
             BlipVisionModel,
+        )
+        from .models.blip_2 import (
+            BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Blip2ForConditionalGeneration,
+            Blip2PreTrainedModel,
+            Blip2QFormerModel,
+            Blip2VisionModel,
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5673,6 +5700,17 @@ if TYPE_CHECKING:
             XLNetPreTrainedModel,
             load_tf_weights_in_xlnet,
         )
+        from .models.xmod import (
+            XMOD_PRETRAINED_MODEL_ARCHIVE_LIST,
+            XmodForCausalLM,
+            XmodForMaskedLM,
+            XmodForMultipleChoice,
+            XmodForQuestionAnswering,
+            XmodForSequenceClassification,
+            XmodForTokenClassification,
+            XmodModel,
+            XmodPreTrainedModel,
+        )
         from .models.yolos import (
             YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST,
             YolosForObjectDetection,
@@ -5699,6 +5737,7 @@ if TYPE_CHECKING:
             get_constant_schedule_with_warmup,
             get_cosine_schedule_with_warmup,
             get_cosine_with_hard_restarts_schedule_with_warmup,
+            get_inverse_sqrt_schedule,
             get_linear_schedule_with_warmup,
             get_polynomial_decay_schedule_with_warmup,
             get_scheduler,
