@@ -128,7 +128,7 @@ class Pix2StructTextConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         is_decoder=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -274,7 +274,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
         d_kv=64,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -380,7 +380,7 @@ class Pix2StructConfig(PretrainedConfig):
         projection_dim=768,
         logit_scale_init_value=2.6592,
         image_text_hidden_size=256,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -416,6 +416,10 @@ class Pix2StructConfig(PretrainedConfig):
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
+
+        self.text_config.initializer_range = self.initializer_range
+        self.vision_config.initializer_range = self.initializer_range
+
         self.image_text_hidden_size = image_text_hidden_size
 
     @classmethod

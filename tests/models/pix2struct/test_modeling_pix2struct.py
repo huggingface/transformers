@@ -60,7 +60,7 @@ class Pix2StructVisionModelTester:
         is_training=True,
         hidden_size=12,
         projection_dim=32,
-        max_patches = 64,
+        max_patches=64,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -121,7 +121,10 @@ class Pix2StructVisionModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_embeds = config_and_inputs
-        inputs_dict = {"pixel_embeds": pixel_embeds, "attention_mask": torch.randint(0, 2, (self.batch_size, self.max_patches))}
+        inputs_dict = {
+            "pixel_embeds": pixel_embeds,
+            "attention_mask": torch.randint(0, 2, (self.batch_size, self.max_patches)),
+        }
         return config, inputs_dict
 
 
@@ -210,7 +213,7 @@ class Pix2StructTextModelTester:
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=12,
         projection_dim=32,
         num_hidden_layers=5,
         num_attention_heads=4,
@@ -353,23 +356,25 @@ class Pix2StructTextImageModelsModelTester:
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_embeds = self.vision_model_tester.prepare_config_and_inputs()
 
-        config = self.get_config()
+        config = self.get_config(text_config, vision_config)
 
         return config, input_ids, attention_mask, pixel_embeds
 
-    def get_config(self):
-        return Pix2StructConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
-        )
+    def get_config(self, text_config, vision_config):
+        return Pix2StructConfig.from_text_vision_configs(text_config, vision_config, projection_dim=64)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, pixel_embeds = config_and_inputs
+        config, input_ids, decoder_attention_mask, pixel_embeds = config_and_inputs
+
+        attention_mask = (pixel_embeds.sum(dim=-1) != 0).float()
+
         inputs_dict = {
-            "input_ids": input_ids,
+            "decoder_input_ids": input_ids,
             "labels": input_ids,
-            "attention_mask": attention_mask,
+            "decoder_attention_mask": decoder_attention_mask,
             "pixel_embeds": pixel_embeds,
+            "attention_mask": attention_mask,
         }
         return config, inputs_dict
 
@@ -388,8 +393,19 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = Pix2StructTextImageModelsModelTester(self)
 
     def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            output = model(**input_dict)
+            self.assertEqual(
+                output[0].shape,
+                (
+                    self.model_tester.vision_model_tester.batch_size,
+                    self.model_tester.text_model_tester.seq_length,
+                    self.model_tester.text_model_tester.vocab_size,
+                ),
+            )
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):

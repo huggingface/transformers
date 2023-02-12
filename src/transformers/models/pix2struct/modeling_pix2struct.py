@@ -204,8 +204,10 @@ class Pix2StructVisionAttention(nn.Module):
             if attention_mask is not None:
                 if attention_mask.dim() == 2:
                     position_bias = position_bias + attention_mask[:, None, :, None].to(position_bias.device)
-                else:  
-                    position_bias = position_bias + attention_mask.to(position_bias.device) # (batch_size, n_heads, seq_length, key_length)
+                else:
+                    position_bias = position_bias + attention_mask.to(
+                        position_bias.device
+                    )  # (batch_size, n_heads, seq_length, key_length)
 
         position_bias_masked = position_bias
         if position_bias_masked is not None:
@@ -363,21 +365,104 @@ class Pix2StructVisionEncoder(nn.Module):
         )
 
 
-class Pix2StructVisionPreTrainedModel(PreTrainedModel):
+# class Pix2StructVisionPreTrainedModel(PreTrainedModel):
+#     """
+#     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+#     models.
+#     """
+
+#     config_class = Pix2StructConfig
+#     base_model_prefix = "pix2struct_encoder"
+#     main_input_name = "pixel_embeds"
+#     supports_gradient_checkpointing = True
+#     _no_split_modules = ["Pix2StructVisionLayer"]
+
+#     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, Pix2StructLayerNorm]) -> None:
+#         """Initialize the weights"""
+#         if isinstance(module, (nn.Linear, nn.Conv2d)):
+#             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
+#             # `trunc_normal_cpu` not implemented in `half` issues
+#             module.weight.data = nn.init.trunc_normal_(
+#                 module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
+#             ).to(module.weight.dtype)
+#             if module.bias is not None:
+#                 module.bias.data.zero_()
+#         elif isinstance(module, Pix2StructLayerNorm):
+#             if module.weight is not None:
+#                 module.weight.data.fill_(1.0)
+#         elif isinstance(module, nn.Embedding):
+#             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+#             if module.padding_idx is not None:
+#                 module.weight.data[module.padding_idx].zero_()
+
+#     def _set_gradient_checkpointing(self, module: Pix2StructVisionEncoder, value: bool = False) -> None:
+#         if isinstance(module, Pix2StructVisionEncoder):
+#             module.gradient_checkpointing = value
+
+
+class Pix2StructPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
     config_class = Pix2StructConfig
-    base_model_prefix = "pix2struct_encoder"
-    main_input_name = "pixel_embeds"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Pix2StructVisionLayer"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, Pix2StructLayerNorm]) -> None:
+    @property
+    def dummy_inputs(self):
+        input_ids = torch.tensor(DUMMY_INPUTS)
+        input_mask = torch.tensor(DUMMY_MASK)
+        dummy_inputs = {
+            "decoder_input_ids": input_ids,
+            "input_ids": input_ids,
+            "decoder_attention_mask": input_mask,
+        }
+        return dummy_inputs
+
+    def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        factor = self.config.initializer_factor  # Used for testing weights initialization
+        if isinstance(module, Pix2StructLayerNorm):
+            module.weight.data.fill_(factor * 1.0)
+        elif isinstance(module, Pix2StructTextDenseActDense):
+            # Mesh TensorFlow FF initialization
+            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
+            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
+            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
+            if hasattr(module.wi, "bias") and module.wi.bias is not None:
+                module.wi.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                module.wo.bias.data.zero_()
+        elif isinstance(module, Pix2StructTextDenseGatedActDense):
+            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
+            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
+                module.wi_0.bias.data.zero_()
+            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
+            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
+                module.wi_1.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                module.wo.bias.data.zero_()
+        elif isinstance(module, Pix2StructTextAttention):
+            # Mesh TensorFlow attention initialization to avoid scaling before softmax
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
+            hidden_size = self.config.hidden_size
+            key_value_proj_dim = self.config.d_kv
+            n_heads = self.config.num_heads
+            module.query.weight.data.normal_(mean=0.0, std=factor * ((hidden_size * key_value_proj_dim) ** -0.5))
+            module.key.weight.data.normal_(mean=0.0, std=factor * (hidden_size**-0.5))
+            module.value.weight.data.normal_(mean=0.0, std=factor * (hidden_size**-0.5))
+            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            if module.has_relative_attention_bias:
+                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((hidden_size) ** -0.5))
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, Pix2StructTextModel):
+            module.lm_head.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.data = nn.init.trunc_normal_(
@@ -393,9 +478,30 @@ class Pix2StructVisionPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module: Pix2StructVisionEncoder, value: bool = False) -> None:
-        if isinstance(module, Pix2StructVisionEncoder):
-            module.gradient_checkpointing = value
+    def _shift_right(self, input_ids):
+        decoder_start_token_id = self.config.decoder_start_token_id
+        pad_token_id = self.config.pad_token_id
+
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In Pix2StructText it is usually set to the"
+            " pad_token_id. See Pix2StructText docs for more information"
+        )
+
+        # shift inputs to the right
+        if is_torch_fx_proxy(input_ids):
+            # Item assignment is not supported natively for proxies.
+            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
+            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
+        else:
+            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+            shifted_input_ids[..., 0] = decoder_start_token_id
+
+        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        # replace possible -100 values in labels by `pad_token_id`
+        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+        return shifted_input_ids
 
 
 VIT_START_DOCSTRING = r"""
@@ -436,7 +542,13 @@ VIT_INPUTS_DOCSTRING = r"""
     "The bare Pix2StructVision Model transformer outputting raw hidden-states without any specific head on top.",
     VIT_START_DOCSTRING,
 )
-class Pix2StructVisionModel(Pix2StructVisionPreTrainedModel):
+class Pix2StructVisionModel(Pix2StructPreTrainedModel):
+    config_class = Pix2StructVisionConfig
+    base_model_prefix = "pix2struct_encoder"
+    main_input_name = "pixel_embeds"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Pix2StructVisionLayer"]
+
     def __init__(self, config: Pix2StructConfig):
         super().__init__(config)
         self.config = config
@@ -448,6 +560,10 @@ class Pix2StructVisionModel(Pix2StructVisionPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def _set_gradient_checkpointing(self, module: Pix2StructVisionEncoder, value: bool = False) -> None:
+        if isinstance(module, Pix2StructVisionEncoder):
+            module.gradient_checkpointing = value
 
     def get_input_embeddings(self):
         return self.embeddings.patch_projection
@@ -515,7 +631,7 @@ class Pix2StructVisionModel(Pix2StructVisionPreTrainedModel):
         sequence_output = self.layernorm(sequence_output)
 
         if not return_dict:
-            head_outputs = (sequence_output, )
+            head_outputs = (sequence_output,)
             return head_outputs + encoder_outputs[1:]
 
         return BaseModelOutput(
@@ -987,103 +1103,16 @@ class Pix2StructTextBlock(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
-class Pix2StructTextPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
+class Pix2StructTextModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructTextConfig
     base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
     _no_split_modules = ["Pix2StructTextBlock"]
-
-    @property
-    def dummy_inputs(self):
-        input_ids = torch.tensor(DUMMY_INPUTS)
-        input_mask = torch.tensor(DUMMY_MASK)
-        dummy_inputs = {
-            "decoder_input_ids": input_ids,
-            "input_ids": input_ids,
-            "decoder_attention_mask": input_mask,
-        }
-        return dummy_inputs
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, Pix2StructLayerNorm):
-            module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, Pix2StructTextDenseActDense):
-            # Mesh TensorFlow FF initialization
-            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
-            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
-            if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
-        elif isinstance(module, Pix2StructTextDenseGatedActDense):
-            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
-            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.data.zero_()
-            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
-            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
-        elif isinstance(module, Pix2StructTextAttention):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
-            hidden_size = self.config.hidden_size
-            key_value_proj_dim = self.config.d_kv
-            n_heads = self.config.num_heads
-            module.query.weight.data.normal_(mean=0.0, std=factor * ((hidden_size * key_value_proj_dim) ** -0.5))
-            module.key.weight.data.normal_(mean=0.0, std=factor * (hidden_size**-0.5))
-            module.value.weight.data.normal_(mean=0.0, std=factor * (hidden_size**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-            if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((hidden_size) ** -0.5))
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, Pix2StructTextModel):
-            module.lm_head.weight.data.normal_(mean=0.0, std=factor * ((self.config.hidden_size) ** -0.5))
+    supports_gradient_checkpointing = True
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (Pix2StructTextAttention, Pix2StructTextModel)):
             module.gradient_checkpointing = value
 
-    def _shift_right(self, input_ids):
-        decoder_start_token_id = self.config.decoder_start_token_id
-        pad_token_id = self.config.pad_token_id
-
-        assert decoder_start_token_id is not None, (
-            "self.model.config.decoder_start_token_id has to be defined. In Pix2StructText it is usually set to the"
-            " pad_token_id. See Pix2StructText docs for more information"
-        )
-
-        # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-            shifted_input_ids[..., 0] = decoder_start_token_id
-
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-        return shifted_input_ids
-
-
-class Pix2StructTextModel(Pix2StructTextPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
@@ -1284,9 +1313,9 @@ class Pix2StructTextModel(Pix2StructTextPreTrainedModel):
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[3],)
+                all_attentions = all_attentions + (layer_outputs[2],)
                 if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[4],)
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[3],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1495,13 +1524,17 @@ Pix2StructText_ENCODER_INPUTS_DOCSTRING = r"""
 """
 
 
-class Pix2StructPreTrainedModel(PreTrainedModel):
-    config_class = Pix2StructConfig
-    base_model_prefix = "pix2struct"
+# class Pix2StructPreTrainedModel(PreTrainedModel):
+#     config_class = Pix2StructConfig
+#     base_model_prefix = "pix2struct"
+#     main_input_name = "pixel_embeds"
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        pass
+#     def _init_weights(self, module):
+#         """Initialize the weights"""
+#         if isinstance(module, Pix2StructVisionModel):
+#             module.init_weights()
+#         elif isinstance(module, Pix2StructTextModel):
+#             module.init_weights()
 
 
 # Warning message for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
@@ -1518,6 +1551,10 @@ num_heads)`.
     Pix2StructText_START_DOCSTRING,
 )
 class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
+    config_class = Pix2StructConfig
+    base_model_prefix = "pix2struct"
+    main_input_name = "pixel_embeds"
+
     _keys_to_ignore_on_load_missing = [
         r"encoder.embed_tokens.weight",
         r"decoder.embed_tokens.weight",
