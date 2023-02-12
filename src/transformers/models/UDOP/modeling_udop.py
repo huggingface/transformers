@@ -248,7 +248,6 @@ DEPARALLELIZE_DOCSTRING = r"""
 AUGMENTATION_RANGE = (0.80, 1.25)
 
 
-
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 
@@ -260,18 +259,20 @@ AUGMENTATION_RANGE = (0.80, 1.25)
 # DeiT: https://github.com/facebookresearch/deit
 # --------------------------------------------------------
 
+
 def _ntuple(n):
     def parse(x):
         if isinstance(x, collections.abc.Iterable):
             return x
         return tuple(repeat(x, n))
+
     return parse
 
 
 to_2tuple = _ntuple(2)
 
 
-def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: bool = True):
+def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
     This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
@@ -281,7 +282,7 @@ def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: b
     'survival rate' as the argument.
 
     """
-    if drop_prob == 0. or not training:
+    if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
     shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
@@ -339,9 +340,9 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
 
 
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
-    """
-    def __init__(self, drop_prob: float = 0., scale_by_keep: bool = True):
+    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: float = 0.0, scale_by_keep: bool = True):
         super(DropPath, self).__init__()
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
@@ -350,12 +351,12 @@ class DropPath(nn.Module):
         return drop_path(x, self.drop_prob, self.training, self.scale_by_keep)
 
     def extra_repr(self):
-        return f'drop_prob={round(self.drop_prob,3):0.3f}'
+        return f"drop_prob={round(self.drop_prob,3):0.3f}"
 
 
 class PatchEmbed(nn.Module):
-    """ 2D Image to Patch Embedding
-    """
+    """2D Image to Patch Embedding"""
+
     def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, norm_layer=None, flatten=True):
         super().__init__()
         img_size = to_2tuple(img_size)
@@ -706,7 +707,6 @@ mae_vit_large_patch16 = mae_vit_large_patch16_dec512d8b  # decoder: 512 dim, 8 b
 mae_vit_huge_patch14 = mae_vit_huge_patch14_dec512d8b  # decoder: 512 dim, 8 blocks
 
 
-
 def mae_model(name, pretrained_weights, image_size, vocab_size, max_2d_position_embeddings, **kwargs):
     mae_models = {
         "mae_vit_base_patch16": mae_vit_base_patch16,
@@ -721,6 +721,7 @@ def mae_model(name, pretrained_weights, image_size, vocab_size, max_2d_position_
         image_size=image_size, vocab_size=vocab_size, max_2d_position_embeddings=max_2d_position_embeddings
     )
     return model
+
 
 def get_relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
     """
