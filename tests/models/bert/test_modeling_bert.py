@@ -458,6 +458,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else {}
     )
+    PipelineTesterMixin.disable_irrelevant_tests()
 
     fx_compatible = True
 

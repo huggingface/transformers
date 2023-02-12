@@ -16,6 +16,7 @@
 
 import copy
 import importlib
+import inspect
 import json
 import os
 import random
@@ -70,6 +71,40 @@ class PipelineTesterMixin:
     pipieline_model_mapping = None
     supported_frameworks = ["pt", "tf"]
 
+    @staticmethod
+    def disable_irrelevant_tests():
+        """Remove an irrelevant pipeline test (to a model test class) from the test methods
+
+        This is done in a **black magic** way: During the explicit model test class declaration (e.g. `BertModelTest`),
+        this method gets the local namespace dictionary seen by the frame `frame_local` at the class declaration moment,
+        and modify the mapping dictionary frame_local["pipieline_model_mapping"]` by setting its values to `None` for
+        some test method names.
+
+        This method could only be called in a model test class body, outside any method, and after the attribute
+        `pipieline_model_mapping` is defined.
+
+        The advantage of this hack is:
+            - we no longer need any skip statement for a pipeline test that is irrelevant to a model test class:
+                - only the tests that are meant to be tested will be collected as tests to run
+            - the test report won't contain such **skipped** tests (as they are not test methods anymore):
+                - we should, and we only need, rely on the explicit mappings `pipieline_model_mapping`.
+                - if we use skip statements, the report won't contain the test class names for these skipped tests, and
+                  we don't get any useful information from the report. It's therefore better to make the report easy to
+                  read instead of full of such usefulness lines.
+        """
+        # Get the frame in the caller, which should be in a model test class body outside any method
+        frame = inspect.currentframe().f_back
+        frame_locals = frame.f_locals
+        if "__qualname__" not in frame_locals or not frame_locals["__qualname__"].endswith("ModelTest"):
+            raise ValueError(
+                f"This method is called in a place that is not in a model test class body: {frame.f_code.co_filename}::{frame.f_lineno}"
+            )
+        for task in pipeline_test_mapping.keys():
+            _task = task.replace("-", "_")
+            test_name = f"test_pipeline_{_task}"
+            if task not in frame_locals["pipieline_model_mapping"]:
+                frame_locals[test_name] = None
+
     def run_task_tests(self, task):
         """Run pipeline tests for a specific `task`
 
@@ -77,9 +112,6 @@ class PipelineTesterMixin:
             task (`str`):
                 A task name. This should be a key in the mapping `pipeline_test_mapping`.
         """
-        if task not in self.pipieline_model_mapping:
-            self.skipTest(f"Test is skipped: task `{task}` is not in `self.pipieline_model_mapping`.")
-
         model_architectures = self.pipieline_model_mapping[task]
         if issubclass(model_architectures, (PreTrainedModel, TFPreTrainedModel)):
             model_architectures = (model_architectures,)
