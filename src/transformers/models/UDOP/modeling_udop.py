@@ -8,8 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
-import torch
-from torch import Tensor, nn
+from torch import Tensor
 
 from transformers import PreTrainedModel, add_start_docstrings
 from transformers.activations import ACT2FN
