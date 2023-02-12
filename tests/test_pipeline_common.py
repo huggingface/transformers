@@ -61,6 +61,9 @@ class PipelineTesterMixin:
             task (`str`):
                 A task name. This should be a key in the mapping `pipeline_test_mapping`.
         """
+        if task not in self.pipieline_model_mapping:
+            self.skipTest(f"Test is skipped: task `{task}` is not in `self.pipieline_model_mapping`.")
+
         model_architectures = self.pipieline_model_mapping[task]
         if issubclass(model_architectures, (PreTrainedModel, TFPreTrainedModel)):
             model_architectures = (model_architectures,)
@@ -184,19 +187,16 @@ class PipelineTesterMixin:
         run_batch_test(pipeline, examples)
 
     def test_pipeline_feature_extraction(self):
-        if "feature-extraction" in self.pipieline_model_mapping:
-            self.run_task_tests(task="feature-extraction")
+        self.run_task_tests(task="feature-extraction")
 
     def test_pipeline_audio_classification(self):
         self.run_task_tests(task="audio-classification")
 
     def test_pipeline_fill_mask(self):
-        if "fill-mask" in self.pipieline_model_mapping:
-            self.run_task_tests(task="fill-mask")
+        self.run_task_tests(task="fill-mask")
 
     def test_pipeline_image_classification(self):
-        if "image-classification" in self.pipieline_model_mapping:
-            self.run_task_tests(task="image-classification")
+        self.run_task_tests(task="image-classification")
 
     def test_pipeline_text_classification(self):
         self.run_task_tests(task="text-classification")
