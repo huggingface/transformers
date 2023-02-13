@@ -123,6 +123,7 @@ _deps = [
     "jax>=0.2.8,!=0.3.2,<=0.3.6",
     "jaxlib>=0.1.65,<=0.3.6",
     "jieba",
+    "kenlm",
     "keras-nlp>=0.3.1",
     "nltk",
     "natten>=0.14.4",
@@ -158,9 +159,9 @@ _deps = [
     "sigopt",
     "librosa",
     "starlette",
-    # "tensorflow-cpu>=2.4,<2.12",
-    # "tensorflow>=2.4,<2.12",
-    # "tensorflow-text",
+    "tensorflow-cpu>=2.4,<2.12",
+    "tensorflow>=2.4,<2.12",
+    "tensorflow-text",
     "tf2onnx",
     "timeout-decorator",
     "timm",
@@ -175,7 +176,7 @@ _deps = [
     "uvicorn",
     "beautifulsoup4",
     "sudachipy>=0.6.6",
-    # "sudachidict_core>=20220729",
+    "sudachidict_core>=20220729",
     "rhoknp>=1.1.0",
 ]
 
@@ -245,11 +246,11 @@ class DepsTableUpdateCommand(Command):
 
 extras = {}
 
-extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "rhoknp")
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tf2onnx")
-extras["tf-cpu"] = deps_list("tf2onnx")
+extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text", "keras-nlp")
 
 extras["torch"] = deps_list("torch")
 extras["accelerate"] = deps_list("accelerate")
@@ -277,7 +278,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer")
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "kenlm")
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
@@ -362,19 +363,19 @@ extras["dev-torch"] = (
     + extras["modelcreation"]
     + extras["onnxruntime"]
 )
-# extras["dev-tensorflow"] = (
-#     extras["testing"]
-#     + extras["tf"]
-#     + extras["sentencepiece"]
-#     + extras["tokenizers"]
-#     + extras["vision"]
-#     + extras["quality"]
-#     + extras["docs_specific"]
-#     + extras["sklearn"]
-#     + extras["modelcreation"]
-#     + extras["onnx"]
-#     + extras["tf-speech"]
-# )
+extras["dev-tensorflow"] = (
+    extras["testing"]
+    + extras["tf"]
+    + extras["sentencepiece"]
+    + extras["tokenizers"]
+    + extras["vision"]
+    + extras["quality"]
+    + extras["docs_specific"]
+    + extras["sklearn"]
+    + extras["modelcreation"]
+    + extras["onnx"]
+    + extras["tf-speech"]
+)
 extras["dev"] = (
     extras["all"]
     + extras["testing"]
