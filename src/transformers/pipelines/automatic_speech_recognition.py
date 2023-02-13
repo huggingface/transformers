@@ -63,7 +63,8 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
         if dtype is not None:
             processed = processed.to(dtype=dtype)
         _stride_left = 0 if chunk_start_idx == 0 else stride_left
-        is_last = chunk_end_idx >= inputs_len
+        # all right strides must be full, otherwise it is the last item
+        is_last = chunk_end_idx > inputs_len if stride_right > 0 else chunk_end_idx >= inputs_len
         _stride_right = 0 if is_last else stride_right
 
         chunk_len = chunk.shape[0]
