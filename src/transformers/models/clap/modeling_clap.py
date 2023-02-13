@@ -61,7 +61,7 @@ def do_mixup(hidden_states, mixup_lambda):
     because the decision boundary becomes smooth.
 
     Args:
-        hidden_states (`torch.FloatTensor` of shape (batch_size, seq_length, hidden_size)) :
+        hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_length, hidden_size)`):
             Input hidden states
         mixup_lambda (`torch.FloatTensor`):
             Mixing ratio sampled from the Beta distribution
@@ -913,7 +913,7 @@ class ClapAudioEncoder(nn.Module):
         self.num_features = int(config.hidden_size * 2 ** (self.num_layers - 1))
         self.freq_ratio = config.spec_size // config.num_mel_bins
 
-        drop_path = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
 
         self.input_resolutions = [(grid_size[0] // (2**i), grid_size[1] // (2**i)) for i in range(self.num_layers)]
 
@@ -921,14 +921,14 @@ class ClapAudioEncoder(nn.Module):
             [
                 ClapAudioStage(
                     config=config,
-                    dim=int(config.hidden_size * 2**layer),
-                    input_resolution=self.input_resolutions[layer],
-                    depth=config.depths[layer],
-                    num_heads=config.num_attention_heads[layer],
-                    drop_path=drop_path,
-                    downsample=ClapAudioPatchMerging if (layer < self.num_layers - 1) else None,
+                    dim=int(config.hidden_size * 2**i_layer),
+                    input_resolution=self.input_resolutions[i_layer],
+                    depth=config.depths[i_layer],
+                    num_heads=config.num_attention_heads[i_layer],
+                    drop_path=drop_path_rate[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                    downsample=ClapAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
                 )
-                for layer in range(self.num_layers)
+                for i_layer in range(self.num_layers)
             ]
         )
 
