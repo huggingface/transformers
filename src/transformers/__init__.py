@@ -211,7 +211,6 @@ _import_structure = {
         "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ClapAudioConfig",
         "ClapConfig",
-        "ClapFeatureExtractor",
         "ClapProcessor",
         "ClapTextConfig",
     ],
@@ -1233,6 +1232,7 @@ else:
     _import_structure["models.clap"].extend(
         [
             "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ClapFeatureExtractor",
             "ClapAudioModel",
             "ClapAudioModelWithProjection",
             "ClapModel",
@@ -3710,7 +3710,6 @@ if TYPE_CHECKING:
         CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
         ClapAudioConfig,
         ClapConfig,
-        ClapFeatureExtractor,
         ClapProcessor,
         ClapTextConfig,
     )
@@ -4603,6 +4602,7 @@ if TYPE_CHECKING:
         )
         from .models.clap import (
             CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClapFeatureExtractor,
             ClapAudioModel,
             ClapAudioModelWithProjection,
             ClapModel,

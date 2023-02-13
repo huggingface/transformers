@@ -20,10 +20,10 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
-from ...audio_utils import _fram_wave, _power_to_db, _stft, get_mel_filter_banks
+import torch
+from ...audio_utils import fram_wave, power_to_db, stft, get_mel_filter_banks
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...image_transforms import np_bilinear_resize  # TODO this has to be removed
 from ...utils import TensorType, logging
 
 
@@ -65,7 +65,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             The highest frequency of interest. The STFT will not be computed for values above this.
         top_db (`float`, *optional*):
             The highest decibel value used to convert the mel spectrogram to the log scale. For more details see the
-            `SequenceFeatureExtractor._power_to_db` function
+            `audio_utils.power_to_db` function
         truncation (`str`, *optional*, default to `"fusions"`):
             Truncation pattern for long audio inputs. Two patterns are available:
                 - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and a
@@ -162,14 +162,14 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
               implementation when the truncation mode is not `"fusion"`.
         """
         window = np.hanning(self.n_fft + 1)[:-1]
-        frames = _fram_wave(waveform, self.hop_length, self.n_fft)
-        stft = _stft(frames, window=window, fft_size=self.n_fft)
+        frames = fram_wave(waveform, self.hop_length, self.n_fft)
+        spectrogram = stft(frames, window=window, fft_size=self.n_fft)
 
-        magnitudes = np.abs(stft) ** 2
-        mel_spec = np.matmul(mel_filters.T, magnitudes)
-        log_mel_spec = _power_to_db(mel_spec).T
-        log_mel_spec = np.asarray(log_mel_spec, np.float32)
-        return log_mel_spec
+        magnitudes = np.abs(spectrogram) ** 2
+        mel_spectrogram = np.matmul(mel_filters.T, magnitudes)
+        log_mel_spectrogram = power_to_db(mel_spectrogram).T
+        log_mel_spectrogram = np.asarray(log_mel_spectrogram, np.float32)
+        return log_mel_spectrogram
 
     def _random_mel_fusion(self, mel, total_frames, chunk_frames):
         ranges = np.array_split(list(range(0, total_frames - chunk_frames + 1)), 3)
@@ -188,7 +188,9 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         mel_chunk_middle = mel[idx_middle : idx_middle + chunk_frames, :]
         mel_chunk_back = mel[idx_back : idx_back + chunk_frames, :]
 
-        mel_shrink = np_bilinear_resize(mel, chunk_frames, self.feature_size)
+        mel = torch.tensor(mel[None, None, :])
+        mel_shrink = torch.nn.functional.interpolate(mel, size=[chunk_frames, 64], mode = "bilinear", align_corners = False, antialias = False)
+        mel_shrink = mel_shrink[0][0].numpy()
         mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], axis=0)
         return mel_fusion
 

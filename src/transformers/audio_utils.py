@@ -213,7 +213,7 @@ def get_mel_filter_banks(
     return filterbank
 
 
-def _stft(frames: np.array, window: np.array, fft_size: int = None):
+def stft(frames: np.array, window: np.array, fft_size: int = None):
     """
     Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
     as `torch.stft`. #TODO @Arthur batching this could allow more usage, good first issue.
@@ -253,7 +253,7 @@ def _stft(frames: np.array, window: np.array, fft_size: int = None):
     return data.T
 
 
-def _power_to_db(mel_spectrogram, top_db=None, a_min=1e-10, ref=1.0):
+def power_to_db(mel_spectrogram, top_db=None, a_min=1e-10, ref=1.0):
     """
     Convert a mel spectrogram from power to db scale, this function is the numpy implementation of librosa.power_to_lb.
 
@@ -283,7 +283,7 @@ def _power_to_db(mel_spectrogram, top_db=None, a_min=1e-10, ref=1.0):
     return log_spec
 
 
-def _fram_wave(waveform: np.array, hop_length: int = 160, n_fft: int = 400, center: bool = True):
+def fram_wave(waveform: np.array, hop_length: int = 160, n_fft: int = 400, center: bool = True):
     """
     In order to compute the short time fourier transform, the waveform needs to be split in overlapping windowed
     segments called `frames`.

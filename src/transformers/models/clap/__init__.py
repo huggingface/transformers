@@ -23,7 +23,6 @@ _import_structure = {
         "ClapConfig",
         "ClapTextConfig",
     ],
-    "feature_extraction_clap": ["ClapFeatureExtractor"],
     "processing_clap": ["ClapProcessor"],
     "tokenization_clap": ["ClapTokenizer"],
 }
@@ -43,6 +42,7 @@ else:
         "ClapAudioModel",
         "ClapAudioModelWithProjection",
     ]
+    _import_structure["feature_extraction_clap"] = ["ClapFeatureExtractor"]
 
 if TYPE_CHECKING:
     from .configuration_clap import (
@@ -51,9 +51,7 @@ if TYPE_CHECKING:
         ClapConfig,
         ClapTextConfig,
     )
-    from .feature_extraction_clap import ClapFeatureExtractor
     from .processing_clap import ClapProcessor
-    from .tokenization_clap import ClapTokenizer
 
     try:
         if not is_torch_available():
@@ -70,6 +68,8 @@ if TYPE_CHECKING:
             ClapTextModel,
             ClapTextModelWithProjection,
         )
+        from .feature_extraction_clap import ClapFeatureExtractor
+        
 
 else:
     import sys
