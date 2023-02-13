@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .feature_extraction_clap import ClapFeatureExtractor
         from .modeling_clap import (
             CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
             ClapAudioModel,
@@ -68,8 +69,7 @@ if TYPE_CHECKING:
             ClapTextModel,
             ClapTextModelWithProjection,
         )
-        from .feature_extraction_clap import ClapFeatureExtractor
-        
+
 
 else:
     import sys

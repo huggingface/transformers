@@ -19,9 +19,9 @@ import copy
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
-
 import torch
-from ...audio_utils import fram_wave, power_to_db, stft, get_mel_filter_banks
+
+from ...audio_utils import fram_wave, get_mel_filter_banks, power_to_db, stft
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -189,7 +189,9 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         mel_chunk_back = mel[idx_back : idx_back + chunk_frames, :]
 
         mel = torch.tensor(mel[None, None, :])
-        mel_shrink = torch.nn.functional.interpolate(mel, size=[chunk_frames, 64], mode = "bilinear", align_corners = False, antialias = False)
+        mel_shrink = torch.nn.functional.interpolate(
+            mel, size=[chunk_frames, 64], mode="bilinear", align_corners=False, antialias=False
+        )
         mel_shrink = mel_shrink[0][0].numpy()
         mel_fusion = np.stack([mel_chunk_front, mel_chunk_middle, mel_chunk_back, mel_shrink], axis=0)
         return mel_fusion
