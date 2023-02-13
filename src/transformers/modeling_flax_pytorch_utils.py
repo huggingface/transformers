@@ -138,7 +138,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     else:
         flax_model_params = flax_model.params
         random_flax_state_dict = flatten_dict(flax_model_params)
-            
+
     flax_state_dict = {}
 
     load_model_with_head_into_base_model = (model_prefix not in flax_model_params) and (
@@ -217,13 +217,12 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
         # use params dict if the model contains batch norm layers and then add batch_stats keys,values to dict
         if "params" in flax_model.params and "batch_stats" in flax_model.params:
             flax_model_params = flax_model.params["params"]
-            
+
             random_flax_state_dict = flatten_dict(flax_model_params)
             random_flax_state_dict.update(flatten_dict(flax_model.params["batch_stats"]))
         else:
             flax_model_params = flax_model.params
             random_flax_state_dict = flatten_dict(flax_model_params)
-
 
         load_model_with_head_into_base_model = (model_prefix not in flax_model_params) and (
             model_prefix in set([k.split(".")[0] for k in pt_state_dict.keys()])
