@@ -321,6 +321,20 @@ class TFHubertModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFHubertModel.from_pretrained("facebook/hubert-base-ls960")
         self.assertIsNotNone(model)
 
+    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
+    def test_dataset_conversion(self):
+        default_batch_size = self.model_tester.batch_size
+        self.model_tester.batch_size = 2
+        super().test_dataset_conversion()
+        self.model_tester.batch_size = default_batch_size
+
+    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
+    def test_keras_fit(self):
+        default_batch_size = self.model_tester.batch_size
+        self.model_tester.batch_size = 2
+        super().test_keras_fit()
+        self.model_tester.batch_size = default_batch_size
+
 
 @require_tf
 class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
@@ -431,19 +445,17 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @slow
+    def test_model_from_pretrained(self):
+        model = TFHubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
+        self.assertIsNotNone(model)
+
     # We override here as passing a full batch of 13 samples results in OOM errors for CTC
-    # TODO: fix me
-    @unittest.skip(reason="Crashing on CI, temporarily skipped")
     def test_dataset_conversion(self):
         default_batch_size = self.model_tester.batch_size
         self.model_tester.batch_size = 2
         super().test_dataset_conversion()
         self.model_tester.batch_size = default_batch_size
-
-    @slow
-    def test_model_from_pretrained(self):
-        model = TFHubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
-        self.assertIsNotNone(model)
 
     # We override here as passing a full batch of 13 samples results in OOM errors for CTC
     def test_keras_fit(self):
