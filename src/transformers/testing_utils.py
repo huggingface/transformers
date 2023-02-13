@@ -1742,6 +1742,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=600):
         timeout (`int`, *optional*, defaults to 600):
             The timeout (in seconds) that will be passed to the input and output queues.
     """
+    timeout = int(os.environ.get("PYTEST_TIMEOUT", timeout))
 
     start_methohd = "spawn"
     ctx = multiprocessing.get_context(start_methohd)
