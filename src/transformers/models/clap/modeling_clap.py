@@ -1174,7 +1174,7 @@ Clap_TEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-Clap_AUDIO_INPUTS_DOCSTRING = r"""
+CLAP_AUDIO_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Input audio features. This should be returnes by the [`ClapFeatureExtractor`] class that you can also
@@ -1192,7 +1192,7 @@ Clap_AUDIO_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-Clap_INPUTS_DOCSTRING = r"""
+CLAP_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -1888,7 +1888,7 @@ class ClapAudioModel(ClapPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_encoder.patch_embed.proj
 
-    @add_start_docstrings_to_model_forward(Clap_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ClapAudioConfig)
     def forward(
         self,
@@ -2190,7 +2190,7 @@ class ClapModel(ClapPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(Clap_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
     def get_audio_features(
         self,
         input_features: Optional[torch.Tensor] = None,
@@ -2220,7 +2220,7 @@ class ClapModel(ClapPreTrainedModel):
 
         return audio_features
 
-    @add_start_docstrings_to_model_forward(Clap_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLAP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ClapOutput, config_class=ClapConfig)
     def forward(
         self,
@@ -2414,7 +2414,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_model.audio_encoder.patch_embed.proj
 
-    @add_start_docstrings_to_model_forward(Clap_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ClapAudioModelOutput, config_class=ClapAudioConfig)
     def forward(
         self,
