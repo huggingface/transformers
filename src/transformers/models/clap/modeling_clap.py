@@ -61,7 +61,7 @@ def do_mixup(hidden_states, mixup_lambda):
     because the decision boundary becomes smooth.
 
     Args:
-        hidden_states (`torch.FloatTensor` of shape (batch_size, seq_length, hidden_size)) :
+        hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_length, hidden_size)`):
             Input hidden states
         mixup_lambda (`torch.FloatTensor`):
             Mixing ratio sampled from the Beta distribution
