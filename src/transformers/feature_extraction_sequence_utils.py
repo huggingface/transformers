@@ -15,12 +15,9 @@
 """
  Sequence feature extraction class for common feature extractors to preprocess sequences.
 """
-import math
-import warnings
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-from numpy.fft import fft
 
 from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from .utils import PaddingStrategy, TensorType, is_tf_tensor, is_torch_tensor, logging, to_numpy
@@ -238,11 +235,13 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Pad inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            processed_features:
+            processed_features (`Union[Dict[str, np.ndarray], BatchFeature]`):
                 Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
                 of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
-            max_length: maximum length of the returned list and optionally padding length (see below)
-            padding_strategy: PaddingStrategy to use for padding.
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see below)
+            padding_strategy (`PaddingStrategy`, *optional*, default to `PaddingStrategy.DO_NOT_PAD`):
+                PaddingStrategy to use for padding.
 
                 - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
                 - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
@@ -251,11 +250,12 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
                     - 'left': pads on the left of the sequences
                     - 'right': pads on the right of the sequences
-            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
-                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            return_attention_mask:
-                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            pad_to_multiple_of (`int`, *optional*):
+                Integer if set will pad the sequence to a multiple of the provided value. This is especially useful to
+                enable the use of Tensor Core on NVIDIA hardware with compute capability `>= 7.5` (Volta), or on TPUs
+                which benefit from having sequence lengths be a multiple of 128.
+            return_attention_mask (`bool`, *optional*):
+                Set to False to avoid returning attention mask (default: set to model specifics)
         """
         required_input = processed_features[self.model_input_names[0]]
 
@@ -306,16 +306,16 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Truncate inputs to predefined length or max length in the batch
 
         Args:
-            processed_features:
+            processed_features(`Union[Dict[str, np.ndarray], BatchFeature]`):
                 Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
                 of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
-            max_length:
+            max_length (`int`, *optional*):
                 maximum length of the returned list and optionally padding length (see below)
-            pad_to_multiple_of (optional) :
+            pad_to_multiple_of (`int`, *optional*) :
                 Integer if set will pad the sequence to a multiple of the provided value. This is especially useful to
                 enable the use of Tensor Core on NVIDIA hardware with compute capability `>= 7.5` (Volta), or on TPUs
                 which benefit from having sequence lengths be a multiple of 128.
-            truncation (optional):
+            truncation (`bool`, *optional*):
                 Activates truncation to cut input sequences longer than `max_length` to `max_length`.
         """
         if not truncation:
@@ -369,297 +369,3 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             )
 
         return padding_strategy
-
-    @staticmethod
-    def hz_to_mel(freq: float, mel_scale: str = "htk") -> float:
-        """Convert Hz to Mels.
-
-        Args:
-            freqs (`float`):
-                Frequencies in Hz
-            mel_scale (`str`, *optional*, defaults to `"htk"`):
-                Scale to use, `htk` or `slaney`.
-
-        Returns:
-            mels (`float`):
-                Frequency in Mels
-        """
-
-        if mel_scale not in ["slaney", "htk"]:
-            raise ValueError('mel_scale should be one of "htk" or "slaney".')
-
-        if mel_scale == "htk":
-            return 2595.0 * math.log10(1.0 + (freq / 700.0))
-
-        # Fill in the linear part
-        frequency_min = 0.0
-        f_sp = 200.0 / 3
-
-        mels = (freq - frequency_min) / f_sp
-
-        # Fill in the log-scale part
-        min_log_hz = 1000.0
-        min_log_mel = (min_log_hz - frequency_min) / f_sp
-        logstep = math.log(6.4) / 27.0
-
-        if freq >= min_log_hz:
-            mels = min_log_mel + math.log(freq / min_log_hz) / logstep
-
-        return mels
-
-    @staticmethod
-    def mel_to_hz(mels: np.array, mel_scale: str = "htk") -> np.array:
-        """Convert mel bin numbers to frequencies.
-
-        Args:
-            mels (`np.array`):
-                Mel frequencies
-            mel_scale (`str`, *optional*, `"htk"`):
-                Scale to use: `htk` or `slaney`.
-
-        Returns:
-            freqs (`np.array`):
-                Mels converted in Hz
-        """
-
-        if mel_scale not in ["slaney", "htk"]:
-            raise ValueError('mel_scale should be one of "htk" or "slaney".')
-
-        if mel_scale == "htk":
-            return 700.0 * (10.0 ** (mels / 2595.0) - 1.0)
-
-        # Fill in the linear scale
-        frequency_min = 0.0
-        f_sp = 200.0 / 3
-        freqs = frequency_min + f_sp * mels
-
-        # And now the nonlinear scale
-        min_log_hz = 1000.0
-        min_log_mel = (min_log_hz - frequency_min) / f_sp
-        logstep = math.log(6.4) / 27.0
-
-        log_t = mels >= min_log_mel
-        freqs[log_t] = min_log_hz * np.exp(logstep * (mels[log_t] - min_log_mel))
-
-        return freqs
-
-    @staticmethod
-    def create_triangular_filterbank(
-        all_freqs: np.array,
-        f_pts: np.array,
-    ) -> np.array:
-        """Create a triangular filter bank.
-
-
-        Args:
-            all_freqs (`np.array`):
-                STFT freq points of size (`n_freqs`).
-            f_pts (`np.array`):
-                Filter mid points of size (`n_filter`).
-
-        Returns:
-            fb (np.array):
-                The filter bank of size (`n_freqs`, `n_filter`).
-        """
-        # Adapted from Librosa
-        # calculate the difference between each filter mid point and each stft freq point in hertz
-        f_diff = f_pts[1:] - f_pts[:-1]  # (n_filter + 1)
-        slopes = np.expand_dims(f_pts, 0) - np.expand_dims(all_freqs, 1)  # (n_freqs, n_filter + 2)
-        # create overlapping triangles
-        zero = np.zeros(1)
-        down_slopes = (-1.0 * slopes[:, :-2]) / f_diff[:-1]  # (n_freqs, n_filter)
-        up_slopes = slopes[:, 2:] / f_diff[1:]  # (n_freqs, n_filter)
-        fb = np.maximum(zero, np.minimum(down_slopes, up_slopes))
-
-        return fb
-
-    def get_mel_filter_banks(
-        self,
-        n_freqs: int,
-        frequency_min: float,
-        frequency_max: float,
-        n_mels: int,
-        sample_rate: int,
-        norm: Optional[str] = None,
-        mel_scale: str = "htk",
-    ) -> np.array:
-        """
-        Create a frequency bin conversion matrix used to obtain the Mel Spectrogram. This is called a *mel filter
-        bank*, and various implementation exist, which differ in the number of filters, the shape of the filters, the
-        way the filters are spaced, the bandwidth of the filters, and the manner in which the spectrum is warped. The
-        goal of these features is to approximate the non-linear human perception of the variation in pitch with respect
-        to the frequency. This code is heavily inspired from the *torchaudio* implementation, see
-        [here](https://pytorch.org/audio/stable/transforms.html) for more details.
-
-
-        Note:
-            Different banks of MEL filters were introduced in the litterature. The following variation are supported:
-                - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHz
-                  and a speech bandwidth of `[0, 4600]` Hz
-                - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) (1995) uses a filter bank of 24 filters for a
-                  speech bandwidth `[0, 8000]` Hz (sampling rate ≥ 16 kHz).
-                - MFCC FB-40: from the Auditory Toolbox for MATLAB written by Slaney in 1998, assumes a sampling rate
-                  of 16 kHz, and speech bandwidth [133, 6854] Hz. This version also includes an area normalization.
-                - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes sampling
-                  rate of 12.5 kHz and speech bandwidth [0, 6250] Hz
-            The default parameters of `torchaudio`'s mel filterbanks implement the `"htk"` filers while `torchlibrosa`
-            uses the `"slaney"` implementation.
-
-        Args:
-            n_freqs (`int`):
-                Number of frequencies to highlight/apply.
-            frequency_min (`float`):
-                Minimum frequency of interest(Hz).
-            frequency_max (`float`):
-                Maximum frequency of interest(Hz).
-            n_mels (`int`):
-                Number of mel filterbanks.
-            sample_rate (`int`):
-                Sample rate of the audio waveform
-            norm (`str`, *optional*):
-                If "slaney", divide the triangular mel weights by the width of the mel band (area normalization).
-            mel_scale (`str`, *optional*, `"htk"`):
-                Scale to use: `htk` or `slaney`. (Default: `htk`)
-
-        Returns:
-            `numpy.ndarray`: Triangular filter banks (fb matrix) of size (`n_freqs`, `n_mels`) meaning number of
-            frequencies to highlight/apply to x the number of filterbanks. Each column is a filterbank so that assuming
-            there is a matrix A of size (..., `n_freqs`), the applied result would be `A * melscale_fbanks(A.size(-1),
-            ...)`.
-
-        """
-
-        if norm is not None and norm != "slaney":
-            raise ValueError('norm must be one of None or "slaney"')
-
-        # freq bins
-        all_freqs = np.linspace(0, sample_rate // 2, n_freqs)
-
-        # calculate mel freq bins
-        m_min = self.hz_to_mel(frequency_min, mel_scale=mel_scale)
-        m_max = self.hz_to_mel(frequency_max, mel_scale=mel_scale)
-
-        m_pts = np.linspace(m_min, m_max, n_mels + 2)
-        f_pts = self.mel_to_hz(m_pts, mel_scale=mel_scale)
-
-        # create filterbank
-        filterbank = self.create_triangular_filterbank(all_freqs, f_pts)
-
-        if norm is not None and norm == "slaney":
-            # Slaney-style mel is scaled to be approx constant energy per channel
-            enorm = 2.0 / (f_pts[2 : n_mels + 2] - f_pts[:n_mels])
-            filterbank *= np.expand_dims(enorm, 0)
-
-        if (filterbank.max(axis=0) == 0.0).any():
-            warnings.warn(
-                "At least one mel filterbank has all zero values. "
-                f"The value for `n_mels` ({n_mels}) may be set too high. "
-                f"Or, the value for `n_freqs` ({n_freqs}) may be set too low."
-            )
-
-        return filterbank
-
-    def _stft(self, frames, window):
-        """
-        Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
-        results as `torch.stft`. #TODO @Arthur batching this could allow more usage, good first issue.
-
-        Args:
-            frames (`np.array` of dimension `(num_frames, self.n_fft)`):
-                A framed audio signal obtained using `self._fram_wav`.
-            window (`np.array` of dimension `(self.n_freqs, self.n_mels)`:
-                A array reprensenting the function that will be used to reduces the amplitude of the discontinuities at
-                the boundaries of each frame when computing the FFT. Each frame will be multiplied by the window. For
-                more information on this phenomena, called *Spectral leakage*, refer to [this
-                tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
-        """
-        frame_size = frames.shape[1]
-        fft_size = self.n_fft
-
-        if fft_size is None:
-            fft_size = frame_size
-
-        if fft_size < frame_size:
-            raise ValueError("FFT size must greater or equal the frame size")
-        # number of FFT bins to store
-        num_fft_bins = (fft_size >> 1) + 1
-
-        data = np.empty((len(frames), num_fft_bins), dtype=np.complex64)
-        fft_signal = np.zeros(fft_size)
-
-        for f, frame in enumerate(frames):
-            if window is not None:
-                np.multiply(frame, window, out=fft_signal[:frame_size])
-            else:
-                fft_signal[:frame_size] = frame
-            data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
-        return data.T
-
-    def _power_to_db(self, mel_spectrogram, a_min=1e-10, ref=1.0):
-        """
-        Convert a mel spectrogram from power to db scale, this function is the numpy implementation of
-        librosa.power_to_lb.
-
-        Note:
-            The motivation behind applying the log function on the mel spectrogram is that humans do not hear loudness
-            on a linear scale. Generally to double the percieved volume of a sound we need to put 8 times as much
-            energy into it. This means that large variations in energy may not sound all that different if the sound is
-            loud to begin with. This compression operation makes the mel features match more closely what humans
-            actually hear.
-        """
-        log_spec = 10 * np.log10(np.clip(mel_spectrogram, a_min=a_min, a_max=None))
-        log_spec -= 10.0 * np.log10(np.maximum(a_min, ref))
-        if self.top_db is not None:
-            if self.top_db < 0:
-                raise ValueError("top_db must be non-negative")
-            log_spec = np.clip(log_spec, min=np.maximum(log_spec) - self.top_db, max=np.inf)
-        return log_spec
-
-    def _fram_wave(self, waveform: np.array, center: bool = True):
-        """
-        In order to compute the short time fourier transform, the waveform needs to be split in overlapping windowed
-        segments called `frames`.
-
-        The window length (self.window_length) defines how much of the signal is contained in each frame, while the hop
-        length defines the step between the beginning of each new frame.
-
-        #TODO @Arthur **This method does not support batching yet as we are mainly focus on inference. If you want this
-        to be added feel free to open an issue and ping @arthurzucker on Github**
-
-        Args:
-            waveform (`np.array`) of shape (sample_length,):
-                The raw waveform which will be split into smaller chunks.
-            center (`bool`, defaults to `True`):
-                Whether or not to center each frame around the middle of the frame. Centering is done by reflecting the
-                waveform on the left and on the right.
-
-        Return:
-            framed_waveform (`np.array` of shape (`waveform.shape // self.hop_length , self.n_fft)`):
-                The framed waveforms that can be fed to `np.fft`.
-        """
-        frames = []
-        for i in range(0, waveform.shape[0] + 1, self.hop_length):
-            half_window = (self.n_fft - 1) // 2 + 1
-            if center:
-                start = i - half_window if i > half_window else 0
-                end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
-                frame = waveform[start:end]
-                if start == 0:
-                    padd_width = (-i + half_window, 0)
-                    frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-                elif end == waveform.shape[0]:
-                    padd_width = (0, (i - waveform.shape[0] + half_window))
-                    frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-            else:
-                frame = waveform[i : i + self.n_fft]
-                frame_width = frame.shape[0]
-                if frame_width < waveform.shape[0]:
-                    frame = np.lib.pad(
-                        frame, pad_width=(0, self.n_fft - frame_width), mode="constant", constant_values=0
-                    )
-            frames.append(frame)
-
-        frames = np.stack(frames, 0)
-        return frames

@@ -37,11 +37,11 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
     refer to this superclass for more information regarding those methods.
 
     This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
-    Fourier Transform` which should match pytorch's `torch.stft` equivalent.
+    Fourier Transform` (STFT) which should match pytorch's `torch.stft` equivalent.
 
     Args:
         feature_size (`int`, defaults to 80):
-            The feature dimension of the extracted MEL spectrograms. This corresponds to the number of frequency bins
+            The feature dimension of the extracted Mel spectrograms. This corresponds to the number of frequency bins
             (intervals) that are computed, for each Fourier step.
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz). This only serves
@@ -49,23 +49,23 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         hop_length (`int`, defaults to 160):
             Length of the overlaping windows for the STFT used to obtain the Mel Spectrogram. The audio will be split
             in smaller `frames` with a step of `hop_length` between each frame.
-        chunk_length_s (`int`, defaults to 10):
+        max_length_s (`int`, defaults to 10):
             The maximum input lenght of the model in seconds. This is used to pad the audio.
         n_fft (`int`, defaults to 400):
             Size of the Fourier transform. This should be the length of a single frame in samples. 400 means that the
             fourrier transform is computed on 400 samples.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
-        return_attention_mask (`bool`, *optional*, False):
+        return_attention_mask (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the attention masks coresponding to the input.
-        frequency_min (`float`, *optional*, 0):
+        frequency_min (`float`, *optional*, default to 0):
             The lowest frequency of interest. The STFT will not be computed for values below this.
-        frequency_max (`float`, *optional*, 14_000):
+        frequency_max (`float`, *optional*, default to 14_000):
             The highest frequency of interest. The STFT will not be computed for values above this.
         top_db (`float`, *optional*):
             The highest decibel value used to convert the mel spectrogram to the log scale. For more details see the
             `SequenceFeatureExtractor._power_to_db` function
-        truncation (`str`, *optional*, `"fusions"`):
+        truncation (`str`, *optional*, default to `"fusions"`):
             Truncation pattern for long audio inputs. Two patterns are available:
                 - `fusion` will use `_random_mel_fusion`, which stacks 3 random crops from the mel spectrogram and a
                   downsampled version of the entire mel spectrogram.
@@ -86,7 +86,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         feature_size=80,
         sampling_rate=48_000,
         hop_length=480,
-        chunk_length_s=10,
+        max_length_s=10,
         n_fft=400,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
@@ -109,8 +109,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         self.padding = padding
         self.n_fft = n_fft
         self.hop_length = hop_length
-        self.chunk_length_s = chunk_length_s
-        self.nb_max_samples = chunk_length_s * sampling_rate
+        self.max_length_s = max_length_s
+        self.nb_max_samples = max_length_s * sampling_rate
         self.sampling_rate = sampling_rate
         self.frequency_min = frequency_min
         self.frequency_max = frequency_max
