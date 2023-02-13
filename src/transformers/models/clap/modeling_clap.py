@@ -925,10 +925,10 @@ class ClapAudioEncoder(nn.Module):
                     input_resolution=self.input_resolutions[i_layer],
                     depth=config.depths[i_layer],
                     num_heads=config.num_attention_heads[i_layer],
-                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                    drop_path=drop_path_rate[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
                     downsample=ClapAudioPatchMerging if (i_layer < self.num_layers - 1) else None,
                 )
-                for layer in range(self.num_layers)
+                for i_layer in range(self.num_layers)
             ]
         )
 

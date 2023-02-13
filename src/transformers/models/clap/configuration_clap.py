@@ -203,7 +203,7 @@ class ClapAudioConfig(PretrainedConfig):
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the encoder.
         fusion_type (`[type]`, *optional*):
-            Fusion type used for the patch fusion. 
+            Fusion type used for the patch fusion.
         patch_embed_input_channels (`int`, *optional*, defaults to 1):
             Number of channels used for the input spectrogram
         flatten_patch_embeds (`bool`, *optional*, defaults to `True`):
@@ -397,14 +397,6 @@ class ClapConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        # If `_config_dict` exist, we use them for the backward compatibility.
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        audio_config_dict = kwargs.pop("audio_config_dict", None)
-        if text_config_dict is not None:
-            text_config = text_config_dict
-        if audio_config_dict is not None:
-            audio_config = audio_config_dict
 
         if text_config is None:
             text_config = {}
