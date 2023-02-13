@@ -52,27 +52,6 @@ CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Adapted from https://github.com/LAION-AI/Clap/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L176
-def do_mixup(hidden_states, mixup_lambda):
-    """
-    MIXUP is a data augmentation method, proposed by Hongyi Zhang et al on 25 Oct. 2017.
-    https://arxiv.org/abs/1710.09412 Based on the mixing ratio sampled from the Beta distribution, it is a method of
-    expanding data by mixing both input and output. By using this, it is said that generalization performance improves
-    because the decision boundary becomes smooth.
-
-    Args:
-        hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_length, hidden_size)`):
-            Input hidden states
-        mixup_lambda (`torch.FloatTensor`):
-            Mixing ratio sampled from the Beta distribution
-    """
-    intermediate_hidden_states = hidden_states.transpose(0, -1) * mixup_lambda
-    flipped_hidden_states = torch.flip(hidden_states, dims=[0]).transpose(0, -1) * (1 - mixup_lambda)
-    out = intermediate_hidden_states + flipped_hidden_states
-    out = out.transpose(0, -1)
-    return out
-
-
 # Adapted from: https://github.com/LAION-AI/Clap/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L191
 def interpolate(hidden_states, ratio):
     """
