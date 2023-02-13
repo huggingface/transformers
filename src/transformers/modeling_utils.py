@@ -1150,8 +1150,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def enable_input_require_grads(self):
         """
-        Enables the gradients for the input embeddings. This is useful for
-        fine-tuning adapter weights while keeping the model weights fixed.
+        Enables the gradients for the input embeddings. This is useful for fine-tuning adapter weights while keeping
+        the model weights fixed.
         """
 
         def make_inputs_require_grads(module, input, output):
