@@ -1088,7 +1088,7 @@ class TFGenerationMixin:
             for argument, value in model_kwargs.items()
             if not any(argument.startswith(p) for p in irrelevant_prefix)
         }
-        encoder_signature = set(inspect.signature(encoder.forward).parameters)
+        encoder_signature = set(inspect.signature(encoder.call).parameters)
         encoder_accepts_wildcard = "kwargs" in encoder_signature or "model_kwargs" in encoder_signature
         if not encoder_accepts_wildcard:
             encoder_kwargs = {
