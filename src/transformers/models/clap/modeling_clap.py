@@ -52,27 +52,6 @@ CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Adapted from https://github.com/LAION-AI/Clap/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L176
-def do_mixup(hidden_states, mixup_lambda):
-    """
-    MIXUP is a data augmentation method, proposed by Hongyi Zhang et al on 25 Oct. 2017.
-    https://arxiv.org/abs/1710.09412 Based on the mixing ratio sampled from the Beta distribution, it is a method of
-    expanding data by mixing both input and output. By using this, it is said that generalization performance improves
-    because the decision boundary becomes smooth.
-
-    Args:
-        hidden_states (`torch.FloatTensor` of shape `(batch_size, seq_length, hidden_size)`):
-            Input hidden states
-        mixup_lambda (`torch.FloatTensor`):
-            Mixing ratio sampled from the Beta distribution
-    """
-    intermediate_hidden_states = hidden_states.transpose(0, -1) * mixup_lambda
-    flipped_hidden_states = torch.flip(hidden_states, dims=[0]).transpose(0, -1) * (1 - mixup_lambda)
-    out = intermediate_hidden_states + flipped_hidden_states
-    out = out.transpose(0, -1)
-    return out
-
-
 # Adapted from: https://github.com/LAION-AI/Clap/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/utils.py#L191
 def interpolate(hidden_states, ratio):
     """
@@ -191,12 +170,14 @@ class ClapAudioModelOutput(ModelOutput):
     ClapAudio model output to mimic the output of the original implementation.
 
     Args:
-        framewise_output (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
+        framewise_output (`torch.FloatTensor` of shape `(batch_size, reshaped_hidden_size, num_classes)`):
+            Output hidden_states that are interpolated after applying sigmoid. These logits are used to compute the
+            the classification label in the original implementation.
+        clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size, num_classes)`):
+            Output hidden_states after applying sigmoid. These logits are used to compute the
+            the classification label in the original implementation.
+        fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Pooled interpolated hidden_states.
         embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
@@ -228,12 +209,14 @@ class ClapAudioModelOutputWithProjection(ModelOutput):
     Args:
         audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
             The audio embeddings obtained by applying the projection layer to the pooler_output.
-        framewise_output (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
+        framewise_output (`torch.FloatTensor` of shape `(batch_size, reshaped_hidden_size, num_classes)`):
+            Output hidden_states that are interpolated after applying sigmoid. These logits are used to compute the
+            the classification label in the original implementation.
+        clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size, num_classes)`):
+            Output hidden_states after applying sigmoid. These logits are used to compute the
+            the classification label in the original implementation.
+        fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Pooled interpolated hidden_states.
         embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
@@ -953,7 +936,7 @@ class ClapAudioEncoder(nn.Module):
     def reshape_mel2img(self, normalixed_input_features):
         """
         The input is 4 normalized log mel spectrograms. It is reshape to the common shape of images. Each channel
-        should represent 1 of the 4 crops of the spectrogram. For more details, refer to the `ClapFeatureExtracor`.
+        should represent 1 of the 4 crops of the spectrogram. For more details, refer to the [`ClapFeatureExtractor`].
         """
         _, _, time_steps, freq_steps = normalixed_input_features.shape
 
@@ -1191,11 +1174,14 @@ Clap_TEXT_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-Clap_AUDIO_INPUTS_DOCSTRING = r"""
+CLAP_AUDIO_INPUTS_DOCSTRING = r"""
     Args:
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Input audio features. This should be returnes by the [`ClapFeatureExtractor`] class that you can also
             retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
+        is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
+            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
+            the features.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1206,7 +1192,7 @@ Clap_AUDIO_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-Clap_INPUTS_DOCSTRING = r"""
+CLAP_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -1902,7 +1888,7 @@ class ClapAudioModel(ClapPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_encoder.patch_embed.proj
 
-    @add_start_docstrings_to_model_forward(Clap_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ClapAudioConfig)
     def forward(
         self,
@@ -2204,7 +2190,7 @@ class ClapModel(ClapPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(Clap_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
     def get_audio_features(
         self,
         input_features: Optional[torch.Tensor] = None,
@@ -2234,7 +2220,7 @@ class ClapModel(ClapPreTrainedModel):
 
         return audio_features
 
-    @add_start_docstrings_to_model_forward(Clap_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLAP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ClapOutput, config_class=ClapConfig)
     def forward(
         self,
@@ -2428,7 +2414,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.audio_model.audio_encoder.patch_embed.proj
 
-    @add_start_docstrings_to_model_forward(Clap_AUDIO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLAP_AUDIO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ClapAudioModelOutput, config_class=ClapAudioConfig)
     def forward(
         self,
