@@ -83,6 +83,8 @@
       title: Object detection
     title: Computer Vision
   - sections:
+     - local: tasks/image_captioning
+       title: Image captioning
      - local: tasks/document_question_answering
        title: Document Question Answering
     title: Multimodal
