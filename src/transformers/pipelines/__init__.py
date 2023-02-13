@@ -532,7 +532,6 @@ def pipeline(
             - `"translation_xx_to_yy"`: will return a [`TranslationPipeline`].
             - `"video-classification"`: will return a [`VideoClassificationPipeline`].
             - `"visual-question-answering"`: will return a [`VisualQuestionAnsweringPipeline`].
-            - `"zero-shot-audio-classification"`: will return a [`ZeroShotAudioClassificationPipeline`].
             - `"zero-shot-classification"`: will return a [`ZeroShotClassificationPipeline`].
             - `"zero-shot-image-classification"`: will return a [`ZeroShotImageClassificationPipeline`].
             - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].
