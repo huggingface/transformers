@@ -88,7 +88,7 @@ class ClapProcessor(ProcessorMixin):
             )
 
         if text is not None and audios is not None:
-            encoding["audio_features"] = audio_features.input_features
+            encoding["input_features"] = audio_features.input_features
             return encoding
         elif text is not None:
             return encoding
