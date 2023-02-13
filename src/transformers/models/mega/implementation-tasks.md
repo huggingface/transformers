@@ -73,13 +73,25 @@ Classes with incremental states:
 This is mostly pretty standard: cross-attention takes cross-attn keys and values, self-attention takes self-attn keys and values. However, the only incremental state value `MultiHeadEMA` expects is something called `prev_state` -- this is just the incremental progress of the EMA local attention, and we'll need to incorporate that in our `prev_key_values`. It probably makes sense to have that stored as another item in the `prev_key_values` tuples (we'll only have 1 because it's self-only).
 
 ### Planning the change
-MultiHeadEMA: 
+~~MultiHeadEMA~~: 
 * return hidden state if `use_cache` (new input, in place of `incremental_state is not None`)
 * use prior `state` value if provided (new input, possibly taken out of the `prev_key_values` tuple)
+* **status:** done, pending testing within the wrapper classes
 
 MovingAverageGatedAttention
 * Accept previous keys and values from `prev_key_values` (new input, in place of incremental_state)
-* Return a tuple in the style of the HF attention modules (layer output, attention weights, key, value) with contents controlled by `output_attentions` and `use_cache` (new inputs)
+* Return a tuple in the style of the HF attention modules (layer output, attention weights, key, value, EMA state) with contents controlled by `output_attentions` and `use_cache` (new inputs)
+* **status:** incremental state removal done, currently working through attention masking 
+  * need to combine the padding mask (0 unmasked, 1 masked) and attention mask (0 unmasked, -inf masked)
+  * added comments in softmax and element attention methods for this class
+  * definitely seems like we can combine the two masks
+  * left off here 
+
+prev_key_values inputs for ^ will be expected as:
+
+```
+(self_key, self_value, self_ema_state, cross_key, cross_value)
+```
 
 GatedCrossAttention
 * Accept previous cross-attention keys and values from `prev_key_values` (new input, in place of incremental_state)
@@ -87,6 +99,8 @@ GatedCrossAttention
 
 MegaDecoder
 * Accept `prev_key_values` and `use_cache` (new input) and pass relevant information along to component modules
+
+Then delete the IncrementalState class entirely
 
 ## Arguments needed for forward pass
 

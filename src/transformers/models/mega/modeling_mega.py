@@ -131,7 +131,6 @@ def with_incremental_state(cls):
     return cls
 
 # EMA attention module
-@with_incremental_state
 class MultiHeadEMA(nn.Module):
     """Exponential Moving Average Layer.
     See "https://arxiv.org/abs/2209.10655" for more details.
@@ -266,13 +265,21 @@ class MultiHeadEMA(nn.Module):
         self,
         x,
         padding_mask: Optional[torch.Tensor] = None,
-        incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]] = None,
+        # incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]] = None,
+        prev_state: Optional[torch.Tensor] = None,
+        use_cache: bool = False
     ) -> torch.Tensor:
         """Input shape: Time x Batch x Channel
         Args:
             padding_mask (ByteTensor, optional): mask to exclude
                 keys that are pads, of shape `(batch, src_len)`, where
                 padding elements are indicated by 1s.
+
+        Refactoring:
+            prev_state (Tensor, optional): the hidden state returned from 
+                the previous timestep if performing incremental decoding
+            use_cache (boolean): whether to perform incremental decoding; 
+                if True, the hidden state output will be returned
         """
 
         seq_len, bsz, embed_dim = x.size()
@@ -283,21 +290,21 @@ class MultiHeadEMA(nn.Module):
 
         # L x B x D -> B x D x L
         x = x.permute(1, 2, 0)
+        # mask the input: output is a tensor with 0 in the masked positions
         if padding_mask is not None:
             x = x * (1.0 - padding_mask.unsqueeze(1).type_as(x))
 
-        assert not self.bidirectional or incremental_state is None, 'Bidirectional EMA does not support incremental state'
-        if incremental_state is not None:
-            saved_state = self._get_input_buffer(incremental_state)
-            if 'prev_state' in saved_state:
-                h = saved_state['prev_state']
-            else:
-                h = None
-            out, h = self.step(x, seq_len, hx=h)
-            saved_state['prev_state'] = h
-            self._set_input_buffer(incremental_state, saved_state)
+        if self.bidirectional and use_cache:
+            raise ValueError('Bidirectional EMA does not support incremental state')
+
+        if use_cache:
+            out, updated_state = self.step(x, seq_len, hx=prev_state)
+
             # B x D -> 1 x B x D
             out = F.silu(out + residual)
+
+            # if incremental decoding, return the new state along with the output
+            return out, updated_state
         else:
             # D x L
             k = self.kernel(seq_len)
@@ -320,32 +327,7 @@ class MultiHeadEMA(nn.Module):
             # B x D x L -> L x B x D
             out = F.silu(out.permute(2, 0, 1) + residual)
 
-        return out
-
-    def _get_input_buffer(self, incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]]) -> Dict[str, Optional[torch.Tensor]]:
-        result = self.get_incremental_state(incremental_state, "ema_state")
-        if result is not None:
-            return result
-        else:
-            empty_result: Dict[str, Optional[torch.Tensor]] = {}
-            return empty_result
-
-    def _set_input_buffer(self, incremental_state: Dict[str, Dict[str, Optional[torch.Tensor]]], buffer: Dict[str, Optional[torch.Tensor]]):
-        return self.set_incremental_state(incremental_state, "ema_state", buffer)
-
-    @torch.jit.export
-    def reorder_incremental_state(
-            self, incremental_state: Dict[str, Dict[str, Optional[torch.Tensor]]], new_order: torch.Tensor
-    ):
-        """Reorder buffered internal state (for incremental generation)."""
-        input_buffer = self._get_input_buffer(incremental_state)
-        if input_buffer is not None:
-            for k in input_buffer.keys():
-                input_buffer_k = input_buffer[k]
-                if input_buffer_k is not None:
-                    input_buffer[k] = input_buffer_k.index_select(0, new_order)
-            incremental_state = self._set_input_buffer(incremental_state, input_buffer)
-        return incremental_state
+            return out, None
 
 # Gated cross-attention
 @with_incremental_state
@@ -938,6 +920,10 @@ class MovingAverageGatedAttention(nn.Module):
       inverse_mask = None 
     
     if attn_mask is not None:
+      # FIXME: i think this is wrong based on how `attn_mask` is handled in self.softmax_attention
+      # this is written like attn_mask is boolean despite the fact that it's probably in {0, -inf}
+      # the result of this will be -inf for every input with padding
+      # - possibly raise issue on GitHub
       lengths = attn_mask.sum(dim=-1, keepdim=True)
 
     # C x C
@@ -988,9 +974,12 @@ class MovingAverageGatedAttention(nn.Module):
       # should possibly rewrite attention masking to work with the huggingface paradigm (1=not masked, 0=masked)
       # and unify padding/attention mask
 
-    if padding_mask is not None:
+    if padding_mask is not None: # padding mask is a ByteTensor, which is sorta like boolean
       padding_mask_all = padding_mask.all(dim=-1, keepdim=True)
       padding_mask = torch.logical_and(padding_mask, ~padding_mask_all)
+      # this statement fills all of the masked tokens (bytetensor=1) with -inf, which matches attn_mask
+      # there's no reason this can't be the same input as attn_mask
+      # -inf is used to make the softmax ignore the masked tokens
       qk = qk.masked_fill(padding_mask.unsqueeze(2).to(torch.bool), float('-inf'))
 
     if before_attn_fn:
@@ -1003,19 +992,17 @@ class MovingAverageGatedAttention(nn.Module):
       self, 
       x, 
       padding_mask: Optional[torch.Tensor] = None,
-      incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]] = None,
+    #   incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]] = None,
+      prev_key_values: Optional[Tuple[torch.Tensor]] = None,
       attn_mask: Optional[torch.Tensor] = None,
-      return_attention_weights = False,
+      output_attentions = False,
       before_attn_fn = False,
+      use_cache=False,
   ):
     seq_len, bsz, embed_dim = x.size()
     assert embed_dim == self.config.hidden_size, f"Input embedding dimension should be {self.config.hidden_size}; received {embed_dim}"
 
-    if incremental_state is not None:
-      saved_state = self._get_input_buffer(incremental_state)
-    else:
-      saved_state = None
-
+    # store inputs for residual connection and handle pre-norm if requested
     residual = x 
     if self.config.normalize_before_mega:
       x = self.norm(x)
@@ -1023,8 +1010,14 @@ class MovingAverageGatedAttention(nn.Module):
     # L x B x E
     v = self.activation(self.v_proj(x))
 
+    # unpack the incremental state if provided
+    # assumed to be (self K, self V, self EMA state, cross K, cross V)
+    if use_cache and (prev_key_values is not None):
+        prev_self_key, prev_self_value, prev_ema_state, _, _ = prev_key_values
+
     # L x B x D
-    mx = self.move(x, padding_mask, incremental_state)
+    # updated_ema_state will be None if use_cache=False
+    mx, updated_ema_state = self.move(x, padding_mask, prev_state=prev_ema_state, use_cache=use_cache)
     mx = self.dropout(mx)
 
     # L x B x D -> L x B x (2*D+S+E)
@@ -1055,49 +1048,44 @@ class MovingAverageGatedAttention(nn.Module):
     k = k.transpose(0, 1)
     v = v.transpose(0, 1)
 
-    if saved_state is not None:
+    # this block does the appending of current state K/V to previous state
+    # should only be needed if we're doing incremental decoding & the past values are provided
+    if use_cache and (prev_key_values):
       # saved states are stored with shape (bsz, seq_len, dim)
-      if "prev_key" in saved_state:
-        prev_key = saved_state['prev_key']
-        assert prev_key is not None, "Previous state key cannot be None"
-        assert k is not None, "Cannot locate current state key"
-        k = torch.cat([prev_key, k], dim=1)
-      if "prev_value" in saved_state:
-        prev_value = saved_state['prev_value']
-        assert prev_value is not None, "Previous state value cannot be None"
-        assert v is not None, "Cannot locate current state value"
-        v = torch.cat([prev_value, v], dim=1)
+      k = torch.cat([prev_self_key, k], dim=1)
+      v = torch.cat([prev_self_value, v], dim=1)
       # THIS ISN'T NEEDED IF THE ATTENTION MASK INCLUDES CURRENT TOKEN (ASSUMED BY HF)
-      prev_padding_mask = None 
-      if "prev_padding_mask" in saved_state:
-        prev_padding_mask = saved_state['prev_padding_mask']
-      padding_mask = MovingAverageGatedAttention._append_prev_padding_mask(
-          padding_mask=padding_mask,
-          prev_padding_mask=prev_padding_mask,
-          batch_size=bsz,
-          seq_len=k.size(1)
-      )
+    #   prev_padding_mask = None 
+    #   if "prev_padding_mask" in saved_state:
+    #     prev_padding_mask = saved_state['prev_padding_mask']
+    #   padding_mask = MovingAverageGatedAttention._append_prev_padding_mask(
+    #       padding_mask=padding_mask,
+    #       prev_padding_mask=prev_padding_mask,
+    #       batch_size=bsz,
+    #       seq_len=k.size(1)
+    #   )
 
       # UPDATE THE SAVED STATE -- instead of doing this, let's create what we need to return for past_key_values
+      # if not chunking, store as-is
       if not self.config.use_chunking:
-        saved_state['prev_key'] = k 
-        saved_state['prev_value'] = v
-        saved_state['prev_key_padding_mask'] = padding_mask 
+        updated_self_key = k 
+        updated_self_value = v
+        # saved_state['prev_key_padding_mask'] = padding_mask 
       else:
         curr_len = k.size(1) % self.config.chunk_size 
         if curr_len == 0:
-          if "prev_key" in saved_state:
-            del saved_state["prev_key"]
-            del saved_state["prev_value"]
-            del saved_state["prev_key_padding_mask"]
+          # so this is interesting... it's deleting the incremental state when we reach the end of a chunk
+          # I'm going to overwrite to None so we don't lose everything
+        #   if "prev_key" in saved_state:
+        #     del saved_state["prev_key"]
+        #     del saved_state["prev_value"]
+        #     del saved_state["prev_key_padding_mask"]
+          updated_self_key = None 
+          updated_self_value = None
         else:
-          saved_state['prev_key'] = k 
-          saved_state['prev_value'] = v
-          saved_state['prev_key_padding_mask'] = padding_mask 
-      
-      # in this branch, incremental_state is never None
-      assert incremental_state is not None
-      self._set_input_buffer(incremental_state, saved_state)
+          updated_self_key = k 
+          updated_self_value = v
+        #   saved_state['prev_key_padding_mask'] = padding_mask 
     
     ctx_len = k.size(1)
     if not self.config.use_chunking:
@@ -1154,55 +1142,13 @@ class MovingAverageGatedAttention(nn.Module):
 
     if not self.config.normalize_before_mega:
       out = self.norm(out)
+
+    return_values = (out, attn_weights) if output_attentions else (out, )
+
+    if self.config.is_decoder:
+        return_values = return_values + (updated_self_key, updated_self_value, updated_ema_state)
     
-    if return_attention_weights:
-      return out, attn_weights 
-    else:
-      return out, None
-
-  def _get_input_buffer(self, incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]]) -> Dict[str, Optional[torch.Tensor]]:
-    result = self.get_incremental_state(incremental_state, "attn_state")
-    return result if result is not None else {}
-
-  def _set_input_buffer(self, incremental_state: Dict[str, Dict[str, Optional[torch.Tensor]]], buffer:Dict[str, Optional[torch.Tensor]]):
-    return self.set_incremental_state(incremental_state, "attn_state", buffer)
-
-  @torch.jit.export
-  def reorder_incremental_state(
-      self, incremental_state: Dict[str, Dict[str, Optional[torch.Tensor]]], new_order: torch.Tensor
-  ):
-    """Reorder buffered internal state (for incremental generation)"""
-    input_buffer = self._get_input_buffer(incremental_state)
-    if input_buffer is not None:
-      for k in input_buffer.keys():
-        input_buffer_k = input_buffer[k]
-        if input_buffer_k is not None:
-          input_buffer[k] = input_buffer_k.index_select(0, new_order)
-      incremental_state = self._set_input_buffer(incremental_state, input_buffer)
-    return incremental_state
-
-  @staticmethod
-  def _append_prev_padding_mask(
-      padding_mask: Optional[torch.Tensor],
-      prev_padding_mask: Optional[torch.Tensor],
-      batch_size: int,
-      seq_len: int
-  ) -> Optional[torch.Tensor]:
-  # saved key padding masks have the same shape (bsz, seq_len)
-    if prev_padding_mask is not None and padding_mask is not None:
-      new_padding_mask = torch.cat([prev_padding_mask, padding_mask], dim=1)
-    # during incremental decoding, as the padding token enters and 
-    # leaves the frame, there will be a time when prev or current
-    # is None
-    elif prev_padding_mask is not None:
-      filler = torch.zeros((batch_size, seq_len - prev_padding_mask.size(1)), device=prev_padding_mask.device)
-      new_padding_mask = torch.cat([prev_padding_mask, filler.bool()], dim=1)
-    elif padding_mask is not None:
-      filler = torch.zeros((batch_size, seq_len - padding_mask.size(1)), device=padding_mask.device)
-      new_padding_mask = torch.cat([filler.bool(), padding_mask])
-    else:
-      new_padding_mask = prev_padding_mask 
-    return new_padding_mask 
+    return return_values
 
 # Normalized feed-forward network
 class NormalizedFeedForwardNetwork(nn.Module):
