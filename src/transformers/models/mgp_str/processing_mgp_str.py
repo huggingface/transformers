@@ -128,12 +128,12 @@ class MGPSTRProcessor(ProcessorMixin):
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
-        char_preds, char_preds_softmax, bpe_preds, bpe_preds_softmax, wp_preds, wp_preds_softmax = sequences
+        char_preds, bpe_preds, wp_preds = sequences
         batch_size = char_preds.size(0)
 
-        char_strs, char_scores = self._decode_helper(char_preds, char_preds_softmax, "char")
-        bpe_strs, bpe_scores = self._decode_helper(bpe_preds, bpe_preds_softmax, "bpe")
-        wp_strs, wp_scores = self._decode_helper(wp_preds, wp_preds_softmax, "wp")
+        char_strs, char_scores = self._decode_helper(char_preds, "char")
+        bpe_strs, bpe_scores = self._decode_helper(bpe_preds, "bpe")
+        wp_strs, wp_scores = self._decode_helper(wp_preds, "wp")
 
         final_strs = []
         final_scores = []

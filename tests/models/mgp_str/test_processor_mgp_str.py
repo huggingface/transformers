@@ -95,7 +95,6 @@ class MGPSTRProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
 
         processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
-        # processor.save_pretrained(self.tmpdirname)
         processor = MGPSTRProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())

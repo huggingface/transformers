@@ -4225,6 +4225,12 @@ class MGPSTRPreTrainedModel(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+class MGPSTRForSceneTextRecognition(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 class MMBTForClassification(metaclass=DummyObject):
     _backends = ["torch"]
