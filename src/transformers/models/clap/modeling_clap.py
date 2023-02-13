@@ -422,20 +422,11 @@ class ClapAudioPatchEmbed(nn.Module):
                     local_hidden_states.size(3),
                 )
                 local_hidden_states = local_hidden_states.permute((0, 2, 3, 1, 4)).contiguous().flatten(3)
-                output_batch_size, output_num_channels, output_height, _ = local_hidden_states.size()
 
                 local_width = local_hidden_states.size(-1)
                 if local_width < output_width:
-                    padded_hidden_states = torch.zeros(
-                        (output_batch_size, output_num_channels, output_height, output_width - local_width)
-                    ).to(global_hidden_states.device)
-
-                    local_hidden_states = torch.cat(
-                        [
-                            local_hidden_states,
-                            padded_hidden_states,
-                        ],
-                        dim=-1,
+                    local_hidden_states = torch.nn.functional.pad(
+                        local_hidden_states, (0, output_width - local_width), "constant", 0
                     )
                 else:
                     local_hidden_states = local_hidden_states[:, :, :, :output_width]
