@@ -28,4 +28,4 @@ body:
       label: Provide useful links for the implementation
       description: |
         Please provide information regarding the implementation, the weights, and the authors.
-        Please mention the authors by @gh-username if you're aware of their usernames.d
+        Please mention the authors by @gh-username if you're aware of their usernames.
