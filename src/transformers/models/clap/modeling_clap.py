@@ -940,40 +940,22 @@ class ClapAudioEncoder(nn.Module):
         # to avoid bicubic zero error
         if time_steps < target_T:
             normalized_input_features = nn.functional.interpolate(
-                normalized_input_features,
-                (target_T, normalized_input_features.shape[3]),
-                mode="bicubic",
-                align_corners=True,
+                normalized_input_features, (target_T, freq_steps), mode="bicubic", align_corners=True
             )
         if freq_steps < target_F:
             normalized_input_features = nn.functional.interpolate(
-                normalized_input_features,
-                (normalized_input_features.shape[2], target_F),
-                mode="bicubic",
-                align_corners=True,
+                normalized_input_features, (time_steps, target_F), mode="bicubic", align_corners=True
             )
 
-        # batch_size, num_channels, target_T, target_F --> batch_size, num_channels, target_F, target_T
-        normalized_input_features = normalized_input_features.permute(0, 1, 3, 2).contiguous()
+        batch, channels, time, freq = normalized_input_features.shape
 
-        # batch_size, num_channels, target_F, target_T --> batch_size, num_channels, target_F, freq_ratio, target_T/freq_ratio
+        # batch_size, channels, target_T, target_F --> batch_size, channels, target_F * freq_ratio, target_T // freq_ratio
         normalized_input_features = normalized_input_features.reshape(
-            normalized_input_features.shape[0],
-            normalized_input_features.shape[1],
-            normalized_input_features.shape[2],
-            self.freq_ratio,
-            normalized_input_features.shape[3] // self.freq_ratio,
+            batch, channels * self.freq_ratio, time // self.freq_ratio, freq
         )
-
-        # batch_size, num_channels, target_F, freq_ratio, target_T/freq_ratio --> batch_size, num_channels, target_F, freq_ratio, target_T/freq_ratio
-        normalized_input_features = normalized_input_features.permute(0, 1, 3, 2, 4).contiguous()
-
-        # batch_size, num_channels, target_F/freq_ratio, freq_ratio, target_T/freq_ratio --> batch_size, num_channels, target_F * freq_ratio, target_T/freq_ratio
+        normalized_input_features = normalized_input_features.permute(0, 1, 3, 2).contiguous()
         normalized_input_features = normalized_input_features.reshape(
-            normalized_input_features.shape[0],
-            normalized_input_features.shape[1],
-            normalized_input_features.shape[2] * normalized_input_features.shape[3],
-            normalized_input_features.shape[4],
+            batch, channels, freq * self.freq_ratio, time // self.freq_ratio
         )
 
         return normalized_input_features
