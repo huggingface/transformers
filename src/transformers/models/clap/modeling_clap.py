@@ -924,12 +924,12 @@ class ClapAudioEncoder(nn.Module):
         )
         self.head = nn.Linear(config.num_classes, config.num_classes)
 
-    def reshape_mel2img(self, normalixed_input_features):
+    def reshape_mel2img(self, normalized_input_features):
         """
         The input is 4 normalized log mel spectrograms. It is reshape to the common shape of images. Each channel
         should represent 1 of the 4 crops of the spectrogram. For more details, refer to the [`ClapFeatureExtractor`].
         """
-        _, _, time_steps, freq_steps = normalixed_input_features.shape
+        _, _, time_steps, freq_steps = normalized_input_features.shape
 
         target_T = int(self.spec_size * self.freq_ratio)
         target_F = self.spec_size // self.freq_ratio
@@ -939,38 +939,44 @@ class ClapAudioEncoder(nn.Module):
 
         # to avoid bicubic zero error
         if time_steps < target_T:
-            normalixed_input_features = nn.functional.interpolate(
-                normalixed_input_features,
-                (target_T, normalixed_input_features.shape[3]),
+            normalized_input_features = nn.functional.interpolate(
+                normalized_input_features,
+                (target_T, normalized_input_features.shape[3]),
                 mode="bicubic",
                 align_corners=True,
             )
         if freq_steps < target_F:
-            normalixed_input_features = nn.functional.interpolate(
-                normalixed_input_features,
-                (normalixed_input_features.shape[2], target_F),
+            normalized_input_features = nn.functional.interpolate(
+                normalized_input_features,
+                (normalized_input_features.shape[2], target_F),
                 mode="bicubic",
                 align_corners=True,
             )
 
-        normalixed_input_features = normalixed_input_features.permute(0, 1, 3, 2).contiguous()
-        normalixed_input_features = normalixed_input_features.reshape(
-            normalixed_input_features.shape[0],
-            normalixed_input_features.shape[1],
-            normalixed_input_features.shape[2],
+        # batch_size, num_channels, target_T, target_F --> batch_size, num_channels, target_F, target_T
+        normalized_input_features = normalized_input_features.permute(0, 1, 3, 2).contiguous()
+
+        # batch_size, num_channels, target_F, target_T --> batch_size, num_channels, target_F, freq_ratio, target_T/freq_ratio
+        normalized_input_features = normalized_input_features.reshape(
+            normalized_input_features.shape[0],
+            normalized_input_features.shape[1],
+            normalized_input_features.shape[2],
             self.freq_ratio,
-            normalixed_input_features.shape[3] // self.freq_ratio,
+            normalized_input_features.shape[3] // self.freq_ratio,
         )
 
-        normalixed_input_features = normalixed_input_features.permute(0, 1, 3, 2, 4).contiguous()
-        normalixed_input_features = normalixed_input_features.reshape(
-            normalixed_input_features.shape[0],
-            normalixed_input_features.shape[1],
-            normalixed_input_features.shape[2] * normalixed_input_features.shape[3],
-            normalixed_input_features.shape[4],
+        # batch_size, num_channels, target_F, freq_ratio, target_T/freq_ratio --> batch_size, num_channels, target_F, freq_ratio, target_T/freq_ratio
+        normalized_input_features = normalized_input_features.permute(0, 1, 3, 2, 4).contiguous()
+
+        # batch_size, num_channels, target_F/freq_ratio, freq_ratio, target_T/freq_ratio --> batch_size, num_channels, target_F * freq_ratio, target_T/freq_ratio
+        normalized_input_features = normalized_input_features.reshape(
+            normalized_input_features.shape[0],
+            normalized_input_features.shape[1],
+            normalized_input_features.shape[2] * normalized_input_features.shape[3],
+            normalized_input_features.shape[4],
         )
 
-        return normalixed_input_features
+        return normalized_input_features
 
     def forward(
         self,
@@ -984,15 +990,15 @@ class ClapAudioEncoder(nn.Module):
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, ClapAudioModelOutput]:
         input_features = input_features.transpose(1, 3)
-        normalixed_input_features = self.bn0(input_features)
-        normalixed_input_features = normalixed_input_features.transpose(1, 3)
+        normalized_input_features = self.bn0(input_features)
+        normalized_input_features = normalized_input_features.transpose(1, 3)
 
         is_longer_list_idx = None
         if self.enable_fusion:
             is_longer_list = is_longer.to(input_features.device)
             is_longer_list_idx = torch.where(is_longer_list == 1)[0]
 
-        hidden_states = self.reshape_mel2img(normalixed_input_features)
+        hidden_states = self.reshape_mel2img(normalized_input_features)
 
         frames_num = hidden_states.shape[2]
 
