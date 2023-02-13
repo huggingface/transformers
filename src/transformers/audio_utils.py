@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Audio processing functions to extract feature from a raw audio. Should all be in numpy to support
- all frameworks, and remmove unecessary dependencies.
+ Audio processing functions to extract feature from a raw audio. Should all be in numpy to support all frameworks, and
+ remmove unecessary dependencies.
 """
 import math
 import warnings
@@ -139,11 +139,11 @@ def get_mel_filter_banks(
     mel_scale: str = "htk",
 ) -> np.array:
     """
-    Create a frequency bin conversion matrix used to obtain the Mel Spectrogram. This is called a *mel filter
-    bank*, and various implementation exist, which differ in the number of filters, the shape of the filters, the
-    way the filters are spaced, the bandwidth of the filters, and the manner in which the spectrum is warped. The
-    goal of these features is to approximate the non-linear human perception of the variation in pitch with respect
-    to the frequency. This code is heavily inspired from the *torchaudio* implementation, see
+    Create a frequency bin conversion matrix used to obtain the Mel Spectrogram. This is called a *mel filter bank*,
+    and various implementation exist, which differ in the number of filters, the shape of the filters, the way the
+    filters are spaced, the bandwidth of the filters, and the manner in which the spectrum is warped. The goal of these
+    features is to approximate the non-linear human perception of the variation in pitch with respect to the frequency.
+    This code is heavily inspired from the *torchaudio* implementation, see
     [here](https://pytorch.org/audio/stable/transforms.html) for more details.
 
 
@@ -157,8 +157,8 @@ def get_mel_filter_banks(
                 of 16 kHertz, and speech bandwidth [133, 6854] Hertz. This version also includes an area normalization.
             - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes sampling
                 rate of 12.5 kHertz and speech bandwidth [0, 6250] Hertz
-        The default parameters of `torchaudio`'s mel filterbanks implement the `"htk"` filers while `torchlibrosa`
-        uses the `"slaney"` implementation.
+        The default parameters of `torchaudio`'s mel filterbanks implement the `"htk"` filers while `torchlibrosa` uses
+        the `"slaney"` implementation.
 
     Args:
         n_freqs (`int`):
@@ -217,20 +217,21 @@ def get_mel_filter_banks(
 
 def _stft(frames: np.array, window: np.array, fft_size: int = None):
     """
-    Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
-    results as `torch.stft`. #TODO @Arthur batching this could allow more usage, good first issue.
+    Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
+    as `torch.stft`. #TODO @Arthur batching this could allow more usage, good first issue.
 
     Args:
         frames (`np.array` of dimension `(num_frames, self.n_fft)`):
             A framed audio signal obtained using `self._fram_wav`.
         window (`np.array` of dimension `(self.n_freqs, self.n_mels)`:
-            A array reprensenting the function that will be used to reduces the amplitude of the discontinuities at
-            the boundaries of each frame when computing the FFT. Each frame will be multiplied by the window. For
-            more information on this phenomena, called *Spectral leakage*, refer to [this
+            A array reprensenting the function that will be used to reduces the amplitude of the discontinuities at the
+            boundaries of each frame when computing the FFT. Each frame will be multiplied by the window. For more
+            information on this phenomena, called *Spectral leakage*, refer to [this
             tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
         fft_size (`int`, *optional*):
-            Defines the frequency resolution of the Fourier Transform. The number of frequency bins used for dividing the window into equal strips
-            A bin is a spectrum sample, and defines the frequency resolution of the window. An increase of the FFT size slows the calculus time proportionnally.
+            Defines the frequency resolution of the Fourier Transform. The number of frequency bins used for dividing
+            the window into equal strips A bin is a spectrum sample, and defines the frequency resolution of the
+            window. An increase of the FFT size slows the calculus time proportionnally.
     """
     frame_size = frames.shape[1]
 
@@ -256,15 +257,13 @@ def _stft(frames: np.array, window: np.array, fft_size: int = None):
 
 def _power_to_db(mel_spectrogram, top_db=None, a_min=1e-10, ref=1.0):
     """
-    Convert a mel spectrogram from power to db scale, this function is the numpy implementation of
-    librosa.power_to_lb.
+    Convert a mel spectrogram from power to db scale, this function is the numpy implementation of librosa.power_to_lb.
 
     Note:
-        The motivation behind applying the log function on the mel spectrogram is that humans do not hear loudness
-        on a linear scale. Generally to double the percieved volume of a sound we need to put 8 times as much
-        energy into it. This means that large variations in energy may not sound all that different if the sound is
-        loud to begin with. This compression operation makes the mel features match more closely what humans
-        actually hear.
+        The motivation behind applying the log function on the mel spectrogram is that humans do not hear loudness on a
+        linear scale. Generally to double the percieved volume of a sound we need to put 8 times as much energy into
+        it. This means that large variations in energy may not sound all that different if the sound is loud to begin
+        with. This compression operation makes the mel features match more closely what humans actually hear.
 
     Args:
         mel_spectrogram (`np.array`):
@@ -291,11 +290,11 @@ def _fram_wave(waveform: np.array, hop_length: int = 160, n_fft: int = 400, cent
     In order to compute the short time fourier transform, the waveform needs to be split in overlapping windowed
     segments called `frames`.
 
-    The window length (window_length) defines how much of the signal is contained in each frame, while the hop
-    length defines the step between the beginning of each new frame.
+    The window length (window_length) defines how much of the signal is contained in each frame, while the hop length
+    defines the step between the beginning of each new frame.
 
-    #TODO @Arthur **This method does not support batching yet as we are mainly focus on inference. If you want this
-    to be added feel free to open an issue and ping @arthurzucker on Github**
+    #TODO @Arthur **This method does not support batching yet as we are mainly focus on inference. If you want this to
+    be added feel free to open an issue and ping @arthurzucker on Github**
 
     Args:
         waveform (`np.array`) of shape (sample_length,):

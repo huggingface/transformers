@@ -22,9 +22,9 @@ import numpy as np
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...image_transforms import np_bilinear_resize
+from ...image_transforms import np_bilinear_resize #TODO this has to be removed
 from ...utils import TensorType, logging
-
+from ...audio_utils import get_mel_filter_banks, _fram_wave, _power_to_db, _stft
 
 logger = logging.get_logger(__name__)
 
@@ -114,7 +114,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         self.sampling_rate = sampling_rate
         self.frequency_min = frequency_min
         self.frequency_max = frequency_max
-        self.mel_filters = self.get_mel_filter_banks(
+        self.mel_filters = get_mel_filter_banks(
             n_freqs=int(1 + n_fft // 2),
             n_mels=feature_size,
             frequency_min=frequency_min,
@@ -123,7 +123,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             norm=None,
             mel_scale="htk",
         )
-        self.mel_filters_slaney = self.get_mel_filter_banks(
+        self.mel_filters_slaney = get_mel_filter_banks(
             n_freqs=int(1 + n_fft // 2),
             n_mels=feature_size,
             frequency_min=frequency_min,
@@ -161,12 +161,12 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
               implementation when the truncation mode is not `"fusion"`.
         """
         window = np.hanning(self.n_fft + 1)[:-1]
-        frames = self._fram_wave(waveform)
-        stft = self._stft(frames, window=window)
+        frames = _fram_wave(waveform)
+        stft = _stft(frames, window=window)
 
         magnitudes = np.abs(stft) ** 2
         mel_spec = np.matmul(mel_filters.T, magnitudes)
-        log_mel_spec = self._power_to_db(mel_spec).T
+        log_mel_spec = _power_to_db(mel_spec).T
         log_mel_spec = np.asarray(log_mel_spec, np.float32)
         return log_mel_spec
 
