@@ -42,8 +42,8 @@ class ClapProcessor(ProcessorMixin):
     def __call__(self, text=None, audios=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to RobertaTokenizerFast's [`~RobertaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
+        and `kwargs` arguments to RobertaTokenizerFast's [`~RobertaTokenizerFast.__call__`] if `text` is not `None` to
+        encode the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
         ClapFeatureExtractor's [`~ClapFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
 
@@ -104,8 +104,8 @@ class ClapProcessor(ProcessorMixin):
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to RobertaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
+        This method forwards all its arguments to RobertaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer
+        to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 
