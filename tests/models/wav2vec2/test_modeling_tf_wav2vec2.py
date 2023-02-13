@@ -396,7 +396,7 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_keras_fit(self):
         default_batch_size = self.model_tester.batch_size
         self.model_tester.batch_size = 2
-        super().test_dataset_conversion()
+        super().test_keras_fit()
         self.model_tester.batch_size = default_batch_size
 
 
@@ -527,7 +527,7 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_keras_fit(self):
         default_batch_size = self.model_tester.batch_size
         self.model_tester.batch_size = 2
-        super().test_dataset_conversion()
+        super().test_keras_fit()
         self.model_tester.batch_size = default_batch_size
 
 
