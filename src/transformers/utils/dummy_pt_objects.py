@@ -1467,13 +1467,6 @@ class ChineseCLIPVisionModel(metaclass=DummyObject):
 CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ClapFeatureExtractor(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class ClapAudioModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -1482,6 +1475,13 @@ class ClapAudioModel(metaclass=DummyObject):
 
 
 class ClapAudioModelWithProjection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ClapFeatureExtractor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

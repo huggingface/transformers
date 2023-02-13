@@ -24,13 +24,13 @@ class ClapProcessor(ProcessorMixin):
     r"""
     Constructs a Clap processor which wraps a Clap feature extractor and a Clap tokenizer into a single processor.
 
-    [`ClapProcessor`] offers all the functionalities of [`ClapFeatureExtractor`] and [`ClapTokenizerFast`]. See the
+    [`ClapProcessor`] offers all the functionalities of [`ClapFeatureExtractor`] and [`RobertaTokenizerFast`]. See the
     [`~ClapProcessor.__call__`] and [`~ClapProcessor.decode`] for more information.
 
     Args:
         feature_extractor ([`ClapFeatureExtractor`]):
             The audio processor is a required input.
-        tokenizer ([`ClapTokenizerFast`]):
+        tokenizer ([`RobertaTokenizerFast`]):
             The tokenizer is a required input.
     """
     feature_extractor_class = "ClapFeatureExtractor"
@@ -42,7 +42,7 @@ class ClapProcessor(ProcessorMixin):
     def __call__(self, text=None, audios=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to ClapTokenizerFast's [`~ClapTokenizerFast.__call__`] if `text` is not `None` to encode
+        and `kwargs` arguments to RobertaTokenizerFast's [`~RobertaTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
         ClapFeatureExtractor's [`~ClapFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
@@ -97,14 +97,14 @@ class ClapProcessor(ProcessorMixin):
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to ClapTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
+        This method forwards all its arguments to RobertaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to ClapTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
+        This method forwards all its arguments to RobertaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
