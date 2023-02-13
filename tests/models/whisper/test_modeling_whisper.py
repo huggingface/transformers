@@ -632,10 +632,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip("Skip while we investigate while it's failing.")
-    def test_constrained_beam_search_generate_dict_output(self):
-        pass
-
     @staticmethod
     def _get_encoder_outputs(
         model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
