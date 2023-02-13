@@ -1436,7 +1436,7 @@ class DetrImageProcessor(BaseImageProcessor):
         ):
             # we filter empty queries and detection below threshold
             cur_scores, cur_labels = cur_logits.softmax(-1).max(-1)
-            keep = cur_labels.ne(empty_label) & (scores > threshold)
+            keep = cur_labels.ne(empty_label) & (cur_scores > threshold)
             cur_scores = cur_scores[keep]
             cur_labels = cur_labels[keep]
             cur_masks = cur_masks[keep]
