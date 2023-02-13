@@ -78,6 +78,7 @@ from .token_classification import (
 )
 from .video_classification import VideoClassificationPipeline
 from .visual_question_answering import VisualQuestionAnsweringPipeline
+from .zero_shot_audio_classification_pipeline import ZeroShotAudioClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
