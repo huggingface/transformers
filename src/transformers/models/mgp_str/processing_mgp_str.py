@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,48 +14,99 @@
 # limitations under the License.
 """Processor class for MGP-STR."""
 
-from transformers import BertTokenizer, GPT2Tokenizer, MGPSTRTokenizer
+import warnings
+
+from transformers import BertTokenizer, GPT2Tokenizer
+from transformers.utils.generic import ExplicitEnum
+from transformers.utils import is_torch_available
 
 from ...processing_utils import ProcessorMixin
 
 
+if is_torch_available():
+    import torch
+
+
+class DecodeType(ExplicitEnum):
+    CHARACTER = "char"
+    CHARACTER_EOS_TOKEN = 1
+    CHARACTER_EOS_STR = "[s]"
+    BPE = "bpe"
+    BPE_EOS_TOKEN = 2
+    BPE_EOS_STR = "#"
+    WORDPIECE = "wp"
+    WORDPIECE_EOS_TOKEN = 102
+    WORDPIECE_EOS_STR = "[SEP]"
+
+
+SUPPORTED_ANNOTATION_FORMATS = (DecodeType.CHARACTER, DecodeType.BPE, DecodeType.WORDPIECE)
+
+
 class MGPSTRProcessor(ProcessorMixin):
     r"""
-    Constructs a MGP-STR processor which wraps a vision feature extractor and MGP-STR tokenizers into a single
-    processor.
+    Constructs a MGP-STR processor which wraps an image processor and MGP-STR tokenizers into a single
 
-    [`MGPSTRProcessor`] offers all the functionalities of `ViTFeatureExtractor`] and [`MGPSTRTokenizer`]. See the
+    [`MGPSTRProcessor`] offers all the functionalities of `ViTImageProcessor`] and [`MGPSTRTokenizer`]. See the
     [`~MGPSTRProcessor.__call__`] and [`~MGPSTRProcessor.batch_decode`] for more information.
 
     Args:
-        feature_extractor (`ViTFeatureExtractor`):
-            An instance of `ViTFeatureExtractor`. The feature extractor is a required input.
+        image_processor (`ViTImageProcessor`):
+            An instance of `ViTImageProcessor`. The image extractor is a required input.
+        tokenizer ([`MGPSTRTokenizer`]):
+            The tokenizer is a required input.
     """
-    feature_extractor_class = "AutoFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
+    attributes = ["image_processor", "tokenizer"]
+    feature_extractor_class = "ViTImageProcessor"
+    tokenizer_class = "MGPSTRTokenizer"
 
-    def __init__(self, feature_extractor, *args):
-        super().__init__(feature_extractor, *args)
-        self.char_tokenizer = MGPSTRTokenizer.from_pretrained("alibaba-damo/mgp-str-base")
+    def __init__(self, image_processor=None, tokenizer=None, *kwargs):
+        if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
+            feature_extractor = kwargs.pop("feature_extractor")
+
+        image_processor = image_processor if image_processor is not None else feature_extractor
+        if image_processor is None:
+            raise ValueError("You need to specify an `image_processor`.")
+        if tokenizer is None:
+            raise ValueError("You need to specify a `tokenizer`.")
+
+        self.char_tokenizer = tokenizer
         self.bpe_tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         self.wp_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
+        super().__init__(image_processor, tokenizer)
+
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to AutoFeatureExtractor's
-        [`~AutoFeatureExtractor.__call__`] and returns its output. If used in the context
-        [`~MGPSTRTokenizer.__call__`]. Please refer to the doctsring of the above method for more information.
+        When used in normal mode, this method forwards all its arguments to ViTImageProcessor's
+        [`~ViTImageProcessor.__call__`] and returns its output. 
+        Please refer to the doctsring of the above method for more information.
         """
         images = kwargs.pop("images", None)
+        text = kwargs.pop("text", None)
         if len(args) > 0:
             images = args[0]
             args = args[1:]
 
-        if images is None:
-            raise ValueError("You need to specify an `images` input to process.")
+        if images is None and text is None:
+            raise ValueError("You need to specify either an `images` or `text` input to process.")
 
-        inputs = self.feature_extractor(images, *args, **kwargs)
-        return inputs
+        if images is not None:
+            inputs = self.image_processor(images, *args, **kwargs)
+        if text is not None:
+            encodings = self.tokenizer(text, **kwargs)
+
+        if text is None:
+            return inputs
+        elif images is None:
+            return encodings
+        else:
+            inputs["labels"] = encodings["input_ids"]
+            return inputs
 
     def batch_decode(self, sequences):
         """
@@ -75,12 +126,12 @@ class MGPSTRProcessor(ProcessorMixin):
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
-        char_preds, char_preds_softmax, bpe_preds, bpe_preds_softmax, wp_preds, wp_preds_softmax = sequences
+        char_preds, bpe_preds, wp_preds = sequences
         batch_size = char_preds.size(0)
 
-        char_strs, char_scores = self._decode_helper(char_preds, char_preds_softmax, "char")
-        bpe_strs, bpe_scores = self._decode_helper(bpe_preds, bpe_preds_softmax, "bpe")
-        wp_strs, wp_scores = self._decode_helper(wp_preds, wp_preds_softmax, "wp")
+        char_strs, char_scores = self._decode_helper(char_preds, "char")
+        bpe_strs, bpe_scores = self._decode_helper(bpe_preds, "bpe")
+        wp_strs, wp_scores = self._decode_helper(wp_preds, "wp")
 
         final_strs = []
         final_scores = []
@@ -99,36 +150,34 @@ class MGPSTRProcessor(ProcessorMixin):
         out["wp_preds"] = wp_strs
         return out
 
-    def _decode_helper(self, pred_logits, pred_softmax, decode_type):
+    def _decode_helper(self, pred_logits, format):
         """
         Convert a list of lists of bpe token ids into a list of strings by calling bpe tokenizer.
 
         Args:
             pred_logits (`torch.Tensor`):
                 List of model prediction logits.
-            pred_softmax (`torch.Tensor`):
-                List of model prediction softmax.
-            tyope (`str`):
+            type (`str`):
                 Type of model prediction. Must be one of ['char', 'bpe', 'wp'].
         Returns:
             `tuple`:
                 dec_strs(`str`): The decode strings of model prediction. conf_scores(`List[float]`): The confidence
                 score of model prediction.
         """
-        if decode_type == "char":
+        if format == DecodeType.CHARACTER:
             decoder = self.char_tokenizer.batch_decode
-            eos_token = 1
-            eos_str = "[s]"
-        elif decode_type == "bpe":
+            eos_token = DecodeType.CHARACTER_EOS_TOKEN
+            eos_str = DecodeType.CHARACTER_EOS_STR
+        elif format == DecodeType.BPE:
             decoder = self.bpe_decode
-            eos_token = 2
-            eos_str = "#"
-        elif decode_type == "wp":
+            eos_token = DecodeType.BPE_EOS_TOKEN
+            eos_str = DecodeType.BPE_EOS_STR
+        elif format == DecodeType.WORDPIECE:
             decoder = self.wp_decode
-            eos_token = 102
-            eos_str = "[SEP]"
+            eos_token = DecodeType.WORDPIECE_EOS_TOKEN
+            eos_str = DecodeType.WORDPIECE_EOS_STR
         else:
-            raise ValueError("The type must be one of ['char', 'bpe', 'wp'] ")
+            raise ValueError(f"Format {format} is not supported.")
 
         dec_strs, conf_scores = [], []
         batch_size = pred_logits.size(0)
@@ -136,7 +185,7 @@ class MGPSTRProcessor(ProcessorMixin):
         _, preds_index = pred_logits.topk(1, dim=-1, largest=True, sorted=True)
         preds_index = preds_index.view(-1, batch_max_length)[:, 1:]
         preds_str = decoder(preds_index)
-        preds_max_prob, _ = pred_softmax.max(dim=2)
+        preds_max_prob, _ = torch.nn.functional.softmax(pred_logits, dim=2).max(dim=2)
         preds_max_prob = preds_max_prob[:, 1:]
 
         for index in range(batch_size):

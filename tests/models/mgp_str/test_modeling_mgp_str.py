@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
-    from transformers import MGPSTRModel
+    from transformers import MGPSTRForSceneTextRecognition
 
 
 class MGPSTRModelTester:
@@ -35,60 +35,60 @@ class MGPSTRModelTester:
         parent,
         is_training=False,
         batch_size=13,
-        img_size=(32, 128),
+        image_size=(32, 128),
         patch_size=4,
-        in_chans=3,
+        num_channels=3,
         max_token_length=27,
-        char_num_classes=38,
-        bpe_num_classes=50257,
-        wp_num_classes=30522,
-        embed_dim=768,
-        depth=12,
-        num_heads=12,
+        num_character_labels=38,
+        num_bpe_labels=50257,
+        num_wordpiece_labels=30522,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
         mlp_ratio=4.0,
     ):
         self.parent = parent
         self.is_training = is_training
         self.batch_size = batch_size
-        self.img_size = img_size
+        self.image_size = image_size
         self.patch_size = patch_size
-        self.in_chans = in_chans
+        self.num_channels = num_channels
         self.max_token_length = max_token_length
-        self.char_num_classes = char_num_classes
-        self.bpe_num_classes = bpe_num_classes
-        self.wp_num_classes = wp_num_classes
-        self.embed_dim = embed_dim
-        self.depth = depth
-        self.num_heads = num_heads
+        self.num_character_labels = num_character_labels
+        self.num_bpe_labels = num_bpe_labels
+        self.num_wordpiece_labels = num_wordpiece_labels
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.in_chans, self.img_size[0], self.img_size[1]])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
         config = self.get_config()
         return config, pixel_values
 
     def get_config(self):
         return MGPSTRConfig(
-            img_size=self.img_size,
+            image_size=self.image_size,
             patch_size=self.patch_size,
-            in_chans=self.in_chans,
+            num_channels=self.num_channels,
             max_token_length=self.max_token_length,
-            char_num_classes=self.char_num_classes,
-            bpe_num_classes=self.bpe_num_classes,
-            wp_num_classes=self.wp_num_classes,
-            embed_dim=self.embed_dim,
-            depth=self.depth,
-            num_heads=self.num_heads,
+            num_character_labels=self.num_character_labels,
+            num_bpe_labels=self.num_bpe_labels,
+            num_wordpiece_labels=self.num_wordpiece_labels,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
             mlp_ratio=self.mlp_ratio,
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = MGPSTRModel(config)
+        model = MGPSTRForSceneTextRecognition(config)
         model.to(torch_device)
         model.eval()
         generated_ids, attens = model(pixel_values)
         self.parent.assertEqual(
-            generated_ids[0].shape, (self.batch_size, self.max_token_length, self.char_num_classes)
+            generated_ids[0].shape, (self.batch_size, self.max_token_length, self.num_character_labels)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -103,7 +103,7 @@ class MGPSTRModelTester:
 
 @require_torch
 class MGPSTRModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (MGPSTRModel,) if is_torch_available() else ()
+    all_model_classes = (MGPSTRForSceneTextRecognition,) if is_torch_available() else ()
     fx_compatible = False
 
     test_pruning = False

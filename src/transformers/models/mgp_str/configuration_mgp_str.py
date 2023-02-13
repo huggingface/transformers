@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Google AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MGPSTR model configuration"""
+""" MGP-STR model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -27,35 +27,34 @@ MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MGPSTRConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MGPSTRModel`]. It is used to instantiate an
-    MGPSTR model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the MGPSTR
+    This is the configuration class to store the configuration of an [`MGPSTRModel`]. It is used to instantiate an
+    MGP-STR model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the MGP-STR
     [alibaba-damo/mgp-str-base](https://huggingface.co/alibaba-damo/mgp-str-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
-        img_size (`int`, *optional*, defaults to `32x128`):
+        image_size (`List[int]`, *optional*, defaults to `[32, 128]`):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to `4`):
+        patch_size (`int`, *optional*, defaults to 4):
             The size (resolution) of each patch.
-        in_chans (`int`, *optional*, defaults to `3`):
+        num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         max_token_length (`int`, *optional*, defaults to `27`):
             The max number of output tokens.
-        char_num_classes (`int`, *optional*, defaults to `27`):
-            The number of classes for char head .
-        bpe_num_classes (`int`, *optional*, defaults to `27`):
+        num_character_labels (`int`, *optional*, defaults to `38`):
+            The number of classes for character head .
+        num_bpe_labels (`int`, *optional*, defaults to `50257`):
             The number of classes for bpe head .
-        wp_num_classes (`int`, *optional*, defaults to `27`):
-            The number of classes for wp head .
-        embed_dim (`int`, *optional*, defaults to 768):
+        num_wordpiece_labels (`int`, *optional*, defaults to `30522`):
+            The number of classes for wordpiece head .
+        hidden_size (`int`, *optional*, defaults to 768):
             The embedding dimension.
-        depth (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         mlp_ratio (`int`, *optional*, defaults to 12):
             The ratio of mlp hidden dim to embedding dim.
@@ -71,24 +70,19 @@ class MGPSTRConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The stochastic depth rate.
-        norm_layer (`str` or `function`, *optional*, defaults to `None`):
-            The normalization layer function (function or string) in the encoder. for example, `"LayerNorm"`.
-        act_layer (`str` or `function`, *optional*, defaults to `"None"`):
-            The non-linear activation function (function or string) in the encoder. for example, `"gelu"`, `"relu"`,
-            `"selu"` and `"gelu_new"`.
-        weight_init (`str`, *optional*, defaults to `''`):
-            The weight init scheme.
+        output_a3_attentions (`bool`, *optional*, defaults to `False`):
+            Whether or not the model should returns A^3 module attentions.
 
     Example:
 
     ```python
-    >>> from transformers import MGPSTRConfig, MGPSTRModel
+    >>> from transformers import MGPSTRConfig, MGPSTRForSceneTextRecognition
 
     >>> # Initializing a MGPSTR mgp-str-base style configuration
     >>> configuration = MGPSTRConfig()
 
     >>> # Initializing a model (with random weights) from the mgp-str-base style configuration
-    >>> model = MGPSTRModel(configuration)
+    >>> model = MGPSTRForSceneTextRecognition(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -97,16 +91,16 @@ class MGPSTRConfig(PretrainedConfig):
 
     def __init__(
         self,
-        img_size=(32, 128),
+        image_size=(32, 128),
         patch_size=4,
-        in_chans=3,
+        num_channels=3,
         max_token_length=27,
-        char_num_classes=38,
-        bpe_num_classes=50257,
-        wp_num_classes=30522,
-        embed_dim=768,
-        depth=12,
-        num_heads=12,
+        num_character_labels=38,
+        num_bpe_labels=50257,
+        num_wordpiece_labels=30522,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
         mlp_ratio=4.0,
         qkv_bias=True,
         representation_size=None,
@@ -114,23 +108,21 @@ class MGPSTRConfig(PretrainedConfig):
         drop_rate=0.0,
         attn_drop_rate=0.0,
         drop_path_rate=0.0,
-        norm_layer=None,
-        act_layer=None,
-        weight_init="",
+        output_a3_attentions=False,
         **kwargs
     ):
         super().__init__(**kwargs)
 
-        self.img_size = img_size
+        self.image_size = image_size
         self.patch_size = patch_size
-        self.in_chans = in_chans
+        self.num_channels = num_channels
         self.max_token_length = max_token_length
-        self.char_num_classes = char_num_classes
-        self.bpe_num_classes = bpe_num_classes
-        self.wp_num_classes = wp_num_classes
-        self.embed_dim = embed_dim
-        self.depth = depth
-        self.num_heads = num_heads
+        self.num_character_labels = num_character_labels
+        self.num_bpe_labels = num_bpe_labels
+        self.num_wordpiece_labels = num_wordpiece_labels
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
         self.representation_size = representation_size
         self.distilled = distilled
@@ -139,6 +131,4 @@ class MGPSTRConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.attn_drop_rate = attn_drop_rate
         self.drop_path_rate = drop_path_rate
-        self.norm_layer = norm_layer
-        self.act_layer = act_layer
-        self.weight_init = weight_init
+        self.output_a3_attentions = output_a3_attentions
