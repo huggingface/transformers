@@ -74,9 +74,6 @@ class DetaConfig(PretrainedConfig):
         encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
         auxiliary_loss (`bool`, *optional*, defaults to `False`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
@@ -146,7 +143,6 @@ class DetaConfig(PretrainedConfig):
         decoder_ffn_dim=1024,
         decoder_attention_heads=8,
         encoder_layerdrop=0.0,
-        decoder_layerdrop=0.0,
         is_encoder_decoder=True,
         activation_function="relu",
         d_model=256,
@@ -202,7 +198,6 @@ class DetaConfig(PretrainedConfig):
         self.init_std = init_std
         self.init_xavier_std = init_xavier_std
         self.encoder_layerdrop = encoder_layerdrop
-        self.decoder_layerdrop = decoder_layerdrop
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         # deformable attributes
