@@ -19,7 +19,7 @@ from typing import List, Tuple
 import numpy as np
 import tensorflow as tf
 
-from ..tf_utils import stable_softmax
+from ..tf_utils import stable_softmax, shape_list
 from ..utils import add_start_docstrings
 from ..utils.logging import get_logger
 
@@ -105,8 +105,8 @@ class TFTemperatureLogitsWarper(TFLogitsWarper):
     """
 
     def __init__(self, temperature: float):
-        if not isinstance(temperature, float) or not (temperature > 0):
-            raise ValueError(f"`temperature` has to be a strictly positive float, but is {temperature}")
+        # if not isinstance(temperature, float) or not (temperature > 0):
+        #     raise ValueError(f"`temperature` has to be a strictly positive float, but is {temperature}")
 
         self.temperature = temperature
 
@@ -129,14 +129,17 @@ class TFTopKLogitsWarper(TFLogitsWarper):
     """
 
     def __init__(self, top_k: int, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
-        if not isinstance(top_k, int) or top_k <= 0:
-            raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
+        tf.debugging.assert_type(top_k, tf.int32, f"`top_k` has to be a tf.int32, but is {type(top_k)}")
+        tf.debugging.assert_greater(top_k, 0, f"`top_k` has to be a strictly positive integer, but is {top_k}")
+        # if not isinstance(top_k, int) or top_k <= 0:
+        #     raise ValueError(f"`top_k` has to be a strictly positive integer, but is {top_k}")
 
-        self.top_k = max(top_k, min_tokens_to_keep)
+        # self.top_k = max(top_k, min_tokens_to_keep)
+        self.top_k = top_k
         self.filter_value = filter_value
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-        top_k = min(self.top_k, scores.shape[-1])  # Safety check
+        top_k = tf.maximum(tf.minimum(self.top_k, scores.shape[-1]), 1)  # Safety check
         # Boolean mask containing all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < tf.math.top_k(scores, k=top_k)[0][..., -1:]
         next_scores = tf.where(indices_to_remove, self.filter_value, scores)
@@ -158,8 +161,8 @@ class TFTopPLogitsWarper(TFLogitsWarper):
     """
 
     def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
-        if not isinstance(top_p, float) or (top_p < 0 or top_p > 1.0):
-            raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
+        # if not isinstance(top_p, float) or (top_p < 0 or top_p > 1.0):
+        #     raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
 
         self.top_p = top_p
         self.filter_value = filter_value
@@ -168,17 +171,18 @@ class TFTopPLogitsWarper(TFLogitsWarper):
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         topk_scores, topk_indices = tf.math.top_k(scores, scores.shape[-1])
 
-        mask_scores = tf.fill(scores.shape, self.filter_value)
+        # mask_scores = tf.fill(scores.shape, self.filter_value)  <--- Not happy with partial shape
+        mask_scores = tf.ones_like(scores) * self.filter_value
         cumulative_probs = tf.math.cumsum(stable_softmax(topk_scores, axis=-1), axis=-1)
         score_mask = cumulative_probs < self.top_p
 
         # Also include the token that is higher than top_p (the first false = shift and insert a True on the left)
-        score_mask = tf.concat((tf.ones([score_mask.shape[0], 1], dtype=tf.bool), score_mask[:, :-1]), axis=-1)
+        score_mask = tf.concat((tf.ones([shape_list(score_mask)[0], 1], dtype=tf.bool), score_mask[:, :-1]), axis=-1)
 
         # Ensure min tokens to keep
         score_mask = tf.concat(
             (
-                tf.ones([score_mask.shape[0], self.min_tokens_to_keep], dtype=tf.bool),
+                tf.ones([shape_list(score_mask)[0], self.min_tokens_to_keep], dtype=tf.bool),
                 score_mask[:, self.min_tokens_to_keep :],
             ),
             axis=-1,
@@ -190,9 +194,9 @@ class TFTopPLogitsWarper(TFLogitsWarper):
         # Undo the topk sorting: converts the 2D matrix of per-row original indices of shape (batch_size, vocab_size)
         # to a 3D tensor of shape (batch_size, vocab_size, 2) containing the original score coordinate, from which we
         # can scatter (i.e. `scatter_indices[row, col, :]` is a tensor containing `[row, topk_indices[row, col]]`)
-        scatter_rows = tf.tile(tf.expand_dims(tf.range(topk_indices.shape[0]), axis=-1), [1, topk_indices.shape[-1]])
+        scatter_rows = tf.tile(tf.expand_dims(tf.range(shape_list(topk_indices)[0]), axis=-1), [1, shape_list(topk_indices)[-1]])
         scatter_indices = tf.stack((scatter_rows, topk_indices), axis=-1)
-        next_scores = tf.scatter_nd(scatter_indices, topk_next_scores, shape=topk_next_scores.shape)
+        next_scores = tf.scatter_nd(scatter_indices, topk_next_scores, shape=shape_list(topk_next_scores))
 
         return next_scores
 

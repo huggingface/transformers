@@ -870,22 +870,22 @@ class TFGenerationMixin:
                 )
 
         # If the input length is a tensor (i.e. dynamic length), skip length checks
-        if not isinstance(input_ids_seq_length, tf.Tensor):
-            if (
-                generation_config.min_length is not None
-                and generation_config.min_length > generation_config.max_length
-            ):
-                raise ValueError(
-                    f"Unfeasable length constraints: the minimum length ({generation_config.min_length}) is larger"
-                    f" than the maximum length ({generation_config.max_length})"
-                )
-            if input_ids_seq_length >= generation_config.max_length:
-                input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
-                logger.warning(
-                    f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
-                    f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
-                    " increasing`max_new_tokens`."
-                )
+        # if not isinstance(input_ids_seq_length, tf.Tensor):
+        #     if (
+        #         generation_config.min_length is not None
+        #         and generation_config.min_length > generation_config.max_length
+        #     ):
+        #         raise ValueError(
+        #             f"Unfeasable length constraints: the minimum length ({generation_config.min_length}) is larger"
+        #             f" than the maximum length ({generation_config.max_length})"
+        #         )
+        #     if input_ids_seq_length >= generation_config.max_length:
+        #         input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+        #         logger.warning(
+        #             f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
+        #             f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
+        #             " increasing`max_new_tokens`."
+        #         )
 
         # 8. determine generation mode
         is_contrastive_search_gen_mode = (
@@ -917,11 +917,11 @@ class TFGenerationMixin:
 
         # 10. go into different generation modes
         if is_greedy_gen_mode:
-            if generation_config.num_return_sequences > 1:
-                raise ValueError(
-                    f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
-                    " greedy search."
-                )
+            # if generation_config.num_return_sequences > 1:
+            #     raise ValueError(
+            #         f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
+            #         " greedy search."
+            #     )
             # 11. run greedy search
             return self.greedy_search(
                 input_ids,
@@ -933,25 +933,25 @@ class TFGenerationMixin:
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 **model_kwargs,
             )
-        elif is_contrastive_search_gen_mode:
-            if generation_config.num_return_sequences > 1:
-                raise ValueError(
-                    f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
-                    " contrastive search."
-                )
-            # 11. run contrastive search
-            return self.contrastive_search(
-                input_ids,
-                top_k=generation_config.top_k,
-                penalty_alpha=generation_config.penalty_alpha,
-                logits_processor=logits_processor,
-                max_length=generation_config.max_length,
-                pad_token_id=generation_config.pad_token_id,
-                eos_token_id=generation_config.eos_token_id,
-                output_scores=generation_config.output_scores,
-                return_dict_in_generate=generation_config.return_dict_in_generate,
-                **model_kwargs,
-            )
+        # elif is_contrastive_search_gen_mode:
+        #     # if generation_config.num_return_sequences > 1:
+        #     #     raise ValueError(
+        #     #         f"num_return_sequences has to be 1, but is {generation_config.num_return_sequences} when doing"
+        #     #         " contrastive search."
+        #     #     )
+        #     # 11. run contrastive search
+        #     return self.contrastive_search(
+        #         input_ids,
+        #         top_k=generation_config.top_k,
+        #         penalty_alpha=generation_config.penalty_alpha,
+        #         logits_processor=logits_processor,
+        #         max_length=generation_config.max_length,
+        #         pad_token_id=generation_config.pad_token_id,
+        #         eos_token_id=generation_config.eos_token_id,
+        #         output_scores=generation_config.output_scores,
+        #         return_dict_in_generate=generation_config.return_dict_in_generate,
+        #         **model_kwargs,
+        #     )
         elif is_sample_gen_mode:
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config=generation_config)
@@ -979,20 +979,27 @@ class TFGenerationMixin:
             )
 
         elif is_beam_gen_mode:
-            if generation_config.num_beams < generation_config.num_return_sequences:
-                raise ValueError(
-                    "Beam search decoding cannot return more sequences than it has beams. Please set num_beams >="
-                    f" num_return_sequences, got {generation_config.num_beams} and"
-                    f" {generation_config.num_return_sequences} (respectivelly)"
-                )
+            tf.debugging.assert_less(
+                generation_config.num_beams,
+                generation_config.num_return_sequences,
+                "Beam search decoding cannot return more sequences than it has beams. Please set num_beams >="
+                f" num_return_sequences, got {generation_config.num_beams} and"
+                f" {generation_config.num_return_sequences} (respectivelly)"
+            )
+            # if generation_config.num_beams < generation_config.num_return_sequences:
+            #     raise ValueError(
+            #         "Beam search decoding cannot return more sequences than it has beams. Please set num_beams >="
+            #         f" num_return_sequences, got {generation_config.num_beams} and"
+            #         f" {generation_config.num_return_sequences} (respectivelly)"
+            #     )
 
             # 11. broadcast inputs to the desired number of beams
             input_ids = self._expand_to_num_beams(input_ids, num_beams=generation_config.num_beams)
 
-            if "encoder_outputs" in model_kwargs:
-                model_kwargs["encoder_outputs"]["last_hidden_state"] = self._expand_to_num_beams(
-                    model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=generation_config.num_beams
-                )
+            # if "encoder_outputs" in model_kwargs:
+            #     model_kwargs["encoder_outputs"]["last_hidden_state"] = self._expand_to_num_beams(
+            #         model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=generation_config.num_beams
+            #     )
 
             if "attention_mask" in model_kwargs:
                 model_kwargs["attention_mask"] = self._expand_to_num_beams(
@@ -1014,13 +1021,14 @@ class TFGenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_beam_sample_gen_mode:
-            if generation_config.num_beams < generation_config.num_return_sequences:
-                raise ValueError(
-                    "Beam search decoding cannot return more sequences than it has beams. Please set num_beams >="
-                    f" num_return_sequences, got {generation_config.num_beams} and"
-                    f" {generation_config.num_return_sequences} (respectivelly)"
-                )
+        # elif is_beam_sample_gen_mode:
+        else:
+            # if generation_config.num_beams < generation_config.num_return_sequences:
+            #     raise ValueError(
+            #         "Beam search decoding cannot return more sequences than it has beams. Please set num_beams >="
+            #         f" num_return_sequences, got {generation_config.num_beams} and"
+            #         f" {generation_config.num_return_sequences} (respectivelly)"
+            #     )
 
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config=generation_config)
@@ -1028,10 +1036,10 @@ class TFGenerationMixin:
             # 12. broadcast inputs to the desired number of beams
             input_ids = self._expand_to_num_beams(input_ids, num_beams=generation_config.num_beams)
 
-            if "encoder_outputs" in model_kwargs:
-                model_kwargs["encoder_outputs"]["last_hidden_state"] = self._expand_to_num_beams(
-                    model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=generation_config.num_beams
-                )
+            # if "encoder_outputs" in model_kwargs:
+            #     model_kwargs["encoder_outputs"]["last_hidden_state"] = self._expand_to_num_beams(
+            #         model_kwargs["encoder_outputs"]["last_hidden_state"], num_beams=generation_config.num_beams
+            #     )
 
             if "attention_mask" in model_kwargs:
                 model_kwargs["attention_mask"] = self._expand_to_num_beams(
@@ -1128,7 +1136,7 @@ class TFGenerationMixin:
             return decoder_start_token_id
         elif bos_token_id is not None:
             return bos_token_id
-        raise ValueError(
+        Error(
             "`decoder_start_token_id` or `bos_token_id` has to be defined for encoder-decoder generation."
         )
 
@@ -2230,7 +2238,7 @@ class TFGenerationMixin:
 
         # per batch, beam-item score, logprobs
         running_scores = tf.tile(
-            tf.expand_dims(tf.convert_to_tensor([0.0] + [-1.0e9] * (num_beams - 1)), axis=0), [batch_size, 1]
+            tf.expand_dims(tf.convert_to_tensor([0.0] + [-1.0e9] * tf.cast(num_beams - 1, dtype=tf.float32)), axis=0), [batch_size, 1]
         )
         scores = tf.ones((batch_size, num_beams)) * -1.0e9
 
@@ -2389,7 +2397,7 @@ class TFGenerationMixin:
 
             # we want to store the beam indices with batch information -> real beam index = beam index % num beams
             batch_modified_indices = topk_current_beam_indices + tf.broadcast_to(
-                tf.expand_dims(tf.range(batch_size) * num_beams, axis=1), topk_current_beam_indices.shape
+                tf.expand_dims(tf.range(batch_size) * num_beams, axis=1), shape_list(topk_current_beam_indices)
             )
             topk_beam_indices = tf.tensor_scatter_nd_update(
                 tensor=topk_running_beam_indices,
@@ -2403,7 +2411,7 @@ class TFGenerationMixin:
             # set of active beam search sequences, set their log probs to a very large negative value.
             eos_in_next_token = topk_sequences[:, :, cur_len] == eos_token_id
             if eos_token_id is None:
-                eos_in_next_token = tf.broadcast_to(eos_in_next_token, topk_sequences[:, :, cur_len].shape)
+                eos_in_next_token = tf.broadcast_to(eos_in_next_token, shape_list(topk_sequences[:, :, cur_len]))
             did_topk_just_finished = eos_in_next_token & tf.broadcast_to(
                 tf.concat((tf.ones((num_beams), dtype=tf.bool), tf.zeros((num_beams), dtype=tf.bool)), axis=0),
                 shape_list(eos_in_next_token),
