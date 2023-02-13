@@ -171,11 +171,11 @@ class ClapAudioModelOutput(ModelOutput):
 
     Args:
         framewise_output (`torch.FloatTensor` of shape `(batch_size, reshaped_hidden_size, num_classes)`):
-            Output hidden_states that are interpolated after applying sigmoid. These logits are used to compute the
-            the classification label in the original implementation.
+            Output hidden_states that are interpolated after applying sigmoid. These logits are used to compute the the
+            classification label in the original implementation.
         clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size, num_classes)`):
-            Output hidden_states after applying sigmoid. These logits are used to compute the
-            the classification label in the original implementation.
+            Output hidden_states after applying sigmoid. These logits are used to compute the the classification label
+            in the original implementation.
         fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Pooled interpolated hidden_states.
         embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -210,11 +210,11 @@ class ClapAudioModelOutputWithProjection(ModelOutput):
         audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
             The audio embeddings obtained by applying the projection layer to the pooler_output.
         framewise_output (`torch.FloatTensor` of shape `(batch_size, reshaped_hidden_size, num_classes)`):
-            Output hidden_states that are interpolated after applying sigmoid. These logits are used to compute the
-            the classification label in the original implementation.
+            Output hidden_states that are interpolated after applying sigmoid. These logits are used to compute the the
+            classification label in the original implementation.
         clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size, num_classes)`):
-            Output hidden_states after applying sigmoid. These logits are used to compute the
-            the classification label in the original implementation.
+            Output hidden_states after applying sigmoid. These logits are used to compute the the classification label
+            in the original implementation.
         fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Pooled interpolated hidden_states.
         embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
