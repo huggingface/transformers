@@ -1,7 +1,7 @@
 - sections:
   - local: index
     title: 🤗 Transformers
-  - local: in_translation
+  - local: quicktour
     title: Visite rapide
   - local: in_translation
     title: Installation
