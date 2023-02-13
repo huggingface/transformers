@@ -17,7 +17,7 @@ import argparse
 import re
 
 import torch
-from Clap import create_model
+from CLAP import create_model
 
 from transformers import AutoFeatureExtractor, ClapConfig, ClapModel
 
@@ -32,10 +32,9 @@ KEYS_TO_MODIFY_MAPPING = {
     "mlp.fc2": "output.dense",
     "norm1": "layernorm_before",
     "norm2": "layernorm_after",
-    # "bn0": "batch_norm",
 }
 
-processor = AutoFeatureExtractor.from_pretrained("ArthurZ/clap", truncation="rand_trunc")
+processor = AutoFeatureExtractor.from_pretrained("ybelkada/clap-htsat-unfused", truncation="rand_trunc")
 
 
 def init_clap(checkpoint_path, enable_fusion=False):
@@ -105,6 +104,7 @@ def convert_clap_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     transformers_config.audio_config.enable_fusion = enable_fusion
     model = ClapModel(transformers_config)
 
+    # ignore the spectrogram embedding layer
     model.load_state_dict(state_dict, strict=False)
 
     model.save_pretrained(pytorch_dump_folder_path)
