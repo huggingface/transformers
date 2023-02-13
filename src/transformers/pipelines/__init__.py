@@ -738,6 +738,11 @@ def pipeline(
                 'You cannot use both `pipeline(... device_map=..., model_kwargs={"device_map":...})` as those'
                 " arguments might conflict, use only one.)"
             )
+        if device is not None:
+            logger.warning(
+                "Both `device` and `device_map` are specified. `device` will override `device_map`. You"
+                " will most likely encounter unexpected behavior. Please remove `device` and keep `device_map`."
+            )
         model_kwargs["device_map"] = device_map
     if torch_dtype is not None:
         if "torch_dtype" in model_kwargs:
@@ -861,6 +866,10 @@ def pipeline(
                 image_processor = model_name
             elif isinstance(config, str):
                 image_processor = config
+            # Backward compatibility, as `feature_extractor` used to be the name
+            # for `ImageProcessor`.
+            elif feature_extractor is not None and isinstance(feature_extractor, BaseImageProcessor):
+                image_processor = feature_extractor
             else:
                 # Impossible to guess what is the right image_processor here
                 raise Exception(
