@@ -144,7 +144,7 @@ def get_mel_filter_banks(
     This code is heavily inspired from the *torchaudio* implementation, see
     [here](https://pytorch.org/audio/stable/transforms.html) for more details.
 
-    
+
     Note:
         Different banks of Mel filters were introduced in the litterature. The following variation are supported:
             - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHertz
@@ -175,8 +175,8 @@ def get_mel_filter_banks(
             Scale to use: `htk` or `slaney`. (Default: `htk`)
 
     Returns:
-        `np.ndarray`: Triangular filter banks (fb matrix) of shape (`nb_frequency_bins`, `nb_mel_filters`). This matrix is a 
-        projection matrix to go from a spectrogram to a Mel Spectrogram.
+        `np.ndarray`: Triangular filter banks (fb matrix) of shape (`nb_frequency_bins`, `nb_mel_filters`). This matrix
+        is a projection matrix to go from a spectrogram to a Mel Spectrogram.
 
     """
 
@@ -288,7 +288,9 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
             frame = waveform[i : i + fft_window_size]
             frame_width = frame.shape[0]
             if frame_width < waveform.shape[0]:
-                frame = np.lib.pad(frame, pad_width=(0, fft_window_size - frame_width), mode="constant", constant_values=0)
+                frame = np.lib.pad(
+                    frame, pad_width=(0, fft_window_size - frame_width), mode="constant", constant_values=0
+                )
         frames.append(frame)
 
     frames = np.stack(frames, 0)
@@ -305,17 +307,17 @@ def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = 
             A framed audio signal obtained using `audio_utils.fram_wav`.
         windowing_function (`np.array` of dimension `(nb_frequency_bins, nb_mel_filters)`:
             A array reprensenting the function that will be used to reduces the amplitude of the discontinuities at the
-            boundaries of each frame when computing the STFT. Each frame will be multiplied by the windowing_function. For more
-            information on the discontinuities, called *Spectral leakage*, refer to [this
+            boundaries of each frame when computing the STFT. Each frame will be multiplied by the windowing_function.
+            For more information on the discontinuities, called *Spectral leakage*, refer to [this
             tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
         fft_window_size (`int`, *optional*):
-            Size of the window om which the Fourier transform is applied. This controls the frequency resolution of the spectrogram. 
-            400 means that the fourrier transform is computed on windows of 400 samples. The number of frequency bins (`nb_frequency_bins`)
-            used to divide the window into equal strips is equal to `(1+fft_window_size)//2`. An increase of the fft_window_size slows the 
-            calculus time proportionnally.
-    
+            Size of the window om which the Fourier transform is applied. This controls the frequency resolution of the
+            spectrogram. 400 means that the fourrier transform is computed on windows of 400 samples. The number of
+            frequency bins (`nb_frequency_bins`) used to divide the window into equal strips is equal to
+            `(1+fft_window_size)//2`. An increase of the fft_window_size slows the calculus time proportionnally.
+
     Returns:
-        spectrogram (`np.ndarray`): 
+        spectrogram (`np.ndarray`):
             A spectrogram of shape `(num_frames, nb_frequency_bins)` obtained using the STFT algorithm
     """
     frame_size = frames.shape[1]

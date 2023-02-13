@@ -42,7 +42,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
     Args:
         feature_size (`int`, defaults to 64):
-            The feature dimension of the extracted Mel spectrograms. This corresponds to the number of mel filters (`n_mels`).
+            The feature dimension of the extracted Mel spectrograms. This corresponds to the number of mel filters
+            (`n_mels`).
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz). This only serves
             to warn users if the audio fed to the feature extractor does not have the same sampling rate.
@@ -52,8 +53,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         max_length_s (`int`, defaults to 10):
             The maximum input lenght of the model in seconds. This is used to pad the audio.
         fft_window_size (`int`, defaults to 400):
-            Size of the window (in samples) on which the Fourier transform is applied. This controls the frequency resolution of the spectrogram. 
-            400 means that the fourrier transform is computed on windows of 400 samples.
+            Size of the window (in samples) on which the Fourier transform is applied. This controls the frequency
+            resolution of the spectrogram. 400 means that the fourrier transform is computed on windows of 400 samples.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
