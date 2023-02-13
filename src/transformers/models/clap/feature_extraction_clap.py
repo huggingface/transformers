@@ -161,8 +161,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
               implementation when the truncation mode is not `"fusion"`.
         """
         window = np.hanning(self.n_fft + 1)[:-1]
-        frames = _fram_wave(waveform)
-        stft = _stft(frames, window=window)
+        frames = _fram_wave(waveform, self.hop_length, self.n_fft)
+        stft = _stft(frames, window=window, fft_size = self.n_fft)
 
         magnitudes = np.abs(stft) ** 2
         mel_spec = np.matmul(mel_filters.T, magnitudes)

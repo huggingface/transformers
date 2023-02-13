@@ -61,7 +61,6 @@ def hertz_to_mel(freq: float, mel_scale: str = "htk") -> float:
     return mels
 
 
-@staticmethod
 def mel_to_hertz(mels: np.array, mel_scale: str = "htk") -> np.array:
     """Convert mel bin numbers to frequencies.
 
@@ -98,8 +97,7 @@ def mel_to_hertz(mels: np.array, mel_scale: str = "htk") -> np.array:
     return freqs
 
 
-@staticmethod
-def create_triangular_filterbank(
+def _create_triangular_filterbank(
     all_freqs: np.array,
     f_pts: np.array,
 ) -> np.array:
@@ -168,7 +166,7 @@ def get_mel_filter_banks(
         frequency_max (`float`):
             Maximum frequency of interest(Hertz).
         n_mels (`int`):
-            Number of mel filterbanks.
+            Number of mel filterbanks. TODO 80 seems a bit high? 
         sample_rate (`int`):
             Sample rate of the audio waveform
         norm (`str`, *optional*):
@@ -198,7 +196,7 @@ def get_mel_filter_banks(
     f_pts = mel_to_hertz(m_pts, mel_scale=mel_scale)
 
     # create filterbank
-    filterbank = create_triangular_filterbank(all_freqs, f_pts)
+    filterbank = _create_triangular_filterbank(all_freqs, f_pts)
 
     if norm is not None and norm == "slaney":
         # Slaney-style mel is scaled to be approx constant energy per channel
