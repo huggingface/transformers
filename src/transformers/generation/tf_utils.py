@@ -1230,7 +1230,7 @@ class TFGenerationMixin:
     ) -> tf.Tensor:
         if self.config.is_encoder_decoder and encoder_outputs is not None:
             # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
-            shape = encoder_outputs.last_hidden_state.size()[:-1]
+            shape = encoder_outputs.last_hidden_state.shape[:-1]
             return tf.ones(shape, dtype=tf.int32) * -100
 
         if bos_token_id is None:
@@ -1515,8 +1515,8 @@ class TFGenerationMixin:
                 The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
-                The id of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int]]`, *optional*):
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -1575,6 +1575,8 @@ class TFGenerationMixin:
         max_length = max_length if max_length is not None else self.generation_config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -1660,7 +1662,13 @@ class TFGenerationMixin:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 unfinished_seq = 1 - tf.cast(finished_sequences, tf.int32)
                 next_tokens = next_tokens * unfinished_seq + pad_token_id * (1 - unfinished_seq)
-            finished_sequences = finished_sequences | (next_tokens == eos_token_id)
+                next_token_is_eos = tf.math.reduce_any(
+                    tf.equal(
+                        tf.broadcast_to(next_tokens, (len(eos_token_id), batch_size)), tf.expand_dims(eos_token_id, -1)
+                    ),
+                    axis=0,
+                )
+                finished_sequences = finished_sequences | next_token_is_eos
 
             # update `generated` and `cur_len`
             update_indices = tf.stack([tf.range(batch_size), tf.broadcast_to(cur_len, [batch_size])], axis=-1)
@@ -1776,8 +1784,8 @@ class TFGenerationMixin:
                 The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
-                The id of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int]]`, *optional*):
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             seed (`List[int]`, *optional*):
                 Random seed to control sampling, containing two integers, used when `do_sample` is `True`. See the
                 `seed` argument from stateless functions in `tf.random`.
@@ -1852,6 +1860,8 @@ class TFGenerationMixin:
         max_length = max_length if max_length is not None else self.generation_config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -1943,7 +1953,13 @@ class TFGenerationMixin:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 unfinished_seq = 1 - tf.cast(finished_sequences, tf.int32)
                 next_tokens = next_tokens * unfinished_seq + pad_token_id * (1 - unfinished_seq)
-            finished_sequences = finished_sequences | (next_tokens == eos_token_id)
+                next_token_is_eos = tf.math.reduce_any(
+                    tf.equal(
+                        tf.broadcast_to(next_tokens, (len(eos_token_id), batch_size)), tf.expand_dims(eos_token_id, -1)
+                    ),
+                    axis=0,
+                )
+                finished_sequences = finished_sequences | next_token_is_eos
 
             # update `generated` and `cur_len`
             update_indices = tf.stack([tf.range(batch_size), tf.broadcast_to(cur_len, [batch_size])], axis=-1)
@@ -2079,8 +2095,8 @@ class TFGenerationMixin:
                 The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
-                The id of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int]]`, *optional*):
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             length_penalty (`float`, *optional*, defaults to 1.0):
                 Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
                 to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
@@ -2180,6 +2196,8 @@ class TFGenerationMixin:
         max_length = max_length if max_length is not None else self.generation_config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.generation_config.num_return_sequences
         )
@@ -2401,9 +2419,18 @@ class TFGenerationMixin:
             # Update current sequences: Did the top `num_beams` sequences reach an end marker?
             # To prevent these just finished sequences from being added to the current sequences
             # set of active beam search sequences, set their log probs to a very large negative value.
-            eos_in_next_token = topk_sequences[:, :, cur_len] == eos_token_id
             if eos_token_id is None:
-                eos_in_next_token = tf.broadcast_to(eos_in_next_token, topk_sequences[:, :, cur_len].shape)
+                eos_in_next_token = tf.zeros(topk_sequences[:, :, cur_len].shape, dtype=tf.bool)
+            else:
+                eos_in_next_token = tf.math.reduce_any(
+                    tf.equal(
+                        tf.broadcast_to(
+                            topk_sequences[:, :, cur_len], [len(eos_token_id)] + topk_sequences[:, :, cur_len].shape
+                        ),
+                        tf.expand_dims(tf.expand_dims(eos_token_id, -1), -1),
+                    ),
+                    axis=0,
+                )
             did_topk_just_finished = eos_in_next_token & tf.broadcast_to(
                 tf.concat((tf.ones((num_beams), dtype=tf.bool), tf.zeros((num_beams), dtype=tf.bool)), axis=0),
                 shape_list(eos_in_next_token),
@@ -2649,8 +2676,8 @@ class TFGenerationMixin:
                 The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
-                The id of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int]]`, *optional*):
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2700,6 +2727,8 @@ class TFGenerationMixin:
         max_length = max_length if max_length is not None else self.generation_config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.generation_config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.generation_config.eos_token_id
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
         output_scores = output_scores if output_scores is not None else self.generation_config.output_scores
         output_attentions = (
             output_attentions if output_attentions is not None else self.generation_config.output_attentions
@@ -2924,7 +2953,13 @@ class TFGenerationMixin:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
                 unfinished_seq = 1 - tf.cast(finished_sequences, tf.int32)
                 next_tokens = next_tokens * unfinished_seq + pad_token_id * (1 - unfinished_seq)
-            finished_sequences = finished_sequences | (next_tokens == eos_token_id)
+                next_token_is_eos = tf.math.reduce_any(
+                    tf.equal(
+                        tf.broadcast_to(next_tokens, (len(eos_token_id), batch_size)), tf.expand_dims(eos_token_id, -1)
+                    ),
+                    axis=0,
+                )
+                finished_sequences = finished_sequences | next_token_is_eos
 
             # update `generated` and `cur_len`
             update_indices = tf.stack([tf.range(batch_size), tf.broadcast_to(cur_len, [batch_size])], axis=-1)
