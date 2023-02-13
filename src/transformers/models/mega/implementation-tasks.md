@@ -25,7 +25,7 @@
   * `MegaEmbeddings` - add optional token type embeddings  
   * `MegaLayer` - start with something like this for the combined encoder/decoder layer
     * There's also a nice handling of cross-attention already
-    * If `output_attentions`, do we want self-attention or cross attention? both?
+    * If `output_attentions`, do we want self-attention or cross attention? both? (both)
     * Should also set it up to work with `inputs_embeds` so that we can pass token embeddings directly (helpful for explainability tooling like gradient-based attribution)
   * `MegaPretrainedModel` - initialization, remove checkpointing (?)
 * Decoder stuff:
@@ -38,6 +38,55 @@
     * Initial values?
     * Differences from HF's `past_key_values`
 
+## Incremental State --> past_key_values
+### Hugging Face's `past_key_values`
+tuple of tuples whose entries are the attention keys and values for each decoder layer. these are the last outputs of the `layer_module` if `layer_module.is_decoder` stacked according to layer
+
+```
+past_key_values = (
+    (layer_1_self_k, layer_1_self_v, layer_1_cross_k, layer_1_cross_v),
+    (layer_2_self_k, layer_2_self_v, layer_2_cross_k, layer_2_cross_v),
+    ...
+    (layer_n_self_k, layer_n_self_v, layer_n_cross_k, layer_n_cross_v)
+)
+```
+
+According to the docs for `BaseModelOutputWithPastAndCrossAttentions`, the shape of the tensors in the tuples is `(batch_size, num_heads, sequence_length, embed_size_per_head)`. Even though `num_heads` will always be 1 in our case, I'm guessing we'll need to follow the same format. This is the class used for RoBERTa's encoder output, though the specifics of `past_key_values` looks slightly different at the lower levels (i.e. only the single tuple-of-tensors is passed for a single layer).
+
+Unlike the fairseq incremental state, the attention mask is combined with the standard self-attention mask. 
+
+### Fairseq's Incremental State
+Dictionary-like, with keys named according to the use of the values (all tensors). These tensors are stored with shape `(batch_size, sequence_length, embed_size_per_head)` - this is good!! We can probably just return instead of modifying the stateful representation. The way HF attention modules handle this is by returning a tuple of the following:
+* context output (i.e. the weighted representation)
+* attention probabilities (if requested by `output_attentions`; normalized by softmax)
+* key layer output (if requested by `is_decoder`)
+* value layer output (if requested by `is_decoder`)
+
+It appears that incremental decoding begins with an empty IncrementalState (i.e. an empty dictionary), so that the first step populates the state. We can control this by using `if use_cache` where they use `if incremental_state is not None`.
+
+Classes with incremental states:
+* MultiHeadEMA (state; just a step-wise hidden state of the EMA portion)
+* GatedCrossAttention (key, value, mask, number of steps (unused))
+* MovingAverageGatedAttention (key, value, mask)
+* MegaDecoderLayer (passed to the above layers)
+
+This is mostly pretty standard: cross-attention takes cross-attn keys and values, self-attention takes self-attn keys and values. However, the only incremental state value `MultiHeadEMA` expects is something called `prev_state` -- this is just the incremental progress of the EMA local attention, and we'll need to incorporate that in our `prev_key_values`. It probably makes sense to have that stored as another item in the `prev_key_values` tuples (we'll only have 1 because it's self-only).
+
+### Planning the change
+MultiHeadEMA: 
+* return hidden state if `use_cache` (new input, in place of `incremental_state is not None`)
+* use prior `state` value if provided (new input, possibly taken out of the `prev_key_values` tuple)
+
+MovingAverageGatedAttention
+* Accept previous keys and values from `prev_key_values` (new input, in place of incremental_state)
+* Return a tuple in the style of the HF attention modules (layer output, attention weights, key, value) with contents controlled by `output_attentions` and `use_cache` (new inputs)
+
+GatedCrossAttention
+* Accept previous cross-attention keys and values from `prev_key_values` (new input, in place of incremental_state)
+* Return keys and values if `use_cache` (new input)
+
+MegaDecoder
+* Accept `prev_key_values` and `use_cache` (new input) and pass relevant information along to component modules
 
 ## Arguments needed for forward pass
 
@@ -60,7 +109,7 @@ Encoder
 
 Decoder
 * Input IDs (self / target sequence; or embeddings)
-* Attention mask (padding)
-* Autoregressive attention mask (is this needed separately?)
+* Attention mask
+  * Hugging Face combines padding masks with causal LM masks
 * Incremental state (if doing incremental decoding)
 * Encoder hidden states (if doing cross-attention)

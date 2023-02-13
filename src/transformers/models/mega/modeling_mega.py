@@ -26,7 +26,6 @@ import torch.nn.functional as F
 
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -1068,6 +1067,7 @@ class MovingAverageGatedAttention(nn.Module):
         assert prev_value is not None, "Previous state value cannot be None"
         assert v is not None, "Cannot locate current state value"
         v = torch.cat([prev_value, v], dim=1)
+      # THIS ISN'T NEEDED IF THE ATTENTION MASK INCLUDES CURRENT TOKEN (ASSUMED BY HF)
       prev_padding_mask = None 
       if "prev_padding_mask" in saved_state:
         prev_padding_mask = saved_state['prev_padding_mask']
@@ -1078,6 +1078,7 @@ class MovingAverageGatedAttention(nn.Module):
           seq_len=k.size(1)
       )
 
+      # UPDATE THE SAVED STATE -- instead of doing this, let's create what we need to return for past_key_values
       if not self.config.use_chunking:
         saved_state['prev_key'] = k 
         saved_state['prev_value'] = v
