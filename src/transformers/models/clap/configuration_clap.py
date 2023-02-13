@@ -173,7 +173,7 @@ class ClapAudioConfig(PretrainedConfig):
 
     Args:
         window_size (`int`, *optional*, defaults to 8):
-            [description]
+            Image size of the spectrogram
         num_mel_bins (`int`, *optional*, defaults to 64):
             Number of mel features used per frames. Should correspond to the value used in the `ClapProcessor` class.
         spec_size (`int`, *optional*, defaults to 256):
@@ -184,46 +184,46 @@ class ClapAudioConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         patch_size (`int`, *optional*, defaults to 4):
-            [description]
+            Patch size for the audio spectrogram
         patch_stride (`list`, *optional*, defaults to `[4, 4]`):
-            [description]
+            Patch stride for the audio spectrogram
         num_classes (`int`, *optional*, defaults to 527):
-            [description]
+            Number of classes used for the head training
         hidden_size (`int`, *optional*, defaults to 96):
-            [description]
+            Hidden size of the audio model
         projection_hidden_size (`int`, *optional*, defaults to 768):
-            [description]
+            Hidden size of the projection layer
         depths (`list`, *optional*, defaults to `[2, 2, 6, 2]`):
-            [description]
+            Depths used for the Swin Layers of the audio model
         num_attention_heads (`list`, *optional*, defaults to `[4, 8, 16, 32]`):
-            [description]
+            Number of attention heads used for the Swin Layers of the audio model
         enable_fusion (`bool`, *optional*, defaults to `False`):
             Whether or not to enable patch fusion. This is the main contribution of the authors, and should give the
             best results. Patch fusion will #TODO describe what it does
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            [description]
+            The dropout probabilitiy for all fully connected layers in the encoder.
         fusion_type (`[type]`, *optional*):
-            [description]
+            Fusion type used for the patch fusion. 
         patch_embed_input_channels (`int`, *optional*, defaults to 1):
-            [description]
+            Number of channels used for the input spectrogram
         flatten_patch_embeds (`bool`, *optional*, defaults to `True`):
-            [description]
+            Whether or not to flatten the patch embeddings
         patch_embeds_hidden_size (`int`, *optional*, defaults to 96):
-            [description]
+            Hidden size of the patch embeddings
         enable_patch_layer_norm (`bool`, *optional*, defaults to `True`):
-            [description]
+            Whether or not to enable layer normalization for the patch embeddings
         drop_path_rate (`float`, *optional*, defaults to 0.0):
-            [description]
+            Drop path rate for the patch fusion
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            [description]
+            The dropout ratio for the attention probabilities.
         qkv_bias (`bool`, *optional*, defaults to `True`):
-            [description]
+            Whether or not to add a bias to the query, key, value projections.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
-            [description]
+            Ratio of the mlp hidden dim to embedding dim.
         aff_block_r (`int`, *optional*, defaults to 4):
-            [description]
+            downsize_ratio used in the AudioFF block
         num_hidden_layers (`int`, *optional*, defaults to 4):
-            [description]
+            Number of hidden layers in the Transformer encoder.
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -348,13 +348,13 @@ class ClapConfig(PretrainedConfig):
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original Clap implementation.
         fusion_num_hidden_layers (`int`, *optional*, defaults to 2):
-            [description]
+            Number of hidden layers in the fusion layer.
         projection_dim (`int`, *optional*, defaults to 512):
-            [description]
+            Dimentionality of text and audio projection layers.
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
-            [description]
+            Activation function for the projection layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):
-            [description]
+            Factor to scale the initialization of the model weights.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
