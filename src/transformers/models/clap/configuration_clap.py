@@ -25,7 +25,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = {
-    "laion-ai/base": "https://huggingface.co/laion-ai/base/resolve/main/config.json",
+    "laion-ai/clap-htsat-fused": "https://huggingface.co/laion-ai/clap-htsat-fused/resolve/main/config.json",
+    "laion-ai/clap-htsat-unfused": "https://huggingface.co/laion-ai/clap-htsat-unfused/resolve/main/config.json",
 }
 
 

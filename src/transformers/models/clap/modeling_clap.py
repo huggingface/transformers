@@ -47,7 +47,7 @@ _CHECKPOINT_FOR_DOC = "laion-ai/clap-htsat-fused"
 
 CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "laion-ai/clap-htsat-fused",
-    "laion-ai/clap-htsat-unfused",
+    "ybelkada/clap-htsat-unfused",
     # See all clap models at https://huggingface.co/models?filter=clap
 ]
 
@@ -1889,8 +1889,8 @@ class ClapAudioModel(ClapPreTrainedModel):
         >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model = ClapAudioModel.from_pretrained("laionai/clap-hsat-fused")
-        >>> processor = AutoProcessor.from_pretrained("laionai/clap-hsat-fused")
+        >>> model = ClapAudioModel.from_pretrained("ybelkada/clap-htsat-fused")
+        >>> processor = AutoProcessor.from_pretrained("ybelkada/clap-htsat-fused")
 
         >>> inputs = processor(audios=audio_sample, return_tensors="pt")
 
@@ -2141,8 +2141,8 @@ class ClapModel(ClapPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, ClapModel
 
-        >>> model = ClapModel.from_pretrained("laion-ai/clap-htsat-unfused")
-        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/clap-htsat-unfused")
+        >>> model = ClapModel.from_pretrained("ybelkada/clap-htsat-unfused")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ybelkada/clap-htsat-unfused")
 
         >>> inputs = tokenizer(["the sound of a cat", "the sound of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -2218,18 +2218,18 @@ class ClapModel(ClapPreTrainedModel):
         Examples:
 
         ```python
-        >>> from dataset import load_dataset
+        >>> from datasets import load_dataset
         >>> from transformers import AutoProcessor, ClapModel
 
         >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model = ClapModel.from_pretrained("laion-ai/clap-htst-unfused-base")
-        >>> processor = AutoProcessor.from_pretrained("laion-ai/clap-htst-unfused-base")
+        >>> model = ClapModel.from_pretrained("ybelkada/clap-htsat-unfused")
+        >>> processor = AutoProcessor.from_pretrained("ybelkada/clap-htsat-unfused")
 
         >>> input_text = ["Sound of a dog", "Sound of vaccum cleaner"]
 
-        >>> inputs = processor(text=input_text, audio=audio_sample, return_tensors="pt", padding=True)
+        >>> inputs = processor(text=input_text, audios=audio_sample, return_tensors="pt", padding=True)
 
         >>> outputs = model(**inputs)
         >>> logits_per_audio = outputs.logits_per_audio  # this is the audio-text similarity score
@@ -2336,8 +2336,8 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, ClapTextModelWithProjection
 
-        >>> model = ClapTextModelWithProjection.from_pretrained("laion-ai/clap-htsat-unfused")
-        >>> tokenizer = AutoTokenizer.from_pretrained("laion-ai/clap-htsat-unfused")
+        >>> model = ClapTextModelWithProjection.from_pretrained("ybelkada/clap-htsat-unfused")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ybelkada/clap-htsat-unfused")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -2398,6 +2398,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
     def forward(
         self,
         input_features: Optional[torch.FloatTensor] = None,
+        is_longer: Optional[torch.BoolTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2411,13 +2412,13 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import ClapAudioModelWithProjection, ClapProcessor
 
-        >>> model = ClapAudioModelWithProjection.from_pretrained("laion-ai/clap-htsat-unfused")
-        >>> processor = ClapProcessor.from_pretrained("laion-ai/clap-htsat-unfused")
+        >>> model = ClapAudioModelWithProjection.from_pretrained("ybelkada/clap-htsat-fused")
+        >>> processor = ClapProcessor.from_pretrained("ybelkada/clap-htsat-fused")
 
         >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> inputs = processor(audio=audio_sample, return_tensors="pt")
+        >>> inputs = processor(audios=audio_sample, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> audio_embeds = outputs.audio_embeds
         ```"""
@@ -2429,6 +2430,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
 
         audio_outputs = self.audio_model(
             input_features=input_features,
+            is_longer=is_longer,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
