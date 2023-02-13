@@ -157,7 +157,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         filter banks are used depending on the truncation pattern:
             - `self.mel_filters`: they correspond to the defaults parameters of `torchaduio` which can be obtained from
               calling `torchaudio.transforms.MelSpectrogram().mel_scale.fb`. These filters are used when `truncation`
-              is set to `fuison`.
+              is set to `"fusion"`.
             - `self.mel_filteres_slaney` : they correspond to the defaults parameters of `torchlibrosa` which used
               `librosa.filters.mel` when computing the mel spectrogram. These filters were only used in the original
               implementation when the truncation mode is not `"fusion"`.

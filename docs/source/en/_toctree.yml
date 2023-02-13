@@ -611,7 +611,7 @@
     - local: internal/image_processing_utils
       title: Utilities for Image Processors
     - local: internal/audio_utils
-      title: Utilities for audio processing
+      title: Utilities for Audio processing
     - local: internal/file_utils
       title: General Utilities
     title: Internal Helpers
