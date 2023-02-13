@@ -936,7 +936,7 @@ class ClapAudioEncoder(nn.Module):
     def reshape_mel2img(self, normalixed_input_features):
         """
         The input is 4 normalized log mel spectrograms. It is reshape to the common shape of images. Each channel
-        should represent 1 of the 4 crops of the spectrogram. For more details, refer to the `ClapFeatureExtracor`.
+        should represent 1 of the 4 crops of the spectrogram. For more details, refer to the [`ClapFeatureExtractor`].
         """
         _, _, time_steps, freq_steps = normalixed_input_features.shape
 
