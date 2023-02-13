@@ -31,9 +31,9 @@ CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = {
 
 class ClapTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ClapTextModel`]. It is
-    used to instantiate a RoBERTa model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the RoBERTa
+    This is the configuration class to store the configuration of a [`ClapTextModel`]. It is used to instantiate a
+    RoBERTa model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the RoBERTa
     [roberta-base](https://huggingface.co/roberta-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
