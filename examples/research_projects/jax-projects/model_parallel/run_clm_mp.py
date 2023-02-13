@@ -555,7 +555,7 @@ def main():
     def eval_step(input_ids, labels, params):
         logits = model(input_ids=input_ids, params=params, train=False)[0]
         loss = loss_fn(logits, labels)
-        # metrics
+        # region Metrics
         return {"loss": loss}
 
     p_train_step = pjit(

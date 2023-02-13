@@ -522,7 +522,7 @@ def main():
         experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
         accelerator.init_trackers("swag_no_trainer", experiment_config)
 
-    # Metrics
+    # region Metrics
     metric = evaluate.load("accuracy")
 
     # Train!

@@ -407,7 +407,7 @@ def main():
                 load_from_cache_file=not data_args.overwrite_cache,
             )
 
-    # Metrics
+    # region Metrics
     metric = load_metric("seqeval")
 
     def compute_metrics(p):

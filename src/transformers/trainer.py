@@ -3102,7 +3102,7 @@ class Trainer:
         if all_inputs is not None:
             all_inputs = nested_truncate(all_inputs, num_samples)
 
-        # Metrics!
+        # region Metrics!
         if self.compute_metrics is not None and all_preds is not None and all_labels is not None:
             if args.include_inputs_for_metrics:
                 metrics = self.compute_metrics(

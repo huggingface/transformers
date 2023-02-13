@@ -585,7 +585,7 @@ def main():
         experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
         accelerator.init_trackers("ner_no_trainer", experiment_config)
 
-    # Metrics
+    # region Metrics
     metric = evaluate.load("seqeval")
 
     def get_labels(predictions, references):

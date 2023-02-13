@@ -451,7 +451,7 @@ def main():
         model.compile(optimizer=optimizer, jit_compile=training_args.xla)
         # endregion
 
-        # Metrics
+        # region Metrics
         metric = evaluate.load("seqeval")
 
         def get_labels(y_pred, y_true):

@@ -589,7 +589,7 @@ def main():
         num_training_steps=args.max_train_steps,
     )
 
-    # Metrics
+    # region Metrics
     metric = load_metric("seqeval")
 
     def get_luke_labels(outputs, ner_tags, original_entity_spans):

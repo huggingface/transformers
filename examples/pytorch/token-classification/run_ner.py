@@ -504,7 +504,7 @@ def main():
     # Data collator
     data_collator = DataCollatorForTokenClassification(tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None)
 
-    # Metrics
+    # region Metrics
     metric = evaluate.load("seqeval")
 
     def compute_metrics(p):
