@@ -72,7 +72,7 @@ def mel_to_hertz(mels: np.array, mel_scale: str = "htk") -> np.array:
 
     Returns:
         freqs (`np.array`):
-            Mels converted in Hertz
+            Mels converted to Hertz
     """
 
     if mel_scale not in ["slaney", "htk"]:
@@ -105,33 +105,33 @@ def _create_triangular_filterbank(
 
 
     Args:
-        all_freqs (`np.array`):
-            STFT freq points of size (`n_freqs`).
-        f_pts (`np.array`):
-            Filter mid points of size (`n_filter`).
+        all_freqs (`np.array` of shape (`nb_frequency_bins`, )):
+            Discrete frequencies used when the STFT was computed.
+        f_pts (`np.array`, of shape (`nb_mel_filters`, )):
+            Coordinates of the middle points of the triangular filters to create.
 
     Returns:
         fb (np.array):
-            The filter bank of size (`n_freqs`, `n_filter`).
+            The filter bank of size (`nb_frequency_bins`, `nb_mel_filters`).
     """
     # Adapted from Librosa
     # calculate the difference between each filter mid point and each stft freq point in hertz
     f_diff = f_pts[1:] - f_pts[:-1]  # (n_filter + 1)
-    slopes = np.expand_dims(f_pts, 0) - np.expand_dims(all_freqs, 1)  # (n_freqs, n_filter + 2)
+    slopes = np.expand_dims(f_pts, 0) - np.expand_dims(all_freqs, 1)  # (nb_frequency_bins, n_filter + 2)
     # create overlapping triangles
     zero = np.zeros(1)
-    down_slopes = (-1.0 * slopes[:, :-2]) / f_diff[:-1]  # (n_freqs, n_filter)
-    up_slopes = slopes[:, 2:] / f_diff[1:]  # (n_freqs, n_filter)
+    down_slopes = (-1.0 * slopes[:, :-2]) / f_diff[:-1]  # (nb_frequency_bins, n_filter)
+    up_slopes = slopes[:, 2:] / f_diff[1:]  # (nb_frequency_bins, n_filter)
     fb = np.maximum(zero, np.minimum(down_slopes, up_slopes))
 
     return fb
 
 
 def get_mel_filter_banks(
-    n_freqs: int,
+    nb_frequency_bins: int,
+    nb_mel_filters: int,
     frequency_min: float,
     frequency_max: float,
-    n_mels: int,
     sample_rate: int,
     norm: Optional[str] = None,
     mel_scale: str = "htk",
@@ -144,7 +144,7 @@ def get_mel_filter_banks(
     This code is heavily inspired from the *torchaudio* implementation, see
     [here](https://pytorch.org/audio/stable/transforms.html) for more details.
 
-
+    
     Note:
         Different banks of Mel filters were introduced in the litterature. The following variation are supported:
             - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHertz
@@ -159,103 +159,63 @@ def get_mel_filter_banks(
         the `"slaney"` implementation.
 
     Args:
-        n_freqs (`int`):
-            Number of frequencies to highlight/apply.
+        nb_frequency_bins (`int`):
+            Number of frequencies used to compute the spectrogram (should be the same as in `stft`).
+        nb_mel_filters (`int`):
+            Number of Mel filers to generate.
         frequency_min (`float`):
             Minimum frequency of interest(Hertz).
         frequency_max (`float`):
             Maximum frequency of interest(Hertz).
-        n_mels (`int`):
-            Number of mel filterbanks. TODO 80 seems a bit high?
         sample_rate (`int`):
-            Sample rate of the audio waveform
+            Sample rate of the audio waveform.
         norm (`str`, *optional*):
-            If "slaney", divide the triangular mel weights by the width of the mel band (area normalization).
+            If "slaney", divide the triangular Mel weights by the width of the mel band (area normalization).
         mel_scale (`str`, *optional*, `"htk"`):
             Scale to use: `htk` or `slaney`. (Default: `htk`)
 
     Returns:
-        `numpy.ndarray`: Triangular filter banks (fb matrix) of size (`n_freqs`, `n_mels`) meaning number of
-        frequencies to highlight/apply to x the number of filterbanks. Each column is a filterbank so that assuming
-        there is a matrix A of size (..., `n_freqs`), the applied result would be `A * melscale_fbanks(A.size(-1),
-        ...)`.
+        `np.ndarray`: Triangular filter banks (fb matrix) of shape (`nb_frequency_bins`, `nb_mel_filters`). This matrix is a 
+        projection matrix to go from a spectrogram to a Mel Spectrogram.
 
     """
 
     if norm is not None and norm != "slaney":
         raise ValueError('norm must be one of None or "slaney"')
 
-    # freq bins
-    all_freqs = np.linspace(0, sample_rate // 2, n_freqs)
+    # freqency bins
+    all_freqs = np.linspace(0, sample_rate // 2, nb_frequency_bins)
 
-    # calculate mel freq bins
+    # Compute mim and max frequencies in mel scale
     m_min = hertz_to_mel(frequency_min, mel_scale=mel_scale)
     m_max = hertz_to_mel(frequency_max, mel_scale=mel_scale)
 
-    m_pts = np.linspace(m_min, m_max, n_mels + 2)
+    # create the centers of the triangular mel filters.
+    m_pts = np.linspace(m_min, m_max, nb_mel_filters + 2)
     f_pts = mel_to_hertz(m_pts, mel_scale=mel_scale)
 
-    # create filterbank
+    # create the filterbank
     filterbank = _create_triangular_filterbank(all_freqs, f_pts)
 
     if norm is not None and norm == "slaney":
         # Slaney-style mel is scaled to be approx constant energy per channel
-        enorm = 2.0 / (f_pts[2 : n_mels + 2] - f_pts[:n_mels])
+        enorm = 2.0 / (f_pts[2 : nb_mel_filters + 2] - f_pts[:nb_mel_filters])
         filterbank *= np.expand_dims(enorm, 0)
 
     if (filterbank.max(axis=0) == 0.0).any():
         warnings.warn(
             "At least one mel filterbank has all zero values. "
-            f"The value for `n_mels` ({n_mels}) may be set too high. "
-            f"Or, the value for `n_freqs` ({n_freqs}) may be set too low."
+            f"The value for `nb_mel_filters` ({nb_mel_filters}) may be set too high. "
+            f"Or, the value for `nb_frequency_bins` ({nb_frequency_bins}) may be set too low."
         )
 
     return filterbank
 
 
-def stft(frames: np.array, window: np.array, fft_size: int = None):
-    """
-    Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
-    as `torch.stft`. #TODO @Arthur batching this could allow more usage, good first issue.
-
-    Args:
-        frames (`np.array` of dimension `(num_frames, self.n_fft)`):
-            A framed audio signal obtained using `self._fram_wav`.
-        window (`np.array` of dimension `(self.n_freqs, self.n_mels)`:
-            A array reprensenting the function that will be used to reduces the amplitude of the discontinuities at the
-            boundaries of each frame when computing the FFT. Each frame will be multiplied by the window. For more
-            information on this phenomena, called *Spectral leakage*, refer to [this
-            tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
-        fft_size (`int`, *optional*):
-            Defines the frequency resolution of the Fourier Transform. The number of frequency bins used for dividing
-            the window into equal strips A bin is a spectrum sample, and defines the frequency resolution of the
-            window. An increase of the FFT size slows the calculus time proportionnally.
-    """
-    frame_size = frames.shape[1]
-
-    if fft_size is None:
-        fft_size = frame_size
-
-    if fft_size < frame_size:
-        raise ValueError("FFT size must greater or equal the frame size")
-    # number of FFT bins to store
-    num_fft_bins = (fft_size >> 1) + 1
-
-    data = np.empty((len(frames), num_fft_bins), dtype=np.complex64)
-    fft_signal = np.zeros(fft_size)
-
-    for f, frame in enumerate(frames):
-        if window is not None:
-            np.multiply(frame, window, out=fft_signal[:frame_size])
-        else:
-            fft_signal[:frame_size] = frame
-        data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
-    return data.T
-
-
 def power_to_db(mel_spectrogram, top_db=None, a_min=1e-10, ref=1.0):
     """
     Convert a mel spectrogram from power to db scale, this function is the numpy implementation of librosa.power_to_lb.
+    It computes 10 * log10(mel_spectrogram / ref), using basic log properties for stability.
 
     Note:
         The motivation behind applying the log function on the mel spectrogram is that humans do not hear loudness on a
@@ -269,9 +229,9 @@ def power_to_db(mel_spectrogram, top_db=None, a_min=1e-10, ref=1.0):
         top_db (`int`, *optional*):
             The maximum decibel value.
         a_min (`int`, *optional*, default to 1e-10):
-            TODO
+            Minimum value to use when cliping the mel spectrogram.
         ref (`float`, *optional*, default to 1.0):
-            TODO
+            Maximum reference value used to scale the mel_spectrogram.
 
     """
     log_spec = 10 * np.log10(np.clip(mel_spectrogram, a_min=a_min, a_max=None))
@@ -283,7 +243,7 @@ def power_to_db(mel_spectrogram, top_db=None, a_min=1e-10, ref=1.0):
     return log_spec
 
 
-def fram_wave(waveform: np.array, hop_length: int = 160, n_fft: int = 400, center: bool = True):
+def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 400, center: bool = True):
     """
     In order to compute the short time fourier transform, the waveform needs to be split in overlapping windowed
     segments called `frames`.
@@ -291,24 +251,28 @@ def fram_wave(waveform: np.array, hop_length: int = 160, n_fft: int = 400, cente
     The window length (window_length) defines how much of the signal is contained in each frame, while the hop length
     defines the step between the beginning of each new frame.
 
-    #TODO @Arthur **This method does not support batching yet as we are mainly focus on inference. If you want this to
+    TODO @Arthur **This method does not support batching yet as we are mainly focus on inference. If you want this to
     be added feel free to open an issue and ping @arthurzucker on Github**
 
     Args:
         waveform (`np.array`) of shape (sample_length,):
             The raw waveform which will be split into smaller chunks.
+        hop_length (`int`, *optional*, defaults to 160):
+            Step between each window of the waveform.
+        fft_window_size (`int`, *optional*, defaults to 400):
+            Defines the size of the window.
         center (`bool`, defaults to `True`):
             Whether or not to center each frame around the middle of the frame. Centering is done by reflecting the
             waveform on the left and on the right.
 
     Return:
-        framed_waveform (`np.array` of shape (`waveform.shape // hop_length , n_fft)`):
+        framed_waveform (`np.array` of shape `(waveform.shape // hop_length , fft_window_size)`):
             The framed waveforms that can be fed to `np.fft`.
     """
     frames = []
     for i in range(0, waveform.shape[0] + 1, hop_length):
-        half_window = (n_fft - 1) // 2 + 1
         if center:
+            half_window = (fft_window_size - 1) // 2 + 1
             start = i - half_window if i > half_window else 0
             end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
             frame = waveform[start:end]
@@ -321,11 +285,56 @@ def fram_wave(waveform: np.array, hop_length: int = 160, n_fft: int = 400, cente
                 frame = np.pad(frame, pad_width=padd_width, mode="reflect")
 
         else:
-            frame = waveform[i : i + n_fft]
+            frame = waveform[i : i + fft_window_size]
             frame_width = frame.shape[0]
             if frame_width < waveform.shape[0]:
-                frame = np.lib.pad(frame, pad_width=(0, n_fft - frame_width), mode="constant", constant_values=0)
+                frame = np.lib.pad(frame, pad_width=(0, fft_window_size - frame_width), mode="constant", constant_values=0)
         frames.append(frame)
 
     frames = np.stack(frames, 0)
     return frames
+
+
+def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = None):
+    """
+    Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
+    as `torch.stft`. TODO @Arthur batching this could allow more usage, good first issue.
+
+    Args:
+        frames (`np.array` of dimension `(num_frames, fft_window_size)`):
+            A framed audio signal obtained using `audio_utils.fram_wav`.
+        windowing_function (`np.array` of dimension `(nb_frequency_bins, nb_mel_filters)`:
+            A array reprensenting the function that will be used to reduces the amplitude of the discontinuities at the
+            boundaries of each frame when computing the STFT. Each frame will be multiplied by the windowing_function. For more
+            information on the discontinuities, called *Spectral leakage*, refer to [this
+            tutorial]https://download.ni.com/evaluation/pxi/Understanding%20FFTs%20and%20Windowing.pdf
+        fft_window_size (`int`, *optional*):
+            Size of the window om which the Fourier transform is applied. This controls the frequency resolution of the spectrogram. 
+            400 means that the fourrier transform is computed on windows of 400 samples. The number of frequency bins (`nb_frequency_bins`)
+            used to divide the window into equal strips is equal to `(1+fft_window_size)//2`. An increase of the fft_window_size slows the 
+            calculus time proportionnally.
+    
+    Returns:
+        spectrogram (`np.ndarray`): 
+            A spectrogram of shape `(num_frames, nb_frequency_bins)` obtained using the STFT algorithm
+    """
+    frame_size = frames.shape[1]
+
+    if fft_window_size is None:
+        fft_window_size = frame_size
+
+    if fft_window_size < frame_size:
+        raise ValueError("FFT size must greater or equal the frame size")
+    # number of FFT bins to store
+    nb_frequency_bins = (fft_window_size >> 1) + 1
+
+    spectrogram = np.empty((len(frames), nb_frequency_bins), dtype=np.complex64)
+    fft_signal = np.zeros(fft_window_size)
+
+    for f, frame in enumerate(frames):
+        if windowing_function is not None:
+            np.multiply(frame, windowing_function, out=fft_signal[:frame_size])
+        else:
+            fft_signal[:frame_size] = frame
+        spectrogram[f] = fft(fft_signal, axis=0)[:nb_frequency_bins]
+    return spectrogram.T

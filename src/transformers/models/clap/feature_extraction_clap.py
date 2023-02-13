@@ -41,9 +41,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
     Fourier Transform` (STFT) which should match pytorch's `torch.stft` equivalent.
 
     Args:
-        feature_size (`int`, defaults to 80):
-            The feature dimension of the extracted Mel spectrograms. This corresponds to the number of frequency bins
-            (intervals) that are computed, for each Fourier step.
+        feature_size (`int`, defaults to 64):
+            The feature dimension of the extracted Mel spectrograms. This corresponds to the number of mel filters (`n_mels`).
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz). This only serves
             to warn users if the audio fed to the feature extractor does not have the same sampling rate.
@@ -52,9 +51,9 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             in smaller `frames` with a step of `hop_length` between each frame.
         max_length_s (`int`, defaults to 10):
             The maximum input lenght of the model in seconds. This is used to pad the audio.
-        n_fft (`int`, defaults to 400):
-            Size of the Fourier transform. This should be the length of a single frame in samples. 400 means that the
-            fourrier transform is computed on 400 samples.
+        fft_window_size (`int`, defaults to 400):
+            Size of the window (in samples) on which the Fourier transform is applied. This controls the frequency resolution of the spectrogram. 
+            400 means that the fourrier transform is computed on windows of 400 samples.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
         return_attention_mask (`bool`, *optional*, defaults to `False`):
@@ -84,11 +83,11 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
     def __init__(
         self,
-        feature_size=80,
+        feature_size=64,
         sampling_rate=48_000,
         hop_length=480,
         max_length_s=10,
-        n_fft=400,
+        fft_window_size=1024,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
         frequency_min: float = 0,
@@ -108,7 +107,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         self.top_db = top_db
         self.truncation = truncation
         self.padding = padding
-        self.n_fft = n_fft
+        self.fft_window_size = fft_window_size
+        self.nb_frequency_bins = (fft_window_size >> 1) + 1
         self.hop_length = hop_length
         self.max_length_s = max_length_s
         self.nb_max_samples = max_length_s * sampling_rate
@@ -116,8 +116,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         self.frequency_min = frequency_min
         self.frequency_max = frequency_max
         self.mel_filters = get_mel_filter_banks(
-            n_freqs=int(1 + n_fft // 2),
-            n_mels=feature_size,
+            nb_frequency_bins=self.nb_frequency_bins,
+            nb_mel_filters=feature_size,
             frequency_min=frequency_min,
             frequency_max=frequency_max,
             sample_rate=sampling_rate,
@@ -125,8 +125,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="htk",
         )
         self.mel_filters_slaney = get_mel_filter_banks(
-            n_freqs=int(1 + n_fft // 2),
-            n_mels=feature_size,
+            nb_frequency_bins=self.nb_frequency_bins,
+            nb_mel_filters=feature_size,
             frequency_min=frequency_min,
             frequency_max=frequency_max,
             sample_rate=sampling_rate,
@@ -161,9 +161,9 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
               `librosa.filters.mel` when computing the mel spectrogram. These filters were only used in the original
               implementation when the truncation mode is not `"fusion"`.
         """
-        window = np.hanning(self.n_fft + 1)[:-1]
-        frames = fram_wave(waveform, self.hop_length, self.n_fft)
-        spectrogram = stft(frames, window=window, fft_size=self.n_fft)
+        window = np.hanning(self.fft_window_size + 1)[:-1]
+        frames = fram_wave(waveform, self.hop_length, self.fft_window_size)
+        spectrogram = stft(frames, window, fft_window_size=self.fft_window_size)
 
         magnitudes = np.abs(spectrogram) ** 2
         mel_spectrogram = np.matmul(mel_filters.T, magnitudes)
