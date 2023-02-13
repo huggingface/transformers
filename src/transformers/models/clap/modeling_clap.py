@@ -170,12 +170,14 @@ class ClapAudioModelOutput(ModelOutput):
     ClapAudio model output to mimic the output of the original implementation.
 
     Args:
-        framewise_output (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
+        framewise_output (`torch.FloatTensor` of shape `(batch_size, reshaped_hidden_size, num_classes)`):
+            Output hidden_states that are interpolated after applying sigmoid. These logits are used to compute the
+            the classification label in the original implementation.
+        clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size, num_classes)`):
+            Output hidden_states after applying sigmoid. These logits are used to compute the
+            the classification label in the original implementation.
+        fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Pooled interpolated hidden_states.
         embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
@@ -207,12 +209,14 @@ class ClapAudioModelOutputWithProjection(ModelOutput):
     Args:
         audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`):
             The audio embeddings obtained by applying the projection layer to the pooler_output.
-        framewise_output (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
+        framewise_output (`torch.FloatTensor` of shape `(batch_size, reshaped_hidden_size, num_classes)`):
+            Output hidden_states that are interpolated after applying sigmoid. These logits are used to compute the
+            the classification label in the original implementation.
+        clipwise_output (`torch.FloatTensor` of shape `(batch_size, hidden_size, num_classes)`):
+            Output hidden_states after applying sigmoid. These logits are used to compute the
+            the classification label in the original implementation.
+        fine_grained_embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Pooled interpolated hidden_states.
         embedding (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
@@ -1175,6 +1179,9 @@ Clap_AUDIO_INPUTS_DOCSTRING = r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Input audio features. This should be returnes by the [`ClapFeatureExtractor`] class that you can also
             retrieve from [`AutoFeatureExtractor`]. See [`ClapFeatureExtractor.__call__`] for details.
+        is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
+            Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
+            the features.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
