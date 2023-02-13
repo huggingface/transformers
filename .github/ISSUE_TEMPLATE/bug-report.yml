@@ -43,6 +43,7 @@ body:
         
           - deepspeed: HF Trainer: @stas00, Accelerate: @pacman100
           - ray/raytune: @richardliaw, @amogkam
+          - Big Model Inference: @sgugger @muellerzr
         
         Documentation: @sgugger, @stevhliu and @MKhalusova
         
