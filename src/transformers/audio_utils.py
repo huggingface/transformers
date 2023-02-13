@@ -242,7 +242,8 @@ def power_to_db(mel_spectrogram, top_db=None, a_min=1e-10, ref=1.0):
         log_spec = np.clip(log_spec, min=np.maximum(log_spec) - top_db, max=np.inf)
     return log_spec
 
-#TODO @ArthurZucker: This method does not support batching yet as we are mainly focus on inference.
+
+# TODO @ArthurZucker: This method does not support batching yet as we are mainly focus on inference.
 def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 400, center: bool = True):
     """
     In order to compute the short time fourier transform, the waveform needs to be split in overlapping windowed
@@ -294,13 +295,15 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
     frames = np.stack(frames, 0)
     return frames
 
-#TODO @ArthurZucker: This method does not support batching yet as we are mainly focus on inference.
+
+# TODO @ArthurZucker: This method does not support batching yet as we are mainly focus on inference.
+
 
 def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = None):
     """
     Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same results
-    as `torch.stft`. 
-    
+    as `torch.stft`.
+
     Args:
         frames (`np.array` of dimension `(num_frames, fft_window_size)`):
             A framed audio signal obtained using `audio_utils.fram_wav`.
@@ -316,16 +319,18 @@ def stft(frames: np.array, windowing_function: np.array, fft_window_size: int = 
             `(1+fft_window_size)//2`. An increase of the fft_window_size slows the calculus time proportionnally.
 
     Example:
-    
+
     ```python
     >>> from transformers.audio_utils import stft, fram_wave
     >>> import numpy as np
+
     >>> audio = np.random.rand(50)
-    >>> fft_window_size = 10; hop_length = 2
+    >>> fft_window_size = 10
+    >>> hop_length = 2
     >>> framed_audio = fram_wave(audio, hop_length, fft_window_size)
     >>> spectrogram = stft(framed_audio, np.hanning(fft_window_size + 1))
     ```
-    
+
     Returns:
         spectrogram (`np.ndarray`):
             A spectrogram of shape `(num_frames, nb_frequency_bins)` obtained using the STFT algorithm
