@@ -582,7 +582,7 @@ class GenerationMixin:
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
 
-        batch_size = batch_size if batch_size is not None else (1, 1)
+        batch_size = batch_size if batch_size is not None else 1
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
