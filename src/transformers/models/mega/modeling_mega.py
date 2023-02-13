@@ -361,28 +361,28 @@ class GatedCrossAttention(nn.Module):
         self.config = config
         self.activation = get_activation_fn(activation=self.config.activation)
         self.attention_activation = self.config.attention_activation
-        self.scaling = self.config.zdim ** -0.5 if self.attention_activation == 'softmax' else None
+        self.scaling = self.config.shared_representation_size ** -0.5 if self.attention_activation == 'softmax' else None
 
-        dropout_module = MegaFeatureDropout if self.config.feature_dropout else MegaDropout
+        dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
         self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
         self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob, module_name=self.__class__.__name__)
         # Attention dropout is standard dropout
-        self.attention_dropout = MegaDropout(self.config.attention_dropout_prob, module_name=self.__class__.__name__)
+        self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__)
 
-        self.prenorm = self.config.prenorm
-        self.norm = SequenceNorm(self.config.norm_type, self.config.embed_dim, affine=self.config.norm_affine)
+        self.prenorm = self.config.normalize_before_mega
+        self.norm = SequenceNorm(self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine)
 
-        self.k_proj = nn.Linear(self.config.embed_dim, self.config.zdim)
-        self.v_proj = nn.Linear(self.config.embed_dim, self.config.embed_dim)
-        self.q_proj = nn.Linear(self.config.embed_dim, 2 * self.config.embed_dim + self.config.zdim)
-        self.h_proj = nn.Linear(self.config.embed_dim, self.config.embed_dim)
+        self.k_proj = nn.Linear(self.config.hidden_size, self.config.shared_representation_size)
+        self.v_proj = nn.Linear(self.config.hidden_size, self.config.hidden_size)
+        self.q_proj = nn.Linear(self.config.hidden_size, 2 * self.config.hidden_size + self.config.shared_representation_size)
+        self.h_proj = nn.Linear(self.config.hidden_size, self.config.hidden_size)
 
-        if self.config.rel_pos_bias == 'simple':
+        if self.config.relative_positional_bias == 'simple':
             self.rel_pos_bias = SimpleRelativePositionalBias(self.config.max_positions)
-        elif self.config.rel_pos_bias == 'rotary':
-            self.rel_pos_bias = RotaryRelativePositionalBias(self.config.zdim, self.config.max_positions)
+        elif self.config.relative_positional_bias == 'rotary':
+            self.rel_pos_bias = RotaryRelativePositionalBias(self.config.shared_representation_size, self.config.max_positions)
         else:
-            raise ValueError('unknown relative position bias: {}'.format(self.config.rel_pos_bias))
+            raise ValueError('unknown relative position bias: {}'.format(self.config.relative_positional_bias))
 
         self.reset_parameters()
         self.softmax = nn.Softmax(dim=-1)
@@ -498,7 +498,7 @@ class GatedCrossAttention(nn.Module):
         """
 
         seq_len, bsz, embed_dim = query.size()
-        assert embed_dim == self.config.embed_dim
+        assert embed_dim == self.config.hidden_size
 
         if incremental_state is not None:
             saved_state = self._get_input_buffer(incremental_state)
@@ -518,7 +518,7 @@ class GatedCrossAttention(nn.Module):
 
         # L2 x B x (2*D+S)
         base = self.q_proj(q)
-        u, r, q = torch.split(base, [self.config.embed_dim, self.config.embed_dim, self.config.zdim], dim=-1)
+        u, r, q = torch.split(base, [self.config.hidden_size, self.config.hidden_size, self.config.shared_representation_size], dim=-1)
 
         # L2 x B x D
         u = torch.sigmoid(u)
@@ -875,33 +875,33 @@ class MovingAverageGatedAttention(nn.Module):
     super().__init__()
     self.config = config
     self.activation = get_activation_fn(self.config.activation)
-    self.scaling = self.config.zdim ** -0.5 if self.config.attention_activation == 'softmax' else None 
-    dropout_module = MegaFeatureDropout if self.config.feature_dropout else MegaDropout
+    self.scaling = self.config.shared_representation_size ** -0.5 if self.config.attention_activation == 'softmax' else None 
+    dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
     self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
     self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob, module_name=self.__class__.__name__)
     # attention dropout is standard dropout
-    self.attention_dropout = MegaDropout(self.config.attention_dropout_prob, module_name=self.__class__.__name__)
+    self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__)
 
-    self.norm = SequenceNorm(self.config.norm_type, self.config.embed_dim, affine=self.config.norm_affine)
-    self.move = MultiHeadEMA(self.config.embed_dim, 
-                             ndim=self.config.ndim, 
+    self.norm = SequenceNorm(self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine)
+    self.move = MultiHeadEMA(self.config.hidden_size, 
+                             ndim=self.config.ema_projection_size, 
                              bidirectional=self.config.bidirectional, 
                              truncation=self.config.truncation)
     
-    self.v_proj = nn.Linear(self.config.embed_dim, self.config.hdim)
-    self.mx_proj = nn.Linear(self.config.embed_dim, self.config.zdim + self.config.hdim + 2 * self.config.embed_dim)
-    self.h_proj = nn.Linear(self.config.hdim, self.config.embed_dim)
+    self.v_proj = nn.Linear(self.config.hidden_size, self.config.intermediate_size)
+    self.mx_proj = nn.Linear(self.config.hidden_size, self.config.shared_representation_size + self.config.intermediate_size + 2 * self.config.hidden_size)
+    self.h_proj = nn.Linear(self.config.intermediate_size, self.config.hidden_size)
 
-    self.gamma = nn.Parameter(torch.Tensor(2, self.config.zdim))
-    self.beta = nn.Parameter(torch.Tensor(2, self.config.zdim))
+    self.gamma = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
+    self.beta = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
 
     max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size 
-    if self.config.rel_pos_bias == 'simple':
+    if self.config.relative_positional_bias == 'simple':
       self.rel_pos_bias = SimpleRelativePositionalBias(max_positions)
-    elif self.config.rel_pos_bias == 'rotary':
-      self.rel_pos_bias = RotaryRelativePositionalBias(self.config.zdim, max_positions)
+    elif self.config.relative_positional_bias == 'rotary':
+      self.rel_pos_bias = RotaryRelativePositionalBias(self.config.shared_representation_size, max_positions)
     else:
-      raise ValueError(f"Unknown relative positional bias: {self.config.rel_pos_bias}")
+      raise ValueError(f"Unknown relative positional bias: {self.config.relative_positional_bias}")
 
     self.softmax = nn.Softmax(dim=-1)
     self.attention_function = self.softmax_attention if self.config.attention_activation == 'softmax' else self.element_attention
@@ -1010,7 +1010,7 @@ class MovingAverageGatedAttention(nn.Module):
       before_attn_fn = False,
   ):
     seq_len, bsz, embed_dim = x.size()
-    assert embed_dim == self.config.embed_dim, f"Input embedding dimension should be {self.config.embed_dim}; received {embed_dim}"
+    assert embed_dim == self.config.hidden_size, f"Input embedding dimension should be {self.config.hidden_size}; received {embed_dim}"
 
     if incremental_state is not None:
       saved_state = self._get_input_buffer(incremental_state)
@@ -1018,7 +1018,7 @@ class MovingAverageGatedAttention(nn.Module):
       saved_state = None
 
     residual = x 
-    if self.config.prenorm:
+    if self.config.normalize_before_mega:
       x = self.norm(x)
     
     # L x B x E
@@ -1032,9 +1032,9 @@ class MovingAverageGatedAttention(nn.Module):
     base = self.mx_proj(mx)
     u, zr, hx = torch.split(
         base, [
-            self.config.embed_dim, 
-            self.config.zdim + self.config.hdim, 
-            self.config.embed_dim
+            self.config.hidden_size, 
+            self.config.shared_representation_size + self.config.intermediate_size, 
+            self.config.hidden_size
         ], 
         dim=-1
     )
@@ -1043,7 +1043,7 @@ class MovingAverageGatedAttention(nn.Module):
     u = torch.sigmoid(u)
 
     # L x B x (E + S)
-    z, r = torch.split(F.silu(zr), [self.config.zdim, self.config.hdim], dim=-1)
+    z, r = torch.split(F.silu(zr), [self.config.shared_representation_size, self.config.intermediate_size], dim=-1)
 
     # L x B x S -> L x B x 1 x S -> L x B x 2 X S 
     z = z.unsqueeze(2) * self.gamma + self.beta
@@ -1078,7 +1078,7 @@ class MovingAverageGatedAttention(nn.Module):
           seq_len=k.size(1)
       )
 
-      if self.config.chunk_size < 0:
+      if not self.config.use_chunking:
         saved_state['prev_key'] = k 
         saved_state['prev_value'] = v
         saved_state['prev_key_padding_mask'] = padding_mask 
@@ -1099,7 +1099,7 @@ class MovingAverageGatedAttention(nn.Module):
       self._set_input_buffer(incremental_state, saved_state)
     
     ctx_len = k.size(1)
-    if self.config.chunk_size < 0:
+    if not self.config.use_chunking:
       # if we're not chunking, treat the entire sequence as one long chunk
       # B x L x S -> B x 1 x L x S
       q = q.unsqueeze(1)
@@ -1115,7 +1115,7 @@ class MovingAverageGatedAttention(nn.Module):
       else:
         # B x L x S -> B x K x C x S
         nc = seq_len // self.config.chunk_size 
-        q = q.reshape(bsz, nc, self.config.chunk_size, self.config.zdim)
+        q = q.reshape(bsz, nc, self.config.chunk_size, self.config.shared_representation_size)
       
       if ctx_len < self.config.chunk_size:
         k = k.unsqueeze(1)
@@ -1125,8 +1125,8 @@ class MovingAverageGatedAttention(nn.Module):
       else:
         # B x L x S -> B x K x C x S
         nc = ctx_len // self.config.chunk_size 
-        k = k.reshape(bsz, nc, self.config.chunk_size, self.config.zdim)
-        v = v.reshape(bsz, nc, self.config.chunk_size, self.config.hdim)
+        k = k.reshape(bsz, nc, self.config.chunk_size, self.config.shared_representation_size)
+        v = v.reshape(bsz, nc, self.config.chunk_size, self.config.intermediate_size)
         if padding_mask is not None:
           padding_mask = padding_mask.view(bsz, nc, self.config.chunk_size)
         
@@ -1143,7 +1143,7 @@ class MovingAverageGatedAttention(nn.Module):
     kernel = self.attention_dropout(attn_weights)
 
     # B x K x C x E -> B x L x E -> L x B x E
-    h = torch.matmul(kernel, v).view(bsz, seq_len, self.config.hdim).transpose(0, 1)
+    h = torch.matmul(kernel, v).view(bsz, seq_len, self.config.intermediate_size).transpose(0, 1)
 
     # L x B x E -> L x B x D
     h = self.activation(hx + self.h_proj(h * r))
@@ -1151,7 +1151,7 @@ class MovingAverageGatedAttention(nn.Module):
     # L x B x D
     out = torch.addcmul(residual, u, h - residual)
 
-    if not self.config.prenorm:
+    if not self.config.normalize_before_mega:
       out = self.norm(out)
     
     if return_attention_weights:
@@ -1209,19 +1209,19 @@ class NormalizedFeedForwardNetwork(nn.Module):
         super().__init__()
 
         self.config = config
-        self.hidden_dim = config.ffn_hidden_size
+        self.hidden_dim = config.nffn_hidden_size
         self.act_fn = config.activation
         self.activation = get_activation_fn(config.activation)
 
-        dropout_module = MegaFeatureDropout if self.config.feature_dropout else MegaDropout
+        dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
         self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
-        self.hidden_dropout = dropout_module(self.config.ffn_activation_dropout_prob, module_name=self.__class__.__name__)
+        self.hidden_dropout = dropout_module(self.config.nffn_activation_dropout_prob, module_name=self.__class__.__name__)
 
         self.prenorm = self.config.normalize_before_ffn
-        self.norm = SequenceNorm(self.config.norm_type, self.config.embed_dim, affine=self.config.norm_affine)
+        self.norm = SequenceNorm(self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine)
 
-        self.fc1 = nn.Linear(self.config.embed_dim, self.config.ffn_hidden_size)
-        self.fc2 = nn.Linear(self.config.ffn_hidden_size, self.config.embed_dim)
+        self.fc1 = nn.Linear(self.config.hidden_size, self.config.nffn_hidden_size)
+        self.fc2 = nn.Linear(self.config.nffn_hidden_size, self.config.hidden_size)
 
         self.reset_parameters()
 
@@ -1258,10 +1258,10 @@ class MegaEncoderLayer(nn.Module):
     Args:
         args (argparse.Namespace): parsed command-line arguments
     """
-    def __init__(self, config):
+    def __init__(self, config: MegaConfig):
         super().__init__()
         self.mega_layer = MovingAverageGatedAttention(config)
-        self.nffn = None if config.ffn_hidden_size > 0 else NormalizedFeedForwardNetwork(config)
+        self.nffn = NormalizedFeedForwardNetwork(config) if config.use_normalized_ffn else None
 
     def forward(self, x, encoder_padding_mask):
         """
@@ -1291,7 +1291,7 @@ class MegaDecoderLayer(nn.Module):
         super().__init__()
         self.mega_layer = MovingAverageGatedAttention(config)
         self.cross_attn = None if no_cross_attention else GatedCrossAttention(config)
-        self.nffn = None if config.ffn_hidden_size > 0 else NormalizedFeedForwardNetwork(config)
+        self.nffn = NormalizedFeedForwardNetwork(config) if config.use_normalized_ffn else None
 
 
     def forward(
@@ -1822,7 +1822,7 @@ class MegaPreTrainedModel(PreTrainedModel):
 
     config_class = MegaConfig
     base_model_prefix = "mega"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
     _no_split_modules = []
 
     def _init_weights(self, module):

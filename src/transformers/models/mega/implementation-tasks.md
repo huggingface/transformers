@@ -5,8 +5,10 @@
 * ~~Possibly add explicit `use_nffn` args as well instead of implying based on other args~~
 * `is_decoder` and `add_cross_attention` are already part of the `PretrainedConfig` parent class
 * Either remove the `initializer_range` arg, or use it to init weights
+  * Actual initialization via config is happening in `MegaPretrainedModel`, so need to pick that or the original inits
 * Remove gradient checkpointing option?
-  * Actually inherited from the `PretrainedConfig`, so probably just raise a warning if it's requested
+  * ~~Actually inherited from the `PretrainedConfig`, so probably just raise a warning if it's requested~~
+  * Actually did this by setting `supports_gradient_checkpointing=False` in `MegaPretrainedModel`
 
 ## Mega source code
 * Possibly combine `MegaEncoderLayer` and `MegaDecoderLayer` into a single class
@@ -29,8 +31,12 @@
 * Decoder stuff:
   * Probably untangle the incremental state in OG Mega to look more like the `forward` method in the auto-generated `MegaEncoder` (which is meant to be the stack of N encoder or decoder layers)
   * However, it doesn't really have to be the same, and RoBERTa uses a gross tuple of (decoder key, decoder value, encoder key, encoder value)
+    * No, we actually should set it up to return the tuple if `use_cache` is specified
   * It is interesting that the fairseq method is stateful, with the internal functions of `MultiheadEMA` modifying it directly
   * Need to look into how the original implementation instantiates and passes the incremental state
+    * Expected shape in terms of batch / tgt seq len / hidden size?
+    * Initial values?
+    * Differences from HF's `past_key_values`
 
 
 ## Arguments needed for forward pass
@@ -45,7 +51,7 @@ Mega Block
   * Incremental state (previous attention keys, values, and padding mask)
     * note that this could be used for both cross-attention and unidirectional self-attention
     * But only necessary if doing incremental decoding (not necessarily the case, such as causal LM i.e. GPT)
-    * This is controlled in the RoBERTa code (and in GPT2) with `use_cache`
+    * This is controlled in the RoBERTa code (and in GPT2) with `use_cache` - which specifically determines whether to _return_ the attention information
 
 Encoder 
 * Input IDs (or embeddings)
