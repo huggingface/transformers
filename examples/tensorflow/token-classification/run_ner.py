@@ -488,8 +488,8 @@ def main():
                     "accuracy": results["overall_accuracy"],
                 }
 
-        # endregion
-
+        # end region
+        
         # region Preparing push_to_hub and model card
         push_to_hub_model_id = training_args.push_to_hub_model_id
         model_name = model_args.model_name_or_path.split("/")[-1]
