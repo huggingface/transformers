@@ -20,11 +20,12 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
+from ...audio_utils import _fram_wave, _power_to_db, _stft, get_mel_filter_banks
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...image_transforms import np_bilinear_resize #TODO this has to be removed
+from ...image_transforms import np_bilinear_resize  # TODO this has to be removed
 from ...utils import TensorType, logging
-from ...audio_utils import get_mel_filter_banks, _fram_wave, _power_to_db, _stft
+
 
 logger = logging.get_logger(__name__)
 
@@ -162,7 +163,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         """
         window = np.hanning(self.n_fft + 1)[:-1]
         frames = _fram_wave(waveform, self.hop_length, self.n_fft)
-        stft = _stft(frames, window=window, fft_size = self.n_fft)
+        stft = _stft(frames, window=window, fft_size=self.n_fft)
 
         magnitudes = np.abs(stft) ** 2
         mel_spec = np.matmul(mel_filters.T, magnitudes)

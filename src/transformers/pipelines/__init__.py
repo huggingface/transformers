@@ -299,17 +299,6 @@ SUPPORTED_TASKS = {
         },
         "type": "multimodal",
     },
-    "zero-shot-audio-classification": {
-        "impl": ZeroShotAudioClassificationPipeline,
-        "tf": (TFAutoModel,) if is_tf_available() else (),
-        "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {
-            "model": {
-                "pt": ("laion-ai/clap-hsat-tiny", "f4881ba"),
-            }
-        },
-        "type": "multimodal",
-    },
     "conversational": {
         "impl": ConversationalPipeline,
         "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),

@@ -166,7 +166,7 @@ def get_mel_filter_banks(
         frequency_max (`float`):
             Maximum frequency of interest(Hertz).
         n_mels (`int`):
-            Number of mel filterbanks. TODO 80 seems a bit high? 
+            Number of mel filterbanks. TODO 80 seems a bit high?
         sample_rate (`int`):
             Sample rate of the audio waveform
         norm (`str`, *optional*):
