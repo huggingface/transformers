@@ -24,7 +24,6 @@ _import_structure = {
         "ClapTextConfig",
     ],
     "processing_clap": ["ClapProcessor"],
-    "tokenization_clap": ["ClapTokenizer"],
 }
 
 try:
