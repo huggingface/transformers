@@ -3727,10 +3727,7 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
-        patterns = [
-            "*.sagemaker-uploading",
-            "*.sagemaker-uploaded"
-        ]
+        patterns = ["*.sagemaker-uploading", "*.sagemaker-uploaded"]
 
         # Get current .gitignore content
         if os.path.exists(os.path.join(self.repo.local_dir, ".gitignore")):
