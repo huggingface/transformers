@@ -53,7 +53,6 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
         if self.framework != "pt":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
         # No specific FOR_XXX available yet
-        # self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
 
     def __call__(
         self,
