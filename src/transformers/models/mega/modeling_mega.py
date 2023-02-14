@@ -593,21 +593,6 @@ class GatedCrossAttention(nn.Module):
     def _set_input_buffer(self, incremental_state: Dict[str, Dict[str, Optional[torch.Tensor]]], buffer: Dict[str, Optional[torch.Tensor]]):
         return self.set_incremental_state(incremental_state, "attn_state", buffer)
 
-    @torch.jit.export
-    def reorder_incremental_state(
-            self, incremental_state: Dict[str, Dict[str, Optional[torch.Tensor]]], new_order: torch.Tensor
-    ):
-        """Reorder buffered internal state (for incremental generation)."""
-        input_buffer = self._get_input_buffer(incremental_state)
-        if input_buffer is not None:
-            for k in input_buffer.keys():
-                input_buffer_k = input_buffer[k]
-                if input_buffer_k is not None and isinstance(input_buffer_k, torch.Tensor):
-                    if input_buffer_k.size(0) == new_order.size(0):
-                        break
-                    input_buffer[k] = input_buffer_k.index_select(0, new_order)
-            incremental_state = self._set_input_buffer(incremental_state, input_buffer)
-        return incremental_state
 
 # Positional embeddings
 class SimpleRelativePositionalBias(nn.Module):
@@ -964,7 +949,9 @@ class MovingAverageGatedAttention(nn.Module):
             # 1 for tokens which are *not masked*
             # 0 for tokens which are *masked*
             # replace masked tokens with -inf to make softmax ignore them
-            qk = torch.where(attention_mask == 0, qk, float('-inf'))
+            mask_all = attention_mask.all(dim=-1, keepdim=True)
+            attention_mask = torch.logical_and(attention_mask, ~mask_all)
+            qk = qk.masked_fill(attention_mask.unsqueeze(2).to(torch.bool), float('-inf'))
 
         if before_attn_fn:
             return qk
@@ -984,7 +971,7 @@ class MovingAverageGatedAttention(nn.Module):
         '''
         Mega self-attention block, combining multi-headed EMA with traditional attention
 
-        x: embeddings on which to perform Mega attention 
+        x: embeddings on which to perform Mega attention, shape = (time, batch, embedding size)
         attention_mask: 1 if unmasked, 0 if masked
         prev_key_values: a tuple of tensors representing past state for
             incremental decoding - (self_key, self_value, self_ema_state)

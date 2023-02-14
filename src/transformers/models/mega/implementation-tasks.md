@@ -29,6 +29,7 @@
   * `MegaPretrainedModel` - initialization, remove checkpointing (?)
 * Decoder stuff:
   * Probably untangle the incremental state in OG Mega to look more like the `forward` method in the auto-generated `MegaEncoder` (which is meant to be the stack of N encoder or decoder layers)
+* Initialization: once modules are ready to go into the `PretrainedModel` class, try to use its default initialization instead of one-off `reset_parameters` methods (which might be doing the same thing)
 
 ## Incremental State --> past_key_values
 ### Hugging Face's `past_key_values`
