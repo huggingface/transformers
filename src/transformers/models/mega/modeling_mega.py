@@ -26,6 +26,7 @@ import torch.nn.functional as F
 
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -264,7 +265,7 @@ class MultiHeadEMA(nn.Module):
     def forward(
         self,
         x,
-        padding_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         # incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]] = None,
         prev_state: Optional[torch.Tensor] = None,
         use_cache: bool = False
@@ -276,6 +277,7 @@ class MultiHeadEMA(nn.Module):
                 padding elements are indicated by 1s.
 
         Refactoring:
+            attention_mask: 1 for unmasked, 0 for masked
             prev_state (Tensor, optional): the hidden state returned from 
                 the previous timestep if performing incremental decoding
             use_cache (boolean): whether to perform incremental decoding; 
@@ -291,8 +293,8 @@ class MultiHeadEMA(nn.Module):
         # L x B x D -> B x D x L
         x = x.permute(1, 2, 0)
         # mask the input: output is a tensor with 0 in the masked positions
-        if padding_mask is not None:
-            x = x * (1.0 - padding_mask.unsqueeze(1).type_as(x))
+        if attention_mask is not None:
+            x = x * (attention_mask.unsqueeze(1).type_as(x))
 
         if self.bidirectional and use_cache:
             raise ValueError('Bidirectional EMA does not support incremental state')
@@ -948,7 +950,7 @@ class MovingAverageGatedAttention(nn.Module):
         # C x C
         bias = self.rel_pos_bias(slen)
         if slen != q.size(2):
-            assert q.size(2) == 1, "Size mismatch between Q and K in element attention"
+            assert q.size(2) == 1, "Size mismatch between Q and K in softmax attention"
             # 1 x C
             bias = bias[-1:] 
 
@@ -1004,8 +1006,13 @@ class MovingAverageGatedAttention(nn.Module):
 
         # unpack the incremental state if provided
         # assumed to be (self K, self V, self EMA state, cross K, cross V)
-        if use_cache and (prev_key_values is not None):
+        # also assumes that incremental decoding is working one token at a time, so input sequence length must be 1
+        if self.config.is_decoder and (prev_key_values is not None):
+            if seq_len > 1:
+                raise ValueError(f"Incremental decoding requested on input sequence length > 1: {seq_len}")
             prev_self_key, prev_self_value, prev_ema_state, _, _ = prev_key_values
+        else:
+            prev_self_key = prev_self_value = prev_ema_state = None 
 
         # L x B x D
         # updated_ema_state will be None if use_cache=False
@@ -1040,7 +1047,7 @@ class MovingAverageGatedAttention(nn.Module):
         k = k.transpose(0, 1)
         v = v.transpose(0, 1)
 
-        if use_cache:
+        if self.config.is_decoder:
             # combine history and current to save updated state (if history is provided)
             # when chunking is applied, the past states will be None at the end of the chunk, in 
             # which case, proceed as if no K/V history had been provided
