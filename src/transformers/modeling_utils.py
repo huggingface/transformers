@@ -2107,16 +2107,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             from .utils.bitsandbytes_config import BitsAndBytesConfig
 
             bitsandbytes_config = BitsAndBytesConfig()
+
+            # warn that this argument will be deprecated in the future and fully replaced with `bitsandbytes_config`
+            logger.warning(
+                "The `load_in_8bit` argument will be deprecated in the future (v5). Please create a "
+                "`BitsAndBytesConfig` instead and pass it to the argument `quantization_config` when "
+                "calling .from_pretrained"
+            )
         elif bitsandbytes_config is not None:
             # We force `load_in_8bit` to True if `bitsandbytes_config` is passed.
             load_in_8bit = True
 
         if load_in_8bit:
-            # warn that this argument will be deprecated in the future and fully replaced with `bitsandbytes_config`
-            logger.warning(
-                "The `load_in_8bit` argument will be deprecated in the future (v5). Please use "
-                "`BitsAndBytesConfig` instead."
-            )
 
             if not (is_accelerate_available() and is_bitsandbytes_available()):
                 raise ImportError(
