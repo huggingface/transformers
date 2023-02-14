@@ -32,6 +32,7 @@ from . import (
     blenderbot,
     blenderbot_small,
     blip,
+    blip_2,
     bloom,
     bort,
     bridgetower,
@@ -194,6 +195,7 @@ from . import (
     xlm_roberta,
     xlm_roberta_xl,
     xlnet,
+    xmod,
     yolos,
     yoso,
 )

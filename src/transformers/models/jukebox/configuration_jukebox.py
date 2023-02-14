@@ -539,8 +539,6 @@ class JukeboxConfig(PretrainedConfig):
         metadata_conditioning (`bool`, *optional*, defaults to `True`):
             Whether or not to use metadata conditioning, corresponding to the artist, the genre and the min/maximum
             duration.
-        init_std (`float`, *optional*, defaults to 0.2):
-            Standard deviation used to initial the model.
 
     Example:
 
@@ -572,7 +570,6 @@ class JukeboxConfig(PretrainedConfig):
         max_duration=600.0,
         max_nb_genres=5,
         metadata_conditioning=True,
-        init_std=0.2,
         **kwargs,
     ):
         if vqvae_config is None:
@@ -596,7 +593,6 @@ class JukeboxConfig(PretrainedConfig):
 
         self.hop_fraction = self.vqvae_config.hop_fraction
 
-        self.init_std = init_std
         self.nb_priors = nb_priors
 
         # Metadata conditioning

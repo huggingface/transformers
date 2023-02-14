@@ -185,6 +185,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaModel"),
         ("xlm-roberta-xl", "XLMRobertaXLModel"),
         ("xlnet", "XLNetModel"),
+        ("xmod", "XmodModel"),
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
     ]
@@ -246,6 +247,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("xlnet", "XLNetLMHeadModel"),
+        ("xmod", "XmodForMaskedLM"),
     ]
 )
 
@@ -320,6 +322,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("xlnet", "XLNetLMHeadModel"),
+        ("xmod", "XmodForMaskedLM"),
         ("yoso", "YosoForMaskedLM"),
     ]
 )
@@ -375,6 +378,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForCausalLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForCausalLM"),
         ("xlnet", "XLNetLMHeadModel"),
+        ("xmod", "XmodForCausalLM"),
     ]
 )
 
@@ -536,6 +540,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("xlm", "XLMWithLMHeadModel"),
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
+        ("xmod", "XmodForMaskedLM"),
         ("yoso", "YosoForMaskedLM"),
     ]
 )
@@ -664,6 +669,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForSequenceClassification"),
         ("xlm-roberta-xl", "XLMRobertaXLForSequenceClassification"),
         ("xlnet", "XLNetForSequenceClassification"),
+        ("xmod", "XmodForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
     ]
 )
@@ -721,6 +727,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForQuestionAnswering"),
         ("xlm-roberta-xl", "XLMRobertaXLForQuestionAnswering"),
         ("xlnet", "XLNetForQuestionAnsweringSimple"),
+        ("xmod", "XmodForQuestionAnswering"),
         ("yoso", "YosoForQuestionAnswering"),
     ]
 )
@@ -793,6 +800,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForTokenClassification"),
         ("xlm-roberta-xl", "XLMRobertaXLForTokenClassification"),
         ("xlnet", "XLNetForTokenClassification"),
+        ("xmod", "XmodForTokenClassification"),
         ("yoso", "YosoForTokenClassification"),
     ]
 )
@@ -834,6 +842,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMultipleChoice"),
         ("xlm-roberta-xl", "XLMRobertaXLForMultipleChoice"),
         ("xlnet", "XLNetForMultipleChoice"),
+        ("xmod", "XmodForMultipleChoice"),
         ("yoso", "YosoForMultipleChoice"),
     ]
 )

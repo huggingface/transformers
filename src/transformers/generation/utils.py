@@ -541,15 +541,20 @@ class GenerationMixin:
                         "doesn't have its forwarding implemented. See the GPT2 implementation for an example "
                         "(https://github.com/huggingface/transformers/pull/21405), and feel free to open a PR with it!"
                     )
+                # In this case, `input_ids` is moved to the `model_kwargs`, so a few automations (like the creation of
+                # the attention mask) can rely on the actual model input.
+                model_kwargs["input_ids"] = self._maybe_initialize_input_ids_for_generation(
+                    inputs, bos_token_id, batch_size=model_kwargs["inputs_embeds"].shape[0]
+                )
             else:
                 if inputs is not None:
                     raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
-                inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
+            inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
 
         # 4. if `inputs` is still None, try to create `input_ids` from BOS token
-        if inputs is None:
-            inputs = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
-
+        inputs = self._maybe_initialize_input_ids_for_generation(
+            inputs, bos_token_id, model_kwargs.get("encoder_outputs")
+        )
         return inputs, input_name, model_kwargs
 
     def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
@@ -558,9 +563,17 @@ class GenerationMixin:
         """
         return logits
 
-    def _prepare_input_ids_for_generation(
-        self, bos_token_id: Optional[int], encoder_outputs: Optional[ModelOutput]
+    def _maybe_initialize_input_ids_for_generation(
+        self,
+        inputs: Optional[torch.Tensor] = None,
+        bos_token_id: Optional[int] = None,
+        encoder_outputs: Optional[ModelOutput] = None,
+        batch_size: Optional[int] = None,
     ) -> torch.LongTensor:
+        """Initializes input ids for generation, if necessary."""
+        if inputs is not None:
+            return inputs
+
         if self.config.is_encoder_decoder and encoder_outputs is not None:
             # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
             shape = encoder_outputs.last_hidden_state.size()[:-1]
@@ -568,7 +581,9 @@ class GenerationMixin:
 
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
-        return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
+
+        batch_size = batch_size if batch_size is not None else 1
+        return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
         self,
@@ -594,13 +609,19 @@ class GenerationMixin:
         # 1. get encoder
         encoder = self.get_encoder()
 
-        # 2. prepare encoder args and encoder kwargs from model kwargs
+        # 2. Prepare encoder args and encoder kwargs from model kwargs.
         irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
         encoder_kwargs = {
             argument: value
             for argument, value in model_kwargs.items()
             if not any(argument.startswith(p) for p in irrelevant_prefix)
         }
+        encoder_signature = set(inspect.signature(encoder.forward).parameters)
+        encoder_accepts_wildcard = "kwargs" in encoder_signature or "model_kwargs" in encoder_signature
+        if not encoder_accepts_wildcard:
+            encoder_kwargs = {
+                argument: value for argument, value in encoder_kwargs.items() if argument in encoder_signature
+            }
 
         # 3. make sure that encoder returns `ModelOutput`
         model_input_name = model_input_name if model_input_name is not None else self.main_input_name
@@ -650,26 +671,22 @@ class GenerationMixin:
         **model_kwargs,
     ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
         """Expands tensors from [batch_size, ...] to [batch_size * expand_size, ...]"""
+
+        def _expand_dict_for_generation(dict_to_expand):
+            for key in dict_to_expand:
+                if dict_to_expand[key] is not None and isinstance(dict_to_expand[key], torch.Tensor):
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
+            return dict_to_expand
+
         if input_ids is not None:
             input_ids = input_ids.repeat_interleave(expand_size, dim=0)
 
-        if model_kwargs.get("token_type_ids") is not None:
-            model_kwargs["token_type_ids"] = model_kwargs["token_type_ids"].repeat_interleave(expand_size, dim=0)
-
-        if model_kwargs.get("attention_mask") is not None:
-            model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(expand_size, dim=0)
+        model_kwargs = _expand_dict_for_generation(model_kwargs)
 
         if is_encoder_decoder:
-            encoder_outputs = model_kwargs.get("encoder_outputs")
-            if encoder_outputs is None:
+            if model_kwargs.get("encoder_outputs") is None:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-                expand_size, dim=0
-            )
-            model_kwargs["encoder_outputs"] = encoder_outputs
-            decoder_attention_mask = model_kwargs.get("decoder_attention_mask")
-            if decoder_attention_mask is not None:
-                model_kwargs["decoder_attention_mask"] = decoder_attention_mask.repeat_interleave(expand_size, dim=0)
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
 
@@ -1258,8 +1275,7 @@ class GenerationMixin:
                 device=inputs_tensor.device,
             )
         else:
-            # if decoder-only then inputs_tensor has to be `input_ids`
-            input_ids = inputs_tensor
+            input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
@@ -1702,8 +1718,8 @@ class GenerationMixin:
                 used to tell if the generation loop should stop.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
-                The id of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int]]`, *optional*):
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -1982,7 +1998,7 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
-                unfinished_sequences = (
+                unfinished_sequences = unfinished_sequences.mul(
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
@@ -2057,8 +2073,8 @@ class GenerationMixin:
                 tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
-                The id of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int]]`, *optional*):
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2228,7 +2244,7 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
-                unfinished_sequences = (
+                unfinished_sequences = unfinished_sequences.mul(
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
@@ -2306,8 +2322,8 @@ class GenerationMixin:
                 tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
-                The id of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int]]`, *optional*):
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2497,7 +2513,7 @@ class GenerationMixin:
 
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id_tensor is not None:
-                unfinished_sequences = (
+                unfinished_sequences = unfinished_sequences.mul(
                     next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
                 )
 
@@ -2574,8 +2590,8 @@ class GenerationMixin:
                 tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
-                The id of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int]]`, *optional*):
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -2902,8 +2918,8 @@ class GenerationMixin:
                 tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
-                The id of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int]]`, *optional*):
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -3230,8 +3246,8 @@ class GenerationMixin:
                 tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
-                The id of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int]]`, *optional*):
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
@@ -3613,8 +3629,8 @@ class GenerationMixin:
                 tokens. The maximum length of the sequence to be generated.
             pad_token_id (`int`, *optional*):
                 The id of the *padding* token.
-            eos_token_id (`int`, *optional*):
-                The id of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int]]`, *optional*):
+                The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.

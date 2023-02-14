@@ -50,7 +50,6 @@ from .configuration_speech_to_text import Speech2TextConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Speech2TextConfig"
-_TOKENIZER_FOR_DOC = "Speech2TextTokenizer"
 _CHECKPOINT_FOR_DOC = "facebook/s2t-small-librispeech-asr"
 
 
@@ -1257,7 +1256,6 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,

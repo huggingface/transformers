@@ -180,6 +180,13 @@ _import_structure = {
         "BlipTextConfig",
         "BlipVisionConfig",
     ],
+    "models.blip_2": [
+        "BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Blip2Config",
+        "Blip2Processor",
+        "Blip2QFormerConfig",
+        "Blip2VisionConfig",
+    ],
     "models.bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig"],
     "models.bort": [],
     "models.bridgetower": [
@@ -500,6 +507,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlm_roberta_xl": ["XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaXLConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
+    "models.xmod": ["XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP", "XmodConfig"],
     "models.yolos": ["YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP", "YolosConfig"],
     "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
     "onnx": [],
@@ -1149,6 +1157,15 @@ else:
             "BlipPreTrainedModel",
             "BlipTextModel",
             "BlipVisionModel",
+        ]
+    )
+    _import_structure["models.blip_2"].extend(
+        [
+            "BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Blip2ForConditionalGeneration",
+            "Blip2PreTrainedModel",
+            "Blip2QFormerModel",
+            "Blip2VisionModel",
         ]
     )
     _import_structure["models.bloom"].extend(
@@ -2563,6 +2580,19 @@ else:
             "load_tf_weights_in_xlnet",
         ]
     )
+    _import_structure["models.xmod"].extend(
+        [
+            "XMOD_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "XmodForCausalLM",
+            "XmodForMaskedLM",
+            "XmodForMultipleChoice",
+            "XmodForQuestionAnswering",
+            "XmodForSequenceClassification",
+            "XmodForTokenClassification",
+            "XmodModel",
+            "XmodPreTrainedModel",
+        ]
+    )
     _import_structure["models.yolos"].extend(
         [
             "YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3659,6 +3689,13 @@ if TYPE_CHECKING:
         BlipTextConfig,
         BlipVisionConfig,
     )
+    from .models.blip_2 import (
+        BLIP_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Blip2Config,
+        Blip2Processor,
+        Blip2QFormerConfig,
+        Blip2VisionConfig,
+    )
     from .models.bloom import BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP, BloomConfig
     from .models.bridgetower import (
         BRIDGETOWER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3951,6 +3988,7 @@ if TYPE_CHECKING:
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
     from .models.xlm_roberta_xl import XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaXLConfig
     from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+    from .models.xmod import XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP, XmodConfig
     from .models.yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
     from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
 
@@ -4512,6 +4550,13 @@ if TYPE_CHECKING:
             BlipPreTrainedModel,
             BlipTextModel,
             BlipVisionModel,
+        )
+        from .models.blip_2 import (
+            BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Blip2ForConditionalGeneration,
+            Blip2PreTrainedModel,
+            Blip2QFormerModel,
+            Blip2VisionModel,
         )
         from .models.bloom import (
             BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5644,6 +5689,17 @@ if TYPE_CHECKING:
             XLNetModel,
             XLNetPreTrainedModel,
             load_tf_weights_in_xlnet,
+        )
+        from .models.xmod import (
+            XMOD_PRETRAINED_MODEL_ARCHIVE_LIST,
+            XmodForCausalLM,
+            XmodForMaskedLM,
+            XmodForMultipleChoice,
+            XmodForQuestionAnswering,
+            XmodForSequenceClassification,
+            XmodForTokenClassification,
+            XmodModel,
+            XmodPreTrainedModel,
         )
         from .models.yolos import (
             YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST,

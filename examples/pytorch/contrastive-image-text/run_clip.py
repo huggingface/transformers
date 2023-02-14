@@ -131,6 +131,10 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "An optional input evaluation data file (a jsonlines file)."},
     )
+    test_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input testing data file (a jsonlines file)."},
+    )
     max_seq_length: Optional[int] = field(
         default=128,
         metadata={
