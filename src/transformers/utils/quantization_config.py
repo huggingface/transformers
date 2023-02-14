@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 @dataclass
 class BitsAndBytesConfig:
-    r"""
+    """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `bitsandbytes`.
 
