@@ -490,7 +490,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             "transformer.word_embeddings": 0,
             "transformer.word_embeddings_layernorm": "cpu",
             "lm_head": 0,
-            "transformer.h": 0,
+            "transformer.h": 1,
             "transformer.ln_f": "disk",
         }
         bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
