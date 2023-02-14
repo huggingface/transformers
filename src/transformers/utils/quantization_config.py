@@ -16,8 +16,9 @@
 # limitations under the License.
 from dataclasses import dataclass
 
+
 @dataclass
-class BitsAndBytesConfig():
+class BitsAndBytesConfig:
     r"""
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `bitsandbytes`.
@@ -47,6 +48,7 @@ class BitsAndBytesConfig():
             this flag. This is useful for offloading large models such as `google/flan-t5-xxl`. Note that the int8
             operations will not be run on CPU.
     """
+
     def __init__(
         self,
         llm_int8_threshold=6.0,
@@ -71,5 +73,3 @@ class BitsAndBytesConfig():
 
         if not isinstance(self.llm_int8_enable_fp32_cpu_offload, bool):
             raise ValueError("llm_int8_enable_fp32_cpu_offload must be a boolean")
-
-        
