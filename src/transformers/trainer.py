@@ -3757,7 +3757,7 @@ class Trainer:
         self.repo.git_add(".gitignore")
 
         # avoid race condition with git status
-        time.sleep(1)
+        time.sleep(0.5)
 
         if not self.repo.is_repo_clean():
             self.repo.git_commit("Add *.sagemaker patterns to .gitignore.")
