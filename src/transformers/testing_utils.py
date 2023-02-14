@@ -1728,7 +1728,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
     return decorator
 
 
-def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=600):
+def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
     """
     To run a test in a subprocess. In particular, this can avoid (GPU) memory issue.
 
@@ -1739,9 +1739,12 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=600):
             The function implementing the actual testing logic.
         inputs (`dict`, *optional*, defaults to `None`):
             The inputs that will be passed to `target_func` through an (input) queue.
-        timeout (`int`, *optional*, defaults to 600):
-            The timeout (in seconds) that will be passed to the input and output queues.
+        timeout (`int`, *optional*, defaults to `None`):
+            The timeout (in seconds) that will be passed to the input and output queues. If not specified, the env.
+            variable `PYTEST_TIMEOUT` will be checked. If still `None`, its value will be set to `600`.
     """
+    if timeout is None:
+        timeout = int(os.environ.get("PYTEST_TIMEOUT", 600))
 
     start_methohd = "spawn"
     ctx = multiprocessing.get_context(start_methohd)
