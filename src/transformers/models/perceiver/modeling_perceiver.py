@@ -2124,7 +2124,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
 
         self.output_num_channels = output_num_channels
         # If `none`, the decoder will not construct any position encodings.
-        # You should construct your own when quering the decoder.
+        # You should construct your own when querying the decoder.
         self.output_position_encodings = None
         self.position_encoding_type = position_encoding_type
         self.position_encoding_kwargs = position_encoding_kwargs
@@ -2851,13 +2851,13 @@ class PerceiverTextPreprocessor(AbstractPreprocessor):
         return self.config.d_model
 
     def forward(self, inputs: torch.LongTensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
-        embeddings = self.embeddings(inputs)
+        embeddings_without_pos = self.embeddings(inputs)
 
         seq_length = inputs.shape[1]
         position_ids = torch.arange(0, seq_length, device=inputs.device)
-        embeddings = embeddings + self.position_embeddings(position_ids)
+        embeddings = embeddings_without_pos + self.position_embeddings(position_ids)
 
-        return embeddings, None, embeddings
+        return embeddings, None, embeddings_without_pos
 
 
 class PerceiverEmbeddingDecoder(nn.Module):
@@ -2890,7 +2890,7 @@ class PerceiverMultimodalPostprocessor(nn.Module):
     postprocessor.
 
     Args:
-          modalities (`Dict[str, PostprocessorType]`):
+          modalities (`Mapping[str, PostprocessorType]`):
             Dictionary mapping modality name to postprocessor class for that modality.
           input_is_dict (`bool`, *optional*, defaults to `False`):
             If True, input is assumed to be dictionary structured, and outputs keep the same dictionary shape. If
@@ -3346,7 +3346,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
     of channels.
 
     Args:
-        modalities (`Dict[str, PreprocessorType]`):
+        modalities (`Mapping[str, PreprocessorType]`):
             Dict mapping modality name to preprocessor.
         mask_probs (`Dict[str, float]`):
             Dict mapping modality name to masking probability of that modality.
