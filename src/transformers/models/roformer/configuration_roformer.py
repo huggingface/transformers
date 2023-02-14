@@ -126,7 +126,7 @@ class RoFormerConfig(PretrainedConfig):
         pad_token_id=0,
         rotary_value=False,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

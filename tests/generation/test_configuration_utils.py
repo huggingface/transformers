@@ -20,6 +20,7 @@ import unittest
 from huggingface_hub import HfFolder, delete_repo, set_access_token
 from parameterized import parameterized
 from requests.exceptions import HTTPError
+
 from transformers import AutoConfig, GenerationConfig
 from transformers.testing_utils import TOKEN, USER, is_staging_test
 

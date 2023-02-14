@@ -77,7 +77,7 @@ def _pad(items, key, padding_value, padding_side):
         # Others include `attention_mask` etc...
         shape = items[0][key].shape
         dim = len(shape)
-        if key == "pixel_values":
+        if key in ["pixel_values", "image"]:
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
@@ -749,7 +749,7 @@ class Pipeline(_ScikitCompat):
         framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
-        device: Union[int, str, "torch.device"] = -1,
+        device: Union[int, str, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
@@ -764,6 +764,19 @@ class Pipeline(_ScikitCompat):
         self.image_processor = image_processor
         self.modelcard = modelcard
         self.framework = framework
+
+        if self.framework == "pt" and device is not None:
+            self.model = self.model.to(device=device)
+
+        if device is None:
+            # `accelerate` device map
+            hf_device_map = getattr(self.model, "hf_device_map", None)
+            if hf_device_map is not None:
+                # Take the first device used by `accelerate`.
+                device = next(iter(hf_device_map.values()))
+            else:
+                device = -1
+
         if is_torch_available() and self.framework == "pt":
             if isinstance(device, torch.device):
                 self.device = device
@@ -774,13 +787,9 @@ class Pipeline(_ScikitCompat):
             else:
                 self.device = torch.device(f"cuda:{device}")
         else:
-            self.device = device
+            self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
         self.binary_output = binary_output
-
-        # Special handling
-        if self.framework == "pt" and self.device.type != "cpu":
-            self.model = self.model.to(self.device)
 
         # Update config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
@@ -791,6 +800,13 @@ class Pipeline(_ScikitCompat):
         self._batch_size = kwargs.pop("batch_size", None)
         self._num_workers = kwargs.pop("num_workers", None)
         self._preprocess_params, self._forward_params, self._postprocess_params = self._sanitize_parameters(**kwargs)
+
+        if self.image_processor is None and self.feature_extractor is not None:
+            if isinstance(self.feature_extractor, BaseImageProcessor):
+                # Backward compatible change, if users called
+                # ImageSegmentationPipeline(.., feature_extractor=MyFeatureExtractor())
+                # then we should keep working
+                self.image_processor = self.feature_extractor
 
     def save_pretrained(self, save_directory: str):
         """

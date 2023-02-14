@@ -24,6 +24,7 @@ from pathlib import Path
 
 from huggingface_hub import HfFolder, delete_repo, set_access_token
 from requests.exceptions import HTTPError
+
 from transformers import AutoImageProcessor, ViTImageProcessor
 from transformers.testing_utils import (
     TOKEN,

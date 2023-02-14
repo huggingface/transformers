@@ -37,7 +37,8 @@ from tqdm.auto import tqdm
 
 
 # Integrations must be imported before ML frameworks:
-from .integrations import (  # isort: split
+# isort: off
+from .integrations import (
     default_hp_search_backend,
     get_reporting_integration_callbacks,
     hp_params,
@@ -52,15 +53,16 @@ from .integrations import (  # isort: split
     run_hp_search_wandb,
 )
 
+# isort: on
+
 import numpy as np
 import torch
 import torch.distributed as dist
+from huggingface_hub import Repository, create_repo
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
-
-from huggingface_hub import Repository, create_repo
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -368,10 +370,18 @@ class Trainer:
 
         # At this stage the model is already loaded
         if getattr(model, "is_loaded_in_8bit", False):
-            raise ValueError(
-                "The model you want to train is loaded in 8-bit precision. "
-                "Training an 8-bit model is not supported yet. "
-            )
+            if getattr(model, "_is_int8_training_enabled", False):
+                logger.info(
+                    "The model is loaded in 8-bit precision. To train this model you need to add additional modules"
+                    " inside the model such as adapters using `peft` library and freeze the model weights. Please"
+                    " check "
+                    " the examples in https://github.com/huggingface/peft for more details."
+                )
+            else:
+                raise ValueError(
+                    "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
+                    " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
+                )
 
         # Setup Sharded DDP training
         self.sharded_ddp = None
@@ -431,8 +441,12 @@ class Trainer:
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
 
             self.forword_prefetch = False
-            if "forword_prefetch" in self.args.fsdp_config and self.backward_prefetch:
+            if self.args.fsdp_config.get("forword_prefect", False):
                 self.forword_prefetch = True
+
+            self.limit_all_gathers = False
+            if self.args.fsdp_config.get("limit_all_gathers", False):
+                self.limit_all_gathers = True
 
         # one place to sort out whether to place the model on device or not
         # postpone switching model to cuda when:
@@ -458,7 +472,7 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        if self.place_model_on_device:
+        if self.place_model_on_device and not getattr(model, "is_loaded_in_8bit", False):
             self._move_model_to_device(model, args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
@@ -587,27 +601,26 @@ class Trainer:
             if args.half_precision_backend == "cuda_amp":
                 self.use_cuda_amp = True
                 self.amp_dtype = torch.float16 if args.fp16 else torch.bfloat16
-                self.do_grad_scaling = True
-                if self.sharded_ddp is not None:
-                    self.scaler = ShardedGradScaler()
-                elif self.fsdp is not None:
-                    if self.amp_dtype == torch.float16:
+                #  bf16 does not need grad scaling
+                self.do_grad_scaling = self.amp_dtype == torch.float16
+                if self.do_grad_scaling:
+                    if self.sharded_ddp is not None:
+                        self.scaler = ShardedGradScaler()
+                    elif self.fsdp is not None:
                         from torch.distributed.fsdp.sharded_grad_scaler import (
                             ShardedGradScaler as FSDPShardedGradScaler,
                         )
 
                         self.scaler = FSDPShardedGradScaler()
+                    elif is_torch_tpu_available():
+                        from torch_xla.amp import GradScaler
+
+                        self.scaler = GradScaler()
                     else:
-                        self.do_grad_scaling = False
-                        self.use_cuda_amp = False
-                        self.amp_dtype = None
-
-                elif is_torch_tpu_available():
-                    from torch_xla.amp import GradScaler
-
-                    self.scaler = GradScaler()
-                else:
-                    self.scaler = torch.cuda.amp.GradScaler()
+                        self.scaler = torch.cuda.amp.GradScaler()
+                elif self.fsdp is not None:
+                    self.use_cuda_amp = False
+                    self.amp_dtype = None
             elif args.half_precision_backend == "cpu_amp":
                 self.use_cpu_amp = True
                 self.amp_dtype = torch.bfloat16
@@ -661,7 +674,7 @@ class Trainer:
 
         # torch.compile
         if args.torch_compile and not is_torch_compile_available():
-            raise RuntimeError("Using torch.compile requires a nighly install of PyTorch.")
+            raise RuntimeError("Using torch.compile requires a nightly install of PyTorch.")
 
     def add_callback(self, callback):
         """
@@ -861,7 +874,7 @@ class Trainer:
 
             return DataLoader(
                 train_dataset,
-                batch_size=self.args.per_device_train_batch_size,
+                batch_size=self._train_batch_size,
                 collate_fn=data_collator,
                 num_workers=self.args.dataloader_num_workers,
                 pin_memory=self.args.dataloader_pin_memory,
@@ -1407,9 +1420,8 @@ class Trainer:
         # Distributed training using PyTorch FSDP
         elif self.fsdp is not None:
             # PyTorch FSDP!
-            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
+            from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, MixedPrecision
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-            from torch.distributed.fsdp.fully_sharded_data_parallel import MixedPrecision
             from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
             if FSDPOption.OFFLOAD in self.args.fsdp:
@@ -1454,6 +1466,7 @@ class Trainer:
                     device_id=self.args.device,
                     backward_prefetch=self.backward_prefetch,
                     forward_prefetch=self.forword_prefetch,
+                    limit_all_gathers=self.limit_all_gathers,
                 )
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
@@ -1790,8 +1803,10 @@ class Trainer:
                 self._load_rng_state(resume_from_checkpoint)
 
             rng_to_sync = False
+            steps_skipped = 0
             if skip_first_batches is not None and steps_trained_in_current_epoch > 0:
                 epoch_iterator = skip_first_batches(epoch_iterator, steps_trained_in_current_epoch)
+                steps_skipped = steps_trained_in_current_epoch
                 steps_trained_in_current_epoch = 0
                 rng_to_sync = True
 
@@ -1899,7 +1914,7 @@ class Trainer:
 
                     model.zero_grad()
                     self.state.global_step += 1
-                    self.state.epoch = epoch + (step + 1) / steps_in_epoch
+                    self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(args, self.state, self.control)
 
                     self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
@@ -1997,7 +2012,6 @@ class Trainer:
         return run_dir
 
     def _load_from_checkpoint(self, resume_from_checkpoint, model=None):
-
         if model is None:
             model = self.model
 
@@ -2064,7 +2078,6 @@ class Trainer:
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path):
             if self.deepspeed:
-
                 if self.model_wrapped is not None:
                     # this removes the pre-hooks from the previous engine
                     self.model_wrapped.destroy()
@@ -2120,7 +2133,6 @@ class Trainer:
             )
 
     def _issue_warnings_after_load(self, load_result):
-
         if len(load_result.missing_keys) != 0:
             if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
                 self.model._keys_to_ignore_on_save
@@ -2677,7 +2689,6 @@ class Trainer:
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
         elif self.deepspeed:
-
             # this takes care of everything as long as we aren't under zero3
             if self.args.should_save:
                 self._save(output_dir)
@@ -2976,7 +2987,6 @@ class Trainer:
 
         # if eval is called w/o train init deepspeed here
         if args.deepspeed and not self.deepspeed:
-
             # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
             # from the checkpoint eventually
             deepspeed_engine, _, _ = deepspeed_init(
@@ -3385,6 +3395,10 @@ class Trainer:
             with open(os.path.join(self.args.output_dir, ".gitignore"), "w", encoding="utf-8") as writer:
                 writer.writelines(["checkpoint-*/"])
 
+        # Add "*.sagemaker" to .gitignore if using SageMaker
+        if os.environ.get("SM_TRAINING_ENV"):
+            self._add_sm_patterns_to_gitignore()
+
         self.push_in_progress = None
 
     def create_model_card(
@@ -3706,3 +3720,42 @@ class Trainer:
             tensors = distributed_concat(tensors)
 
         return nested_numpify(tensors)
+
+    def _add_sm_patterns_to_gitignore(self) -> None:
+        """Add SageMaker Checkpointing patterns to .gitignore file."""
+        # Make sure we only do this on the main process
+        if not self.is_world_process_zero():
+            return
+
+        patterns = ["*.sagemaker-uploading", "*.sagemaker-uploaded"]
+
+        # Get current .gitignore content
+        if os.path.exists(os.path.join(self.repo.local_dir, ".gitignore")):
+            with open(os.path.join(self.repo.local_dir, ".gitignore"), "r") as f:
+                current_content = f.read()
+        else:
+            current_content = ""
+
+        # Add the patterns to .gitignore
+        content = current_content
+        for pattern in patterns:
+            if pattern not in content:
+                if content.endswith("\n"):
+                    content += pattern
+                else:
+                    content += f"\n{pattern}"
+
+        # Write the .gitignore file if it has changed
+        if content != current_content:
+            with open(os.path.join(self.repo.local_dir, ".gitignore"), "w") as f:
+                logger.debug(f"Writing .gitignore file. Content: {content}")
+                f.write(content)
+
+        self.repo.git_add(".gitignore")
+
+        # avoid race condition with git status
+        time.sleep(0.5)
+
+        if not self.repo.is_repo_clean():
+            self.repo.git_commit("Add *.sagemaker patterns to .gitignore.")
+            self.repo.git_push()

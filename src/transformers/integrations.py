@@ -354,6 +354,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
 def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import sigopt
+
     from transformers.utils.versions import importlib_metadata
 
     if trainer.args.process_index == 0:
@@ -723,7 +724,6 @@ class WandbCallback(TrainerCallback):
                     init_args["name"] = args.run_name
 
             if self._wandb.run is None:
-
                 self._wandb.init(
                     project=os.getenv("WANDB_PROJECT", "huggingface"),
                     **init_args,
@@ -1053,7 +1053,7 @@ class MLflowCallback(TrainerCallback):
 
 class DagsHubCallback(MLflowCallback):
     """
-    A [`TrainerCallback`] that logs to [DagsHub](https://dagshub.com/).
+    A [`TrainerCallback`] that logs to [DagsHub](https://dagshub.com/). Extends [`MLflowCallback`]
     """
 
     def __init__(self):
@@ -1070,7 +1070,7 @@ class DagsHubCallback(MLflowCallback):
         Setup the DagsHub's Logging integration.
 
         Environment:
-            HF_DAGSHUB_LOG_ARTIFACTS (`str`, *optional*):
+        - **HF_DAGSHUB_LOG_ARTIFACTS** (`str`, *optional*):
                 Whether to save the data and model artifacts for the experiment. Default to `False`.
         """
 
@@ -1158,7 +1158,7 @@ class NeptuneCallback(TrainerCallback):
         run: Optional["Run"] = None,
         log_parameters: bool = True,
         log_checkpoints: Optional[str] = None,
-        **neptune_run_kwargs
+        **neptune_run_kwargs,
     ):
         if not is_neptune_available():
             raise ValueError(
@@ -1430,17 +1430,26 @@ class ClearMLCallback(TrainerCallback):
     def setup(self, args, state, model, tokenizer, **kwargs):
         if self._clearml is None:
             return
+        if self._initialized:
+            return
         if state.is_world_process_zero:
             logger.info("Automatic ClearML logging enabled.")
             if self._clearml_task is None:
-                self._clearml_task = self._clearml.Task.init(
-                    project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
-                    task_name=os.getenv("CLEARML_TASK", "Trainer"),
-                    auto_connect_frameworks={"tensorboard": False, "pytorch": False},
-                    output_uri=True,
-                )
-                self._initialized = True
-                logger.info("ClearML Task has been initialized.")
+                # This might happen when running inside of a pipeline, where the task is already initialized
+                # from outside of Hugging Face
+                if self._clearml.Task.current_task():
+                    self._clearml_task = self._clearml.Task.current_task()
+                    self._initialized = True
+                    logger.info("External ClearML Task has been connected.")
+                else:
+                    self._clearml_task = self._clearml.Task.init(
+                        project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
+                        task_name=os.getenv("CLEARML_TASK", "Trainer"),
+                        auto_connect_frameworks={"tensorboard": False, "pytorch": False},
+                        output_uri=True,
+                    )
+                    self._initialized = True
+                    logger.info("ClearML Task has been initialized.")
 
             self._clearml_task.connect(args, "Args")
             if hasattr(model, "config") and model.config is not None:

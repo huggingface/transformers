@@ -42,7 +42,8 @@ logger = logging.get_logger(__name__)
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("altclip", "AltCLIPProcessor"),
-        ("blip", "BLIPProcessor"),
+        ("blip", "BlipProcessor"),
+        ("blip-2", "Blip2Processor"),
         ("bridgetower", "BridgeTowerProcessor"),
         ("chinese_clip", "ChineseCLIPProcessor"),
         ("clip", "CLIPProcessor"),
@@ -61,6 +62,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("sew-d", "Wav2Vec2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
+        ("speecht5", "SpeechT5Processor"),
         ("trocr", "TrOCRProcessor"),
         ("unispeech", "Wav2Vec2Processor"),
         ("unispeech-sat", "Wav2Vec2Processor"),

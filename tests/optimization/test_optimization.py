@@ -33,6 +33,7 @@ if is_torch_available():
         get_constant_schedule_with_warmup,
         get_cosine_schedule_with_warmup,
         get_cosine_with_hard_restarts_schedule_with_warmup,
+        get_inverse_sqrt_schedule,
         get_linear_schedule_with_warmup,
         get_polynomial_decay_schedule_with_warmup,
     )
@@ -120,7 +121,6 @@ class ScheduleInitTest(unittest.TestCase):
             self.assertAlmostEqual(a, b, delta=tol, msg=msg)
 
     def test_schedulers(self):
-
         common_kwargs = {"num_warmup_steps": 2, "num_training_steps": 10}
         # schedulers doct format
         # function: (sched_args_dict, expected_learning_rates)
@@ -145,6 +145,10 @@ class ScheduleInitTest(unittest.TestCase):
             get_polynomial_decay_schedule_with_warmup: (
                 {**common_kwargs, "power": 2.0, "lr_end": 1e-7},
                 [0.0, 5.0, 10.0, 7.656, 5.625, 3.906, 2.5, 1.406, 0.625, 0.156],
+            ),
+            get_inverse_sqrt_schedule: (
+                {"num_warmup_steps": 2},
+                [0.0, 5.0, 10.0, 8.165, 7.071, 6.325, 5.774, 5.345, 5.0, 4.714],
             ),
         }
 

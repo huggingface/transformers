@@ -135,7 +135,7 @@ class DPTImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 384, "width": 384}
@@ -159,7 +159,7 @@ class DPTImageProcessor(BaseImageProcessor):
         ensure_multiple_of: int = 1,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to target size `(size["height"], size["width"])`. If `keep_aspect_ratio` is `True`, the image
@@ -199,7 +199,7 @@ class DPTImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -220,7 +220,7 @@ class DPTImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.

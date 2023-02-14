@@ -38,7 +38,6 @@ else:
 @require_sentencepiece
 @require_tokenizers
 class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = T5Tokenizer
     rust_tokenizer_class = T5TokenizerFast
     test_rust_tokenizer = True
@@ -272,7 +271,6 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-
                 added_tokens = [f"<extra_id_{i}>" for i in range(100)] + [AddedToken("<special>", lstrip=True)]
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
@@ -306,7 +304,6 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer_list.append((self.rust_tokenizer_class, self.get_rust_tokenizer()))
 
         for tokenizer_class, tokenizer_utils in tokenizer_list:
-
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tokenizer_utils.save_pretrained(tmp_dir)
 

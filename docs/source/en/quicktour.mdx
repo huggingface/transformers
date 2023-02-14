@@ -41,25 +41,29 @@ pip install tensorflow
 
 <Youtube id="tiZFewofSLM"/>
 
-The [`pipeline`] is the easiest way to use a pretrained model for inference. You can use the [`pipeline`] out-of-the-box for many tasks across different modalities. Take a look at the table below for some supported tasks:
+The [`pipeline`] is the easiest and fastest way to use a pretrained model for inference. You can use the [`pipeline`] out-of-the-box for many tasks across different modalities, some of which are shown in the table below:
+
+<Tip>
+
+For a complete list of available tasks, check out the [pipeline API reference](./main_classes/pipelines).
+
+</Tip>
 
 | **Task**                     | **Description**                                                                                              | **Modality**    | **Pipeline identifier**                       |
 |------------------------------|--------------------------------------------------------------------------------------------------------------|-----------------|-----------------------------------------------|
-| Text classification          | assign a label to a given sequence of text                                                                   | NLP             | pipeline(task="sentiment-analysis")           |
-| Text generation              | generate text that follows a given prompt                                                                    | NLP             | pipeline(task="text-generation")              |
-| Name entity recognition      | assign a label to each token in a sequence (people, organization, location, etc.)                            | NLP             | pipeline(task="ner")                          |
-| Question answering           | extract an answer from the text given some context and a question                                            | NLP             | pipeline(task="question-answering")           |
-| Fill-mask                    | predict the correct masked token in a sequence                                                               | NLP             | pipeline(task="fill-mask")                    |
-| Summarization                | generate a summary of a sequence of text or document                                                         | NLP             | pipeline(task="summarization")                |
-| Translation                  | translate text from one language into another                                                                | NLP             | pipeline(task="translation")                  |
-| Image classification         | assign a label to an image                                                                                   | Computer vision | pipeline(task="image-classification")         |
-| Image segmentation           | assign a label to each individual pixel of an image (supports semantic, panoptic, and instance segmentation) | Computer vision | pipeline(task="image-segmentation")           |
-| Object detection             | predict the bounding boxes and classes of objects in an image                                                | Computer vision | pipeline(task="object-detection")             |
-| Audio classification         | assign a label to an audio file                                                                              | Audio           | pipeline(task="audio-classification")         |
-| Automatic speech recognition | extract speech from an audio file into text                                                                  | Audio           | pipeline(task="automatic-speech-recognition") |
-| Visual question answering    | given an image and a question, correctly answer a question about the image                                   | Multimodal      | pipeline(task="vqa")                          |
+| Text classification          | assign a label to a given sequence of text                                                                   | NLP             | pipeline(task=“sentiment-analysis”)           |
+| Text generation              | generate text given a prompt                                                                                 | NLP             | pipeline(task=“text-generation”)              |
+| Summarization                | generate a summary of a sequence of text or document                                                         | NLP             | pipeline(task=“summarization”)                |
+| Image classification         | assign a label to an image                                                                                   | Computer vision | pipeline(task=“image-classification”)         |
+| Image segmentation           | assign a label to each individual pixel of an image (supports semantic, panoptic, and instance segmentation) | Computer vision | pipeline(task=“image-segmentation”)           |
+| Object detection             | predict the bounding boxes and classes of objects in an image                                                | Computer vision | pipeline(task=“object-detection”)             |
+| Audio classification         | assign a label to some audio data                                                                            | Audio           | pipeline(task=“audio-classification”)         |
+| Automatic speech recognition | transcribe speech into text                                                                                  | Audio           | pipeline(task=“automatic-speech-recognition”) |
+| Visual question answering    | answer a question about the image, given an image and a question                                             | Multimodal      | pipeline(task=“vqa”)                          |
+| Document question answering  | answer a question about a document, given an image and a question                                            | Multimodal      | pipeline(task="document-question-answering")  |
+| Image captioning             | generate a caption for a given image                                                                         | Multimodal      | pipeline(task="image-to-text")                |
 
-Start by creating an instance of [`pipeline`] and specifying a task you want to use it for. You can use the [`pipeline`] for any of the previously mentioned tasks, and for a complete list of supported tasks, take a look at the [pipeline API reference](./main_classes/pipelines). In this guide though, you'll use the [`pipeline`] for sentiment analysis as an example:
+Start by creating an instance of [`pipeline`] and specifying a task you want to use it for. In this guide, you'll use the [`pipeline`] for sentiment analysis as an example:
 
 ```py
 >>> from transformers import pipeline

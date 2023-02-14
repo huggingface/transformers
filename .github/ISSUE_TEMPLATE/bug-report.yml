@@ -26,7 +26,7 @@ body:
         Models:
 
           - text models: @ArthurZucker and @younesbelkada
-          - vision models: @amyeroberts and @NielsRogge
+          - vision models: @amyeroberts
           - speech models: @sanchit-gandhi
           - graph models: @clefourrier
         
@@ -43,6 +43,7 @@ body:
         
           - deepspeed: HF Trainer: @stas00, Accelerate: @pacman100
           - ray/raytune: @richardliaw, @amogkam
+          - Big Model Inference: @sgugger @muellerzr
         
         Documentation: @sgugger, @stevhliu and @MKhalusova
         

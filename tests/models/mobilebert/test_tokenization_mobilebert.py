@@ -35,7 +35,6 @@ from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
 # Copied from transformers.tests.models.bert.test_modeling_bert.py with Bert->MobileBert and pathfix
 @require_tokenizers
 class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = MobileBertTokenizer
     rust_tokenizer_class = MobileBertTokenizerFast
     test_rust_tokenizer = True
@@ -312,7 +311,6 @@ class MobileBERTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         text_with_chinese_char = "".join(list_of_commun_chinese_char)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-
                 kwargs["tokenize_chinese_chars"] = True
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)

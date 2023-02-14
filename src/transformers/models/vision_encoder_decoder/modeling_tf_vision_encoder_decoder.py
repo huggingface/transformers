@@ -19,8 +19,9 @@ import gc
 import os
 import tempfile
 import warnings
-from typing import Optional
+from typing import Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
@@ -147,7 +148,6 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 
 # Copied from transformers.models.encoder_decoder.modeling_tf_encoder_decoder.shift_tokens_right
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
-
     if pad_token_id is None:
         raise ValueError("Make sure to set the pad_token_id attribute of the model's configuration.")
     pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
@@ -368,7 +368,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         encoder_pretrained_model_name_or_path: str = None,
         decoder_pretrained_model_name_or_path: str = None,
         *model_args,
-        **kwargs
+        **kwargs,
     ) -> TFPreTrainedModel:
         r"""
         Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model
@@ -535,20 +535,20 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        pixel_values: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
         **kwargs,
-    ):
+    ) -> Union[TFSeq2SeqLMOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:
 
@@ -603,7 +603,6 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
                 )
 
         if encoder_outputs is None:
-
             encoder_inputs = {
                 "input_ids": pixel_values,
                 "output_attentions": output_attentions,

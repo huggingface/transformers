@@ -826,7 +826,6 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFFlaubertWithLMHeadModelOutput]:
-
         transformer_outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,

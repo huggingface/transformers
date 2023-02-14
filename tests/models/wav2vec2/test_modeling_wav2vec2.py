@@ -81,6 +81,7 @@ if is_torchaudio_available():
 
 if is_pyctcdecode_available():
     import pyctcdecode.decoder
+
     from transformers import Wav2Vec2ProcessorWithLM
     from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
@@ -90,7 +91,6 @@ if is_torch_fx_available():
 
 
 def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -1713,10 +1713,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_torchaudio
     def test_wav2vec2_with_lm_invalid_pool(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None)
 
     def test_inference_diarization(self):
         model = Wav2Vec2ForAudioFrameClassification.from_pretrained("anton-l/wav2vec2-base-superb-sd").to(torch_device)

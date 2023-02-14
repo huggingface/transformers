@@ -158,7 +158,7 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         mecab_kwargs=None,
         sudachi_kwargs=None,
         jumanpp_kwargs=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             spm_file=spm_file,
