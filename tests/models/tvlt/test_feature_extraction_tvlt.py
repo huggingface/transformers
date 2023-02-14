@@ -21,7 +21,6 @@ import tempfile
 import unittest
 
 import numpy as np
-import torch
 
 from transformers import is_datasets_available, is_speech_available, is_torch_available
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
