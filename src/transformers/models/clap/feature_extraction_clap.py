@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for Clap."""
+"""Feature extractor class for CLAP."""
 
 
 import copy
@@ -32,13 +32,13 @@ logger = logging.get_logger(__name__)
 
 class ClapFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a Clap feature extractor.
+    Constructs a CLAP feature extractor.
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
-    Fourier Transform` (STFT) which should match pytorch's `torch.stft` equivalent.
+    This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the *Short Time
+    Fourier Transform* (STFT) which should match pytorch's `torch.stft` equivalent.
 
     Args:
         feature_size (`int`, defaults to 64):

@@ -142,7 +142,7 @@ def get_mel_filter_banks(
     filters are spaced, the bandwidth of the filters, and the manner in which the spectrum is warped. The goal of these
     features is to approximate the non-linear human perception of the variation in pitch with respect to the frequency.
     This code is heavily inspired from the *torchaudio* implementation, see
-    ![here](https://pytorch.org/audio/stable/transforms.html) for more details.
+    [here](https://pytorch.org/audio/stable/transforms.html) for more details.
 
 
     Note:
@@ -171,8 +171,8 @@ def get_mel_filter_banks(
             Sample rate of the audio waveform.
         norm (`str`, *optional*):
             If "slaney", divide the triangular Mel weights by the width of the mel band (area normalization).
-        mel_scale (`str`, *optional*, `"htk"`):
-            Scale to use: `htk` or `slaney`. (Default: `htk`)
+        mel_scale (`str`, *optional*, defaults to `"htk"`):
+            Scale to use: `"htk"` or `"slaney"`.
 
     Returns:
         `np.ndarray`: Triangular filter banks (fb matrix) of shape (`nb_frequency_bins`, `nb_mel_filters`). This matrix
@@ -254,7 +254,7 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
 
 
     Args:
-        waveform (`np.array`) of shape (sample_length,):
+        waveform (`np.array` of shape `(sample_length,)`):
             The raw waveform which will be split into smaller chunks.
         hop_length (`int`, *optional*, defaults to 160):
             Step between each window of the waveform.

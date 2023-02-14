@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Clap model."""
+""" PyTorch CLAP model."""
 import collections
 import math
 from dataclasses import dataclass
@@ -1099,7 +1099,7 @@ class ClapAudioEncoder(nn.Module):
         )
 
 
-Clap_START_DOCSTRING = r"""
+CLAP_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -1114,7 +1114,7 @@ Clap_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-Clap_TEXT_INPUTS_DOCSTRING = r"""
+CLAP_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -2290,7 +2290,7 @@ class ClapModel(ClapPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Clap Text Model with a projection layer on top (a linear layer on top of the pooled output).
+    CLAP Text Model with a projection layer on top (a linear layer on top of the pooled output).
     """,
     Clap_START_DOCSTRING,
 )
@@ -2366,7 +2366,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Clap Audio Model with a projection layer on top (a linear layer on top of the pooled output).
+    CLAP Audio Model with a projection layer on top (a linear layer on top of the pooled output).
     """,
     Clap_START_DOCSTRING,
 )
