@@ -108,7 +108,7 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head", 
         modules_to_not_convert (`str`, *optional*, defaults to `lm_head`):
             Name of the module to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
-        current_key_name (`List[`str`]`, *optional*, defaults to `None`):
+        current_key_name (`List[`str`]`, *optional*):
             An array to track the current key of the recursion. This is used to check whether the current key (part of
             it) is not in the list of modules to not convert (for instances modules that are offloaded to `cpu` or
             `disk`).
