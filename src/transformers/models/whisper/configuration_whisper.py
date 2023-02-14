@@ -129,7 +129,7 @@ class WhisperConfig(PretrainedConfig):
             Begin of stream token id.
         eos_token_id (`int`, *optional*, defaults to 50257):
             End of stream token id.
-        ts_start_token_id (`int`, *optional*, defaults to 50363)
+        timestamp_token_id (`int`, *optional*, defaults to 50363)
             Begin timestamp token id
         suppress_tokens (`List[int]`, *optional*):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
