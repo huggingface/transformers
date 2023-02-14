@@ -385,19 +385,17 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
-    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
     def test_dataset_conversion(self):
-        default_batch_size = self.model_tester.batch_size
-        self.model_tester.batch_size = 2
+        # We override here as passing a full batch of 13 samples results in OOMerrors for CTC
+        self.all_model_classes = [model for model in self.all_model_classes if model != TFWav2Vec2ForCTC]
         super().test_dataset_conversion()
-        self.model_tester.batch_size = default_batch_size
+        self.all_model_classes = self.all_model_classes + [TFWav2Vec2ForCTC]
 
-    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
     def test_keras_fit(self):
-        default_batch_size = self.model_tester.batch_size
-        self.model_tester.batch_size = 2
+        # We override here as CTC models fail with OOM errors
+        self.all_model_classes = [model for model in self.all_model_classes if model != TFWav2Vec2ForCTC]
         super().test_keras_fit()
-        self.model_tester.batch_size = default_batch_size
+        self.all_model_classes = self.all_model_classes + [TFWav2Vec2ForCTC]
 
 
 @require_tf

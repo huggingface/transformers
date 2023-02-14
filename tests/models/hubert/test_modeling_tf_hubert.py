@@ -450,19 +450,17 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFHubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
         self.assertIsNotNone(model)
 
-    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
     def test_dataset_conversion(self):
-        default_batch_size = self.model_tester.batch_size
-        self.model_tester.batch_size = 2
+        # We override here as passing a full batch of 13 samples results in OOMerrors for CTC
+        self.all_model_classes = [model for model in self.all_model_classes if model != TFHubertForCTC]
         super().test_dataset_conversion()
-        self.model_tester.batch_size = default_batch_size
+        self.all_model_classes = self.all_model_classes + [TFHubertForCTC]
 
-    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
     def test_keras_fit(self):
-        default_batch_size = self.model_tester.batch_size
-        self.model_tester.batch_size = 2
+        # We override here as CTC models fail with OOM errors
+        self.all_model_classes = [model for model in self.all_model_classes if model != TFHubertForCTC]
         super().test_keras_fit()
-        self.model_tester.batch_size = default_batch_size
+        self.all_model_classes = self.all_model_classes + [TFHubertForCTC]
 
 
 @require_tf
