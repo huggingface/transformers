@@ -145,18 +145,18 @@ def get_mel_filter_banks(
     [here](https://pytorch.org/audio/stable/transforms.html) for more details.
 
 
-    Note:
-        Different banks of Mel filters were introduced in the litterature. The following variation are supported:
+    Tips:
+        - Different banks of Mel filters were introduced in the litterature. The following variation are supported:
             - MFCC FB-20: introduced in 1980 by Davis and Mermelstein, it assumes a sampling frequency of 10 kHertz
-                and a speech bandwidth of `[0, 4600]` Hertz
+            and a speech bandwidth of `[0, 4600]` Hertz
             - MFCC FB-24 HTK: from the Cambridge HMM Toolkit (HTK) (1995) uses a filter bank of 24 filters for a
-                speech bandwidth `[0, 8000]` Hertz (sampling rate ≥ 16 kHertz).
+            speech bandwidth `[0, 8000]` Hertz (sampling rate ≥ 16 kHertz).
             - MFCC FB-40: from the Auditory Toolbox for MATLAB written by Slaney in 1998, assumes a sampling rate
-                of 16 kHertz, and speech bandwidth [133, 6854] Hertz. This version also includes an area normalization.
+            of 16 kHertz, and speech bandwidth [133, 6854] Hertz. This version also includes an area normalization.
             - HFCC-E FB-29 (Human Factor Cepstral Coefficients) of Skowronski and Harris (2004), assumes sampling
-                rate of 12.5 kHertz and speech bandwidth [0, 6250] Hertz
-        The default parameters of `torchaudio`'s mel filterbanks implement the `"htk"` filers while `torchlibrosa` uses
-        the `"slaney"` implementation.
+            rate of 12.5 kHertz and speech bandwidth [0, 6250] Hertz
+        - The default parameters of `torchaudio`'s mel filterbanks implement the `"htk"` filers while `torchlibrosa`
+        uses the `"slaney"` implementation.
 
     Args:
         nb_frequency_bins (`int`):
@@ -217,10 +217,12 @@ def power_to_db(mel_spectrogram, top_db=None, a_min=1e-10, ref=1.0):
     Convert a mel spectrogram from power to db scale, this function is the numpy implementation of librosa.power_to_lb.
     It computes `10 * log10(mel_spectrogram / ref)`, using basic log properties for stability.
 
-    Note:
-        The motivation behind applying the log function on the mel spectrogram is that humans do not hear loudness on a
+    Tips:
+        - The motivation behind applying the log function on the mel spectrogram is that humans do not hear loudness on
+          a
         linear scale. Generally to double the percieved volume of a sound we need to put 8 times as much energy into
-        it. This means that large variations in energy may not sound all that different if the sound is loud to begin
+        it.
+        - This means that large variations in energy may not sound all that different if the sound is loud to begin
         with. This compression operation makes the mel features match more closely what humans actually hear.
 
     Args:
