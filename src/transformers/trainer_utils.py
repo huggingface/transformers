@@ -65,8 +65,8 @@ def enable_full_determinism(seed: int):
     set_seed(seed)
 
     if is_torch_available():
-        #  Enable PyTorch deterministic mode. This potentially requires either the environment
-        #  variable 'CUDA_LAUNCH_BLOCKING' or 'CUBLAS_WORKSPACE_CONFIG' to be set,
+        # Enable PyTorch deterministic mode. This potentially requires either the environment
+        # variable 'CUDA_LAUNCH_BLOCKING' or 'CUBLAS_WORKSPACE_CONFIG' to be set,
         # depending on the CUDA version, so we set them both here
         os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
@@ -363,6 +363,7 @@ class SchedulerType(ExplicitEnum):
     POLYNOMIAL = "polynomial"
     CONSTANT = "constant"
     CONSTANT_WITH_WARMUP = "constant_with_warmup"
+    INVERSE_SQRT = "inverse_sqrt"
 
 
 class TrainerMemoryTracker:
@@ -398,7 +399,6 @@ class TrainerMemoryTracker:
     }
 
     def __init__(self, skip_memory_metrics=False):
-
         self.skip_memory_metrics = skip_memory_metrics
 
         if not is_psutil_available():
@@ -646,9 +646,9 @@ def find_executable_batch_size(
 
     if auto_find_batch_size:
         requires_backends(find_executable_batch_size, "accelerate")
-        import accelerate.memory_utils as mem_utils
+        from accelerate.utils import find_executable_batch_size as accelerate_find_executable_batch_size
 
-        return mem_utils.find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
+        return accelerate_find_executable_batch_size(function=function, starting_batch_size=starting_batch_size)
 
     return functools.partial(function, batch_size=starting_batch_size)
 

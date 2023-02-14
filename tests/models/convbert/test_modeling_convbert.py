@@ -246,7 +246,6 @@ class ConvBertModelTester:
 
 @require_torch
 class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             ConvBertModel,
@@ -419,7 +418,6 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_torchscript_device_change(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-
             # ConvBertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == ConvBertForMultipleChoice:
                 return
@@ -436,6 +434,17 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
                 torch.jit.save(traced_model, os.path.join(tmp, "traced_model.pt"))
                 loaded = torch.jit.load(os.path.join(tmp, "traced_model.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
+
+    def test_model_for_input_embeds(self):
+        batch_size = 2
+        seq_length = 10
+        inputs_embeds = torch.rand([batch_size, seq_length, 768], device=torch_device)
+        config = self.model_tester.get_config()
+        model = ConvBertModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(inputs_embeds=inputs_embeds)
+        self.assertEqual(result.last_hidden_state.shape, (batch_size, seq_length, config.hidden_size))
 
 
 @require_torch

@@ -41,20 +41,28 @@ logger = logging.get_logger(__name__)
 
 PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("altclip", "AltCLIPProcessor"),
+        ("blip", "BlipProcessor"),
+        ("blip-2", "Blip2Processor"),
+        ("bridgetower", "BridgeTowerProcessor"),
         ("chinese_clip", "ChineseCLIPProcessor"),
         ("clip", "CLIPProcessor"),
         ("clipseg", "CLIPSegProcessor"),
         ("flava", "FlavaProcessor"),
+        ("git", "GITProcessor"),
         ("groupvit", "CLIPProcessor"),
+        ("hubert", "Wav2Vec2Processor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("layoutxlm", "LayoutXLMProcessor"),
         ("markuplm", "MarkupLMProcessor"),
+        ("oneformer", "OneFormerProcessor"),
         ("owlvit", "OwlViTProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
+        ("speecht5", "SpeechT5Processor"),
         ("trocr", "TrOCRProcessor"),
         ("unispeech", "Wav2Vec2Processor"),
         ("unispeech-sat", "Wav2Vec2Processor"),
@@ -253,6 +261,7 @@ class AutoProcessor:
                 processor_class = get_class_from_dynamic_module(
                     pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
                 )
+                processor_class.register_for_auto_class()
             else:
                 processor_class = processor_class_from_name(processor_class)
 

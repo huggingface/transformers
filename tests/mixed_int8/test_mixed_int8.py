@@ -16,6 +16,8 @@ import gc
 import tempfile
 import unittest
 
+from packaging import version
+
 from transformers import (
     AutoModel,
     AutoModelForCausalLM,
@@ -33,10 +35,30 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
+from transformers.utils.versions import importlib_metadata
 
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
+
+    class LoRALayer(nn.Module):
+        """Wraps a linear layer with LoRA-like adapter - Used for testing purposes only"""
+
+        def __init__(self, module: nn.Module, rank: int):
+            super().__init__()
+            self.module = module
+            self.adapter = nn.Sequential(
+                nn.Linear(module.in_features, rank, bias=False),
+                nn.Linear(rank, module.out_features, bias=False),
+            )
+            small_std = (2.0 / (5 * min(module.in_features, module.out_features))) ** 0.5
+            nn.init.normal_(self.adapter[0].weight, std=small_std)
+            nn.init.zeros_(self.adapter[1].weight)
+            self.adapter.to(module.weight.device)
+
+        def forward(self, input, *args, **kwargs):
+            return self.module(input, *args, **kwargs) + self.adapter(input)
 
 
 @require_bitsandbytes
@@ -70,7 +92,9 @@ class MixedInt8Test(BaseMixedInt8Test):
         super().setUp()
 
         # Models and tokenizer
-        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto", device_map="auto")
+        self.model_fp16 = AutoModelForCausalLM.from_pretrained(
+            self.model_name, torch_dtype=torch.float16, device_map="auto"
+        )
         self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
 
     def tearDown(self):
@@ -161,6 +185,70 @@ class MixedInt8Test(BaseMixedInt8Test):
         """
         model = AutoModelForSeq2SeqLM.from_pretrained("t5-small", load_in_8bit=True, device_map="auto")
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
+
+
+@require_bitsandbytes
+@require_accelerate
+@require_torch
+@require_torch_gpu
+@slow
+class MixedInt8T5Test(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.model_name = "t5-small"
+        cls.dense_act_model_name = "google/flan-t5-small"  # flan-t5 uses dense-act instead of dense-relu-dense
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        cls.input_text = "Translate in German: Hello, my dog is cute"
+
+    def tearDown(self):
+        r"""
+        TearDown function needs to be called at the end of each test to free the GPU memory and cache, also to
+        avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
+        """
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    def test_inference_without_keep_in_fp32(self):
+        r"""
+        Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
+        `flan-t5-small` uses `T5DenseGatedActDense` whereas `t5-small` uses `T5DenseReluDense`. We need to test
+        both cases.
+        """
+        from transformers import T5ForConditionalGeneration
+
+        T5ForConditionalGeneration._keep_in_fp32_modules = None
+
+        # test with `t5-small`
+        model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        _ = model.generate(**encoded_input)
+
+        # test with `flan-t5-small`
+        model = T5ForConditionalGeneration.from_pretrained(
+            self.dense_act_model_name, load_in_8bit=True, device_map="auto"
+        )
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        _ = model.generate(**encoded_input)
+
+    def test_inference_with_keep_in_fp32(self):
+        r"""
+        Test whether it is possible to mix both `int8` and `fp32` weights when using `keep_in_fp32_modules` correctly.
+        `flan-t5-small` uses `T5DenseGatedActDense` whereas `t5-small` uses `T5DenseReluDense`. We need to test
+        both cases.
+        """
+        from transformers import T5ForConditionalGeneration
+
+        # test with `t5-small`
+        model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        _ = model.generate(**encoded_input)
+
+        # test with `flan-t5-small`
+        model = T5ForConditionalGeneration.from_pretrained(
+            self.dense_act_model_name, load_in_8bit=True, device_map="auto"
+        )
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
+        _ = model.generate(**encoded_input)
 
 
 class MixedInt8ModelClassesTest(BaseMixedInt8Test):
@@ -271,3 +359,44 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         # Second real batch
         output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
         self.assertEqual(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+
+class MixedInt8TestTraining(BaseMixedInt8Test):
+    def setUp(self):
+        self.model_name = "facebook/opt-350m"
+        super().setUp()
+
+    def test_training(self):
+        if version.parse(importlib_metadata.version("bitsandbytes")) < version.parse("0.37.0"):
+            return
+
+        # Step 1: freeze all parameters
+        model = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+
+        for param in model.parameters():
+            param.requires_grad = False  # freeze the model - train adapters later
+            if param.ndim == 1:
+                # cast the small parameters (e.g. layernorm) to fp32 for stability
+                param.data = param.data.to(torch.float32)
+
+        # Step 2: add adapters
+        for _, module in model.named_modules():
+            if "OPTAttention" in repr(type(module)):
+                module.q_proj = LoRALayer(module.q_proj, rank=16)
+                module.k_proj = LoRALayer(module.k_proj, rank=16)
+                module.v_proj = LoRALayer(module.v_proj, rank=16)
+
+        # Step 3: dummy batch
+        batch = self.tokenizer("Test batch ", return_tensors="pt").to(0)
+
+        # Step 4: Check if the gradient is not None
+        with torch.cuda.amp.autocast():
+            out = model.forward(**batch)
+            out.logits.norm().backward()
+
+        for module in model.modules():
+            if isinstance(module, LoRALayer):
+                self.assertTrue(module.adapter[1].weight.grad is not None)
+                self.assertTrue(module.adapter[1].weight.grad.norm().item() > 0)
+            elif isinstance(module, nn.Embedding):
+                self.assertTrue(module.weight.grad is None)

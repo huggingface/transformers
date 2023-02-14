@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +14,7 @@
 
 from . import (
     albert,
+    altclip,
     audio_spectrogram_transformer,
     auto,
     bart,
@@ -34,8 +31,11 @@ from . import (
     bit,
     blenderbot,
     blenderbot_small,
+    blip,
+    blip_2,
     bloom,
     bort,
+    bridgetower,
     byt5,
     camembert,
     canine,
@@ -55,6 +55,7 @@ from . import (
     decision_transformer,
     deformable_detr,
     deit,
+    deta,
     detr,
     dialogpt,
     dinat,
@@ -63,6 +64,7 @@ from . import (
     donut,
     dpr,
     dpt,
+    efficientformer,
     electra,
     encoder_decoder,
     ernie,
@@ -72,6 +74,7 @@ from . import (
     fnet,
     fsmt,
     funnel,
+    git,
     glpn,
     gpt2,
     gpt_neo,
@@ -79,6 +82,7 @@ from . import (
     gpt_neox_japanese,
     gpt_sw3,
     gptj,
+    graphormer,
     groupvit,
     herbert,
     hubert,
@@ -99,6 +103,7 @@ from . import (
     m2m_100,
     marian,
     markuplm,
+    mask2former,
     maskformer,
     mbart,
     mbart50,
@@ -118,6 +123,7 @@ from . import (
     nezha,
     nllb,
     nystromformer,
+    oneformer,
     openai,
     opt,
     owlvit,
@@ -137,6 +143,7 @@ from . import (
     resnet,
     retribert,
     roberta,
+    roberta_prelayernorm,
     roc_bert,
     roformer,
     segformer,
@@ -145,9 +152,11 @@ from . import (
     speech_encoder_decoder,
     speech_to_text,
     speech_to_text_2,
+    speecht5,
     splinter,
     squeezebert,
     swin,
+    swin2sr,
     swinv2,
     switch_transformers,
     t5,
@@ -161,6 +170,7 @@ from . import (
     trocr,
     unispeech,
     unispeech_sat,
+    upernet,
     van,
     videomae,
     vilt,
@@ -184,6 +194,7 @@ from . import (
     xlm_roberta,
     xlm_roberta_xl,
     xlnet,
+    xmod,
     yolos,
     yoso,
 )

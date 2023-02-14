@@ -32,17 +32,17 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import datasets
-import numpy as np
-from datasets import load_dataset
-from tqdm import tqdm
-
 import flax
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
+from datasets import load_dataset
 from flax import jax_utils, traverse_util
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
+from tqdm import tqdm
+
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_MASKED_LM_MAPPING,
@@ -562,7 +562,7 @@ if __name__ == "__main__":
             samples = advance_iter_and_group_samples(training_iter, train_batch_size, max_seq_length)
         except StopIteration:
             # Once the end of the dataset stream is reached, the training iterator
-            # is reinitialized and reshuffled and a new eval dataset is randomely chosen.
+            # is reinitialized and reshuffled and a new eval dataset is randomly chosen.
             shuffle_seed += 1
             tokenized_datasets.set_epoch(shuffle_seed)
 

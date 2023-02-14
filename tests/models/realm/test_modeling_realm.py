@@ -304,7 +304,6 @@ class RealmModelTester:
 
 @require_torch
 class RealmModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             RealmEmbedder,
@@ -480,15 +479,12 @@ class RealmModelIntegrationTest(unittest.TestCase):
     def test_inference_open_qa(self):
         from transformers.models.realm.retrieval_realm import RealmRetriever
 
-        config = RealmConfig()
-
         tokenizer = RealmTokenizer.from_pretrained("google/realm-orqa-nq-openqa")
         retriever = RealmRetriever.from_pretrained("google/realm-orqa-nq-openqa")
 
         model = RealmForOpenQA.from_pretrained(
             "google/realm-orqa-nq-openqa",
             retriever=retriever,
-            config=config,
         )
 
         question = "Who is the pioneer in modern computer science?"

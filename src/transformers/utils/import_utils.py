@@ -288,6 +288,10 @@ def is_torch_available():
     return _torch_available
 
 
+def is_torchvision_available():
+    return importlib.util.find_spec("torchvision") is not None
+
+
 def is_pyctcdecode_available():
     return _pyctcdecode_available
 
@@ -451,6 +455,13 @@ def is_torch_tpu_available(check_device=True):
     return False
 
 
+@lru_cache()
+def is_torch_neuroncore_available(check_device=True):
+    if importlib.util.find_spec("torch_neuronx") is not None:
+        return is_torch_tpu_available(check_device)
+    return False
+
+
 def is_torchdynamo_available():
     if not is_torch_available():
         return False
@@ -483,10 +494,6 @@ def is_datasets_available():
 
 def is_detectron2_available():
     return _detectron2_available
-
-
-def is_more_itertools_available():
-    return importlib.util.find_spec("more_itertools") is not None
 
 
 def is_rjieba_available():
@@ -596,11 +603,11 @@ def is_spacy_available():
 
 
 def is_tensorflow_text_available():
-    return importlib.util.find_spec("tensorflow_text") is not None
+    return is_tf_available() and importlib.util.find_spec("tensorflow_text") is not None
 
 
 def is_keras_nlp_available():
-    return importlib.util.find_spec("keras_nlp") is not None
+    return is_tensorflow_text_available() and importlib.util.find_spec("keras_nlp") is not None
 
 
 def is_in_notebook():
@@ -726,7 +733,11 @@ def is_sudachi_available():
 
 
 def is_jumanpp_available():
-    return (importlib.util.find_spec("pyknp") is not None) and (shutil.which("jumanpp") is not None)
+    return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
+
+
+def is_cython_available():
+    return importlib.util.find_spec("pyximport") is not None
 
 
 # docstyle-ignore
@@ -788,6 +799,14 @@ that match your environment. Please note that you may need to restart your runti
 # docstyle-ignore
 PYTORCH_IMPORT_ERROR = """
 {0} requires the PyTorch library but it was not found in your environment. Checkout the instructions on the
+installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
+"""
+
+
+# docstyle-ignore
+TORCHVISION_IMPORT_ERROR = """
+{0} requires the Torchvision library but it was not found in your environment. Checkout the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 """
@@ -998,6 +1017,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
+        ("torchvision", (is_torchvision_available, TORCHVISION_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),

@@ -96,10 +96,16 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             _ = AutoFeatureExtractor.from_pretrained("hf-internal-testing/config-no-model")
 
     def test_from_pretrained_dynamic_feature_extractor(self):
-        model = AutoFeatureExtractor.from_pretrained(
+        feature_extractor = AutoFeatureExtractor.from_pretrained(
             "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=True
         )
-        self.assertEqual(model.__class__.__name__, "NewFeatureExtractor")
+        self.assertEqual(feature_extractor.__class__.__name__, "NewFeatureExtractor")
+
+        # Test feature extractor can be reloaded.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            feature_extractor.save_pretrained(tmp_dir)
+            reloaded_feature_extractor = AutoFeatureExtractor.from_pretrained(tmp_dir, trust_remote_code=True)
+        self.assertEqual(reloaded_feature_extractor.__class__.__name__, "NewFeatureExtractor")
 
     def test_new_feature_extractor_registration(self):
         try:

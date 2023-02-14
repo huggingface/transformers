@@ -15,12 +15,11 @@
 
 from typing import Callable, Optional, Tuple
 
-import numpy as np
-
 import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
@@ -50,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
-_TOKENIZER_FOR_DOC = "AlbertTokenizer"
 
 
 @flax.struct.dataclass
@@ -122,7 +120,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`AlbertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -245,7 +243,7 @@ class FlaxAlbertSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -524,7 +522,7 @@ class FlaxAlbertPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -680,9 +678,7 @@ class FlaxAlbertModel(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertModule
 
 
-append_call_sample_docstring(
-    FlaxAlbertModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxAlbertModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
 
 
 class FlaxAlbertForPreTrainingModule(nn.Module):
@@ -705,7 +701,6 @@ class FlaxAlbertForPreTrainingModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         # Model
         outputs = self.albert(
             input_ids,
@@ -757,9 +752,9 @@ FLAX_ALBERT_FOR_PRETRAINING_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import AlbertTokenizer, FlaxAlbertForPreTraining
+    >>> from transformers import AutoTokenizer, FlaxAlbertForPreTraining
 
-    >>> tokenizer = AlbertTokenizer.from_pretrained("albert-base-v2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
     >>> model = FlaxAlbertForPreTraining.from_pretrained("albert-base-v2")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
@@ -834,9 +829,7 @@ class FlaxAlbertForMaskedLM(FlaxAlbertPreTrainedModel):
     module_class = FlaxAlbertForMaskedLMModule
 
 
-append_call_sample_docstring(
-    FlaxAlbertForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxAlbertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxAlbertForSequenceClassificationModule(nn.Module):
@@ -906,7 +899,6 @@ class FlaxAlbertForSequenceClassification(FlaxAlbertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxAlbertForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -983,7 +975,6 @@ overwrite_call_docstring(
 )
 append_call_sample_docstring(
     FlaxAlbertForMultipleChoice,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMultipleChoiceModelOutput,
     _CONFIG_FOR_DOC,
@@ -1054,7 +1045,6 @@ class FlaxAlbertForTokenClassification(FlaxAlbertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxAlbertForTokenClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxTokenClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1123,7 +1113,6 @@ class FlaxAlbertForQuestionAnswering(FlaxAlbertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxAlbertForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,

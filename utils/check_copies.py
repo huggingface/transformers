@@ -66,8 +66,8 @@ LOCALIZED_READMES = {
         "start_prompt": "🤗 Transformers는 다음 모델들을 제공합니다",
         "end_prompt": "1. 새로운 모델을 올리고 싶나요?",
         "format_model_list": (
-            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
-            " {paper_authors}.{supplements}"
+            "**[{title}]({model_link})** ({paper_affiliations} 에서 제공)은 {paper_authors}.{supplements}의"
+            " {paper_title_link}논문과 함께 발표했습니다."
         ),
     },
     "README_es.md": {
@@ -82,16 +82,16 @@ LOCALIZED_READMES = {
         "start_prompt": "🤗Transformersは現在、以下のアーキテクチャを提供しています",
         "end_prompt": "1. 新しいモデルを投稿したいですか？",
         "format_model_list": (
-            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
-            " {paper_authors}.{supplements}"
+            "**[{title}]({model_link})** ({paper_affiliations} から) {paper_authors}.{supplements} から公開された研究論文"
+            " {paper_title_link}"
         ),
     },
     "README_hd.md": {
         "start_prompt": "🤗 ट्रांसफॉर्मर वर्तमान में निम्नलिखित आर्किटेक्चर का समर्थन करते हैं",
         "end_prompt": "1. एक नए मॉडल में योगदान देना चाहते हैं?",
         "format_model_list": (
-            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
-            " {paper_authors}.{supplements}"
+            "**[{title}]({model_link})** ({paper_affiliations} से) {paper_authors}.{supplements} द्वारा"
+            "अनुसंधान पत्र {paper_title_link} के साथ जारी किया गया"
         ),
     },
 }
@@ -177,7 +177,7 @@ def blackify(code):
     has_indent = len(get_indent(code)) > 0
     if has_indent:
         code = f"class Bla:\n{code}"
-    mode = black.Mode(target_versions={black.TargetVersion.PY35}, line_length=119, preview=True)
+    mode = black.Mode(target_versions={black.TargetVersion.PY37}, line_length=119)
     result = black.format_str(code, mode=mode)
     result, _ = style_docstrings_in_code(result)
     return result[len("class Bla:\n") :] if has_indent else result

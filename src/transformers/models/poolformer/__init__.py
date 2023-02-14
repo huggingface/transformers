@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +13,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"]}
+_import_structure = {
+    "configuration_poolformer": [
+        "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PoolFormerConfig",
+        "PoolFormerOnnxConfig",
+    ]
+}
 
 try:
     if not is_vision_available():
@@ -47,7 +48,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
+    from .configuration_poolformer import (
+        POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PoolFormerConfig,
+        PoolFormerOnnxConfig,
+    )
 
     try:
         if not is_vision_available():

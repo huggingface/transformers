@@ -76,6 +76,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("sew", "Wav2Vec2FeatureExtractor"),
         ("sew-d", "Wav2Vec2FeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
+        ("speecht5", "SpeechT5FeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
         ("swinv2", "ViTFeatureExtractor"),
         ("table-transformer", "DetrFeatureExtractor"),
@@ -340,6 +341,7 @@ class AutoFeatureExtractor:
                 feature_extractor_class = get_class_from_dynamic_module(
                     pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
                 )
+                feature_extractor_class.register_for_auto_class()
             else:
                 feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
 

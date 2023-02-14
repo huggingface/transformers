@@ -15,12 +15,11 @@
 
 from typing import Callable, Optional, Tuple
 
-import numpy as np
-
 import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning
@@ -53,7 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/electra-small-discriminator"
 _CONFIG_FOR_DOC = "ElectraConfig"
-_TOKENIZER_FOR_DOC = "ElectraTokenizer"
 
 remat = nn_partitioning.remat
 
@@ -111,7 +109,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`ElectraTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -326,7 +324,7 @@ class FlaxElectraSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -693,7 +691,7 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
         gradient_checkpointing: bool = False,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -787,7 +785,6 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         return_dict: Optional[bool] = None,
         past_key_values: dict = None,
     ):
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -924,9 +921,7 @@ class FlaxElectraModel(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraModule
 
 
-append_call_sample_docstring(
-    FlaxElectraModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxElectraModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxElectraTiedDense(nn.Module):
@@ -1013,9 +1008,7 @@ class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
     module_class = FlaxElectraForMaskedLMModule
 
 
-append_call_sample_docstring(
-    FlaxElectraForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxElectraForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxElectraForPreTrainingModule(nn.Module):
@@ -1085,9 +1078,9 @@ FLAX_ELECTRA_FOR_PRETRAINING_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import ElectraTokenizer, FlaxElectraForPreTraining
+    >>> from transformers import AutoTokenizer, FlaxElectraForPreTraining
 
-    >>> tokenizer = ElectraTokenizer.from_pretrained("google/electra-small-discriminator")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google/electra-small-discriminator")
     >>> model = FlaxElectraForPreTraining.from_pretrained("google/electra-small-discriminator")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
@@ -1176,7 +1169,6 @@ class FlaxElectraForTokenClassification(FlaxElectraPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxElectraForTokenClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxTokenClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1221,7 +1213,7 @@ class FlaxElectraSequenceSummary(nn.Module):
             self.summary = nn.Dense(num_classes, dtype=self.dtype)
 
         activation_string = getattr(self.config, "summary_activation", None)
-        self.activation = ACT2FN[activation_string] if activation_string else lambda x: x
+        self.activation = ACT2FN[activation_string] if activation_string else lambda x: x  # noqa F407
 
         self.first_dropout = identity
         if hasattr(self.config, "summary_first_dropout") and self.config.summary_first_dropout > 0:
@@ -1328,7 +1320,6 @@ overwrite_call_docstring(
 )
 append_call_sample_docstring(
     FlaxElectraForMultipleChoice,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMultipleChoiceModelOutput,
     _CONFIG_FOR_DOC,
@@ -1400,7 +1391,6 @@ class FlaxElectraForQuestionAnswering(FlaxElectraPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxElectraForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
@@ -1494,7 +1484,6 @@ class FlaxElectraForSequenceClassification(FlaxElectraPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxElectraForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1605,7 +1594,6 @@ class FlaxElectraForCausalLM(FlaxElectraPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxElectraForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,

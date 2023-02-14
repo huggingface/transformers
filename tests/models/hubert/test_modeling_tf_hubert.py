@@ -219,7 +219,6 @@ class TFHubertModelTester:
 
 @require_tf
 class TFHubertModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (TFHubertModel, TFHubertForCTC) if is_tf_available() else ()
     test_resize_embeddings = False
     test_head_masking = False
@@ -305,18 +304,15 @@ class TFHubertModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    @unittest.skip(reason="Hubert has no input embeddings")
     def test_inputs_embeds(self):
         pass
 
-    # Hubert cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Hubert has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Hubert has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="Hubert has no input embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -325,9 +321,19 @@ class TFHubertModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFHubertModel.from_pretrained("facebook/hubert-base-ls960")
         self.assertIsNotNone(model)
 
-    @unittest.skip("Loss shapes for CTC don't match the base test.")
-    def test_loss_computation(self):
-        pass
+    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
+    def test_dataset_conversion(self):
+        default_batch_size = self.model_tester.batch_size
+        self.model_tester.batch_size = 2
+        super().test_dataset_conversion()
+        self.model_tester.batch_size = default_batch_size
+
+    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
+    def test_keras_fit(self):
+        default_batch_size = self.model_tester.batch_size
+        self.model_tester.batch_size = 2
+        super().test_keras_fit()
+        self.model_tester.batch_size = default_batch_size
 
 
 @require_tf
@@ -427,18 +433,15 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Hubert has no inputs_embeds
+    @unittest.skip(reason="Hubert has no input embeddings")
     def test_inputs_embeds(self):
         pass
 
-    # Hubert cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Hubert has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Hubert has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    @unittest.skip(reason="Hubert has no input embeddings or get_input_embeddings method")
     def test_model_common_attributes(self):
         pass
 
@@ -447,9 +450,19 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFHubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
         self.assertIsNotNone(model)
 
-    @unittest.skip("Loss shapes for CTC don't match the base test.")
-    def test_loss_computation(self):
-        pass
+    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
+    def test_dataset_conversion(self):
+        default_batch_size = self.model_tester.batch_size
+        self.model_tester.batch_size = 2
+        super().test_dataset_conversion()
+        self.model_tester.batch_size = default_batch_size
+
+    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
+    def test_keras_fit(self):
+        default_batch_size = self.model_tester.batch_size
+        self.model_tester.batch_size = 2
+        super().test_keras_fit()
+        self.model_tester.batch_size = default_batch_size
 
 
 @require_tf

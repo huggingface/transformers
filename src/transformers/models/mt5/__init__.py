@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -51,7 +47,13 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_mt5"] = ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"]
+    _import_structure["modeling_mt5"] = [
+        "MT5EncoderModel",
+        "MT5ForConditionalGeneration",
+        "MT5Model",
+        "MT5PreTrainedModel",
+        "MT5Stack",
+    ]
 
 try:
     if not is_tf_available():
@@ -79,7 +81,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .modeling_mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model, MT5PreTrainedModel, MT5Stack
 
     try:
         if not is_tf_available():

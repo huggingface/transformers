@@ -4,6 +4,17 @@ import os
 
 past_versions_testing = {
     "pytorch": {
+        "1.12": {
+            "torch": "1.12.1",
+            "torchvision": "0.13.1",
+            "torchaudio": "0.12.1",
+            "python": 3.9,
+            "cuda": "cu113",
+            "install": (
+                "python3 -m pip install --no-cache-dir -U torch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1"
+                " --extra-index-url https://download.pytorch.org/whl/cu113"
+            ),
+        },
         "1.11": {
             "torch": "1.11.0",
             "torchvision": "0.12.0",

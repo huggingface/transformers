@@ -42,7 +42,6 @@ if is_tf_available():
 
 @require_tf
 class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             TFMobileBertModel,
@@ -317,6 +316,11 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
                 assert x is None
                 name = model.get_bias()
                 assert name is None
+
+    @slow
+    def test_keras_fit(self):
+        # Override as it is a slow test on this model
+        super().test_keras_fit()
 
     @tooslow
     def test_saved_model_creation(self):

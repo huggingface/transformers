@@ -21,10 +21,10 @@ from typing import Callable, List, Optional, Union
 import tensorflow as tf
 
 
-if hasattr(tf.keras, "optimizer") and hasattr(tf.keras.optimizer, "legacy"):
-    Adam = tf.keras.optimizer.legacy.Adam
-else:
-    Adam = tf.keras.optimizers.Adam
+try:
+    from tensorflow.keras.optimizers.legacy import Adam
+except ImportError:
+    from tensorflow.keras.optimizers import Adam
 
 
 class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -176,7 +176,7 @@ class AdamWeightDecay(Adam):
     with the m and v parameters in strange ways as shown in [Decoupled Weight Decay
     Regularization](https://arxiv.org/abs/1711.05101).
 
-    Instead we want ot decay the weights in a manner that doesn't interact with the m/v parameters. This is equivalent
+    Instead we want to decay the weights in a manner that doesn't interact with the m/v parameters. This is equivalent
     to adding the square of the weights to the loss with plain (non-momentum) SGD.
 
     Args:
@@ -219,7 +219,7 @@ class AdamWeightDecay(Adam):
         include_in_weight_decay: Optional[List[str]] = None,
         exclude_from_weight_decay: Optional[List[str]] = None,
         name: str = "AdamWeightDecay",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(learning_rate, beta_1, beta_2, epsilon, amsgrad, name, **kwargs)
         self.weight_decay_rate = weight_decay_rate

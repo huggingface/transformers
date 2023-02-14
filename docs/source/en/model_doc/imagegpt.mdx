@@ -38,8 +38,6 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr), based on 
 
 Tips:
 
-- Demo notebooks for ImageGPT can be found
-  [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ImageGPT).
 - ImageGPT is almost exactly the same as [GPT-2](gpt2), with the exception that a different activation
   function is used (namely "quick gelu"), and the layer normalization layers don't mean center the inputs. ImageGPT
   also doesn't have tied input- and output embeddings.
@@ -70,6 +68,17 @@ Tips:
 | MiT-b3 | [3, 4, 18, 3] | [64, 128, 320, 512] | 768 | 45.2 | 83.1 |
 | MiT-b4 | [3, 8, 27, 3] | [64, 128, 320, 512] | 768 | 62.6 | 83.6 |
 | MiT-b5 | [3, 6, 40, 3] | [64, 128, 320, 512] | 768 | 82.0 | 83.8 |
+
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ImageGPT.
+
+<PipelineTag pipeline="image-classification"/>
+
+- Demo notebooks for ImageGPT can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/ImageGPT).
+- [`ImageGPTForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## ImageGPTConfig
 

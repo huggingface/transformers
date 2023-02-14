@@ -44,11 +44,10 @@ def hashimage(image: Image) -> str:
 @require_timm
 @require_torch
 class DepthEstimationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        depth_estimator = DepthEstimationPipeline(model=model, feature_extractor=feature_extractor)
+    def get_test_pipeline(self, model, tokenizer, processor):
+        depth_estimator = DepthEstimationPipeline(model=model, image_processor=processor)
         return depth_estimator, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",

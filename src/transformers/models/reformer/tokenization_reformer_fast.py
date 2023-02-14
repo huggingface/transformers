@@ -98,7 +98,7 @@ class ReformerTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         unk_token="<unk>",
         additional_special_tokens=[],
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
