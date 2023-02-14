@@ -32,6 +32,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "mlp.fc2": "output.dense",
     "norm1": "layernorm_before",
     "norm2": "layernorm_after",
+    "bn0": "batch_norm",
 }
 
 processor = AutoFeatureExtractor.from_pretrained("ybelkada/clap-htsat-unfused", truncation="rand_trunc")

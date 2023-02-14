@@ -901,7 +901,7 @@ class ClapAudioEncoder(nn.Module):
 
         self.gradient_checkpointing = False
 
-        self.bn0 = nn.BatchNorm2d(config.num_mel_bins)
+        self.batch_norm = nn.BatchNorm2d(config.num_mel_bins)
         self.norm = nn.LayerNorm(self.num_features)
         self.depths = config.depths
 
@@ -965,7 +965,7 @@ class ClapAudioEncoder(nn.Module):
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, ClapAudioModelOutput]:
         input_features = input_features.transpose(1, 3)
-        normalized_input_features = self.bn0(input_features)
+        normalized_input_features = self.batch_norm(input_features)
         normalized_input_features = normalized_input_features.transpose(1, 3)
 
         is_longer_list_idx = None
