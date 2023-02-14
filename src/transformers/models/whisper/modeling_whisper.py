@@ -1234,7 +1234,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             self.last_is_timestamp = None
 
         if not self.config.condition_on_previous_text:
-            timestamp_tokens: torch.Tensor = decoder_input_ids.ge(self.config.ts_start_token_id)
+            timestamp_tokens = decoder_input_ids.ge(self.config.ts_start_token_id)
             if self.last_is_timestamp is not None:
                 consecutive = torch.logical_and(timestamp_tokens, self.last_is_timestamp)
                 if torch.any(consecutive):
