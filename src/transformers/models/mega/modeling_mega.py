@@ -847,308 +847,282 @@ class MegaFeatureDropout(nn.Module):
 
 # Mega attention: EMA + self-attention
 class MovingAverageGatedAttention(nn.Module):
-  """
-  Pure PyTorch implementation of Mega block; see https://arxiv.org/abs/2209.10655 
-  and original fairseq implementation at https://github.com/facebookresearch/mega
-  (copyright Meta Research, licensed under MIT License)
-  """
-  def __init__(self, config : MegaConfig):
-    super().__init__()
-    self.config = config
-    self.activation = get_activation_fn(self.config.activation)
-    self.scaling = self.config.shared_representation_size ** -0.5 if self.config.attention_activation == 'softmax' else None 
-    dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
-    self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
-    self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob, module_name=self.__class__.__name__)
-    # attention dropout is standard dropout
-    self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__)
+    """
+    Pure PyTorch implementation of Mega block; see https://arxiv.org/abs/2209.10655 
+    and original fairseq implementation at https://github.com/facebookresearch/mega
+    (copyright Meta Research, licensed under MIT License)
+    """
+    def __init__(self, config : MegaConfig):
+        super().__init__()
+        self.config = config
+        self.activation = get_activation_fn(self.config.activation)
+        self.scaling = self.config.shared_representation_size ** -0.5 if self.config.attention_activation == 'softmax' else None 
+        dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
+        self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
+        self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob, module_name=self.__class__.__name__)
+        # attention dropout is standard dropout
+        self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__)
 
-    self.norm = SequenceNorm(self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine)
-    self.move = MultiHeadEMA(self.config.hidden_size, 
-                             ndim=self.config.ema_projection_size, 
-                             bidirectional=self.config.bidirectional, 
-                             truncation=self.config.truncation)
-    
-    self.v_proj = nn.Linear(self.config.hidden_size, self.config.intermediate_size)
-    self.mx_proj = nn.Linear(self.config.hidden_size, self.config.shared_representation_size + self.config.intermediate_size + 2 * self.config.hidden_size)
-    self.h_proj = nn.Linear(self.config.intermediate_size, self.config.hidden_size)
-
-    self.gamma = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
-    self.beta = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
-
-    max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size 
-    if self.config.relative_positional_bias == 'simple':
-      self.rel_pos_bias = SimpleRelativePositionalBias(max_positions)
-    elif self.config.relative_positional_bias == 'rotary':
-      self.rel_pos_bias = RotaryRelativePositionalBias(self.config.shared_representation_size, max_positions)
-    else:
-      raise ValueError(f"Unknown relative positional bias: {self.config.relative_positional_bias}")
-
-    self.softmax = nn.Softmax(dim=-1)
-    self.attention_function = self.softmax_attention if self.config.attention_activation == 'softmax' else self.element_attention
-
-    self.reset_parameters()
-
-  def reset_parameters(self):
-    std = 0.02
-    mean = 0.0
-    nn.init.normal_(self.v_proj.weight, mean=mean, std=std)
-    nn.init.constant_(self.v_proj.bias, 0.0)
-    
-    nn.init.normal_(self.mx_proj.weight, mean=mean, std=std)
-    nn.init.constant_(self.mx_proj.bias, 0.0)
-    
-    nn.init.normal_(self.h_proj.weight, mean=mean, std=std)
-    nn.init.constant_(self.h_proj.bias, 0.0)
-    
-    nn.init.normal_(self.gamma, mean=mean, std=std)
-    nn.init.constant_(self.beta, 0.0)
-    
-  def element_attention(self, q, k, padding_mask, attn_mask, before_attn_fn):
-    slen = k.size(2)
-    if padding_mask is not None:
-      # B x K x C
-      inverse_mask = (1.0 - padding_mask).type_as(q)
-
-      # B x K x 1 
-      lengths = inverse_mask.sum(dim=-1, keepdim=True)
-
-      # B x K x 1 x 1
-      lengths = lengths.clamp(min=1.0).unsqueeze(-1)
-    else:
-      lengths = slen 
-      inverse_mask = None 
-    
-    if attn_mask is not None:
-      # FIXME: i think this is wrong based on how `attn_mask` is handled in self.softmax_attention
-      # this is written like attn_mask is boolean despite the fact that it's probably in {0, -inf}
-      # the result of this will be -inf for every input with padding
-      # - possibly raise issue on GitHub
-      lengths = attn_mask.sum(dim=-1, keepdim=True)
-
-    # C x C
-    bias = self.rel_pos_bias(slen)
-    if slen != q.size(2):
-      assert q.size(2) == 1, "Size mismatch between Q and K in element attention"
-      # 1 x C
-      bias = bias[-1:]
-    
-    # B x K x C x C
-    qk = torch.matmul(q, k.transpose(2, 3)) / lengths + bias 
-
-    if before_attn_fn:
-      return qk 
-    
-    if self.config.attention_activation == 'relu2':
-      attn_weights = relu2(qk).type_as(qk)
-    elif self.config.attention_activation == 'laplace':
-      attn_weights = laplace(qk).type_as(qk)
-    else:
-      raise ValueError(f"Unknown attention activation function: {self.config.attention_activation}")
-    
-    if inverse_mask is not None:
-      attn_weights = attn_weights * inverse_mask.unsqueeze(2)
-    
-    if attn_mask is not None:
-      attn_weights = attn_weights * attn_mask 
-    
-    return attn_weights
-
-  def softmax_attention(self, q, k, padding_mask, attn_mask, before_attn_fn):
-    slen = k.size(2)
-    # C x C
-    bias = self.rel_pos_bias(slen)
-    if slen != q.size(2):
-      assert q.size(2) == 1, "Size mismatch between Q and K in element attention"
-      # 1 x C
-      bias = bias[-1:] 
-
-    # scaled attention
-    q = q * self.scaling 
-
-    # B x K x C x C
-    qk = torch.matmul(q, k.transpose(2, 3)) + bias 
-
-    if attn_mask is not None:
-      qk = qk + attn_mask # 0 (unmasked) and -inf (masked), so masked tokens are set to -inf
-      # should possibly rewrite attention masking to work with the huggingface paradigm (1=not masked, 0=masked)
-      # and unify padding/attention mask
-
-    if padding_mask is not None: # padding mask is a ByteTensor, which is sorta like boolean
-      padding_mask_all = padding_mask.all(dim=-1, keepdim=True)
-      padding_mask = torch.logical_and(padding_mask, ~padding_mask_all)
-      # this statement fills all of the masked tokens (bytetensor=1) with -inf, which matches attn_mask
-      # there's no reason this can't be the same input as attn_mask
-      # -inf is used to make the softmax ignore the masked tokens
-      qk = qk.masked_fill(padding_mask.unsqueeze(2).to(torch.bool), float('-inf'))
-
-    if before_attn_fn:
-      return qk
-    
-    attn_weights = self.softmax(qk).type_as(qk)
-    return attn_weights 
-
-  def forward(
-      self, 
-      x, 
-      padding_mask: Optional[torch.Tensor] = None,
-    #   incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]] = None,
-      prev_key_values: Optional[Tuple[torch.Tensor]] = None,
-      attn_mask: Optional[torch.Tensor] = None,
-      output_attentions = False,
-      before_attn_fn = False,
-      use_cache=False,
-  ):
-    seq_len, bsz, embed_dim = x.size()
-    assert embed_dim == self.config.hidden_size, f"Input embedding dimension should be {self.config.hidden_size}; received {embed_dim}"
-
-    # store inputs for residual connection and handle pre-norm if requested
-    residual = x 
-    if self.config.normalize_before_mega:
-      x = self.norm(x)
-    
-    # L x B x E
-    v = self.activation(self.v_proj(x))
-
-    # unpack the incremental state if provided
-    # assumed to be (self K, self V, self EMA state, cross K, cross V)
-    if use_cache and (prev_key_values is not None):
-        prev_self_key, prev_self_value, prev_ema_state, _, _ = prev_key_values
-
-    # L x B x D
-    # updated_ema_state will be None if use_cache=False
-    mx, updated_ema_state = self.move(x, padding_mask, prev_state=prev_ema_state, use_cache=use_cache)
-    mx = self.dropout(mx)
-
-    # L x B x D -> L x B x (2*D+S+E)
-    base = self.mx_proj(mx)
-    u, zr, hx = torch.split(
-        base, [
-            self.config.hidden_size, 
-            self.config.shared_representation_size + self.config.intermediate_size, 
-            self.config.hidden_size
-        ], 
-        dim=-1
-    )
-
-    # L x B x D
-    u = torch.sigmoid(u)
-
-    # L x B x (E + S)
-    z, r = torch.split(F.silu(zr), [self.config.shared_representation_size, self.config.intermediate_size], dim=-1)
-
-    # L x B x S -> L x B x 1 x S -> L x B x 2 X S 
-    z = z.unsqueeze(2) * self.gamma + self.beta
-    
-    # L x B x 2 x S -> L x B x S 
-    q, k = torch.unbind(z, dim=2)
-
-    # L x B x D -> B x L x D
-    q = q.transpose(0, 1)
-    k = k.transpose(0, 1)
-    v = v.transpose(0, 1)
-
-    # this block does the appending of current state K/V to previous state
-    # should only be needed if we're doing incremental decoding & the past values are provided
-    if use_cache and (prev_key_values):
-      # saved states are stored with shape (bsz, seq_len, dim)
-      k = torch.cat([prev_self_key, k], dim=1)
-      v = torch.cat([prev_self_value, v], dim=1)
-      # THIS ISN'T NEEDED IF THE ATTENTION MASK INCLUDES CURRENT TOKEN (ASSUMED BY HF)
-    #   prev_padding_mask = None 
-    #   if "prev_padding_mask" in saved_state:
-    #     prev_padding_mask = saved_state['prev_padding_mask']
-    #   padding_mask = MovingAverageGatedAttention._append_prev_padding_mask(
-    #       padding_mask=padding_mask,
-    #       prev_padding_mask=prev_padding_mask,
-    #       batch_size=bsz,
-    #       seq_len=k.size(1)
-    #   )
-
-      # UPDATE THE SAVED STATE -- instead of doing this, let's create what we need to return for past_key_values
-      # if not chunking, store as-is
-      if not self.config.use_chunking:
-        updated_self_key = k 
-        updated_self_value = v
-        # saved_state['prev_key_padding_mask'] = padding_mask 
-      else:
-        curr_len = k.size(1) % self.config.chunk_size 
-        if curr_len == 0:
-          # so this is interesting... it's deleting the incremental state when we reach the end of a chunk
-          # I'm going to overwrite to None so we don't lose everything
-        #   if "prev_key" in saved_state:
-        #     del saved_state["prev_key"]
-        #     del saved_state["prev_value"]
-        #     del saved_state["prev_key_padding_mask"]
-          updated_self_key = None 
-          updated_self_value = None
-        else:
-          updated_self_key = k 
-          updated_self_value = v
-        #   saved_state['prev_key_padding_mask'] = padding_mask 
-    
-    ctx_len = k.size(1)
-    if not self.config.use_chunking:
-      # if we're not chunking, treat the entire sequence as one long chunk
-      # B x L x S -> B x 1 x L x S
-      q = q.unsqueeze(1)
-      k = k.unsqueeze(1)
-      v = v.unsqueeze(1)
-      if padding_mask is not None:
-        # B x L -> B x 1 x L
-        padding_mask = padding_mask.unsqueeze(1)
-    else:
-      # otherwise, split the sequences in the batch into K chunks of size C
-      if seq_len < self.config.chunk_size:
-        q = q.unsqueeze(1)
-      else:
-        # B x L x S -> B x K x C x S
-        nc = seq_len // self.config.chunk_size 
-        q = q.reshape(bsz, nc, self.config.chunk_size, self.config.shared_representation_size)
-      
-      if ctx_len < self.config.chunk_size:
-        k = k.unsqueeze(1)
-        v = v.unsqueeze(1)
-        if padding_mask is not None:
-          padding_mask = padding_mask.unsqueeze(1)
-      else:
-        # B x L x S -> B x K x C x S
-        nc = ctx_len // self.config.chunk_size 
-        k = k.reshape(bsz, nc, self.config.chunk_size, self.config.shared_representation_size)
-        v = v.reshape(bsz, nc, self.config.chunk_size, self.config.intermediate_size)
-        if padding_mask is not None:
-          padding_mask = padding_mask.view(bsz, nc, self.config.chunk_size)
+        self.norm = SequenceNorm(self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine)
+        self.move = MultiHeadEMA(self.config.hidden_size, 
+                                ndim=self.config.ema_projection_size, 
+                                bidirectional=self.config.bidirectional, 
+                                truncation=self.config.truncation)
         
-    # this is in the original Mega implementation to work around fork/join parallelism not supporting optional types
-    if padding_mask is not None and padding_mask.dim() == 0:
-      padding_mask = None 
+        self.v_proj = nn.Linear(self.config.hidden_size, self.config.intermediate_size)
+        self.mx_proj = nn.Linear(self.config.hidden_size, self.config.shared_representation_size + self.config.intermediate_size + 2 * self.config.hidden_size)
+        self.h_proj = nn.Linear(self.config.intermediate_size, self.config.hidden_size)
 
-    attn_weights = self.attention_function(q, k, padding_mask, attn_mask, before_attn_fn)
+        self.gamma = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
+        self.beta = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
+
+        max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size 
+        if self.config.relative_positional_bias == 'simple':
+            self.rel_pos_bias = SimpleRelativePositionalBias(max_positions)
+        elif self.config.relative_positional_bias == 'rotary':
+            self.rel_pos_bias = RotaryRelativePositionalBias(self.config.shared_representation_size, max_positions)
+        else:
+            raise ValueError(f"Unknown relative positional bias: {self.config.relative_positional_bias}")
+
+        self.softmax = nn.Softmax(dim=-1)
+        self.attention_function = self.softmax_attention if self.config.attention_activation == 'softmax' else self.element_attention
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        # possibly remove this in favor of automated initialization by HF classes
+        std = 0.02
+        mean = 0.0
+        nn.init.normal_(self.v_proj.weight, mean=mean, std=std)
+        nn.init.constant_(self.v_proj.bias, 0.0)
+        
+        nn.init.normal_(self.mx_proj.weight, mean=mean, std=std)
+        nn.init.constant_(self.mx_proj.bias, 0.0)
+        
+        nn.init.normal_(self.h_proj.weight, mean=mean, std=std)
+        nn.init.constant_(self.h_proj.bias, 0.0)
+        
+        nn.init.normal_(self.gamma, mean=mean, std=std)
+        nn.init.constant_(self.beta, 0.0)
     
-    if before_attn_fn:
-      return attn_weights, v # i am not sure why this is an option or why the return order is reversed
+    def element_attention(self, q, k, attention_mask, before_attn_fn):
+        'Apply element-wise attention via relu^2 or laplace - same as original implementation but with unified attention mask'
+        slen = k.size(2)
+        if attention_mask is not None:
+            # 1 for *not masked*
+            # 0 for *masked*
+
+            # B x K x 1
+            lengths = attention_mask.sum(-1, keepdim=True)
+            # B x K x 1 x 1
+            lengths = lengths.clamp(min=1.0).unsqueeze(-1)
+
+        # C x C
+        bias = self.rel_pos_bias(slen)
+        if slen != q.size(2):
+            assert q.size(2) == 1, "Size mismatch between Q and K in element attention"
+            # 1 x C
+            bias = bias[-1:]
     
-    v = self.hidden_dropout(v, batch_first=True)
-    kernel = self.attention_dropout(attn_weights)
+        # B x K x C x C
+        qk = torch.matmul(q, k.transpose(2, 3)) / lengths + bias 
 
-    # B x K x C x E -> B x L x E -> L x B x E
-    h = torch.matmul(kernel, v).view(bsz, seq_len, self.config.intermediate_size).transpose(0, 1)
-
-    # L x B x E -> L x B x D
-    h = self.activation(hx + self.h_proj(h * r))
-    h = self.dropout(h)
-    # L x B x D
-    out = torch.addcmul(residual, u, h - residual)
-
-    if not self.config.normalize_before_mega:
-      out = self.norm(out)
-
-    return_values = (out, attn_weights) if output_attentions else (out, )
-
-    if self.config.is_decoder:
-        return_values = return_values + (updated_self_key, updated_self_value, updated_ema_state)
+        if before_attn_fn:
+            return qk 
     
-    return return_values
+        if self.config.attention_activation == 'relu2':
+            attn_weights = relu2(qk).type_as(qk)
+        elif self.config.attention_activation == 'laplace':
+            attn_weights = laplace(qk).type_as(qk)
+        else:
+            raise ValueError(f"Unknown attention activation function: {self.config.attention_activation}")
+    
+        if attention_mask is not None:
+            attn_weights = attn_weights * attention_mask.unsqueeze(2) 
+    
+        return attn_weights
+
+    def softmax_attention(self, q, k, attention_mask, before_attn_fn):
+        'Standard softmax attention with combined padding/attention mask'
+        slen = k.size(2)
+        # C x C
+        bias = self.rel_pos_bias(slen)
+        if slen != q.size(2):
+            assert q.size(2) == 1, "Size mismatch between Q and K in element attention"
+            # 1 x C
+            bias = bias[-1:] 
+
+        # scaled attention
+        q = q * self.scaling 
+
+        # B x K x C x C
+        qk = torch.matmul(q, k.transpose(2, 3)) + bias 
+
+        if attention_mask is not None:
+            # 1 for tokens which are *not masked*
+            # 0 for tokens which are *masked*
+            # replace masked tokens with -inf to make softmax ignore them
+            qk = torch.where(attention_mask == 0, qk, float('-inf'))
+
+        if before_attn_fn:
+            return qk
+    
+        attn_weights = self.softmax(qk).type_as(qk)
+        return attn_weights 
+
+    def forward(
+        self, 
+        x, 
+        attention_mask: Optional[torch.Tensor] = None,
+        prev_key_values: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions = False,
+        before_attn_fn = False,
+        use_cache=False
+    ):
+        '''
+        Mega self-attention block, combining multi-headed EMA with traditional attention
+
+        x: embeddings on which to perform Mega attention 
+        attention_mask: 1 if unmasked, 0 if masked
+        prev_key_values: a tuple of tensors representing past state for
+            incremental decoding - (self_key, self_value, self_ema_state)
+        output_attentions: if True, attention weights will be returned 
+        before_attn_fn: whether to return attention values before softmax (retained from original Mega)
+        use_cache: whether you are performing incremental decoding - if True, 
+            states will be returned for use in the next step
+        '''
+        seq_len, bsz, embed_dim = x.size()
+        assert embed_dim == self.config.hidden_size, f"Input embedding dimension should be {self.config.hidden_size}; received {embed_dim}"
+
+        # store inputs for residual connection and handle pre-norm if requested
+        residual = x 
+        if self.config.normalize_before_mega:
+            x = self.norm(x)
+    
+        # L x B x E
+        v = self.activation(self.v_proj(x))
+
+        # unpack the incremental state if provided
+        # assumed to be (self K, self V, self EMA state, cross K, cross V)
+        if use_cache and (prev_key_values is not None):
+            prev_self_key, prev_self_value, prev_ema_state, _, _ = prev_key_values
+
+        # L x B x D
+        # updated_ema_state will be None if use_cache=False
+        mx, updated_ema_state = self.move(x, attention_mask=attention_mask, prev_state=prev_ema_state, use_cache=use_cache)
+        mx = self.dropout(mx)
+
+        # L x B x D -> L x B x (2*D+S+E)
+        base = self.mx_proj(mx)
+        u, zr, hx = torch.split(
+            base, [
+                self.config.hidden_size, 
+                self.config.shared_representation_size + self.config.intermediate_size, 
+                self.config.hidden_size
+            ], 
+            dim=-1
+        )
+
+        # L x B x D
+        u = torch.sigmoid(u)
+
+        # L x B x (E + S)
+        z, r = torch.split(F.silu(zr), [self.config.shared_representation_size, self.config.intermediate_size], dim=-1)
+
+        # L x B x S -> L x B x 1 x S -> L x B x 2 X S 
+        z = z.unsqueeze(2) * self.gamma + self.beta
+        
+        # L x B x 2 x S -> L x B x S 
+        q, k = torch.unbind(z, dim=2)
+
+        # L x B x D -> B x L x D
+        q = q.transpose(0, 1)
+        k = k.transpose(0, 1)
+        v = v.transpose(0, 1)
+
+        if use_cache:
+            # combine history and current to save updated state (if history is provided)
+            # when chunking is applied, the past states will be None at the end of the chunk, in 
+            # which case, proceed as if no K/V history had been provided
+            # saved states are stored with shape (bsz, seq_len, dim)
+            if prev_self_key is not None:
+                k = torch.cat([prev_self_key, k], dim=1)
+            if prev_self_value is not None:
+                v = torch.cat([prev_self_value, v], dim=1)
+
+            # if not chunking, store as-is
+            if not self.config.use_chunking:
+                updated_self_key = k 
+                updated_self_value = v
+            else:
+                curr_len = k.size(1) % self.config.chunk_size 
+                if curr_len == 0:
+                    # if we're chunking and have reached the end of a chunk, wipe out the saved state
+                    updated_self_key = None 
+                    updated_self_value = None
+                else:
+                    updated_self_key = k 
+                    updated_self_value = v
+    
+        ctx_len = k.size(1)
+        if not self.config.use_chunking:
+            # if we're not chunking, treat the entire sequence as one long chunk
+            # B x L x S -> B x 1 x L x S
+            q = q.unsqueeze(1)
+            k = k.unsqueeze(1)
+            v = v.unsqueeze(1)
+            if attention_mask is not None:
+                # B x L -> B x 1 x L
+                attention_mask = attention_mask.unsqueeze(1)
+        else:
+            # otherwise, split the sequences in the batch into K chunks of size C
+            if seq_len < self.config.chunk_size:
+                q = q.unsqueeze(1)
+            else:
+                # B x L x S -> B x K x C x S
+                nc = seq_len // self.config.chunk_size 
+                q = q.reshape(bsz, nc, self.config.chunk_size, self.config.shared_representation_size)
+      
+            if ctx_len < self.config.chunk_size:
+                k = k.unsqueeze(1)
+                v = v.unsqueeze(1)
+                if attention_mask is not None:
+                    attention_mask = attention_mask.unsqueeze(1)
+            else:
+                # B x L x S -> B x K x C x S
+                nc = ctx_len // self.config.chunk_size 
+                k = k.reshape(bsz, nc, self.config.chunk_size, self.config.shared_representation_size)
+                v = v.reshape(bsz, nc, self.config.chunk_size, self.config.intermediate_size)
+                if attention_mask is not None:
+                    attention_mask = attention_mask.view(bsz, nc, self.config.chunk_size)
+        
+        # this is in the original Mega implementation to work around fork/join parallelism not supporting optional types
+        if attention_mask is not None and attention_mask.dim() == 0:
+            attention_mask = None 
+
+        attn_weights = self.attention_function(q, k, attention_mask=attention_mask, before_attn_fn=before_attn_fn)
+    
+        v = self.hidden_dropout(v, batch_first=True)
+        kernel = self.attention_dropout(attn_weights)
+
+        # B x K x C x E -> B x L x E -> L x B x E
+        h = torch.matmul(kernel, v).view(bsz, seq_len, self.config.intermediate_size).transpose(0, 1)
+
+        # L x B x E -> L x B x D
+        h = self.activation(hx + self.h_proj(h * r))
+        h = self.dropout(h)
+        # L x B x D
+        out = torch.addcmul(residual, u, h - residual)
+
+        if not self.config.normalize_before_mega:
+            out = self.norm(out)
+
+        return_values = (out, attn_weights) if output_attentions else (out, )
+
+        if self.config.is_decoder:
+            return_values = return_values + (updated_self_key, updated_self_value, updated_ema_state)
+    
+        return return_values
 
 # Normalized feed-forward network
 class NormalizedFeedForwardNetwork(nn.Module):

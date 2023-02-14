@@ -20,9 +20,8 @@
     * Could possibly wrap up cross-attention and self attention in a `MegaAttention` class, but probably not necessary as it's handled in the Mega block anyway
   * ~~`MegaIntermediate` (unnecessary)~~
   * `MegaOutput`
-  * `create_position_ids
 * To modify
-  * `MegaEmbeddings` - add optional token type embeddings  
+  * ~~`MegaEmbeddings` - add optional token type embeddings  ~~
   * `MegaLayer` - start with something like this for the combined encoder/decoder layer
     * There's also a nice handling of cross-attention already
     * If `output_attentions`, do we want self-attention or cross attention? both? (both)
@@ -30,13 +29,6 @@
   * `MegaPretrainedModel` - initialization, remove checkpointing (?)
 * Decoder stuff:
   * Probably untangle the incremental state in OG Mega to look more like the `forward` method in the auto-generated `MegaEncoder` (which is meant to be the stack of N encoder or decoder layers)
-  * However, it doesn't really have to be the same, and RoBERTa uses a gross tuple of (decoder key, decoder value, encoder key, encoder value)
-    * No, we actually should set it up to return the tuple if `use_cache` is specified
-  * It is interesting that the fairseq method is stateful, with the internal functions of `MultiheadEMA` modifying it directly
-  * Need to look into how the original implementation instantiates and passes the incremental state
-    * Expected shape in terms of batch / tgt seq len / hidden size?
-    * Initial values?
-    * Differences from HF's `past_key_values`
 
 ## Incremental State --> past_key_values
 ### Hugging Face's `past_key_values`
@@ -78,14 +70,10 @@ This is mostly pretty standard: cross-attention takes cross-attn keys and values
 * use prior `state` value if provided (new input, possibly taken out of the `prev_key_values` tuple)
 * **status:** done, pending testing within the wrapper classes
 
-MovingAverageGatedAttention
+~~MovingAverageGatedAttention~~
 * Accept previous keys and values from `prev_key_values` (new input, in place of incremental_state)
 * Return a tuple in the style of the HF attention modules (layer output, attention weights, key, value, EMA state) with contents controlled by `output_attentions` and `use_cache` (new inputs)
-* **status:** incremental state removal done, currently working through attention masking 
-  * need to combine the padding mask (0 unmasked, 1 masked) and attention mask (0 unmasked, -inf masked)
-  * added comments in softmax and element attention methods for this class
-  * definitely seems like we can combine the two masks
-  * left off here 
+* **status:** done - removed incremental state and refactored into a single combined `attention_mask` for padding and unidirectional self-attention
 
 prev_key_values inputs for ^ will be expected as:
 
