@@ -959,22 +959,24 @@ class XLNetModel(XLNetPreTrainedModel):
         raise NotImplementedError
 
     def create_mask(self, qlen, mlen):
+        # docstyle-ignore
         """
         Creates causal attention mask. Float mask where 1.0 indicates masked, 0.0 indicates not-masked.
 
+
+
+
+              same_length=False:      same_length=True:
+              <mlen > <  qlen >       <mlen > <  qlen >
+           ^ [0 0 0 0 0 1 1 1 1]     [0 0 0 0 0 1 1 1 1]
+             [0 0 0 0 0 0 1 1 1]     [1 0 0 0 0 0 1 1 1]
+        qlen [0 0 0 0 0 0 0 1 1]     [1 1 0 0 0 0 0 1 1]
+             [0 0 0 0 0 0 0 0 1]     [1 1 1 0 0 0 0 0 1]
+           v [0 0 0 0 0 0 0 0 0]     [1 1 1 1 0 0 0 0 0]
+        
         Args:
             qlen: Sequence length
-            mlen: Mask length
-
-        ::
-
-                  same_length=False: same_length=True: <mlen > < qlen > <mlen > < qlen >
-               ^ [0 0 0 0 0 1 1 1 1] [0 0 0 0 0 1 1 1 1]
-                 [0 0 0 0 0 0 1 1 1] [1 0 0 0 0 0 1 1 1]
-            qlen [0 0 0 0 0 0 0 1 1] [1 1 0 0 0 0 0 1 1]
-                 [0 0 0 0 0 0 0 0 1] [1 1 1 0 0 0 0 0 1]
-               v [0 0 0 0 0 0 0 0 0] [1 1 1 1 0 0 0 0 0]
-
+            mlen: Mask length        
         """
         attn_mask = torch.ones([qlen, qlen])
         mask_up = torch.triu(attn_mask, diagonal=1)
