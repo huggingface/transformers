@@ -24,10 +24,12 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
     """
     Zero shot audio classification pipeline using `ClapModel`. This pipeline predicts the class of an audio when you
     provide an audio and a set of `candidate_labels`.
+
     Example:
     ```python
     >>> from transformers import pipeline
     >>> from datasets import load_dataset
+
     >>> dataset = load_dataset("ashraq/esc50")
     >>> audio = next(iter(dataset["train"]["audio"]))["array"]
     >>> classifier = pipeline(task="zero-shot-audio-classification", model="laion-ai/clap-hsat-tiny")
@@ -37,10 +39,11 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
     ... )
     [{'score': 0.999727189540863, 'label': 'Sound of a dog'}, {'score': 0.0002727957325987518, 'label': 'Sound of vaccum cleaner'}]
     ```
-    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
-    This audio classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
-    `"zero-shot-audio-classification"`.
-    See the list of available models on
+
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial) This audio
+    classification pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"zero-shot-audio-classification"`. See the list of available models on
     [huggingface.co/models](https://huggingface.co/models?filter=zero-shot-audio-classification).
     """
 
@@ -58,8 +61,8 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
         **kwargs,
     ):
         """
-        Assign labels to the audio(s) passed as inputs.
         Args:
+        Assign labels to the audio(s) passed as inputs.
             audios (`str`, `List[str]`, `np.array` or `List[np.array]`):
                 The pipeline handles three types of inputs:
                 - A string containing a http link pointing to an audio
