@@ -24,7 +24,7 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    BitsandbytesConfig,
+    BitsAndBytesConfig,
     pipeline,
 )
 from transformers.testing_utils import (
@@ -93,7 +93,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         super().setUp()
 
         # Models and tokenizer
-        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype="auto", device_map="auto")
+        self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, torch_dtype=torch.float16, device_map="auto")
         self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
 
     def tearDown(self):
@@ -135,7 +135,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         r"""
         Test that loading the model with the config is equivalent
         """
-        bnb_config = BitsandbytesConfig()
+        bnb_config = BitsAndBytesConfig()
 
         model_8bit_from_config = AutoModelForCausalLM.from_pretrained(
             self.model_name, bitsandbytes_config=bnb_config, device_map="auto"
@@ -152,7 +152,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         r"""
         Test that loading the model with the config and `load_in_8bit` raises an error
         """
-        bnb_config = BitsandbytesConfig()
+        bnb_config = BitsAndBytesConfig()
 
         with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(
@@ -439,7 +439,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             "transformer.ln_f": 1,
         }
 
-        bnb_config = BitsandbytesConfig(llm_int8_enable_fp32_cpu_offload=True)
+        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
 
         model_8bit = AutoModelForCausalLM.from_pretrained(
             self.model_name,
@@ -465,7 +465,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             "transformer.h": 0,
             "transformer.ln_f": 1,
         }
-        bnb_config = BitsandbytesConfig(llm_int8_enable_fp32_cpu_offload=True)
+        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
 
         # Load model
         model_8bit = AutoModelForCausalLM.from_pretrained(
@@ -491,7 +491,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             "transformer.h": 0,
             "transformer.ln_f": 1,
         }
-        bnb_config = BitsandbytesConfig(llm_int8_enable_fp32_cpu_offload=True)
+        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
         with tempfile.TemporaryDirectory() as tmpdirname:
             # Load model
             model_8bit = AutoModelForCausalLM.from_pretrained(

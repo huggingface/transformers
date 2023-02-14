@@ -2,7 +2,7 @@
 from ..utils import DummyObject, requires_backends
 
 
-class BitsandbytesConfig(metaclass=DummyObject):
+class BitsAndBytesConfig(metaclass=DummyObject):
     _backends = ["bitsandbytes"]
 
     def __init__(self, *args, **kwargs):

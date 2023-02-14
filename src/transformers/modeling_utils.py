@@ -2104,9 +2104,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         elif bitsandbytes_config is None and load_in_8bit:
             # Use the default config if `load_in_8bit` is True.
-            from .utils.bitsandbytes_config import BitsandbytesConfig
+            from .utils.bitsandbytes_config import BitsAndBytesConfig
 
-            bitsandbytes_config = BitsandbytesConfig()
+            bitsandbytes_config = BitsAndBytesConfig()
         elif bitsandbytes_config is not None:
             # We force `load_in_8bit` to True if `bitsandbytes_config` is passed.
             load_in_8bit = True
@@ -2115,7 +2115,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # warn that this argument will be deprecated in the future and fully replaced with `bitsandbytes_config`
             logger.warning(
                 "The `load_in_8bit` argument will be deprecated in the future (v5). Please use "
-                "`BitsandbytesConfig` instead."
+                "`BitsAndBytesConfig` instead."
             )
 
             if not (is_accelerate_available() and is_bitsandbytes_available()):

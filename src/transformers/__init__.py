@@ -609,7 +609,7 @@ _import_structure = {
         "logging",
     ],
     "utils.bitsandbytes": [],
-    "utils.bitsandbytes_config": ["BitsandbytesConfig"],
+    "utils.bitsandbytes_config": ["BitsAndBytesConfig"],
 }
 
 # sentencepiece-backed objects
@@ -4091,7 +4091,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         raise ValueError("bitsandbytes is not installed. Please install it with `pip install bitsandbytes`.")
     else:
-        from .utils.bitsandbytes_config import BitsandbytesConfig
+        from .utils.bitsandbytes_config import BitsAndBytesConfig
 
     try:
         if not is_sentencepiece_available():
