@@ -25,6 +25,13 @@ Here are the things you can do using `bitsandbytes` integration
 
 You can load a model by roughly halving the memory requirements by using `load_in_8bit=True` argument when calling `.from_pretrained` method
 
+<Tip>
+
+Note that the `load_in_8bit` argument will be deprecated in a future major version in favor of `quantization_config`.
+
+</Tip>
+
+
 ```python
 # pip install transformers accelerate bitsandbytes
 from transformers import AutoModelForCausalLM, AutoTokenizer
