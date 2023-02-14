@@ -2074,7 +2074,7 @@ class ClapTextModel(ClapPreTrainedModel):
         )
 
 
-@add_start_docstrings(Clap_START_DOCSTRING)
+@add_start_docstrings(CLAP_START_DOCSTRING)
 class ClapModel(ClapPreTrainedModel):
     config_class = ClapConfig
 
@@ -2114,7 +2114,7 @@ class ClapModel(ClapPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(Clap_TEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -2292,7 +2292,7 @@ class ClapModel(ClapPreTrainedModel):
     """
     CLAP Text Model with a projection layer on top (a linear layer on top of the pooled output).
     """,
-    Clap_START_DOCSTRING,
+    CLAP_START_DOCSTRING,
 )
 class ClapTextModelWithProjection(ClapPreTrainedModel):
     config_class = ClapTextConfig
@@ -2310,7 +2310,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.word_embeddings = value
 
-    @add_start_docstrings_to_model_forward(Clap_TEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLAP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ClapTextModelOutput, config_class=ClapTextConfig)
     def forward(
         self,
@@ -2368,7 +2368,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
     """
     CLAP Audio Model with a projection layer on top (a linear layer on top of the pooled output).
     """,
-    Clap_START_DOCSTRING,
+    CLAP_START_DOCSTRING,
 )
 class ClapAudioModelWithProjection(ClapPreTrainedModel):
     config_class = ClapAudioConfig
