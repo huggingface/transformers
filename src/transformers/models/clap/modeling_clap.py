@@ -1785,62 +1785,22 @@ class ClapPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor
 
         if isinstance(module, ClapTextEmbeddings):
-            module.word_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.token_type_embeddings.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, ClapTextSelfAttention):
-            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
-            nn.init.normal_(module.query.weight, std=in_proj_std)
-            nn.init.normal_(module.key.weight, std=in_proj_std)
-            nn.init.normal_(module.value.weight, std=in_proj_std)
-        elif isinstance(
-            module,
-            (
-                ClapTextSelfOutput,
-                ClapTextOutput,
-                ClapTextIntermediate,
-                ClapTextPooler,
-                ClapAudioSelfOutput,
-                ClapAudioIntermediate,
-                ClapAudioOutput,
-            ),
-        ):
-            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
-            nn.init.normal_(module.dense.weight, std=in_proj_std)
-        elif isinstance(module, ClapProjectionLayer):
-            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
-            nn.init.normal_(module.linear1.weight, std=in_proj_std)
-            nn.init.normal_(module.linear2.weight, std=in_proj_std)
-        elif isinstance(module, ClapAudioPatchEmbed):
-            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
-            nn.init.normal_(module.proj.weight, std=in_proj_std)
-        elif isinstance(module, ClapAudioSelfAttention):
-            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
-            nn.init.normal_(module.query.weight, std=in_proj_std)
-            nn.init.normal_(module.key.weight, std=in_proj_std)
-            nn.init.normal_(module.value.weight, std=in_proj_std)
-        elif isinstance(module, ClapAudioPatchMerging):
-            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
-            nn.init.normal_(module.reduction.weight, std=in_proj_std)
-        elif isinstance(module, ClapAudioEncoder):
-            in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
-            nn.init.normal_(module.head.weight, std=in_proj_std)
-        elif isinstance(module, ClapFusionBlock):
-            nn.init.normal_(module.linear.weight, std=factor * 0.02)
+        elif isinstance(module, ClapModel):
+            nn.init.normal_(module.logit_scale_a, std=factor * 0.02)
+            nn.init.normal_(module.logit_scale_t, std=factor * 0.02)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=factor * 0.02)
 
-        if isinstance(module, nn.LayerNorm):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
-        if isinstance(module, nn.Conv2d):
+        elif isinstance(module, (nn.Conv2d, nn.Linear)):
             in_proj_std = (self.config.hidden_size**-0.5) * ((2 * self.config.num_hidden_layers) ** -0.5) * factor
             nn.init.normal_(module.weight, std=in_proj_std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        if isinstance(module, ClapModel):
-            nn.init.normal_(module.logit_scale_a, std=factor * 0.02)
-            nn.init.normal_(module.logit_scale_t, std=factor * 0.02)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ClapTextEncoder):
