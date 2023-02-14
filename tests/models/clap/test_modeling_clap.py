@@ -628,7 +628,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         audio_sample = librispeech_dummy[-1]
 
-        model_id = "ybelkada/clap-htsat-unfused"
+        model_id = "laion/clap-htsat-unfused"
 
         model = ClapModel.from_pretrained(model_id).to(torch_device)
         processor = ClapProcessor.from_pretrained(model_id)
@@ -655,7 +655,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         audio_sample = librispeech_dummy[-1]
 
-        model_id = "ybelkada/clap-htsat-fused"
+        model_id = "laion/clap-htsat-fused"
 
         model = ClapModel.from_pretrained(model_id).to(torch_device)
         processor = ClapProcessor.from_pretrained(model_id)

@@ -47,7 +47,7 @@ _CHECKPOINT_FOR_DOC = "laion-ai/clap-htsat-fused"
 
 CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "laion-ai/clap-htsat-fused",
-    "ybelkada/clap-htsat-unfused",
+    "laion/clap-htsat-unfused",
     # See all clap models at https://huggingface.co/models?filter=clap
 ]
 
@@ -1842,8 +1842,8 @@ class ClapAudioModel(ClapPreTrainedModel):
         >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model = ClapAudioModel.from_pretrained("ybelkada/clap-htsat-fused")
-        >>> processor = AutoProcessor.from_pretrained("ybelkada/clap-htsat-fused")
+        >>> model = ClapAudioModel.from_pretrained("laion/clap-htsat-fused")
+        >>> processor = AutoProcessor.from_pretrained("laion/clap-htsat-fused")
 
         >>> inputs = processor(audios=audio_sample, return_tensors="pt")
 
@@ -2094,8 +2094,8 @@ class ClapModel(ClapPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, ClapModel
 
-        >>> model = ClapModel.from_pretrained("ybelkada/clap-htsat-unfused")
-        >>> tokenizer = AutoTokenizer.from_pretrained("ybelkada/clap-htsat-unfused")
+        >>> model = ClapModel.from_pretrained("laion/clap-htsat-unfused")
+        >>> tokenizer = AutoTokenizer.from_pretrained("laion/clap-htsat-unfused")
 
         >>> inputs = tokenizer(["the sound of a cat", "the sound of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -2177,8 +2177,8 @@ class ClapModel(ClapPreTrainedModel):
         >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
 
-        >>> model = ClapModel.from_pretrained("ybelkada/clap-htsat-unfused")
-        >>> processor = AutoProcessor.from_pretrained("ybelkada/clap-htsat-unfused")
+        >>> model = ClapModel.from_pretrained("laion/clap-htsat-unfused")
+        >>> processor = AutoProcessor.from_pretrained("laion/clap-htsat-unfused")
 
         >>> input_text = ["Sound of a dog", "Sound of vaccum cleaner"]
 
@@ -2289,8 +2289,8 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, ClapTextModelWithProjection
 
-        >>> model = ClapTextModelWithProjection.from_pretrained("ybelkada/clap-htsat-unfused")
-        >>> tokenizer = AutoTokenizer.from_pretrained("ybelkada/clap-htsat-unfused")
+        >>> model = ClapTextModelWithProjection.from_pretrained("laion/clap-htsat-unfused")
+        >>> tokenizer = AutoTokenizer.from_pretrained("laion/clap-htsat-unfused")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -2365,8 +2365,8 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         >>> from datasets import load_dataset
         >>> from transformers import ClapAudioModelWithProjection, ClapProcessor
 
-        >>> model = ClapAudioModelWithProjection.from_pretrained("ybelkada/clap-htsat-fused")
-        >>> processor = ClapProcessor.from_pretrained("ybelkada/clap-htsat-fused")
+        >>> model = ClapAudioModelWithProjection.from_pretrained("laion/clap-htsat-fused")
+        >>> processor = ClapProcessor.from_pretrained("laion/clap-htsat-fused")
 
         >>> dataset = load_dataset("ashraq/esc50")
         >>> audio_sample = dataset["train"]["audio"][0]["array"]
