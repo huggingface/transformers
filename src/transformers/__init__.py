@@ -27,6 +27,7 @@ from . import dependency_versions_check
 from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_bitsandbytes_available,
     is_flax_available,
     is_keras_nlp_available,
     is_sentencepiece_available,
@@ -609,8 +610,16 @@ _import_structure = {
         "logging",
     ],
     "utils.bitsandbytes": [],
-    "utils.quantization_config": ["BitsAndBytesConfig"],
+    "utils.quantization_config": [],
 }
+
+try:
+    if not is_bitsandbytes_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["utils.quantization_config"].append("BitsAndBytesConfig")
 
 # sentencepiece-backed objects
 try:
