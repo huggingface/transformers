@@ -138,7 +138,7 @@ class WhisperConfig(PretrainedConfig):
         begin_suppress_tokens (`List[int]`, *optional*, defaults to `[220,50256]`):
             A list containing tokens that will be supressed at the beginning of the sampling process. Initialized as
             the token for `" "` (`blank_token_id`) and the `eos_token_id`
-        condition_on_previous_text (`bool`, *optional*):
+        condition_on_previous_text (`bool`, *optional*, defaults to `True`):
             If True, provide the previous output of the model as a prompt for the next window; disabling may make the text inconsistent across windows, but the model becomes less prone to getting stuck in a failure loop
 
     Example:
