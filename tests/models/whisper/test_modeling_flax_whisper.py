@@ -647,13 +647,9 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
         model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
 
         input_speech = np.concatenate(self._load_datasamples(4))
-        input_features = processor.feature_extractor(
-            raw_speech=input_speech, return_tensors="jax"
-        ).input_features
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="jax").input_features
 
-        generate_fn = jax.jit(
-            functools.partial(model.generate, max_length=448, return_timestamps=True)
-        )
+        generate_fn = jax.jit(functools.partial(model.generate, max_length=448, return_timestamps=True))
 
         generated_ids = generate_fn(input_features)
 
@@ -706,7 +702,5 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
             }
         ]
 
-        transcript = processor.batch_decode(
-            generated_ids, skip_special_tokens=True, output_offsets=True
-        )
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
