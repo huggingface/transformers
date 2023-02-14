@@ -2648,7 +2648,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     _from_pipeline=from_pipeline,
                     **kwargs,
                 )
-            except OSError:
+            except (OSError, TypeError):
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
                 )
