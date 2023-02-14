@@ -87,6 +87,9 @@ GatedCrossAttention
 
 MegaDecoder
 * Accept `prev_key_values` and `use_cache` (new input) and pass relevant information along to component modules
+* **Open question**: do we expect input IDs for incremental decoding to have sequence length of exactly 1? 
+  * Mega code is written to assume only 1 token in the inputs while the others are represented in `past_key_values`
+  * Could take the last one if we need to, but I can't find documentation
 
 Then delete the IncrementalState class entirely
 

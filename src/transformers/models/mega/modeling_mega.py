@@ -1009,8 +1009,9 @@ class MovingAverageGatedAttention(nn.Module):
         # also assumes that incremental decoding is working one token at a time, so input sequence length must be 1
         if self.config.is_decoder and (prev_key_values is not None):
             if seq_len > 1:
-                raise ValueError(f"Incremental decoding requested on input sequence length > 1: {seq_len}")
-            prev_self_key, prev_self_value, prev_ema_state, _, _ = prev_key_values
+                raise ValueError(f"Incremental decoding only supports self sequence length of 1; received {seq_len}")
+            # the first 3 items in the saved states will be these regardless of whether cross-attention is present
+            prev_self_key, prev_self_value, prev_ema_state = prev_key_values[0:3]
         else:
             prev_self_key = prev_self_value = prev_ema_state = None 
 
