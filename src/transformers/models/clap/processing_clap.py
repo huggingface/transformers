@@ -22,7 +22,7 @@ from ...tokenization_utils_base import BatchEncoding
 
 class ClapProcessor(ProcessorMixin):
     r"""
-    Constructs a Clap processor which wraps a Clap feature extractor and a Clap tokenizer into a single processor.
+    Constructs a CLAP processor which wraps a CLAP feature extractor and a RoBerta tokenizer into a single processor.
 
     [`ClapProcessor`] offers all the functionalities of [`ClapFeatureExtractor`] and [`RobertaTokenizerFast`]. See the
     [`~ClapProcessor.__call__`] and [`~ClapProcessor.decode`] for more information.
