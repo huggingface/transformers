@@ -1801,7 +1801,6 @@ class ClapPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.weight, std=in_proj_std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, ClapTextEncoder):
