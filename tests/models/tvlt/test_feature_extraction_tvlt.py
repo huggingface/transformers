@@ -23,11 +23,13 @@ import unittest
 import numpy as np
 import torch
 
-from transformers import is_datasets_available, is_speech_available
+from transformers import is_datasets_available, is_speech_available, is_torch_available
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
+if is_torch_available():
+    import torch
 
 if is_datasets_available():
     from datasets import load_dataset
