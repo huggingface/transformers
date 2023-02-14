@@ -15,7 +15,6 @@
 import inspect
 import math
 import multiprocessing
-import os
 import traceback
 import unittest
 
@@ -637,7 +636,4 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_librosa
     def test_wav2vec2_with_lm_invalid_pool(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None)
