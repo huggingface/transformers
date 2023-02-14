@@ -17,6 +17,8 @@
 import inspect
 import unittest
 
+import numpy as np
+
 from transformers import is_torch_available, pipeline
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -2439,30 +2441,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         max_score_diff = (output_sequences_batched.scores[0][1] - output_sequences.scores[0][0]).abs().max()
         self.assertTrue(max_score_diff < 1e-5)
 
-    def test_generate_from_input_embeds_decoder_only(self):
-        # PT-only test: TF doesn't have a model with support to generate from input embeds (yet ;))
-        # Note: the model must support generation from input embeddings
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-
-        text = "Hello world"
-        input_ids = tokenizer.encode(text, return_tensors="pt")
-
-        # Traditional way of generating text
-        outputs_from_ids = model.generate(input_ids)
-
-        # Same thing, but from input embeddings
-        inputs_embeds = model.transformer.wte(input_ids)
-        outputs_from_embeds = model.generate(input_ids, inputs_embeds=inputs_embeds)
-        self.assertListEqual(outputs_from_ids.tolist(), outputs_from_embeds.tolist())
-
-        # But if we pass different inputs_embeds, we should get different outputs
-        torch.manual_seed(0)
-        random_embeds = torch.rand_like(inputs_embeds)
-        outputs_from_rand_embeds = model.generate(input_ids, inputs_embeds=random_embeds)
-        with self.assertRaises(AssertionError):
-            self.assertListEqual(outputs_from_rand_embeds.tolist(), outputs_from_embeds.tolist())
-
     def test_eos_token_id_int_and_list_top_k_top_sampling(self):
         # Has TF equivalent: this test relies on random sampling
         generation_kwargs = {
@@ -2490,6 +2468,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(expectation == len(generated_tokens[0]))
 
     def test_generate_from_inputs_embeds_decoder_only(self):
+        # PT-only test: TF doesn't have a model with support to generate from input embeds (yet ;))
         # Note: the model must support generation from input embeddings
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -2523,3 +2502,40 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             outputs_from_embeds[:, inputs_embeds.shape[1] :].tolist(),
             outputs_from_embeds_wo_ids[:, 1:].tolist(),
         )
+
+    def test_model_kwarg_encoder_signature_filtering(self):
+        # Has TF equivalent: ample use of framework-specific code
+        bart_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        article = """Hugging Face is a technology company based in New York and Paris."""
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+        bart_model = BartForConditionalGeneration.from_pretrained("hf-internal-testing/tiny-random-bart").to(
+            torch_device
+        )
+        output = bart_model.generate(input_ids).cpu().numpy()
+
+        # Let's create a fake model that has a different signature. In particular, this fake model accepts "foo" as an
+        # argument. Because "foo" is not in the encoder signature and doesn't start with "decoder_", it will be part of
+        # the encoder kwargs prior to signature filtering, which would lead to an exception. But filtering kicks in and
+        # saves the day.
+        class FakeBart(BartForConditionalGeneration):
+            def forward(self, input_ids, foo=None, **kwargs):
+                return super().forward(input_ids, **kwargs)
+
+        bart_model = FakeBart.from_pretrained("hf-internal-testing/tiny-random-bart").to(torch_device)
+        fake_output = bart_model.generate(input_ids, foo="bar").cpu().numpy()
+        self.assertTrue(np.array_equal(output, fake_output))
+
+        # Encoder signature filtering only kicks in if it doesn't accept wildcard kwargs. The following test will fail
+        # because it doesn't do signature filtering.
+        class FakeEncoder(bart_model.model.encoder.__class__):
+            def forward(self, input_ids, **kwargs):
+                return super().forward(input_ids, **kwargs)
+
+        fake_encoder = FakeEncoder(bart_model.config, bart_model.model.shared).to(torch_device)
+        bart_model.model.encoder = fake_encoder
+
+        # Normal generation still works (the output will be different because the encoder weights are different)
+        fake_output = bart_model.generate(input_ids).cpu().numpy()
+        with self.assertRaises(TypeError):
+            # FakeEncoder.forward() accepts **kwargs -> no filtering -> type error due to unexpected input "foo"
+            bart_model.generate(input_ids, foo="bar")
