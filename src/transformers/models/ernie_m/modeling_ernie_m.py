@@ -556,7 +556,7 @@ class ErnieMModel(ErnieMPreTrainedModel):
         past_key_values_length = 0
         if past_key_values is not None:
             past_key_values_length = past_key_values[0][0].shape[2]
-        
+
         # Adapted from paddlenlp.transformers.ernie_m.ErnieMModel
         if attention_mask is None:
             attention_mask = (input_ids == self.config.pad_token_id).to(torch.float32)
@@ -568,9 +568,9 @@ class ErnieMModel(ErnieMPreTrainedModel):
         # For 2D attention_mask from tokenizer
         elif attention_mask.ndim == 2:
             attention_mask = attention_mask.to(torch.float32)
-            attention_mask = (1.0 - attention_mask)
+            attention_mask = 1.0 - attention_mask
             attention_mask *= torch.finfo(attention_mask.dtype).min
-        
+
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
 
         embedding_output = self.embeddings(
