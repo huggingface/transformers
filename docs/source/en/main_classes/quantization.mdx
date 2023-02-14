@@ -42,7 +42,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map == "auto", load_in_8bit=True)
 ```
 
-Then, use your model as you would usually use a `PreTrainedModel`.
+Then, use your model as you would usually use a [`PreTrainedModel`].
 
 You can check the memory footprint of your model with `get_memory_footprint` method.
 
