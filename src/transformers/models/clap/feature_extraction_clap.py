@@ -153,7 +153,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
     def _np_extract_fbank_features(self, waveform: np.array, mel_filters: Optional[np.array] = None) -> np.ndarray:
         """
-        Compute the log-Mel spectrogram of the provided `waveform` using the `hanning` window. In Clap, two different
+        Compute the log-Mel spectrogram of the provided `waveform` using the `hanning` window. In CLAP, two different
         filter banks are used depending on the truncation pattern:
             - `self.mel_filters`: they correspond to the defaults parameters of `torchaduio` which can be obtained from
               calling `torchaudio.transforms.MelSpectrogram().mel_scale.fb`. These filters are used when `truncation`

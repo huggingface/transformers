@@ -71,7 +71,7 @@ def rename_state_dict(state_dict):
         elif re.match(text_projection_pattern, key):
             projecton_layer = int(re.match(text_projection_pattern, key).group(1))
 
-            # Because in Clap they use `nn.Sequential`...
+            # Because in CLAP they use `nn.Sequential`...
             transformers_projection_layer = 1 if projecton_layer == 0 else 2
 
             key = key.replace(f"_projection.{projecton_layer}.", f"_projection.linear{transformers_projection_layer}.")
