@@ -517,9 +517,8 @@ class FlaxGenerationMixin:
                 else begin_index + 1
             )
             if generation_config.forced_decoder_ids is not None and len(generation_config.forced_decoder_ids) > 0:
-                begin_index += generation_config.forced_decoder_ids[-1][
-                    0
-                ]  # generation starts after the last token that is forced
+                # generation starts after the last token that is forced
+                begin_index += generation_config.forced_decoder_ids[-1][0]
             processors.append(
                 FlaxSuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
             )
