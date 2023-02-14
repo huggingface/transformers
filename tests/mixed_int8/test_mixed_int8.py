@@ -487,11 +487,11 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
         This time we also add `disk` on the device_map.
         """
         device_map = {
-            "transformer.word_embeddings": "cpu",
+            "transformer.word_embeddings": 0,
             "transformer.word_embeddings_layernorm": "cpu",
-            "lm_head": "disk",
+            "lm_head": 0,
             "transformer.h": 0,
-            "transformer.ln_f": 1,
+            "transformer.ln_f": "disk",
         }
         bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
         with tempfile.TemporaryDirectory() as tmpdirname:

@@ -610,16 +610,8 @@ _import_structure = {
         "logging",
     ],
     "utils.bitsandbytes": [],
-    "utils.quantization_config": [],
+    "utils.quantization_config": ["BitsAndBytesConfig"],
 }
-
-try:
-    if not is_bitsandbytes_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["utils.quantization_config"].append("BitsAndBytesConfig")
 
 # sentencepiece-backed objects
 try:
@@ -4094,13 +4086,7 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    try:
-        if not is_bitsandbytes_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        raise ValueError("bitsandbytes is not installed. Please install it with `pip install bitsandbytes`.")
-    else:
-        from .utils.quantization_config import BitsAndBytesConfig
+    from .utils.quantization_config import BitsAndBytesConfig
 
     try:
         if not is_sentencepiece_available():
