@@ -50,11 +50,13 @@ You can check the memory footprint of your model with `get_memory_footprint` met
 print(model.get_memory_footprint())
 ```
 
-With this integration we were able to load large models on smaller devices and run them without any issue. 
+With this integration we were able to load large models on smaller devices and run them without any issue.  
 
-#### Cautions 
+<Tip warning={true}>
 
 Note that once a model has been loaded in 8-bit it is currently not possible to push the quantized weights on the Hub. Note also that you cannot train 8-bit weights as this is not supported yet. However you can use 8-bit models to train extra parameters, this will be covered in the next section.
+
+</Tip>
 
 ### Advanced usecases
 
