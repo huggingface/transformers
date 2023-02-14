@@ -1078,18 +1078,24 @@ class TFGenerationMixin:
     def _prepare_encoder_decoder_kwargs_for_generation(
         self, inputs_tensor: tf.Tensor, model_kwargs, model_input_name: Optional[str] = None
     ) -> Dict[str, Any]:
-        # get encoder and store encoder outputs
+        # 1. get encoder and store encoder outputs
         encoder = self.get_encoder()
 
-        # prepare encoder args and encoder kwargs from model kwargs
+        # 2. prepare encoder args and encoder kwargs from model kwargs
         irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
         encoder_kwargs = {
             argument: value
             for argument, value in model_kwargs.items()
             if not any(argument.startswith(p) for p in irrelevant_prefix)
         }
+        encoder_signature = set(inspect.signature(encoder.call).parameters)
+        encoder_accepts_wildcard = "kwargs" in encoder_signature or "model_kwargs" in encoder_signature
+        if not encoder_accepts_wildcard:
+            encoder_kwargs = {
+                argument: value for argument, value in encoder_kwargs.items() if argument in encoder_signature
+            }
 
-        # vision models don't use `attention_mask`.
+        # 3. vision models don't use `attention_mask`.
         encoder_kwargs["return_dict"] = True
         encoder_kwargs[model_input_name] = inputs_tensor
         if model_input_name != self.main_input_name:  # in Keras, the first input must always be passed
