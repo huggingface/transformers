@@ -165,8 +165,8 @@ class ClapTextConfig(PretrainedConfig):
 class ClapAudioConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ClapAudioModel`]. It is used to instantiate a
-    Clap audio encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the audio encoder of the Clap
+    CLAP audio encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the audio encoder of the CLAP
     [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -332,8 +332,8 @@ class ClapAudioConfig(PretrainedConfig):
 class ClapConfig(PretrainedConfig):
     r"""
     [`ClapConfig`] is the configuration class to store the configuration of a [`ClapModel`]. It is used to instantiate
-    a Clap model according to the specified arguments, defining the text model and audio model configs. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Clap
+    a CLAP model according to the specified arguments, defining the text model and audio model configs. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the CLAP
     [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -347,7 +347,7 @@ class ClapConfig(PretrainedConfig):
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and audio projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original Clap implementation.
+            The inital value of the *logit_scale* paramter. Default is used as per the original CLAP implementation.
         fusion_num_hidden_layers (`int`, *optional*, defaults to 2):
             Number of hidden layers in the fusion layer.
         projection_dim (`int`, *optional*, defaults to 512):
