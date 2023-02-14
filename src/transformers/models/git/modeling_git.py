@@ -1438,7 +1438,7 @@ class GitForCausalLM(GitPreTrainedModel):
         >>> np.random.seed(45)
 
 
-        >>> def read_video_pyav(container, start_index, end_index):
+        >>> def read_video_pyav(container, indices):
         ...     '''
         ...     Decode the video with PyAV decoder.
         ...     Args:
@@ -1450,19 +1450,22 @@ class GitForCausalLM(GitPreTrainedModel):
         ...     '''
         ...     frames = []
         ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
         ...     for i, frame in enumerate(container.decode(video=0)):
         ...         if i > end_index:
         ...             break
-        ...         if i >= start_index:
+        ...         if i >= start_index and i in indices:
         ...             frames.append(frame)
         ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
-
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)
         ...     start_idx = end_idx - converted_len
-        ...     return start_idx, end_idx - 1
+        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...     return indices
 
 
         >>> # load video
@@ -1473,10 +1476,10 @@ class GitForCausalLM(GitPreTrainedModel):
 
         >>> # sample frames
         >>> num_frames = model.config.num_image_with_embedding
-        >>> start_idx, end_idx = sample_frame_indices(
+        >>> indices = sample_frame_indices(
         ...     clip_len=num_frames, frame_sample_rate=1, seg_len=container.streams.video[0].frames
         ... )
-        >>> frames = read_video_pyav(container, start_idx, end_idx)
+        >>> frames = read_video_pyav(container, indices)
 
         >>> pixel_values = processor(images=list(frames), return_tensors="pt").pixel_values
 

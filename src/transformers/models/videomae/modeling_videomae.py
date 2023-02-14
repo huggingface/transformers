@@ -585,7 +585,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> np.random.seed(0)
 
 
-        >>> def read_video_pyav(container, start_index, end_index):
+        >>> def read_video_pyav(container, indices):
         ...     '''
         ...     Decode the video with PyAV decoder.
         ...     Args:
@@ -597,10 +597,12 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         ...     '''
         ...     frames = []
         ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
         ...     for i, frame in enumerate(container.decode(video=0)):
         ...         if i > end_index:
         ...             break
-        ...         if i >= start_index:
+        ...         if i >= start_index and i in indices:
         ...             frames.append(frame)
         ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
@@ -609,7 +611,9 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)
         ...     start_idx = end_idx - converted_len
-        ...     return start_idx, end_idx - 1
+        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...     return indices
 
 
         >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
@@ -619,10 +623,10 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> container = av.open(file_path)
 
         >>> # sample 16 frames
-        >>> start_idx, end_idx = sample_frame_indices(
+        >>> indices = sample_frame_indices(
         ...     clip_len=16, frame_sample_rate=1, seg_len=container.streams.video[0].frames
         ... )
-        >>> video = read_video_pyav(container, start_idx, end_idx)
+        >>> video = read_video_pyav(container, indices)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = VideoMAEModel.from_pretrained("MCG-NJU/videomae-base")
@@ -975,7 +979,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         >>> np.random.seed(0)
 
 
-        >>> def read_video_pyav(container, start_index, end_index):
+        >>> def read_video_pyav(container, indices):
         ...     '''
         ...     Decode the video with PyAV decoder.
         ...     Args:
@@ -987,10 +991,12 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         ...     '''
         ...     frames = []
         ...     container.seek(0)
+        ...     start_index = indices[0]
+        ...     end_index = indices[-1]
         ...     for i, frame in enumerate(container.decode(video=0)):
         ...         if i > end_index:
         ...             break
-        ...         if i >= start_index:
+        ...         if i >= start_index and i in indices:
         ...             frames.append(frame)
         ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
@@ -999,7 +1005,9 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)
         ...     start_idx = end_idx - converted_len
-        ...     return start_idx, end_idx - 1
+        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
+        ...     return indices
 
 
         >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
@@ -1009,10 +1017,10 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         >>> container = av.open(file_path)
 
         >>> # sample 16 frames
-        >>> start_idx, end_idx = sample_frame_indices(
+        >>> indices = sample_frame_indices(
         ...     clip_len=16, frame_sample_rate=1, seg_len=container.streams.video[0].frames
         ... )
-        >>> video = read_video_pyav(container, start_idx, end_idx)
+        >>> video = read_video_pyav(container, indices)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
         >>> model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
