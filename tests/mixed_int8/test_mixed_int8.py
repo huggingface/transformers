@@ -140,7 +140,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         bnb_config = BitsAndBytesConfig()
 
         model_8bit_from_config = AutoModelForCausalLM.from_pretrained(
-            self.model_name, bitsandbytes_config=bnb_config, device_map="auto"
+            self.model_name, quantization_config=bnb_config, device_map="auto"
         )
 
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
@@ -158,7 +158,7 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(
-                self.model_name, bitsandbytes_config=bnb_config, load_in_8bit=True, device_map="auto"
+                self.model_name, quantization_config=bnb_config, load_in_8bit=True, device_map="auto"
             )
 
     def test_warns_save_pretrained(self):
@@ -446,7 +446,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
         model_8bit = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=device_map,
-            bitsandbytes_config=bnb_config,
+            quantization_config=bnb_config,
         )
 
         # Check that the model has been correctly set on device 0, 1, and `cpu`.
@@ -473,7 +473,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
         model_8bit = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=device_map,
-            bitsandbytes_config=bnb_config,
+            quantization_config=bnb_config,
         )
 
         # Check that the model has been correctly set on device 0, 1, and `cpu`.
@@ -499,7 +499,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             model_8bit = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 device_map=device_map,
-                bitsandbytes_config=bnb_config,
+                quantization_config=bnb_config,
                 offload_folder=tmpdirname,
             )
 

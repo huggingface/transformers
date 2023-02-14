@@ -1992,7 +1992,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 https://test.pypi.org/simple/ bitsandbytes-cudaXXX` where XXX is your CUDA version (e.g. 11.6 = 116).
                 Make also sure that you have enough GPU RAM to store half of the model size since the 8bit modules are
                 not compiled and adapted for CPUs.
-            bitsandbytes_config (`Dict`, *optional*):
+            quantization_config (`Dict`, *optional*):
                 A dictionary of configuration parameters for the `bitsandbytes` library and loading the model using
                 advanced features such as offloading in fp32 on CPU or on disk.
             subfolder (`str`, *optional*, defaults to `""`):
@@ -2083,7 +2083,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
-        bitsandbytes_config = kwargs.pop("bitsandbytes_config", None)
+        quantization_config = kwargs.pop("quantization_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
@@ -2115,24 +2115,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
                 )
 
-        if load_in_8bit and bitsandbytes_config is not None:
+        if load_in_8bit and quantization_config is not None:
             raise ValueError(
-                "You can't pass both `load_in_8bit=True` and `bitsandbytes_config` as they are mutually exclusive."
+                "You can't pass both `load_in_8bit=True` and `quantization_config` as they are mutually exclusive."
             )
-        elif bitsandbytes_config is None and load_in_8bit:
+        elif quantization_config is None and load_in_8bit:
             # Use the default config if `load_in_8bit` is True.
-            from .utils.bitsandbytes_config import BitsAndBytesConfig
+            from .utils.quantization_config import BitsAndBytesConfig
 
-            bitsandbytes_config = BitsAndBytesConfig()
+            quantization_config = BitsAndBytesConfig()
 
-            # warn that this argument will be deprecated in the future and fully replaced with `bitsandbytes_config`
+            # warn that this argument will be deprecated in the future and fully replaced with `quantization_config`
             logger.warning(
                 "The `load_in_8bit` argument will be deprecated in the future (v5). Please create a "
                 "`BitsAndBytesConfig` instead and pass it to the argument `quantization_config` when "
                 "calling .from_pretrained"
             )
-        elif bitsandbytes_config is not None:
-            # We force `load_in_8bit` to True if `bitsandbytes_config` is passed.
+        elif quantization_config is not None:
+            # We force `load_in_8bit` to True if `quantization_config` is passed.
             load_in_8bit = True
 
         if load_in_8bit:
@@ -2507,9 +2507,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if load_in_8bit:
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear
 
-            load_in_8bit_skip_modules = bitsandbytes_config.llm_int8_skip_modules
-            load_in_8bit_threshold = bitsandbytes_config.llm_int8_threshold
-            load_in_8bit_fp32_cpu_offload = bitsandbytes_config.llm_int8_enable_fp32_cpu_offload
+            load_in_8bit_skip_modules = quantization_config.llm_int8_skip_modules
+            load_in_8bit_threshold = quantization_config.llm_int8_threshold
+            load_in_8bit_fp32_cpu_offload = quantization_config.llm_int8_enable_fp32_cpu_offload
 
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
