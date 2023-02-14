@@ -25,9 +25,9 @@ The abstract from the paper is the following:
 Tips:
 
 1. Ernie-M is a BERT-like model so it is a stacked Transformer Encoder.
-2. Instead of using MaskedLM for pretraining (like BERT) the authors used two novel techniques: `Cross-attention Masked Language Modeling` and `Back-translation Masked Language Modeling`
+2. Instead of using MaskedLM for pretraining (like BERT) the authors used two novel techniques: `Cross-attention Masked Language Modeling` and `Back-translation Masked Language Modeling`. For now these two LMHead objectives are not implemented here.
 3. It is a multilingual language model.
-4. NSP was not used in pretraining process.
+4. Next Sentence Prediction was not used in pretraining process.
 
 
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato). The original code can be found [here](https://github.com/PaddlePaddle/PaddleNLP/tree/develop/paddlenlp/transformers/ernie_m).

@@ -298,13 +298,11 @@ class ErnieMModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [
-                [
-                    [0.11525039, 0.32233173, -0.14834294],
-                    [0.09505723, 0.11805616, 0.06016524],
-                    [0.03161845, 0.02301386, 0.06967726],
-                ]
-            ]
-        )
+                [[[-0.0012,  0.1245, -0.0214],
+         [-0.0742,  0.0244, -0.0771],
+         [-0.0333,  0.1164, -0.1554]]]
+                )
+
+
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))

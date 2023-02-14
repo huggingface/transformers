@@ -63,7 +63,6 @@ class ErnieMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(len(vocab_keys), 30_000)
 
     def test_vocab_size(self):
-        print("here", self.get_tokenizer().vocab_size)
         self.assertEqual(self.get_tokenizer().vocab_size, 30_000)
 
     def test_rust_and_python_full_tokenizers(self):
