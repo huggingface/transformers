@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2019-present CNRS, Facebook Inc. and the HuggingFace Inc. team.
+# Copyright 2019-present, Facebook, Inc and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Flaubert model, based on XLM."""
+"""
+ PyTorch XLM model.
+"""
 
 import itertools
 import math
-import random
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple, Union
 
@@ -44,24 +45,29 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_flaubert import FlaubertConfig
+from .configuration_xlm import XLMConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "flaubert/flaubert_base_cased"
-_CONFIG_FOR_DOC = "FlaubertConfig"
+_CHECKPOINT_FOR_DOC = "xlm-mlm-en-2048"
+_CONFIG_FOR_DOC = "XLMConfig"
 
-FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "flaubert/flaubert_small_cased",
-    "flaubert/flaubert_base_uncased",
-    "flaubert/flaubert_base_cased",
-    "flaubert/flaubert_large_cased",
-    # See all Flaubert models at https://huggingface.co/models?filter=flaubert
+XLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xlm-mlm-en-2048",
+    "xlm-mlm-ende-1024",
+    "xlm-mlm-enfr-1024",
+    "xlm-mlm-enro-1024",
+    "xlm-mlm-tlm-xnli15-1024",
+    "xlm-mlm-xnli15-1024",
+    "xlm-clm-enfr-1024",
+    "xlm-clm-ende-1024",
+    "xlm-mlm-17-1280",
+    "xlm-mlm-100-1280",
+    # See all XLM models at https://huggingface.co/models?filter=xlm
 ]
 
 
-# Copied from transformers.models.xlm.modeling_xlm.create_sinusoidal_embeddings
 def create_sinusoidal_embeddings(n_pos, dim, out):
     position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
     out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
@@ -70,7 +76,6 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
     out.requires_grad = False
 
 
-# Copied from transformers.models.xlm.modeling_xlm.get_masks
 def get_masks(slen, lengths, causal, padding_mask=None):
     """
     Generate hidden states mask, and optionally an attention mask.
@@ -96,7 +101,6 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     return mask, attn_mask
 
 
-# Copied from transformers.models.xlm.modeling_xlm.MultiHeadAttention
 class MultiHeadAttention(nn.Module):
     NEW_ID = itertools.count()
 
@@ -192,7 +196,6 @@ class MultiHeadAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.xlm.modeling_xlm.TransformerFFN
 class TransformerFFN(nn.Module):
     def __init__(self, in_dim, dim_hidden, out_dim, config):
         super().__init__()
@@ -214,136 +217,13 @@ class TransformerFFN(nn.Module):
         return x
 
 
-FLAUBERT_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`FlaubertConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-FLAUBERT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use `attention_mask` for the same result (see above), kept here for compatibility. Indices selected in
-            `[0, ..., input_ids.size(-1)]`:
-        cache (`Dict[str, torch.FloatTensor]`, *optional*):
-            Dictionary strings to `torch.FloatTensor` that contains precomputed hidden-states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
-            decoding. The dictionary object will be modified in-place during the forward pass to add newly computed
-            hidden-states.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Flaubert Model transformer outputting raw hidden-states without any specific head on top.",
-    FLAUBERT_START_DOCSTRING,
-)
-# Copied from transformers.models.xlm.modeling_xlm.XLMPredLayer with XLM->Flaubert
-class FlaubertPredLayer(nn.Module):
-    """
-    Prediction layer (cross_entropy or adaptive_softmax).
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.asm = config.asm
-        self.n_words = config.n_words
-        self.pad_index = config.pad_index
-        dim = config.emb_dim
-
-        if config.asm is False:
-            self.proj = nn.Linear(dim, config.n_words, bias=True)
-        else:
-            self.proj = nn.AdaptiveLogSoftmaxWithLoss(
-                in_features=dim,
-                n_classes=config.n_words,
-                cutoffs=config.asm_cutoffs,
-                div_value=config.asm_div_value,
-                head_bias=True,  # default is False
-            )
-
-    def forward(self, x, y=None):
-        """Compute the loss, and optionally the scores."""
-        outputs = ()
-        if self.asm is False:
-            scores = self.proj(x)
-            outputs = (scores,) + outputs
-            if y is not None:
-                loss = nn.functional.cross_entropy(scores.view(-1, self.n_words), y.view(-1), reduction="mean")
-                outputs = (loss,) + outputs
-        else:
-            scores = self.proj.log_prob(x)
-            outputs = (scores,) + outputs
-            if y is not None:
-                _, loss = self.proj(x, y)
-                outputs = (loss,) + outputs
-
-        return outputs
-
-
-# Copied from transformers.models.xlm.modeling_xlm.XLMPreTrainedModel with XLM->Flaubert
-class FlaubertPreTrainedModel(PreTrainedModel):
+class XLMPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = FlaubertConfig
+    config_class = XLMConfig
     load_tf_weights = None
     base_model_prefix = "transformer"
 
@@ -377,17 +257,149 @@ class FlaubertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-class FlaubertModel(FlaubertPreTrainedModel):
+@dataclass
+class XLMForQuestionAnsweringOutput(ModelOutput):
+    """
+    Base class for outputs of question answering models using a `SquadHead`.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
+            Classification loss as the sum of start token, end token (and is_impossible if provided) classification
+            losses.
+        start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+            Log probabilities for the top config.start_n_top start token possibilities (beam-search).
+        start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+            Indices for the top config.start_n_top start token possibilities (beam-search).
+        end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+            Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
+            (beam-search).
+        end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+            Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
+        cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
+            Log probabilities for the `is_impossible` label of the answers.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    start_top_log_probs: Optional[torch.FloatTensor] = None
+    start_top_index: Optional[torch.LongTensor] = None
+    end_top_log_probs: Optional[torch.FloatTensor] = None
+    end_top_index: Optional[torch.LongTensor] = None
+    cls_logits: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+XLM_START_DOCSTRING = r"""
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`XLMConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+XLM_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        langs (`torch.LongTensor` of shape `({0})`, *optional*):
+            A parallel sequence of tokens to be used to indicate the language of each token in the input. Indices are
+            languages ids which can be obtained from the language names by using two conversion mappings provided in
+            the configuration of the model (only provided for multilingual models). More precisely, the *language name
+            to language id* mapping is in `model.config.lang2id` (which is a dictionary string to int) and the
+            *language id to language name* mapping is in `model.config.id2lang` (dictionary int to string).
+
+            See usage examples detailed in the [multilingual documentation](../multilingual).
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Length of each sentence that can be used to avoid performing attention on padding token indices. You can
+            also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
+            `[0, ..., input_ids.size(-1)]`.
+        cache (`Dict[str, torch.FloatTensor]`, *optional*):
+            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
+            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
+            decoding.
+
+            The dictionary object will be modified in-place during the forward pass to add newly computed
+            hidden-states.
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    "The bare XLM Model transformer outputting raw hidden-states without any specific head on top.",
+    XLM_START_DOCSTRING,
+)
+class XLMModel(XLMPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def __init__(self, config):  # , dico, is_encoder, with_output):
+    def __init__(self, config):
         super().__init__(config)
 
         # encoder / decoder, output layer
         self.is_encoder = config.is_encoder
         self.is_decoder = not config.is_encoder
         if self.is_decoder:
-            raise NotImplementedError("Currently Flaubert can only be used as an encoder")
+            raise NotImplementedError("Currently XLM can only be used as an encoder")
         # self.with_output = with_output
         self.causal = config.causal
 
@@ -450,21 +462,12 @@ class FlaubertModel(FlaubertPreTrainedModel):
         self.post_init()
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-        self.layerdrop = getattr(config, "layerdrop", 0.0)
-        self.pre_norm = getattr(config, "pre_norm", False)
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
-
-    # Copied from transformers.models.xlm.modeling_xlm.XLMModel.get_input_embeddings
     def get_input_embeddings(self):
         return self.embeddings
 
-    # Copied from transformers.models.xlm.modeling_xlm.XLMModel.set_input_embeddings
     def set_input_embeddings(self, new_embeddings):
         self.embeddings = new_embeddings
 
-    # Copied from transformers.models.xlm.modeling_xlm.XLMModel._prune_heads
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -473,7 +476,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.attentions[layer].prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
@@ -481,15 +484,15 @@ class FlaubertModel(FlaubertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         langs: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        lengths: Optional[torch.LongTensor] = None,
-        cache: Optional[Dict[str, torch.FloatTensor]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        lengths: Optional[torch.Tensor] = None,
+        cache: Optional[Dict[str, torch.Tensor]] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -500,7 +503,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # removed: src_enc=None, src_len=None
         if input_ids is not None:
             bs, slen = input_ids.size()
         else:
@@ -529,16 +531,9 @@ class FlaubertModel(FlaubertPreTrainedModel):
         # if self.is_decoder and src_enc is not None:
         #     src_mask = torch.arange(src_len.max(), dtype=torch.long, device=lengths.device) < src_len[:, None]
 
-        # Setting the position-ids to the registered buffer in constructor, it helps
-        # when tracing the model without passing position-ids, solves
-        # isues similar to issue #5664
+        # position_ids
         if position_ids is None:
-            if hasattr(self, "position_ids"):
-                position_ids = self.position_ids[:, :slen]
-                position_ids = position_ids.expand((bs, slen))
-            else:
-                position_ids = torch.arange(slen, dtype=torch.long, device=device)
-                position_ids = position_ids.unsqueeze(0).expand((bs, slen))
+            position_ids = self.position_ids[:, :slen]
         else:
             assert position_ids.size() == (bs, slen)  # (slen, bs)
             # position_ids = position_ids.transpose(0, 1)
@@ -566,7 +561,7 @@ class FlaubertModel(FlaubertPreTrainedModel):
             inputs_embeds = self.embeddings(input_ids)
 
         tensor = inputs_embeds + self.position_embeddings(position_ids).expand_as(inputs_embeds)
-        if langs is not None and self.use_lang_emb and self.config.n_langs > 1:
+        if langs is not None and self.use_lang_emb and self.n_langs > 1:
             tensor = tensor + self.lang_embeddings(langs)
         if token_type_ids is not None:
             tensor = tensor + self.embeddings(token_type_ids)
@@ -578,37 +573,23 @@ class FlaubertModel(FlaubertPreTrainedModel):
         hidden_states = () if output_hidden_states else None
         attentions = () if output_attentions else None
         for i in range(self.n_layers):
-            # LayerDrop
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
-
             if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
-            if not self.pre_norm:
-                attn_outputs = self.attentions[i](
-                    tensor,
-                    attn_mask,
-                    cache=cache,
-                    head_mask=head_mask[i],
-                    output_attentions=output_attentions,
-                )
-                attn = attn_outputs[0]
-                if output_attentions:
-                    attentions = attentions + (attn_outputs[1],)
-                attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
-                tensor = tensor + attn
-                tensor = self.layer_norm1[i](tensor)
-            else:
-                tensor_normalized = self.layer_norm1[i](tensor)
-                attn_outputs = self.attentions[i](tensor_normalized, attn_mask, cache=cache, head_mask=head_mask[i])
-                attn = attn_outputs[0]
-                if output_attentions:
-                    attentions = attentions + (attn_outputs[1],)
-                attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
-                tensor = tensor + attn
+            attn_outputs = self.attentions[i](
+                tensor,
+                attn_mask,
+                cache=cache,
+                head_mask=head_mask[i],
+                output_attentions=output_attentions,
+            )
+            attn = attn_outputs[0]
+            if output_attentions:
+                attentions = attentions + (attn_outputs[1],)
+            attn = nn.functional.dropout(attn, p=self.dropout, training=self.training)
+            tensor = tensor + attn
+            tensor = self.layer_norm1[i](tensor)
 
             # encoder attention (for decoder only)
             # if self.is_decoder and src_enc is not None:
@@ -618,13 +599,8 @@ class FlaubertModel(FlaubertPreTrainedModel):
             #     tensor = self.layer_norm15[i](tensor)
 
             # FFN
-            if not self.pre_norm:
-                tensor = tensor + self.ffns[i](tensor)
-                tensor = self.layer_norm2[i](tensor)
-            else:
-                tensor_normalized = self.layer_norm2[i](tensor)
-                tensor = tensor + self.ffns[i](tensor_normalized)
-
+            tensor = tensor + self.ffns[i](tensor)
+            tensor = self.layer_norm2[i](tensor)
             tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
         # Add last hidden state
@@ -640,25 +616,65 @@ class FlaubertModel(FlaubertPreTrainedModel):
 
         if not return_dict:
             return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
-
         return BaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
+
+
+class XLMPredLayer(nn.Module):
+    """
+    Prediction layer (cross_entropy or adaptive_softmax).
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.asm = config.asm
+        self.n_words = config.n_words
+        self.pad_index = config.pad_index
+        dim = config.emb_dim
+
+        if config.asm is False:
+            self.proj = nn.Linear(dim, config.n_words, bias=True)
+        else:
+            self.proj = nn.AdaptiveLogSoftmaxWithLoss(
+                in_features=dim,
+                n_classes=config.n_words,
+                cutoffs=config.asm_cutoffs,
+                div_value=config.asm_div_value,
+                head_bias=True,  # default is False
+            )
+
+    def forward(self, x, y=None):
+        """Compute the loss, and optionally the scores."""
+        outputs = ()
+        if self.asm is False:
+            scores = self.proj(x)
+            outputs = (scores,) + outputs
+            if y is not None:
+                loss = nn.functional.cross_entropy(scores.view(-1, self.n_words), y.view(-1), reduction="mean")
+                outputs = (loss,) + outputs
+        else:
+            scores = self.proj.log_prob(x)
+            outputs = (scores,) + outputs
+            if y is not None:
+                _, loss = self.proj(x, y)
+                outputs = (loss,) + outputs
+
+        return outputs
 
 
 @add_start_docstrings(
     """
-    The Flaubert Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    The XLM Model transformer with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
     """,
-    FLAUBERT_START_DOCSTRING,
+    XLM_START_DOCSTRING,
 )
-# Copied transformers.models.xlm.modeling_xlm.XLMWithLMHeadModel with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
-class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
+class XLMWithLMHeadModel(XLMPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["pred_layer.proj.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = FlaubertModel(config)
-        self.pred_layer = FlaubertPredLayer(config)
+        self.transformer = XLMModel(config)
+        self.pred_layer = XLMPredLayer(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -682,7 +698,7 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
             langs = None
         return {"input_ids": input_ids, "langs": langs}
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
@@ -744,25 +760,24 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Flaubert Model with a sequence classification/regression head on top (a linear layer on top of the pooled output)
-    e.g. for GLUE tasks.
+    XLM Model with a sequence classification/regression head on top (a linear layer on top of the pooled output) e.g.
+    for GLUE tasks.
     """,
-    FLAUBERT_START_DOCSTRING,
+    XLM_START_DOCSTRING,
 )
-# Copied transformers.models.xlm.modeling_xlm.XLMForSequenceClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
-class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
+class XLMForSequenceClassification(XLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
 
-        self.transformer = FlaubertModel(config)
+        self.transformer = XLMModel(config)
         self.sequence_summary = SequenceSummary(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
@@ -847,108 +862,22 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Flaubert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
-    """,
-    FLAUBERT_START_DOCSTRING,
-)
-# Copied from transformers.models.xlm.modeling_xlm.XLMForTokenClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
-class FlaubertForTokenClassification(FlaubertPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-
-        self.transformer = FlaubertModel(config)
-        self.dropout = nn.Dropout(config.dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        langs: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        lengths: Optional[torch.Tensor] = None,
-        cache: Optional[Dict[str, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.transformer(
-            input_ids,
-            attention_mask=attention_mask,
-            langs=langs,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            lengths=lengths,
-            cache=cache,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    Flaubert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    XLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    FLAUBERT_START_DOCSTRING,
+    XLM_START_DOCSTRING,
 )
-# Copied from transformers.models.xlm.modeling_xlm.XLMForQuestionAnsweringSimple with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
-class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
+class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.transformer = FlaubertModel(config)
+        self.transformer = XLMModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
@@ -1037,68 +966,23 @@ class FlaubertForQuestionAnsweringSimple(FlaubertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Flaubert Model with a beam-search span classification head on top for extractive question-answering tasks like
-    SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    XLM Model with a beam-search span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    FLAUBERT_START_DOCSTRING,
+    XLM_START_DOCSTRING,
 )
-@dataclass
-# Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput with XLM->Flaubert
-class FlaubertForQuestionAnsweringOutput(ModelOutput):
-    """
-    Base class for outputs of question answering models using a `SquadHead`.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned if both `start_positions` and `end_positions` are provided):
-            Classification loss as the sum of start token, end token (and is_impossible if provided) classification
-            losses.
-        start_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the top config.start_n_top start token possibilities (beam-search).
-        start_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Indices for the top config.start_n_top start token possibilities (beam-search).
-        end_top_log_probs (`torch.FloatTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the top `config.start_n_top * config.end_n_top` end token possibilities
-            (beam-search).
-        end_top_index (`torch.LongTensor` of shape `(batch_size, config.start_n_top * config.end_n_top)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Indices for the top `config.start_n_top * config.end_n_top` end token possibilities (beam-search).
-        cls_logits (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned if `start_positions` or `end_positions` is not provided):
-            Log probabilities for the `is_impossible` label of the answers.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    start_top_log_probs: Optional[torch.FloatTensor] = None
-    start_top_index: Optional[torch.LongTensor] = None
-    end_top_log_probs: Optional[torch.FloatTensor] = None
-    end_top_index: Optional[torch.LongTensor] = None
-    cls_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-# Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnswering with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
-class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
+class XLMForQuestionAnswering(XLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.transformer = FlaubertModel(config)
+        self.transformer = XLMModel(config)
         self.qa_outputs = SQuADHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=FlaubertForQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=XLMForQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1118,7 +1002,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, FlaubertForQuestionAnsweringOutput]:
+    ) -> Union[Tuple, XLMForQuestionAnsweringOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1142,10 +1026,10 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import XLMTokenizer, XLMForQuestionAnswering
+        >>> from transformers import AutoTokenizer, XLMForQuestionAnswering
         >>> import torch
 
-        >>> tokenizer = XLMTokenizer.from_pretrained("xlm-mlm-en-2048")
+        >>> tokenizer = AutoTokenizer.from_pretrained("xlm-mlm-en-2048")
         >>> model = XLMForQuestionAnswering.from_pretrained("xlm-mlm-en-2048")
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(
@@ -1189,7 +1073,7 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
         if not return_dict:
             return outputs + transformer_outputs[1:]
 
-        return FlaubertForQuestionAnsweringOutput(
+        return XLMForQuestionAnsweringOutput(
             loss=outputs.loss,
             start_top_log_probs=outputs.start_top_log_probs,
             start_top_index=outputs.start_top_index,
@@ -1203,26 +1087,107 @@ class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Flaubert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    XLM Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
+    XLM_START_DOCSTRING,
+)
+class XLMForTokenClassification(XLMPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.transformer = XLMModel(config)
+        self.dropout = nn.Dropout(config.dropout)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        langs: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        lengths: Optional[torch.Tensor] = None,
+        cache: Optional[Dict[str, torch.Tensor]] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TokenClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.transformer(
+            input_ids,
+            attention_mask=attention_mask,
+            langs=langs,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            lengths=lengths,
+            cache=cache,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output)
+        logits = self.classifier(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    XLM Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
-    FLAUBERT_START_DOCSTRING,
+    XLM_START_DOCSTRING,
 )
-# Copied from transformer.models.xlm.modeling_xlm.XLMForMultipleChoice with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
-class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
+class XLMForMultipleChoice(XLMPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.transformer = FlaubertModel(config)
+        self.transformer = XLMModel(config)
         self.sequence_summary = SequenceSummary(config)
         self.logits_proj = nn.Linear(config.num_labels, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(
-        FLAUBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
-    )
+    @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
@@ -1266,7 +1231,7 @@ class FlaubertForMultipleChoice(FlaubertPreTrainedModel):
 
         if lengths is not None:
             logger.warning(
-                "The `lengths` parameter cannot be used with the Flaubert multiple choice models. Please use the "
+                "The `lengths` parameter cannot be used with the XLM multiple choice models. Please use the "
                 "attention mask instead."
             )
             lengths = None
