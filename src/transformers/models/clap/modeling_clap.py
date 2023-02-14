@@ -58,14 +58,14 @@ def interpolate(hidden_states, ratio):
     Interpolate data in time domain. This is used to compensate the resolution reduction in downsampling of a CNN.
 
     Args:
-        hidden_states (`torch.FloatTensor` of shape (batch_size, time_steps, classes_num)):
+        hidden_states (`torch.FloatTensor` of shape (batch_size, time_length, classes_num)):
             Input hidden states
         ratio (`int`):
             The ratio of the length of the output to the length of the input.
     """
-    (batch_size, time_steps, classes_num) = hidden_states.shape
+    (batch_size, time_length, classes_num) = hidden_states.shape
     upsampled = hidden_states[:, :, None, :].repeat(1, 1, ratio, 1)
-    upsampled = upsampled.reshape(batch_size, time_steps * ratio, classes_num)
+    upsampled = upsampled.reshape(batch_size, time_length * ratio, classes_num)
     return upsampled
 
 
@@ -922,27 +922,27 @@ class ClapAudioEncoder(nn.Module):
         The input is 4 normalized log mel spectrograms. It is reshape to the common shape of images. Each channel
         should represent 1 of the 4 crops of the spectrogram. For more details, refer to the [`ClapFeatureExtractor`].
         """
-        _, _, time_steps, freq_steps = normalized_input_features.shape
+        _, _, time_length, freq_length = normalized_input_features.shape
 
-        target_T = int(self.spec_size * self.freq_ratio)
-        target_F = self.spec_size // self.freq_ratio
+        spec_width = int(self.spec_size * self.freq_ratio)
+        spec_heigth = self.spec_size // self.freq_ratio
 
-        if time_steps > target_T or freq_steps > target_F:
+        if time_length > spec_width or freq_length > spec_heigth:
             raise ValueError("the wav size should be less than or equal to the swin input size")
 
         # to avoid bicubic zero error
-        if time_steps < target_T:
+        if time_length < spec_width:
             normalized_input_features = nn.functional.interpolate(
-                normalized_input_features, (target_T, freq_steps), mode="bicubic", align_corners=True
+                normalized_input_features, (spec_width, freq_length), mode="bicubic", align_corners=True
             )
-        if freq_steps < target_F:
+        if freq_length < spec_heigth:
             normalized_input_features = nn.functional.interpolate(
-                normalized_input_features, (time_steps, target_F), mode="bicubic", align_corners=True
+                normalized_input_features, (time_length, spec_heigth), mode="bicubic", align_corners=True
             )
 
         batch, channels, time, freq = normalized_input_features.shape
 
-        # batch_size, channels, target_T, target_F --> batch_size, channels, target_F * freq_ratio, target_T // freq_ratio
+        # batch_size, channels, spec_width, spec_heigth --> batch_size, channels, spec_heigth * freq_ratio, spec_width // freq_ratio
         normalized_input_features = normalized_input_features.reshape(
             batch, channels * self.freq_ratio, time // self.freq_ratio, freq
         )
