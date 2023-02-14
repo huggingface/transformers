@@ -671,26 +671,22 @@ class GenerationMixin:
         **model_kwargs,
     ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
         """Expands tensors from [batch_size, ...] to [batch_size * expand_size, ...]"""
+
+        def _expand_dict_for_generation(dict_to_expand):
+            for key in dict_to_expand:
+                if dict_to_expand[key] is not None and isinstance(dict_to_expand[key], torch.Tensor):
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
+            return dict_to_expand
+
         if input_ids is not None:
             input_ids = input_ids.repeat_interleave(expand_size, dim=0)
 
-        if model_kwargs.get("token_type_ids") is not None:
-            model_kwargs["token_type_ids"] = model_kwargs["token_type_ids"].repeat_interleave(expand_size, dim=0)
-
-        if model_kwargs.get("attention_mask") is not None:
-            model_kwargs["attention_mask"] = model_kwargs["attention_mask"].repeat_interleave(expand_size, dim=0)
+        model_kwargs = _expand_dict_for_generation(model_kwargs)
 
         if is_encoder_decoder:
-            encoder_outputs = model_kwargs.get("encoder_outputs")
-            if encoder_outputs is None:
+            if model_kwargs.get("encoder_outputs") is None:
                 raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-                expand_size, dim=0
-            )
-            model_kwargs["encoder_outputs"] = encoder_outputs
-            decoder_attention_mask = model_kwargs.get("decoder_attention_mask")
-            if decoder_attention_mask is not None:
-                model_kwargs["decoder_attention_mask"] = decoder_attention_mask.repeat_interleave(expand_size, dim=0)
+            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
 
