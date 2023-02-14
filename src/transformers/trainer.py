@@ -3721,17 +3721,17 @@ class Trainer:
 
         return nested_numpify(tensors)
 
-    def _add_sm_patterns_to_gitignore(
-        self, patterns: List[str] = [
+    def _add_sm_patterns_to_gitignore(self) -> None:
+        """Add SageMaker Checkpointing patterns to .gitignore file."""
+        # Make sure we only do this on the main process
+        if not self.is_world_process_zero():
+            return
+
+        patterns = [
             "*.sagemaker-uploading",
             "*.sagemaker-uploaded"
-        ]) -> None:
-        """Add SageMaker Checkpointing patterns to .gitignore file.
+        ]
 
-        Args:
-            patterns (List[str], optional): List of patterns to add to .gitignore. Defaults to
-                [".sagemaker-uploading", ".sagemaker-uploaded"].
-        """
         # Get current .gitignore content
         if os.path.exists(os.path.join(self.repo.local_dir, ".gitignore")):
             with open(os.path.join(self.repo.local_dir, ".gitignore"), "r") as f:
