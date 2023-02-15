@@ -168,7 +168,7 @@ class InformerConfig(PretrainedConfig):
         attn: str = "prob",
         factor: int = 2,
         distil: bool = True,
-        **kwargs
+        **kwargs,
     ):
         # time series specific configuration
         self.prediction_length = prediction_length

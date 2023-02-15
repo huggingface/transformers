@@ -17,12 +17,10 @@
 
 import random
 from dataclasses import dataclass
-from math import sqrt
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.distributions import (
     AffineTransform,
