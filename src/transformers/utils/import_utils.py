@@ -1131,7 +1131,17 @@ class OptionalDependencyNotAvailable(BaseException):
     """Internally used error class for signalling an optional dependency was not found."""
 
 
-def direct_import(name: str, path: str, file="__init__.py"):
+def direct_import(name: str, path: str, file="__init__.py") -> ModuleType:
+    """Imports a source file directly (https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly)
+
+    Args:
+        name (`str`): The name for the module
+        path (`str`): The path to the source file
+        file (`str`, optional): The file to join with the path. Defaults to "__init__.py".
+
+    Returns:
+        `ModuleType`: The resulting imported module
+    """
     location = os.path.join(path, file)
     spec = importlib.util.spec_from_file_location(name, location, submodule_search_locations=[path])
     module = importlib.util.module_from_spec(spec)
