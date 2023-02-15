@@ -473,7 +473,7 @@ class ValueEmbedding(nn.Module):
         self.value_projection = nn.Linear(in_features=feature_size, out_features=d_model, bias=False)
 
     def forward(self, x):
-        return self.value_proj(x)
+        return self.value_projection(x)
 
 
 @dataclass
