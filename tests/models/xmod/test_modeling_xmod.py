@@ -512,7 +512,7 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 class XmodModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xmod_base(self):
-        model = XmodModel.from_pretrained("jvamvas/xmod-base")
+        model = XmodModel.from_pretrained("facebook/xmod-base")
 
         # language en_XX
         model.set_default_language("en_XX")
@@ -545,7 +545,7 @@ class XmodModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_xmod_large_prenorm(self):
-        model = XmodModel.from_pretrained("jvamvas/xmod-large-prenorm")
+        model = XmodModel.from_pretrained("facebook/xmod-large-prenorm")
 
         # language en_XX
         model.set_default_language("en_XX")
@@ -581,7 +581,7 @@ class XmodModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_multilingual_batch(self):
-        model = XmodModel.from_pretrained("jvamvas/xmod-base")
+        model = XmodModel.from_pretrained("facebook/xmod-base")
         # fmt: off
         input_ids = torch.tensor([
             [0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2],
@@ -608,7 +608,7 @@ class XmodModelIntegrationTest(unittest.TestCase):
     @slow
     def test_end_to_end_mask_fill(self):
         tokenizer = XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
-        model = XmodForMaskedLM.from_pretrained("jvamvas/xmod-base", default_language="en_XX")
+        model = XmodForMaskedLM.from_pretrained("facebook/xmod-base", default_language="en_XX")
         model.to(torch_device)
 
         sentences = [
