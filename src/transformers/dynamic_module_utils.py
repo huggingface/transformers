@@ -159,7 +159,7 @@ def get_class_in_module(class_name, module_path):
         os.remove(f"{module_dir}/configuration.py")
     # This has to be deleted too!
     if os.path.isdir(f"{module_dir}/__pycache__"):
-        os.remove(f"{module_dir}/__pycache__")
+        shutil.rmtree(f"{module_dir}/__pycache__")
 
     # copy back the target module file - and ONLY this single file
     # Without this hack, we may get error: `ModuleNotFoundError: No module named 'transformers_modules.local.modeling'`
