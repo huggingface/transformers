@@ -74,6 +74,7 @@ from .utils import (
     replace_return_docstrings,
 )
 from .utils.import_utils import importlib_metadata
+from .utils.quantization_config import BitsAndBytesConfig
 from .utils.versions import require_version_core
 
 
@@ -2115,25 +2116,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
                 )
 
-        if load_in_8bit and quantization_config is not None:
-            raise ValueError(
-                "You can't pass both `load_in_8bit=True` and `quantization_config` as they are mutually exclusive."
-            )
-        elif quantization_config is None and load_in_8bit:
-            # Use the default config if `load_in_8bit` is True.
-            from .utils.quantization_config import BitsAndBytesConfig
+        quantization_config_kwargs = {
+            k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters
+        }
+        # pop the kwargs that are in the signature of the init function of BitsAndBytesConfig
+        for k in quantization_config_kwargs:
+            kwargs.pop(k)
 
-            quantization_config = BitsAndBytesConfig()
-
-            # warn that this argument will be deprecated in the future and fully replaced with `quantization_config`
-            logger.warning(
-                "The `load_in_8bit` argument will be deprecated in the future (v5). Please create a "
-                "`BitsAndBytesConfig` instead and pass it to the argument `quantization_config` when "
-                "calling .from_pretrained"
-            )
+        if (len(quantization_config_kwargs) > 0 or load_in_8bit) and quantization_config is None:
+            quantization_config = BitsAndBytesConfig(load_in_8bit=load_in_8bit, **quantization_config_kwargs)
         elif quantization_config is not None:
-            # We force `load_in_8bit` to True if `quantization_config` is passed.
-            load_in_8bit = True
+            load_in_8bit = quantization_config.load_in_8bit
+
+            if len(quantization_config_kwargs) > 0:
+                raise ValueError(
+                    "You can't pass `load_in_8bit` or any other `BitsAndBytesConfig` argument as a kwarg and as an "
+                    "`quantization_config` argument at the same time."
+                )
 
         if load_in_8bit:
             if not (is_accelerate_available() and is_bitsandbytes_available()):

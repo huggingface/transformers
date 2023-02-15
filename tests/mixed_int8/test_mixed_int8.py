@@ -158,7 +158,11 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         with self.assertRaises(ValueError):
             _ = AutoModelForCausalLM.from_pretrained(
-                self.model_name, quantization_config=bnb_config, load_in_8bit=True, device_map="auto"
+                self.model_name,
+                quantization_config=bnb_config,
+                load_in_8bit=True,
+                device_map="auto",
+                llm_int8_enable_fp32_cpu_offload=True,
             )
 
     def test_warns_save_pretrained(self):
@@ -500,6 +504,32 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
                 self.model_name,
                 device_map=device_map,
                 quantization_config=bnb_config,
+                offload_folder=tmpdirname,
+            )
+
+            # Check that the model has been correctly set on device 0, 1, and `cpu`.
+            self.assertEqual(set(model_8bit.hf_device_map.values()), {0, 1, "cpu", "disk"})
+
+            self.check_inference_correctness(model_8bit)
+
+    def test_cpu_gpu_disk_loading_custom_device_map_kwargs(self):
+        r"""
+        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
+        This time we also add `disk` on the device_map - using the kwargs directly instead of the quantization config
+        """
+        device_map = {
+            "transformer.word_embeddings": 0,
+            "transformer.word_embeddings_layernorm": "cpu",
+            "lm_head": 0,
+            "transformer.h": 1,
+            "transformer.ln_f": "disk",
+        }
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Load model
+            model_8bit = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                device_map=device_map,
+                llm_int8_enable_fp32_cpu_offload=True,
                 offload_folder=tmpdirname,
             )
 

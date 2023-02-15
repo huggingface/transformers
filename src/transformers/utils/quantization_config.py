@@ -29,6 +29,8 @@ class BitsAndBytesConfig:
     `llm_int8_*`. If more methods are added to `bitsandbytes`, then more arguments will be added to this class.
 
     Args:
+        load_in_8bit (`bool`, *optional*, defaults to `False`):
+            This flag is used to enable 8-bit quantization with LLM.int8().
         llm_int8_threshold (`float`, *optional*, defaults to 6):
             This corresponds to the outlier threshold for outlier detection as described in `LLM.int8() : 8-bit Matrix
             Multiplication for Transformers at Scale` paper: https://arxiv.org/abs/2208.07339 Any hidden states value
@@ -51,10 +53,12 @@ class BitsAndBytesConfig:
 
     def __init__(
         self,
+        load_in_8bit=False,
         llm_int8_threshold=6.0,
         llm_int8_skip_modules=None,
         llm_int8_enable_fp32_cpu_offload=False,
     ):
+        self.load_in_8bit = load_in_8bit
         self.llm_int8_threshold = llm_int8_threshold
         self.llm_int8_skip_modules = llm_int8_skip_modules
         self.llm_int8_enable_fp32_cpu_offload = llm_int8_enable_fp32_cpu_offload
