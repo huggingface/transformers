@@ -470,7 +470,7 @@ class TimeSeriesSinusoidalPositionalEmbedding(nn.Embedding):
 class ValueEmbedding(nn.Module):
     def __init__(self, feature_size, d_model):
         super(ValueEmbedding, self).__init__()
-        self.value_proj = nn.Linear(in_features=feature_size, out_features=d_model, bias=False)
+        self.value_projection = nn.Linear(in_features=feature_size, out_features=d_model, bias=False)
 
     def forward(self, x):
         return self.value_proj(x)
