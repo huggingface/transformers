@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # BERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bert-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/bert-base-uncased">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The BERT model was proposed in [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova. It's a
@@ -38,6 +47,15 @@ Tips:
   the left.
 - BERT was trained with the masked language modeling (MLM) and next sentence prediction (NSP) objectives. It is
   efficient at predicting masked tokens and at NLU in general, but is not optimal for text generation.
+- Corrupts the inputs by using random masking, more precisely, during pretraining, a given percentage of tokens (usually 15%) is masked by:
+
+    * a special mask token with probability 0.8
+    * a random token different from the one masked with probability 0.1
+    * the same token with probability 0.1
+    
+- The model must predict the original sentence, but has a second objective: inputs are two sentences A and B (with a separation token in between). With probability 50%, the sentences are consecutive in the corpus, in the remaining 50% they are not related. The model has to predict if the sentences are consecutive or not.
+
+
 
 This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/google-research/bert).
 
