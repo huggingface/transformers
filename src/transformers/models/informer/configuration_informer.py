@@ -107,9 +107,9 @@ class InformerConfig(PretrainedConfig):
         attn (`str`, defaults to `prob`):
             Attention used in encoder. This can be set to prob (informer) or full (transformer)
         factor (`int`, defaults to 2):
-            ProbSparse attention factor
-        distil (`bool`, defualts to `True`):
-            Whether to use distilling in encoder
+            ProbSparse attention factor.
+        distil (`bool`, defaults to `True`):
+            Whether to use distilling in encoder.
 
 
         Example:

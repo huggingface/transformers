@@ -433,9 +433,10 @@ def prepare_batch(filename="train-batch.pt"):
 @slow
 class InformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        model = InformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(torch_device)
+        model = InformerModel.from_pretrained("kashif/informer-tourism-monthly").to(torch_device)
         batch = prepare_batch()
 
+        torch.manual_seed(0)
         with torch.no_grad():
             output = model(
                 past_values=batch["past_values"],
@@ -451,15 +452,15 @@ class InformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3125, -1.2884, -1.1118], [-0.5801, -1.4907, -0.7782], [0.0849, -1.6557, -0.9755]], device=torch_device
+            [[-1.4829, 0.7390, -1.3606], [-1.9992, 0.3949, -1.3191], [-1.1011, 0.2860, -1.5074]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = InformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
-            torch_device
-        )
+        model = InformerForPrediction.from_pretrained("kashif/informer-tourism-monthly").to(torch_device)
         batch = prepare_batch("val-batch.pt")
+
+        torch.manual_seed(0)
         with torch.no_grad():
             output = model(
                 past_values=batch["past_values"],
@@ -473,15 +474,15 @@ class InformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.9127, -0.2056, -0.5259], [1.0572, 1.4104, -0.1964], [0.1358, 2.0348, 0.5739]], device=torch_device
+            [[0.4427, 0.6329, 0.1136], [0.5492, 2.3569, 0.6203], [0.0812, 2.6220, 1.5276]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        model = InformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
-            torch_device
-        )
+        model = InformerForPrediction.from_pretrained("kashif/informer-tourism-monthly").to(torch_device)
         batch = prepare_batch("val-batch.pt")
+
+        torch.manual_seed(0)
         with torch.no_grad():
             outputs = model.generate(
                 static_categorical_features=batch["static_categorical_features"],
@@ -494,6 +495,6 @@ class InformerModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
-        expected_slice = torch.tensor([2289.5203, 2778.3054, 4648.1313], device=torch_device)
+        expected_slice = torch.tensor([3877.3796, 4988.0166, 7795.9473], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
