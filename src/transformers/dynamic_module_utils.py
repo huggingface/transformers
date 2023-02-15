@@ -157,6 +157,9 @@ def get_class_in_module(class_name, module_path):
     #       imported. However, we don't have this information so far.
     if os.path.isfile(f"{module_dir}/configuration.py"):
         os.remove(f"{module_dir}/configuration.py")
+    # This has to be deleted too!
+    if os.path.isfile(f"{module_dir}/__pycache__"):
+        os.remove(f"{module_dir}/__pycache__")
 
     # copy back the target module file - and ONLY this single file
     # Without this hack, we may get error: `ModuleNotFoundError: No module named 'transformers_modules.local.modeling'`
@@ -167,9 +170,9 @@ def get_class_in_module(class_name, module_path):
     module_path = module_path.replace(os.path.sep, ".")
     module = importlib.import_module(module_path)
 
-    # copy the whole directory backg
-    shutil.rmtree(f"{module_dir}")
-    shutil.copytree(module_dir_backup_temp, module_dir)
+    # copy the deleted file back
+    if os.path.isfile(f"{module_dir_backup_temp}/configuration.py"):
+        shutil.copy(f"{module_dir_backup_temp}/configuration.py", module_dir)
 
     # remove the backup directory
     shutil.rmtree(module_dir_backup_temp)
@@ -241,7 +244,7 @@ def get_cached_module_file(
     # Download and cache module_file from the repo `pretrained_model_name_or_path` of grab it if it's a local file.
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
     if os.path.isdir(pretrained_model_name_or_path):
-        submodule = f"local_{pretrained_model_name_or_path}"
+        submodule = f"local_{pretrained_model_name_or_path.replace(os.path.sep, '_')}"
     else:
         submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
 
@@ -269,7 +272,7 @@ def get_cached_module_file(
     full_submodule = TRANSFORMERS_DYNAMIC_MODULE_NAME + os.path.sep + submodule
     create_dynamic_module(full_submodule)
     submodule_path = Path(HF_MODULES_CACHE) / full_submodule
-    if submodule == f"local_{pretrained_model_name_or_path}":
+    if submodule == f"local_{pretrained_model_name_or_path.replace(os.path.sep, '_')}":
         # We always copy local files (we could hash the file to see if there was a change, and give them the name of
         # that hash, to only copy when there is a modification but it seems overkill for now).
         # The only reason we do the copy is to avoid putting too many folders in sys.path.
