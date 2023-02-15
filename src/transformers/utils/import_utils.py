@@ -1129,3 +1129,12 @@ class _LazyModule(ModuleType):
 
 class OptionalDependencyNotAvailable(BaseException):
     """Internally used error class for signalling an optional dependency was not found."""
+
+
+def direct_import(name: str, path: str):
+    location = os.path.join(path, "__init__.py")
+    spec = importlib.util.spec_from_file_location(name, location, submodule_search_locations=[path])
+    transformers_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(transformers_module)
+    module = sys.modules[name]
+    return module
