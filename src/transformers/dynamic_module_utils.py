@@ -158,7 +158,7 @@ def get_class_in_module(class_name, module_path):
     if os.path.isfile(f"{module_dir}/configuration.py"):
         os.remove(f"{module_dir}/configuration.py")
     # This has to be deleted too!
-    if os.path.isfile(f"{module_dir}/__pycache__"):
+    if os.path.isdir(f"{module_dir}/__pycache__"):
         os.remove(f"{module_dir}/__pycache__")
 
     # copy back the target module file - and ONLY this single file
