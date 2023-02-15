@@ -28,3 +28,10 @@ class SpeechT5FeatureExtractor(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["speech"])
+
+
+class TvltFeatureExtractor(metaclass=DummyObject):
+    _backends = ["speech"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["speech"])
