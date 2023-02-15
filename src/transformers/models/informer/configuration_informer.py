@@ -106,7 +106,7 @@ class InformerConfig(PretrainedConfig):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
         attn (`str`, defaults to `prob`):
             Attention used in encoder. This can be set to prob (informer) or full (transformer)
-        factor (`int`, defaults to 5):
+        factor (`int`, defaults to 2):
             ProbSparse attention factor
         distil (`bool`, defualts to `True`):
             Whether to use distilling in encoder

@@ -19,7 +19,6 @@ import tempfile
 import unittest
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
