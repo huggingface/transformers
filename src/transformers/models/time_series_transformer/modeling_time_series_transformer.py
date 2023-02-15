@@ -1015,8 +1015,8 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             to construct lag features, i.e. additional values from the past which are added in order to serve as "extra
             context".
 
-            The `sequence_length` here is has to equal `context_length` + `max(config.lags_sequence)`, which if no
-            `lags_sequence` is configured, is equal to `context_length` + 7.
+            The `sequence_length` here is equal to `config.context_length` + `max(config.lags_sequence)`, which if no
+            `lags_sequence` is configured, is equal to `config.context_length` + 7 (as by default, 7 lags are used).
 
             The `past_values` is what the Transformer encoder gets as input (with optional additional features, such as
             `static_categorical_features`, `static_real_features`, `past_time_features` and lags).
