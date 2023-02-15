@@ -36,14 +36,16 @@ Some preselected input tokens are also given global attention: for those few tok
 all tokens and this process is symmetric: all other tokens have access to those specific tokens (on top of the ones in
 their local window). This is shown in Figure 2d of the paper, see below for a sample attention mask:
 
-<img scale="50 %" align="center" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/local_attention_mask.png"/>
+<div class="flex justify-center">
+    <img scale="50 %" align="center" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/local_attention_mask.png"/>
+</div>
 
 Using those attention matrices with less parameters then allows the model to have inputs having a bigger sequence
 length.
 
 ## Other tricks
 
-### Axial positional encodings**
+### Axial positional encodings
 
 [Reformer](#reformer) uses axial positional encodings: in traditional transformer models, the positional encoding
 E is a matrix of size \\(l\\) by \\(d\\), \\(l\\) being the sequence length and \\(d\\) the dimension of the
