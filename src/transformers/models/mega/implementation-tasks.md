@@ -85,6 +85,12 @@ prev_key_values inputs for ^ will be expected as:
 GatedCrossAttention
 * Accept previous cross-attention keys and values from `prev_key_values` (new input, in place of incremental_state)
 * Return keys and values if `use_cache` (new input)
+* What about `pidx`?
+  * Addressed by adding an optional argument to the `forward` method called `num_incremental_steps`; incremented and passed just like `pidx` but named better and returned if `use_cache`
+  * Now I'm not actually sure if this will work... it wouldn't be passed from the input to the wrapper function
+  * It's actually used to index the positional bias for the current step (to preserve relative positions when doing one-at-a-time decoding)
+  * If it's provided, it asserts that the queries are length 1 (which would be the case in incremental decoding); can we proxy this another way?
+  * I could subclass `BaseModelOutputWithPastAndCrossAttentions` and add `num_incremental_steps` -- leaving off here
 
 MegaDecoder
 * Accept `prev_key_values` and `use_cache` (new input) and pass relevant information along to component modules

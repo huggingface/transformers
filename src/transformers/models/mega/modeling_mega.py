@@ -91,46 +91,6 @@ def get_activation_fn(activation: str) -> Callable:
     else:
         raise RuntimeError("--activation-fn {} not supported".format(activation))
 
-# Incremental state for decoding
-class MegaIncrementalState(object):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.init_incremental_state()
-
-    def init_incremental_state(self):
-        self._incremental_state_id = str(uuid.uuid4())
-
-    def _get_full_incremental_state_key(self, key: str) -> str:
-        return "{}.{}".format(self._incremental_state_id, key)
-
-    def get_incremental_state(
-        self,
-        incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]],
-        key: str,
-    ) -> Optional[Dict[str, Optional[torch.Tensor]]]:
-        """Helper for getting incremental state for an nn.Module."""
-        full_key = self._get_full_incremental_state_key(key)
-        if incremental_state is None or full_key not in incremental_state:
-            return None
-        return incremental_state[full_key]
-
-    def set_incremental_state(
-        self,
-        incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]],
-        key: str,
-        value: Dict[str, Optional[torch.Tensor]],
-    ) -> Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]]:
-        """Helper for setting incremental state for an nn.Module."""
-        if incremental_state is not None:
-            full_key = self._get_full_incremental_state_key(key)
-            incremental_state[full_key] = value
-        return incremental_state
-
-def with_incremental_state(cls):
-    cls.__bases__ = (MegaIncrementalState,) + tuple(b for b in cls.__bases__ if b != MegaIncrementalState)
-    return cls
-
 # EMA attention module
 class MultiHeadEMA(nn.Module):
     """Exponential Moving Average Layer.
@@ -332,7 +292,6 @@ class MultiHeadEMA(nn.Module):
             return out, None
 
 # Gated cross-attention
-@with_incremental_state
 class GatedCrossAttention(nn.Module):
     """Gated Structured State Attention.
     See "" for more details.
@@ -460,10 +419,12 @@ class GatedCrossAttention(nn.Module):
         value: Optional[torch.Tensor],
         padding_mask: Optional[torch.Tensor] = None, ## NOT USED
         key_padding_mask: Optional[torch.Tensor] = None,
-        incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]] = None,
-        need_weights: bool = False,
+        # incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]] = None,
+        prev_key_values: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: bool = False,
         static_kv: bool = False,
         before_attn_fn: bool = False,
+        use_cache: bool = False
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Time x Batch x Channel
         Args:
@@ -473,27 +434,36 @@ class GatedCrossAttention(nn.Module):
             key_padding_mask (ByteTensor, optional): mask to exclude
                 keys that are pads, of shape `(batch, src_len)`, where
                 padding elements are indicated by 1s.
-            need_weights (bool, optional): return the attention weights,
+            output_attentions (bool, optional): return the attention weights,
                 averaged over heads (default: False).
             static_kv (bool, optional): static key and value pair.
             before_attn_fn (bool, optional): return the raw attention
                 weights and values before the attention softmax.
+
+        Refactoring:
+            prev_key_values: tuple of tensors for hidden state caching in incremental decoding
+            use_cache: whether to return keys and values for incremental decoding
         """
 
         seq_len, bsz, embed_dim = query.size()
         assert embed_dim == self.config.hidden_size
 
-        if incremental_state is not None:
-            saved_state = self._get_input_buffer(incremental_state)
-            pidx = 0
-            if saved_state is not None and "prev_key" in saved_state:
-                # previous time steps are cached - no need to recompute
-                # key and value if they are static
-                assert static_kv
-                key = value = None
+        if prev_key_values is not None:
+            # make sure the inputs only have a sequence length of 1 if we're doing incremental decoding
+            if seq_len != 1:
+                raise ValueError(f"Incremental decoding requested with self-sequence length > 1: {seq_len}")
+            # expect prev_key_values to have (self_key, self_value, self_ema, cross_key, cross_value)
+            prev_cross_key, prev_cross_value = prev_key_values[-2:]
+            assert static_kv, "Incremental decoding requires static_kv in cross-attention"
+            key = value = None
+            
+            # use the self-attention cache to get the position id of the current step
+            prev_self_key = prev_key_values[0]
+            num_incremental_steps = prev_self_key.size(1) + 1
         else:
-            pidx = None
-            saved_state = None
+            prev_cross_key = prev_cross_value = None
+            # we still need the position id if we're doing incremental decoding (past_key_values will be None for the first step)
+            num_incremental_steps = 0 if use_cache else None
 
         q = query
         if self.prenorm:
@@ -522,30 +492,15 @@ class GatedCrossAttention(nn.Module):
         if v is not None:
             v = v.transpose(0, 1)
 
-        if saved_state is not None:
-            # saved states are stored with shape (bsz, seq_len, dim)
-            if "prev_key" in saved_state:
-                prev_key = saved_state["prev_key"]
-                assert prev_key is not None
-                k = prev_key
-            if "prev_value" in saved_state:
-                prev_value = saved_state["prev_value"]
-                assert prev_value is not None
-                v = prev_value
-            if "prev_key_padding_mask" in saved_state:
-                prev_key_padding_mask = saved_state["prev_key_padding_mask"]
-                key_padding_mask = prev_key_padding_mask
-            if "prev_num_steps" in saved_state:
-                _prev_num_steps = saved_state["prev_num_steps"]
-                pidx = _prev_num_steps + 1
+        # if we're doing incremental decoding, k and v are None and need to be overwritten with past values
+        if prev_key_values is not None:
+            k = prev_cross_key
+            v = prev_cross_value
 
-            saved_state["prev_key"] = k
-            saved_state["prev_value"] = v
-            saved_state["prev_key_padding_mask"] = key_padding_mask
-            saved_state["prev_num_steps"] = pidx
-            # In this branch incremental_state is never None
-            assert incremental_state is not None
-            self._set_input_buffer(incremental_state, saved_state)
+        # if we're returning the cache for later use, store these now for later return (can be done without having prev_key_values provided)
+        if use_cache:
+            updated_cross_key = k 
+            updated_cross_value = v
 
         ctx_len = k.size(1)
         # This is part of a workaround to get around fork/join parallelism
@@ -558,9 +513,9 @@ class GatedCrossAttention(nn.Module):
             assert key_padding_mask.size(1) == ctx_len
 
         if self.attention_activation == 'softmax':
-            attn_weights = self.softmax_attention(q, k, key_padding_mask, pidx, before_attn_fn)
+            attn_weights = self.softmax_attention(q, k, key_padding_mask, num_incremental_steps, before_attn_fn)
         else:
-            attn_weights = self.element_attention(q, k, key_padding_mask, pidx, before_attn_fn)
+            attn_weights = self.element_attention(q, k, key_padding_mask, num_incremental_steps, before_attn_fn)
 
         if before_attn_fn:
             return attn_weights, v
@@ -577,21 +532,11 @@ class GatedCrossAttention(nn.Module):
         if not self.prenorm:
             out = self.norm(out)
 
-        if need_weights:
-            return out, attn_weights
-        else:
-            return out, None
-
-    def _get_input_buffer(self, incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]]) -> Dict[str, Optional[torch.Tensor]]:
-        result = self.get_incremental_state(incremental_state, "attn_state")
-        if result is not None:
-            return result
-        else:
-            empty_result: Dict[str, Optional[torch.Tensor]] = {}
-            return empty_result
-
-    def _set_input_buffer(self, incremental_state: Dict[str, Dict[str, Optional[torch.Tensor]]], buffer: Dict[str, Optional[torch.Tensor]]):
-        return self.set_incremental_state(incremental_state, "attn_state", buffer)
+        outputs = (out, attn_weights) if output_attentions else (out, )
+        if use_cache:
+            outputs = outputs + (updated_cross_key, updated_cross_value)
+        
+        return outputs
 
 
 # Positional embeddings
