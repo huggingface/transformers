@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # BART
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=bart">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-bart-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/bart-large-mnli">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 **DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title) and assign
 @patrickvonplaten
 
@@ -36,6 +45,13 @@ Tips:
 
 - BART is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
   the left.
+- Sequence-to-sequence model with an encoder and a decoder. Encoder is fed a corrupted version of the tokens, decoder is fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). A composition of the following transformations are applied on the pretraining tasks for the encoder:
+
+  * mask random tokens (like in BERT)
+  * delete random tokens
+  * mask a span of k tokens with a single mask token (a span of 0 tokens is an insertion of a mask token)
+  * permute sentences
+  * rotate the document to make it start at a specific token
 
 This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The Authors' code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/bart).
 

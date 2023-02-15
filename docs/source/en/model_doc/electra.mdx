@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # ELECTRA
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=electra">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-electra-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/electra_large_discriminator_squad2_512">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The ELECTRA model was proposed in the paper [ELECTRA: Pre-training Text Encoders as Discriminators Rather Than
@@ -44,6 +53,7 @@ Tips:
   while the hidden size is larger. An additional projection layer (linear) is used to project the embeddings from their
   embedding size to the hidden size. In the case where the embedding size is the same as the hidden size, no projection
   layer is used.
+- ELECTRA is a transformer model pretrained with the use of another (small) masked language model. The inputs are corrupted by that language model, which takes an input text that is randomly masked and outputs a text in which ELECTRA has to predict which token is an original and which one has been replaced. Like for GAN training, the small language model is trained for a few steps (but with the original texts as objective, not to fool the ELECTRA model like in a traditional GAN setting) then the ELECTRA model is trained for a few steps.
 - The ELECTRA checkpoints saved using [Google Research's implementation](https://github.com/google-research/electra)
   contain both the generator and discriminator. The conversion script requires the user to name which model to export
   into the correct architecture. Once converted to the HuggingFace format, these checkpoints may be loaded into all
