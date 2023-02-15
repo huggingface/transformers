@@ -16,6 +16,7 @@
 import argparse
 import importlib.util
 import os
+import sys
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -56,7 +57,9 @@ spec = importlib.util.spec_from_file_location(
     os.path.join(TRANSFORMERS_PATH, "__init__.py"),
     submodule_search_locations=[TRANSFORMERS_PATH],
 )
-transformers_module = spec.loader.load_module()
+transformers_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(transformers_module)
+transformers_module = sys.modules["transformers"]
 
 TASK_GUIDE_TO_MODELS = {
     "asr.mdx": transformers_module.models.auto.modeling_auto.MODEL_FOR_CTC_MAPPING_NAMES,

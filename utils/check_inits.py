@@ -17,6 +17,7 @@ import collections
 import importlib.util
 import os
 import re
+import sys
 from pathlib import Path
 
 
@@ -279,7 +280,9 @@ def check_submodules():
         os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
         submodule_search_locations=[PATH_TO_TRANSFORMERS],
     )
-    transformers = spec.loader.load_module()
+    transformers = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(transformers)
+    transformers = sys.modules["transformers"]
 
     module_not_registered = [
         module
