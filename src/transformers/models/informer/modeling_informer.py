@@ -1861,7 +1861,7 @@ class InformerModel(InformerPreTrainedModel):
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = InformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly")
+        >>> model = InformerModel.from_pretrained("kashif/informer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features
@@ -2035,7 +2035,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = InformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly")
+        >>> model = InformerForPrediction.from_pretrained("kashif/informer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features
