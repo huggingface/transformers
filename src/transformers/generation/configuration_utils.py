@@ -298,6 +298,9 @@ class GenerationConfig(PushToHubMixin):
         self.validate()
 
     def __eq__(self, other):
+        if not isinstance(other, GenerationConfig):
+            return False
+
         self_dict = self.__dict__.copy()
         other_dict = other.__dict__.copy()
         # ignore metadata
