@@ -15,7 +15,6 @@
 """ Testing suite for the TensorFlow Whisper model. """
 
 import inspect
-import os
 import tempfile
 import traceback
 import unittest
@@ -891,10 +890,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_logits_librispeech(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_large_logits_librispeech, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_large_logits_librispeech, inputs=None)
 
     @slow
     def test_tiny_en_generation(self):
@@ -959,22 +955,15 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_generation(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(test_case=self, target_func=_test_large_generation, inputs=None, timeout=timeout)
+        run_test_in_subprocess(test_case=self, target_func=_test_large_generation, inputs=None)
 
     @slow
     def test_large_generation_multilingual(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_large_generation_multilingual, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_large_generation_multilingual, inputs=None)
 
     @slow
     def test_large_batched_generation(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_large_batched_generation, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_large_batched_generation, inputs=None)
 
     @slow
     def test_tiny_en_batched_generation(self):

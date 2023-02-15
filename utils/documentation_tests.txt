@@ -35,7 +35,6 @@ src/transformers/models/blenderbot/configuration_blenderbot.py
 src/transformers/models/blenderbot/modeling_blenderbot.py
 src/transformers/models/blenderbot_small/configuration_blenderbot_small.py
 src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
-src/transformers/models/blip_2/modeling_blip_2.py
 src/transformers/models/blip/modeling_blip.py
 src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/camembert/configuration_camembert.py
@@ -81,6 +80,8 @@ src/transformers/models/electra/configuration_electra.py
 src/transformers/models/electra/modeling_electra.py
 src/transformers/models/electra/modeling_tf_electra.py
 src/transformers/models/ernie/configuration_ernie.py
+src/transformers/models/ernie_m/configuration_ernie_m.py
+src/transformers/models/ernie_m/modeling_ernie_m.py
 src/transformers/models/flava/configuration_flava.py
 src/transformers/models/fnet/configuration_fnet.py
 src/transformers/models/fsmt/configuration_fsmt.py
@@ -217,8 +218,11 @@ src/transformers/models/xlm/configuration_xlm.py
 src/transformers/models/xlm_roberta/configuration_xlm_roberta.py
 src/transformers/models/xlm_roberta_xl/configuration_xlm_roberta_xl.py
 src/transformers/models/xlnet/configuration_xlnet.py
+src/transformers/models/xmod/configuration_xmod.py
+src/transformers/models/xmod/modeling_xmod.py
 src/transformers/models/yolos/configuration_yolos.py
 src/transformers/models/yolos/modeling_yolos.py
 src/transformers/models/x_clip/modeling_x_clip.py
 src/transformers/models/yoso/configuration_yoso.py
+src/transformers/models/timesformer/configuration_timesformer.py
 src/transformers/pipelines/

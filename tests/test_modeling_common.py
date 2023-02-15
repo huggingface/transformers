@@ -325,6 +325,18 @@ class ModelTesterMixin:
             else:
                 check_save_load(first, second)
 
+    def test_from_pretrained_no_checkpoint(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            state_dict = model.state_dict()
+
+            new_model = model_class.from_pretrained(
+                pretrained_model_name_or_path=None, config=config, state_dict=state_dict
+            )
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2776,16 +2788,6 @@ class ModelUtilsTest(TestCasePlus):
             BertModel.from_pretrained(TINY_T5)
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
 
-    def test_model_from_pretrained_no_checkpoint(self):
-        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
-        model = BertModel(config)
-        state_dict = model.state_dict()
-
-        new_model = BertModel.from_pretrained(pretrained_model_name_or_path=None, config=config, state_dict=state_dict)
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
-
-    @require_torch
     def test_model_from_config_torch_dtype(self):
         # test that the model can be instantiated with dtype of user's choice - as long as it's a
         # float dtype. To make it happen config.torch_dtype needs to be set before instantiating the
@@ -2804,7 +2806,6 @@ class ModelUtilsTest(TestCasePlus):
         with self.assertRaises(ValueError):
             model = AutoModel.from_config(config, torch_dtype=torch.int64)
 
-    @require_torch
     def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
         # 1. explicit from_pretrained's torch_dtype argument
@@ -2818,11 +2819,25 @@ class ModelUtilsTest(TestCasePlus):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertEqual(model.dtype, torch.float32)
 
+        def remove_torch_dtype(model_path):
+            file = f"{model_path}/config.json"
+            with open(file, "r", encoding="utf-8") as f:
+                s = json.load(f)
+            s.pop("torch_dtype")
+            with open(file, "w", encoding="utf-8") as f:
+                json.dump(s, f)
+
         # test the default fp32 save_pretrained => from_pretrained cycle
         model.save_pretrained(model_path)
         model = T5ForConditionalGeneration.from_pretrained(model_path)
         self.assertEqual(model.dtype, torch.float32)
-        # test with auto-detection
+        # 1. test torch_dtype="auto" via `config.torch_dtype`
+        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
+        self.assertEqual(model.dtype, torch.float32)
+        # 2. test torch_dtype="auto" via auto-derivation
+        # now remove the torch_dtype entry from config.json and try "auto" again which should
+        # perform auto-derivation from weights
+        remove_torch_dtype(model_path)
         model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
         self.assertEqual(model.dtype, torch.float32)
 
@@ -2833,24 +2848,32 @@ class ModelUtilsTest(TestCasePlus):
         # test fp16 save_pretrained, loaded with auto-detection
         model = model.half()
         model.save_pretrained(model_path)
+        # 1. test torch_dtype="auto" via `config.torch_dtype`
         model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
         self.assertEqual(model.config.torch_dtype, torch.float16)
         self.assertEqual(model.dtype, torch.float16)
-
         # tests `config.torch_dtype` saving
         with open(f"{model_path}/config.json") as f:
             config_dict = json.load(f)
         self.assertEqual(config_dict["torch_dtype"], "float16")
+        # 2. test torch_dtype="auto" via auto-derivation
+        # now same with using config info
+        remove_torch_dtype(model_path)
+        model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype="auto")
+        self.assertEqual(model.dtype, torch.float16)
 
         # test fp16 save_pretrained, loaded with the explicit fp16
         model = T5ForConditionalGeneration.from_pretrained(model_path, torch_dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
 
         # test AutoModel separately as it goes through a different path
-        # test auto-detection
+        # test auto-detection - as currently TINY_T5 doesn't have torch_dtype entry
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype="auto")
+        # test that the config object didn't get polluted with torch_dtype="auto"
+        # there was a bug that after this call we ended up with config.torch_dtype=="auto"
+        self.assertNotEqual(model.config.torch_dtype, "auto")
+        # now test the outcome
         self.assertEqual(model.dtype, torch.float32)
-        # test forcing an explicit dtype
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
 
@@ -3117,6 +3140,27 @@ class ModelUtilsTest(TestCasePlus):
             model = BertModel.from_pretrained(
                 "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir, variant="v2"
             )
+        self.assertIsNotNone(model)
+
+    def test_checkpoint_variant_save_load(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = BertModel.from_pretrained(
+                "hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir, variant="v2"
+            )
+            weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
+
+            model.save_pretrained(tmp_dir, variant="v2")
+            # saving will create a variant checkpoint
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
+
+            model.save_pretrained(tmp_dir)
+            # saving shouldn't delete variant checkpoints
+            weights_name = ".".join(WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["bin"])
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
+
+            # there should be a normal checkpoint
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+
         self.assertIsNotNone(model)
 
     @require_accelerate

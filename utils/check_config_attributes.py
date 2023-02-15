@@ -17,6 +17,7 @@ import importlib
 import inspect
 import os
 import re
+import sys
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -30,7 +31,9 @@ spec = importlib.util.spec_from_file_location(
     os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
     submodule_search_locations=[PATH_TO_TRANSFORMERS],
 )
-transformers = spec.loader.load_module()
+transformers = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(transformers)
+transformers = sys.modules["transformers"]
 
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
@@ -45,12 +48,16 @@ SPECIAL_CASES_TO_ALLOW = {
     "EsmConfig": ["is_folding_model"],
     # used during training (despite we don't have training script for these models yet)
     "Mask2FormerConfig": ["ignore_value"],
-    # used during training (despite we don't have training script for these models yet)
-    "OneFormerConfig": ["ignore_value"],
+    # `ignore_value` used during training (despite we don't have training script for these models yet)
+    # `norm` used in conversion script (despite not using in the modeling file)
+    "OneFormerConfig": ["ignore_value", "norm"],
     # used during preprocessing and collation, see `collating_graphormer.py`
     "GraphormerConfig": ["spatial_pos_max"],
     # used internally in the configuration class file
     "T5Config": ["feed_forward_proj"],
+    # used internally in the configuration class file
+    # `tokenizer_class` get default value `T5Tokenizer` intentionally
+    "MT5Config": ["feed_forward_proj", "tokenizer_class"],
     # used internally in the configuration class file
     "LongT5Config": ["feed_forward_proj"],
     # used internally in the configuration class file

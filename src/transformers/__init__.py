@@ -264,6 +264,7 @@ _import_structure = {
         "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ErnieConfig",
     ],
+    "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
@@ -444,6 +445,11 @@ _import_structure = {
         "TrOCRConfig",
         "TrOCRProcessor",
     ],
+    "models.tvlt": [
+        "TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TvltConfig",
+        "TvltProcessor",
+    ],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",
@@ -507,6 +513,7 @@ _import_structure = {
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlm_roberta_xl": ["XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaXLConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
+    "models.xmod": ["XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP", "XmodConfig"],
     "models.yolos": ["YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP", "YolosConfig"],
     "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
     "onnx": [],
@@ -629,6 +636,7 @@ else:
     _import_structure["models.camembert"].append("CamembertTokenizer")
     _import_structure["models.cpm"].append("CpmTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
+    _import_structure["models.ernie_m"].append("ErnieMTokenizer")
     _import_structure["models.fnet"].append("FNetTokenizer")
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
@@ -748,6 +756,7 @@ else:
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
     _import_structure["models.speecht5"].append("SpeechT5FeatureExtractor")
+    _import_structure["models.tvlt"].append("TvltFeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -825,6 +834,7 @@ else:
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
+    _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -1464,6 +1474,18 @@ else:
             "ErnieForTokenClassification",
             "ErnieModel",
             "ErniePreTrainedModel",
+        ]
+    )
+    _import_structure["models.ernie_m"].extend(
+        [
+            "ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ErnieMForInformationExtraction",
+            "ErnieMForMultipleChoice",
+            "ErnieMForQuestionAnswering",
+            "ErnieMForSequenceClassification",
+            "ErnieMForTokenClassification",
+            "ErnieMModel",
+            "ErnieMPreTrainedModel",
         ]
     )
     _import_structure["models.esm"].extend(
@@ -2343,6 +2365,15 @@ else:
     _import_structure["models.trocr"].extend(
         ["TROCR_PRETRAINED_MODEL_ARCHIVE_LIST", "TrOCRForCausalLM", "TrOCRPreTrainedModel"]
     )
+    _import_structure["models.tvlt"].extend(
+        [
+            "TVLT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TvltForAudioVisualClassification",
+            "TvltForPreTraining",
+            "TvltModel",
+            "TvltPreTrainedModel",
+        ]
+    )
     _import_structure["models.unispeech"].extend(
         [
             "UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2573,6 +2604,19 @@ else:
             "XLNetModel",
             "XLNetPreTrainedModel",
             "load_tf_weights_in_xlnet",
+        ]
+    )
+    _import_structure["models.xmod"].extend(
+        [
+            "XMOD_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "XmodForCausalLM",
+            "XmodForMaskedLM",
+            "XmodForMultipleChoice",
+            "XmodForQuestionAnswering",
+            "XmodForSequenceClassification",
+            "XmodForTokenClassification",
+            "XmodModel",
+            "XmodPreTrainedModel",
         ]
     )
     _import_structure["models.yolos"].extend(
@@ -3751,6 +3795,7 @@ if TYPE_CHECKING:
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
+    from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
@@ -3919,6 +3964,7 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
+    from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.upernet import UperNetConfig
@@ -3970,6 +4016,7 @@ if TYPE_CHECKING:
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
     from .models.xlm_roberta_xl import XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaXLConfig
     from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+    from .models.xmod import XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP, XmodConfig
     from .models.yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
     from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
 
@@ -4091,6 +4138,7 @@ if TYPE_CHECKING:
         from .models.camembert import CamembertTokenizer
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
+        from .models.ernie_m import ErnieMTokenizer
         from .models.fnet import FNetTokenizer
         from .models.gpt_sw3 import GPTSw3Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
@@ -4192,6 +4240,7 @@ if TYPE_CHECKING:
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
         from .models.speecht5 import SpeechT5FeatureExtractor
+        from .models.tvlt import TvltFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():
@@ -4250,6 +4299,7 @@ if TYPE_CHECKING:
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
+        from .models.tvlt import TvltImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
@@ -4779,6 +4829,16 @@ if TYPE_CHECKING:
             ErnieForTokenClassification,
             ErnieModel,
             ErniePreTrainedModel,
+        )
+        from .models.ernie_m import (
+            ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ErnieMForInformationExtraction,
+            ErnieMForMultipleChoice,
+            ErnieMForQuestionAnswering,
+            ErnieMForSequenceClassification,
+            ErnieMForTokenClassification,
+            ErnieMModel,
+            ErnieMPreTrainedModel,
         )
         from .models.esm import (
             ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5487,6 +5547,13 @@ if TYPE_CHECKING:
             load_tf_weights_in_transfo_xl,
         )
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
+        from .models.tvlt import (
+            TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TvltForAudioVisualClassification,
+            TvltForPreTraining,
+            TvltModel,
+            TvltPreTrainedModel,
+        )
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
             UniSpeechForCTC,
@@ -5666,6 +5733,17 @@ if TYPE_CHECKING:
             XLNetModel,
             XLNetPreTrainedModel,
             load_tf_weights_in_xlnet,
+        )
+        from .models.xmod import (
+            XMOD_PRETRAINED_MODEL_ARCHIVE_LIST,
+            XmodForCausalLM,
+            XmodForMaskedLM,
+            XmodForMultipleChoice,
+            XmodForQuestionAnswering,
+            XmodForSequenceClassification,
+            XmodForTokenClassification,
+            XmodModel,
+            XmodPreTrainedModel,
         )
         from .models.yolos import (
             YOLOS_PRETRAINED_MODEL_ARCHIVE_LIST,

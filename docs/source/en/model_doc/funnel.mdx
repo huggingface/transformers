@@ -12,6 +12,16 @@ specific language governing permissions and limitations under the License.
 
 # Funnel Transformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=funnel">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-funnel-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/funnel-transformer-small">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
+
 ## Overview
 
 The Funnel Transformer model was proposed in the paper [Funnel-Transformer: Filtering out Sequential Redundancy for
@@ -35,15 +45,16 @@ comprehension.*
 
 Tips:
 
-- Since Funnel Transformer uses pooling, the sequence length of the hidden states changes after each block of layers.
+- Since Funnel Transformer uses pooling, the sequence length of the hidden states changes after each block of layers. This way, their length is divided by 2, which speeds up the computation of the next hidden states.
   The base model therefore has a final sequence length that is a quarter of the original one. This model can be used
   directly for tasks that just require a sentence summary (like sequence classification or multiple choice). For other
   tasks, the full model is used; this full model has a decoder that upsamples the final hidden states to the same
   sequence length as the input.
+- For tasks such as classification, this is not a problem, but for tasks like masked language modeling or token classification, we need a hidden state with the same sequence length as the original input. In those cases, the final hidden states are upsampled to the input sequence length and go through two additional layers. That's why there are two versions of each checkpoint. The version suffixed with “-base” contains only the three blocks, while the version without that suffix contains the three blocks and the upsampling head with its additional layers.
 - The Funnel Transformer checkpoints are all available with a full version and a base version. The first ones should be
   used for [`FunnelModel`], [`FunnelForPreTraining`],
   [`FunnelForMaskedLM`], [`FunnelForTokenClassification`] and
-  class:*~transformers.FunnelForQuestionAnswering*. The second ones should be used for
+  [`FunnelForQuestionAnswering`]. The second ones should be used for
   [`FunnelBaseModel`], [`FunnelForSequenceClassification`] and
   [`FunnelForMultipleChoice`].
 
