@@ -157,7 +157,10 @@ def get_class_in_module(class_name, module_path):
     #       imported. However, we don't have this information so far.
     if os.path.isfile(f"{module_dir}/configuration.py"):
         os.remove(f"{module_dir}/configuration.py")
-    # This has to be deleted too!
+    # `__init__.py` has to be deleted too!
+    if os.path.isfile(f"{module_dir}/__init__.py"):
+        os.remove(f"{module_dir}/__init__.py")
+    # `__pycache__` directory has to be deleted too!
     if os.path.isdir(f"{module_dir}/__pycache__"):
         shutil.rmtree(f"{module_dir}/__pycache__")
 
