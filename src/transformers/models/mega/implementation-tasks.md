@@ -22,10 +22,14 @@
   * `MegaOutput`
 * To modify
   * ~~`MegaEmbeddings` - add optional token type embeddings  ~~
-  * `MegaLayer` - start with something like this for the combined encoder/decoder layer
+  * ~~`MegaLayer` - start with something like this for the combined encoder/decoder layer~~
     * There's also a nice handling of cross-attention already
     * If `output_attentions`, do we want self-attention or cross attention? both? (both)
+  * `MegaEncoder`: pass through multiple mega layers
+    * Might not be needed, but especially helps with using cached values between layers
+  * `MegaModel`: pass through the embeddings and encoder
     * Should also set it up to work with `inputs_embeds` so that we can pass token embeddings directly (helpful for explainability tooling like gradient-based attribution)
+    * Might need to name things like in the MegaLM class I used 
   * `MegaPretrainedModel` - initialization, remove checkpointing (?)
 * Decoder stuff:
   * Probably untangle the incremental state in OG Mega to look more like the `forward` method in the auto-generated `MegaEncoder` (which is meant to be the stack of N encoder or decoder layers)
@@ -75,6 +79,7 @@ This is mostly pretty standard: cross-attention takes cross-attn keys and values
 * Accept previous keys and values from `prev_key_values` (new input, in place of incremental_state)
 * Return a tuple in the style of the HF attention modules (layer output, attention weights, key, value, EMA state) with contents controlled by `output_attentions` and `use_cache` (new inputs)
 * **status:** done - removed incremental state and refactored into a single combined `attention_mask` for padding and unidirectional self-attention
+  * Possibly revisit to see how other models handle causal masking (or do we assume that self-attention is fine on the full inputs? that seems to be RoBERTa's assumption)
 
 prev_key_values inputs for ^ will be expected as:
 
@@ -86,11 +91,10 @@ GatedCrossAttention
 * Accept previous cross-attention keys and values from `prev_key_values` (new input, in place of incremental_state)
 * Return keys and values if `use_cache` (new input)
 * What about `pidx`?
-  * Addressed by adding an optional argument to the `forward` method called `num_incremental_steps`; incremented and passed just like `pidx` but named better and returned if `use_cache`
-  * Now I'm not actually sure if this will work... it wouldn't be passed from the input to the wrapper function
   * It's actually used to index the positional bias for the current step (to preserve relative positions when doing one-at-a-time decoding)
   * If it's provided, it asserts that the queries are length 1 (which would be the case in incremental decoding); can we proxy this another way?
-  * I could subclass `BaseModelOutputWithPastAndCrossAttentions` and add `num_incremental_steps` -- leaving off here
+  * Currently getting this from the cached self-attention keys (cached self sequence length + 1)
+* Attention masks
 
 MegaDecoder
 * Accept `prev_key_values` and `use_cache` (new input) and pass relevant information along to component modules

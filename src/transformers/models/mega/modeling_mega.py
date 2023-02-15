@@ -348,13 +348,10 @@ class GatedCrossAttention(nn.Module):
         bsz, clen, _ = k.size()
         slen = q.size(1) if pidx is None else pidx + 1
         if key_padding_mask is not None:
-            # B x L1
-            inverse_mask = 1.0 - key_padding_mask.type_as(q)
-            # B x 1 x 1
-            lengths = inverse_mask.sum(dim=-1).view(bsz, 1, 1)
+            # B x L1 --> B x 1 x 1
+            lengths = key_padding_mask.sum(dim=-1).view(bsz, 1, 1)
         else:
             lengths = clen
-            inverse_mask = None
 
         # L x L1
         bias = self.rel_pos_bias(max(slen, clen))[:, :clen]
@@ -379,8 +376,8 @@ class GatedCrossAttention(nn.Module):
         else:
             raise ValueError('Unknown attention activation function: {}'.format(self.attention_activation))
 
-        if inverse_mask is not None:
-            attn_weights = attn_weights * inverse_mask.unsqueeze(1)
+        if key_padding_mask is not None:
+            attn_weights = attn_weights * key_padding_mask.unsqueeze(1)
 
         return attn_weights
 
@@ -404,7 +401,7 @@ class GatedCrossAttention(nn.Module):
         qk = torch.bmm(q, k.transpose(1, 2)) + bias
 
         if key_padding_mask is not None:
-            qk = qk.masked_fill(key_padding_mask.unsqueeze(1).to(torch.bool), float('-inf'))
+            qk = qk.masked_fill((1 - key_padding_mask).unsqueeze(1).to(torch.bool), float('-inf'))
 
         if before_attn_fn:
             return qk
@@ -419,7 +416,6 @@ class GatedCrossAttention(nn.Module):
         value: Optional[torch.Tensor],
         padding_mask: Optional[torch.Tensor] = None, ## NOT USED
         key_padding_mask: Optional[torch.Tensor] = None,
-        # incremental_state: Optional[Dict[str, Dict[str, Optional[torch.Tensor]]]] = None,
         prev_key_values: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         static_kv: bool = False,
@@ -430,10 +426,8 @@ class GatedCrossAttention(nn.Module):
         Args:
             padding_mask (ByteTensor, optional): mask to exclude
                 queries that are pads, of shape `(batch, tgt_len)`, where
-                padding elements are indicated by 1s.
-            key_padding_mask (ByteTensor, optional): mask to exclude
-                keys that are pads, of shape `(batch, src_len)`, where
-                padding elements are indicated by 1s.
+                padding elements are indicated by 1s. 
+                (NOTE: this argument is not used in the original Mega repo and is left with original functionality)
             output_attentions (bool, optional): return the attention weights,
                 averaged over heads (default: False).
             static_kv (bool, optional): static key and value pair.
@@ -441,6 +435,7 @@ class GatedCrossAttention(nn.Module):
                 weights and values before the attention softmax.
 
         Refactoring:
+            key_padding_mask (optional Tensor): 1 for *not masked*, 0 for *masked*; size (batch size, source length)
             prev_key_values: tuple of tensors for hidden state caching in incremental decoding
             use_cache: whether to return keys and values for incremental decoding
         """
@@ -1197,7 +1192,7 @@ class MegaDecoderLayer(nn.Module):
         if self.nffn is not None:
             x = self.nffn(x)
             
-            return x, attn_weights, None 
+        return x, attn_weights, None 
 
 # NOTE: ROBERTA STUFF BEGINS HERE !!!
 class MegaEmbeddings(nn.Module):
@@ -1255,311 +1250,84 @@ class MegaEmbeddings(nn.Module):
             embeddings = inputs_embeds
         return embeddings
 
-
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Mega
-# possibly not needed at all, but helpful for reference to understand how it's supposed to work for cross-attn
-# this is the interesting part that's wrapped up by the *Attention module, but with a linear layer + norm added
-class MegaSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = position_embedding_type or getattr(
-            config, "position_embedding_type", "absolute"
-        )
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
-
-        self.is_decoder = config.is_decoder
-
-    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
-        mixed_query_layer = self.query(hidden_states)
-
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            key_layer = past_key_value[0]
-            value_layer = past_key_value[1]
-            attention_mask = encoder_attention_mask
-        elif is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-            attention_mask = encoder_attention_mask
-        elif past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
-        else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        use_cache = past_key_value is not None
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            query_length, key_length = query_layer.shape[2], key_layer.shape[2]
-            if use_cache:
-                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
-                    -1, 1
-                )
-            else:
-                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
-
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in MegaModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
-        return outputs
-
-
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class MegaSelfOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
-
-
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Mega
-class MegaAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
-        super().__init__()
-        self.self = MegaSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = MegaSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
-        self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
-            output_attentions,
-        )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
-
-
-# deleted *Intermediate function here because it's replaced by the NFFN
-
-# Copied from transformers.models.bert.modeling_bert.BertOutput
-class MegaOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
-
-
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Mega
 class MegaLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: MegaConfig):
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = MegaAttention(config)
+        self.mega_layer = MovingAverageGatedAttention(config)
+        self.nffn = NormalizedFeedForwardNetwork(config) if config.use_normalized_ffn else None
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = MegaAttention(config, position_embedding_type="absolute")
-        self.intermediate = MegaIntermediate(config)
-        self.output = MegaOutput(config)
+            self.cross_attn = GatedCrossAttention(config)
+        else:
+            self.cross_attn = None
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
+        use_cache: bool = False
     ) -> Tuple[torch.Tensor]:
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
-            past_key_value=self_attn_past_key_value,
-        )
-        attention_output = self_attention_outputs[0]
 
-        # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-            present_key_value = self_attention_outputs[-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        # Mega self-attention
+        mega_outputs = self.mega_layer(x=hidden_states, 
+                                       attention_mask=attention_mask, 
+                                       prev_key_values=past_key_value, 
+                                       output_attentions=output_attentions, 
+                                       before_attn_fn=False, 
+                                       use_cache=use_cache)
 
-        cross_attn_present_key_value = None
-        if self.is_decoder and encoder_hidden_states is not None:
-            if not hasattr(self, "crossattention"):
-                raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
-                    " by setting `config.add_cross_attention=True`"
-                )
+        new_hidden_states = mega_outputs[0]
+        self_key, self_value, self_ema_state = mega_outputs[-3:] if use_cache else (None, None, None)
+        self_attention_weights = mega_outputs[1] if output_attentions else None
+        
+        # optional cross attention
+        if self.cross_attn is not None:
+            if encoder_hidden_states is None:
+                raise ValueError(f"Requested cross-attention without providing encoder hidden states")
+            
+            cross_attn_outputs = self.cross_attn(query=new_hidden_states,
+                                                 key=encoder_hidden_states,
+                                                 value=encoder_hidden_states,
+                                                 padding_mask=None,
+                                                 key_padding_mask=encoder_attention_mask,
+                                                 prev_key_values=past_key_value,
+                                                 output_attentions=output_attentions,
+                                                 static_kv=True,
+                                                 before_attn_fn=False,
+                                                 use_cache=use_cache)
+            # update the hidden state from cross attention
+            new_hidden_states = cross_attn_outputs[0]
+            # store cross-attention k/v if caching
+            cross_key, cross_value = cross_attn_outputs[-2:] if use_cache else (None, None)
+            cross_attention_weights = cross_attn_outputs[1] if output_attentions else None
 
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            cross_attention_outputs = self.crossattention(
-                attention_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                cross_attn_past_key_value,
-                output_attentions,
-            )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+        # optional NFFN follows cross attention
+        if self.nffn is not None:
+            new_hidden_states = self.nffn(new_hidden_states)
 
-            # add cross-attn cache to positions 3,4 of present_key_value tuple
-            cross_attn_present_key_value = cross_attention_outputs[-1]
-            present_key_value = present_key_value + cross_attn_present_key_value
-
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-        )
-        outputs = (layer_output,) + outputs
-
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (present_key_value,)
-
-        return outputs
-
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
+        outs = (new_hidden_states,) 
+        if output_attentions:
+            outs = outs + (self_attention_weights,)
+            if self.cross_attn is not None:
+                outs = outs + (cross_attention_weights, )
+        
+        if use_cache:
+            new_key_values = (self_key, self_value, self_ema_state, )
+            if self.cross_attn is not None:
+                new_key_values = new_key_values + (cross_key, cross_value)
+            
+            outs = outs + (new_key_values,)
+        
+        return outs
 
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Mega
