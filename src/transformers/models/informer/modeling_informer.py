@@ -804,24 +804,30 @@ class ProbSparseAttention(nn.Module):
         L_Q = query_states.size(1)
         u = min(self.factor * np.ceil(np.log1p(L_Q)).astype("int").item(), L_Q)
 
-        # __prob_QK
-        # calculate the sampled Q_K
-        index_sample = torch.randint(low=0, high=L_K, size=(U_part,)) # torch.Size([U_part])
+        if L_K > 0:
+            index_sample = torch.randint(0, L_K, (U_part,))  # torch.Size([14])
 
-        # real U = U_part(factor*ln(L_k))*L_q
-        K_sample = key_states[:, index_sample, :]  # torch.Size([bsz * self.num_heads, U_part, channel])
-        Q_K_sample = torch.bmm(query_states, K_sample.transpose(1, 2)) # torch.Size([bsz * self.num_heads, L_Q, U_part])
+            # real U = U_part(factor*ln(L_k))*L_q
+            K_sample = key_states[:, index_sample, :]  # torch.Size([52, 14, 4])
+        else:
+            K_sample = key_states
+        Q_K_sample = torch.bmm(query_states, K_sample.transpose(1, 2))
+        # torch.Size([52, 14, 4]) x torch.Size([52, 4, 14])
 
-        # find the Top_k query with sparsity measurement
-        M = Q_K_sample.max(dim=-1)[0] - torch.div(Q_K_sample.sum(dim=-1), L_K)
-        M_top = M.topk(u, sorted=False)[1]
+        # find the Top_k query with sparisty measurement
+        if u > 0:
+            M = Q_K_sample.max(dim=-1)[0] - torch.div(Q_K_sample.sum(dim=-1), L_K)
+            M_top = M.topk(u, sorted=False)[1]
 
-        # use the reduced Q to calculate Q_K
-        # factor*ln(L_q)
-        # Q_reduce = query_states[:, M_top, :]
-        dim_for_slice = torch.arange(query_states.size(0)).unsqueeze(-1)
-        Q_reduce = query_states[dim_for_slice, M_top]
+            # use the reduced Q to calculate Q_K
+            # factor*ln(L_q)
+            dim_for_slice = torch.arange(query_states.size(0)).unsqueeze(-1)
+            Q_reduce = query_states[dim_for_slice, M_top]
+        else:
+            Q_reduce = query_states
+            M_top = None
 
+        # score_top
         attn_weights = torch.bmm(Q_reduce, key_states.transpose(1, 2))
 
         src_len = key_states.size(1)
@@ -831,11 +837,23 @@ class ProbSparseAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        # Original impl don't apply attention_mask to the encoder, only for the decoder
-        # For the decoder, it creates a casual mask sliced with M_top (ProbMask)
-        if self.is_decoder:
-            prob_mask = _prepare_decoder_prob_attention_mask(L=L_Q, M_top=M_top, scores=attn_weights)
-            attn_weights.masked_fill_(prob_mask, -np.inf)
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
+            prob_mask = attention_mask.expand(bsz, self.num_heads, tgt_len, src_len).reshape(
+                bsz * self.num_heads, tgt_len, src_len
+            )
+
+            if M_top is not None:
+                dim_for_slice = torch.arange(prob_mask.size(0)).unsqueeze(-1)
+                prob_mask = prob_mask[dim_for_slice, M_top, :]
+
+            attn_weights = attn_weights.view(bsz, self.num_heads, u, src_len) + prob_mask.view(
+                bsz, self.num_heads, u, src_len
+            )
+            attn_weights = attn_weights.view(bsz * self.num_heads, u, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
@@ -858,31 +876,21 @@ class ProbSparseAttention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        # The authors didn't use attention dropout.
-        # Not removing this yet, waiting for Kashif approval
-        # attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        # attn_output = torch.bmm(attn_probs, value_states)
-        attn_output = torch.bmm(attn_weights, value_states)
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
-        # Build final output
-        # reimplemented from the original:
-        # https://github.com/zhouhaoyi/Informer2020/blob/ac59c7447135473fb2aafeafe94395f884d5c7a5/models/attn.py#L70
-        if not self.is_decoder:
-            v_aggregated = value_states.mean(dim=1)
-            v_aggregated = v_aggregated.unsqueeze(dim=1).expand(bsz * self.num_heads, L_Q, v_aggregated.size(-1))
-        else:
-            v_aggregated = value_states.cumsum(dim=1)
+        # get initial context
+        context = value_states.cumsum(dim=-2)
+        attn_output = torch.bmm(attn_probs, value_states)
 
-        # https://github.com/zhouhaoyi/Informer2020/blob/ac59c7447135473fb2aafeafe94395f884d5c7a5/models/attn.py#L90
-        dim_for_slice = torch.arange(v_aggregated.size(0)).unsqueeze(-1)
-        v_aggregated[dim_for_slice, M_top, :] = attn_output
-
-        # Rename final output
-        attn_output = v_aggregated
+        if M_top is not None:
+            # update context: copy the attention output to the context at M_top index
+            dim_for_slice = torch.arange(context.size(0)).unsqueeze(-1)
+            context[dim_for_slice, M_top, :] = attn_output
+            attn_output = context
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
@@ -898,20 +906,6 @@ class ProbSparseAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-def _prepare_decoder_prob_attention_mask(L, M_top, scores):
-    # create triangular matrix
-    triangular_matrix = torch.ones(L, scores.shape[-1], dtype=torch.bool).to(scores.device).triu(1)
-
-    # add batch*num_heads dim to the triangular_matrix
-    triangular_mask = triangular_matrix[None, :].expand(scores.size(0), L, scores.shape[-1])
-
-    # slice the triangular_mask with M_top
-    dim_for_slice = torch.arange(triangular_mask.size(0)).unsqueeze(-1)
-    prob_mask = triangular_mask[dim_for_slice, M_top].to(scores.device)
-
-    return prob_mask.to(scores.device)
-
-
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
 class ConvLayer(nn.Module):
     def __init__(self, c_in):
@@ -923,13 +917,13 @@ class ConvLayer(nn.Module):
             padding=1,
             padding_mode="circular",
         )
-        self.norm = nn.BatchNorm1d(c_in)  # Eli question: why batchnorm here?
+        self.norm = nn.BatchNorm1d(c_in)
         self.activation = nn.ELU()
         self.maxPool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
 
     def forward(self, x):
         x = self.downConv(x.permute(0, 2, 1))
-        x = self.norm(x)  # Eli: why? maybe because the impl...
+        x = self.norm(x)
         x = self.activation(x)
         x = self.maxPool(x)
         x = x.transpose(1, 2)
@@ -1023,7 +1017,7 @@ class InformerDecoderLayer(nn.Module):
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
                 factor=config.factor,
-                is_decoder=True
+                is_decoder=True,
             )
         else:
             self.self_attn = InformerAttention(
@@ -1469,7 +1463,6 @@ class InformerDecoder(InformerPreTrainedModel):
 
         self.layers = nn.ModuleList([InformerDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
-        self.attn = config.attn
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1582,11 +1575,9 @@ class InformerDecoder(InformerPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        # create casual mask only if it's full attention (and not ProbAttention)
-        if self.attn != 'prob':
-            attention_mask = self._prepare_decoder_attention_mask(
-                attention_mask, input_shape, inputs_embeds, past_key_values_length
-            )
+        attention_mask = self._prepare_decoder_attention_mask(
+            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
