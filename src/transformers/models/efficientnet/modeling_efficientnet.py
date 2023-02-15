@@ -25,6 +25,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
+    BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
 )
@@ -110,11 +111,11 @@ class EfficientNetEmbeddings(nn.Module):
         super().__init__()
 
         out_channels = round_filters(config, 32)
-        self.padding = nn.ZeroPad2d(padding=(0,1,0,1))
+        self.padding = nn.ZeroPad2d(padding=(0, 1, 0, 1))
         self.convolution = nn.Conv2d(
             config.num_channels, out_channels, kernel_size=3, stride=2, padding="valid", bias=False
         )
-        self.batchnorm = nn.BatchNorm2d(out_channels)
+        self.batchnorm = nn.BatchNorm2d(out_channels, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum)
         self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
@@ -197,7 +198,7 @@ class EfficientNetDepthwiseLayer(nn.Module):
         config ([`EfficientNetConfig`]): Model configuration class.
         in_dim (`int`): Number of input channels.
         stride (`int`): Stride size.
-        drop_rate (`float`): Dropout rate to be used.
+        kernel_size (`int`): Kernel size.
     """
 
     def __init__(
@@ -215,7 +216,9 @@ class EfficientNetDepthwiseLayer(nn.Module):
         self.depthwise_conv = DepthwiseConv2d(
             in_dim, kernel_size=kernel_size, stride=stride, padding=conv_pad, bias=False
         )
-        self.depthwise_norm = nn.BatchNorm2d(num_features=in_dim)
+        self.depthwise_norm = nn.BatchNorm2d(
+            num_features=in_dim, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum
+        )
         self.depthwise_act = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
@@ -267,6 +270,7 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
         hidden_states = self.expand(hidden_states)
         hidden_states = self.act_expand(hidden_states)
         hidden_states = torch.mul(inputs, hidden_states)
+
         return hidden_states
 
 
@@ -281,9 +285,11 @@ class EfficientNetFinalLayer(nn.Module):
         drop_rate (`float`): Dropout rate to be used.
     """
 
-    def __init__(self, config: EfficientNetConfig, in_dim: int, out_dim: int, stride: int, drop_rate: float):
+    def __init__(
+        self, config: EfficientNetConfig, in_dim: int, out_dim: int, stride: int, drop_rate: float, id_skip: bool
+    ):
         super().__init__()
-        self.apply_dropout = stride == 1 and in_dim == out_dim
+        self.apply_dropout = stride == 1 and not id_skip
         self.project_conv = nn.Conv2d(
             in_channels=in_dim,
             out_channels=out_dim,
@@ -291,7 +297,10 @@ class EfficientNetFinalLayer(nn.Module):
             padding="same",
             bias=False,
         )
-        self.project_bn = nn.BatchNorm2d(num_features=out_dim)
+        # print(stride, in_dim, out_dim)
+        self.project_bn = nn.BatchNorm2d(
+            num_features=out_dim, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum
+        )
         self.dropout = nn.Dropout(p=drop_rate)
 
     def forward(self, embeddings: torch.FloatTensor, hidden_states: torch.FloatTensor) -> torch.Tensor:
@@ -312,6 +321,8 @@ class EfficientNetBlock(nn.Module):
         in_dim (`int`): Number of input channels.
         out_dim (`int`): Number of output channels.
         stride (`int`): Stride size.
+        expand_ratio (`int`): Expand ratio.
+        kernel_size (`int`): Kernel size.
         drop_rate (`float`): Dropout rate to be used.
     """
 
@@ -324,6 +335,7 @@ class EfficientNetBlock(nn.Module):
         expand_ratio: int,
         kernel_size: int,
         drop_rate: float,
+        id_skip: bool,
     ):
         super().__init__()
         self.expand_ratio = expand_ratio
@@ -350,6 +362,7 @@ class EfficientNetBlock(nn.Module):
             out_dim=out_dim,
             stride=stride,
             drop_rate=drop_rate,
+            id_skip=id_skip,
         )
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
@@ -357,8 +370,8 @@ class EfficientNetBlock(nn.Module):
         # Expansion and depthwise convolution phase
         if self.expand_ratio != 1:
             hidden_states = self.expansion(hidden_states)
-
         hidden_states = self.depthwise_conv(hidden_states)
+
         # Squeeze and excite phase
         hidden_states = self.squeeze_excite(hidden_states)
         hidden_states = self.projection(embeddings, hidden_states)
@@ -396,6 +409,7 @@ class EfficientNetEncoder(nn.Module):
             expand_ratio = config.expand_ratios[i]
 
             for j in range(round_repeats(config.num_block_repeats[i])):
+                id_skip = True if j == 0 else False
                 stride = 1 if j > 0 else stride
                 in_dim = out_dim if j > 0 else in_dim
                 drop_rate = config.drop_connect_rate * curr_block_num / num_blocks
@@ -408,6 +422,7 @@ class EfficientNetEncoder(nn.Module):
                     kernel_size=kernel_size,
                     expand_ratio=expand_ratio,
                     drop_rate=drop_rate,
+                    id_skip=id_skip,
                 )
                 blocks.append(block)
                 curr_block_num += 1
@@ -415,27 +430,40 @@ class EfficientNetEncoder(nn.Module):
         self.blocks = nn.ModuleList(blocks)
         self.top_conv = nn.Conv2d(
             in_channels=out_dim,
-            out_channels=round_filters(config, 1280),
+            out_channels=round_filters(config, config.hidden_dim),
             kernel_size=1,
             padding="same",
             bias=False,
         )
-        self.top_bn = nn.BatchNorm2d(num_features=1280)
+        self.top_bn = nn.BatchNorm2d(
+            num_features=config.hidden_dim, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum
+        )
         self.top_activation = ACT2FN[config.hidden_act]
 
     def forward(
         self,
         hidden_states: torch.FloatTensor,
         output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
-    ) -> torch.Tensor:
+        return_dict: Optional[bool] = True,
+    ) -> BaseModelOutputWithNoAttention:
+        all_hidden_states = (hidden_states,) if output_hidden_states else None
+
         for block in self.blocks:
             hidden_states = block(hidden_states)
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
 
         hidden_states = self.top_conv(hidden_states)
         hidden_states = self.top_bn(hidden_states)
         hidden_states = self.top_activation(hidden_states)
-        return hidden_states
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
+
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+        )
 
 
 class EfficientNetPreTrainedModel(PreTrainedModel):
@@ -471,17 +499,17 @@ class EfficientNetPreTrainedModel(PreTrainedModel):
     EFFICIENTNET_START_DOCSTRING,
 )
 class EfficientNetModel(EfficientNetPreTrainedModel):
-    def __init__(self, config: EfficientNetConfig, pooling: str = "avg"):
+    def __init__(self, config: EfficientNetConfig):
         super().__init__(config)
         self.config = config
         self.embeddings = EfficientNetEmbeddings(config)
         self.encoder = EfficientNetEncoder(config)
 
         # Final pooling layer
-        if pooling == "avg":
-            self.pooler = nn.AvgPool2d(config.hidden_dim)
+        if config.pooling == "avg":
+            self.pooler = nn.AvgPool2d(config.hidden_dim, ceil_mode=True)
         else:
-            self.pooler = nn.MaxPool2d(config.hidden_dim)
+            self.pooler = nn.MaxPool2d(config.hidden_dim, ceil_mode=True)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -515,11 +543,11 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        last_hidden_state = encoder_outputs[0]
-
         # Apply pooling
+        last_hidden_state = encoder_outputs[0]
         pooled_output = self.pooler(last_hidden_state)
+        # Reshape (batch_size, 1280, 1 , 1) -> (batch_size, 1280)
+        pooled_output = pooled_output.reshape(pooled_output.shape[:2])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -546,7 +574,8 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         self.efficientnet = EfficientNetModel(config)
         # Classifier head
         self.dropout = nn.Dropout(p=config.dropout_rate)
-        self.classifier = nn.Linear(1280, num_labels) if num_labels > 0 else nn.Identity()
+        self.classifier = nn.Linear(config.hidden_dim, num_labels) if num_labels > 0 else nn.Identity()
+        self.classifier_act = nn.Softmax(dim=1)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -578,6 +607,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
+        logits = self.classifier_act(logits)
 
         loss = None
         if labels is not None:

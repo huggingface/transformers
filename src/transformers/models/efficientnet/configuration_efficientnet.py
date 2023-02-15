@@ -69,12 +69,16 @@ class EfficientNetConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
             `"selu", `"gelu_new"`, `"silu"` and `"mish"` are supported.
+        hiddem_dim (`int`, *optional*, defaults to 1280):
+            The hidden dimension of the layer before the classification head.
+        pooling (`str` or `function`, *optional*, defaults to `"avg"`):
+            Type of final pooling to be applied before the dense classification head.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        layer_scale_init_value (`float`, *optional*, defaults to 1e-6):
-            The initial value for the layer scale.
+        batch_norm_eps (`float`, *optional*, defaults to 1e-3):
+            The epsilon used by the batch normalization layers.
+        batch_norm_momentum (`float`, *optional*, defaults to 0.99):
+            The momentum used by the batch normalization layers.
         dropout_rate (`float`, *optional*, defaults to 0.5):
             The dropout rate to be applied before final classifier layer.
         drop_connect_rate (`float`, *optional*, defaults to 0.2):
@@ -113,10 +117,11 @@ class EfficientNetConfig(PretrainedConfig):
         expand_ratios=[1, 6, 6, 6, 6, 6, 6],
         squeeze_expansion_ratio=0.25,
         hidden_act="swish",
-        hidden_dim=640,
+        hidden_dim=1280,
+        pooling="avg",
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        layer_scale_init_value=1e-6,
+        batch_norm_eps=0.001,
+        batch_norm_momentum=0.99,
         dropout_rate=0.5,
         drop_connect_rate=0.2,
         out_features=None,
@@ -138,9 +143,10 @@ class EfficientNetConfig(PretrainedConfig):
         self.squeeze_expansion_ratio = squeeze_expansion_ratio
         self.hidden_act = hidden_act
         self.hidden_dim = hidden_dim
+        self.pooling = pooling
         self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.layer_scale_init_value = layer_scale_init_value
+        self.batch_norm_eps = batch_norm_eps
+        self.batch_norm_momentum = batch_norm_momentum
         self.dropout_rate = dropout_rate
         self.drop_connect_rate = drop_connect_rate
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.kernel_sizes) + 1)]

@@ -21,6 +21,7 @@ import json
 import os
 
 import numpy as np
+import PIL
 import requests
 import tensorflow.keras.applications.efficientnet as efficientnet
 import torch
@@ -91,6 +92,8 @@ def convert_image_processor(model_name):
     size = CONFIG_MAP[model_name]["image_size"]
     preprocessor = EfficientNetImageProcessor(
         size={"height": size, "width": size},
+        image_mean=[0.485, 0.456, 0.406],
+        image_std=[0.47853944, 0.4732864, 0.47434163],
         do_center_crop=False,
     )
     return preprocessor
@@ -107,6 +110,8 @@ def rename_keys(original_param_names):
     rename_keys.append(("stem_conv/kernel:0", "embeddings.convolution.weight"))
     rename_keys.append(("stem_bn/gamma:0", "embeddings.batchnorm.weight"))
     rename_keys.append(("stem_bn/beta:0", "embeddings.batchnorm.bias"))
+    rename_keys.append(("stem_bn/moving_mean:0", "embeddings.batchnorm.running_mean"))
+    rename_keys.append(("stem_bn/moving_variance:0", "embeddings.batchnorm.running_var"))
 
     for b in block_names:
         hf_b = block_name_mapping[b]
@@ -114,10 +119,23 @@ def rename_keys(original_param_names):
         rename_keys.append((f"block{b}_expand_bn/gamma:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.weight"))
         rename_keys.append((f"block{b}_expand_bn/beta:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.bias"))
         rename_keys.append(
+            (f"block{b}_expand_bn/moving_mean:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.running_mean")
+        )
+        rename_keys.append(
+            (f"block{b}_expand_bn/moving_variance:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.running_var")
+        )
+        rename_keys.append(
             (f"block{b}_dwconv/depthwise_kernel:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_conv.weight")
         )
         rename_keys.append((f"block{b}_bn/gamma:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.weight"))
         rename_keys.append((f"block{b}_bn/beta:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.bias"))
+        rename_keys.append(
+            (f"block{b}_bn/moving_mean:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_mean")
+        )
+        rename_keys.append(
+            (f"block{b}_bn/moving_variance:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_var")
+        )
+
         rename_keys.append((f"block{b}_se_reduce/kernel:0", f"encoder.blocks.{hf_b}.squeeze_excite.reduce.weight"))
         rename_keys.append((f"block{b}_se_reduce/bias:0", f"encoder.blocks.{hf_b}.squeeze_excite.reduce.bias"))
         rename_keys.append((f"block{b}_se_expand/kernel:0", f"encoder.blocks.{hf_b}.squeeze_excite.expand.weight"))
@@ -127,10 +145,18 @@ def rename_keys(original_param_names):
         )
         rename_keys.append((f"block{b}_project_bn/gamma:0", f"encoder.blocks.{hf_b}.projection.project_bn.weight"))
         rename_keys.append((f"block{b}_project_bn/beta:0", f"encoder.blocks.{hf_b}.projection.project_bn.bias"))
+        rename_keys.append(
+            (f"block{b}_project_bn/moving_mean:0", f"encoder.blocks.{hf_b}.projection.project_bn.running_mean")
+        )
+        rename_keys.append(
+            (f"block{b}_project_bn/moving_variance:0", f"encoder.blocks.{hf_b}.projection.project_bn.running_var")
+        )
 
     rename_keys.append(("top_conv/kernel:0", "encoder.top_conv.weight"))
     rename_keys.append(("top_bn/gamma:0", "encoder.top_bn.weight"))
     rename_keys.append(("top_bn/beta:0", "encoder.top_bn.bias"))
+    rename_keys.append(("top_bn/moving_mean:0", "encoder.top_bn.running_mean"))
+    rename_keys.append(("top_bn/moving_variance:0", "encoder.top_bn.running_var"))
 
     key_mapping = {}
     for item in rename_keys:
@@ -144,8 +170,11 @@ def rename_keys(original_param_names):
 
 def replace_params(hf_params, tf_params, key_mapping):
     for key, value in tf_params.items():
+        if "normalization" in key:
+            continue
+
         hf_key = key_mapping[key]
-        if "embedding/kernel" in key:
+        if "_conv" in key and "kernel" in key:
             new_hf_value = torch.from_numpy(value).permute(3, 2, 0, 1)
         elif "depthwise_kernel" in key:
             new_hf_value = torch.from_numpy(value).permute(2, 3, 0, 1)
@@ -160,7 +189,7 @@ def replace_params(hf_params, tf_params, key_mapping):
 
 
 @torch.no_grad()
-def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path):
+def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_model, push_to_hub):
     """
     Copy/paste/tweak model's weights to our EfficientNet structure.
     """
@@ -176,8 +205,11 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path):
     )
 
     tf_params = original_model.trainable_variables
-    tf_param_names = [v.name for v in tf_params]
+    tf_non_train_params = original_model.non_trainable_variables
     tf_params = {param.name: param.numpy() for param in tf_params}
+    for param in tf_non_train_params:
+        tf_params[param.name] = param.numpy()
+    tf_param_names = [k for k in tf_params.keys()]
 
     # Load HuggingFace model
     config = get_efficientnet_config(model_name)
@@ -196,30 +228,37 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path):
     hf_model.eval()
     with torch.no_grad():
         outputs = hf_model(**inputs)
-    hf_logits = outputs.logits[0].detach().numpy()
+
+    hf_logits = outputs.logits.detach().numpy()
+    print(hf_logits.shape)
+    print(hf_logits[0, :10])
 
     # Original model inference
     original_model.trainable = False
     image_size = CONFIG_MAP[model_name]["image_size"]
-    img = prepare_img().resize((image_size, image_size))
+    img = prepare_img().resize((image_size, image_size), resample=PIL.Image.NEAREST)
     x = image.img_to_array(img)
     x = np.expand_dims(x, axis=0)
     original_logits = original_model.predict(x)
+    print(original_logits.shape)
+    print(original_logits[0, :10])
 
     # Check whether original and HF model outputs match  -> np.allclose
     assert np.allclose(original_logits, hf_logits, atol=1e-3), "The predicted logits are not the same."
 
-    # Create folder to save model
-    if not os.path.isdir(pytorch_dump_folder_path):
-        os.mkdir(pytorch_dump_folder_path)
+    if save_model:
+        # Create folder to save model
+        if not os.path.isdir(pytorch_dump_folder_path):
+            os.mkdir(pytorch_dump_folder_path)
+        # Save converted model and feature extractor
+        hf_model.save_pretrained(pytorch_dump_folder_path)
+        preprocessor.save_pretrained(pytorch_dump_folder_path)
 
-    # Save converted model and feature extractor
-    hf_model.save_pretrained(pytorch_dump_folder_path)
-    preprocessor.save_pretrained(pytorch_dump_folder_path)
-
-    # Push model and feature extractor to hub
-    preprocessor.push_to_hub(model_name)
-    hf_model.push_to_hub(model_name)
+    if push_to_hub:
+        # Push model and feature extractor to hub
+        model_name = f"efficientnet-{model_name}"
+        preprocessor.push_to_hub(model_name)
+        hf_model.push_to_hub(model_name)
 
 
 if __name__ == "__main__":
@@ -233,11 +272,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default=None,
+        default="hf_model",
         type=str,
-        required=True,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument("--save_model", action="store_true", help="Save model to local")
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and feature extractor to the hub")
 
     args = parser.parse_args()
-    convert_efficientnet_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    convert_efficientnet_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub)

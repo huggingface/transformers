@@ -53,7 +53,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
             `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 346, "width": 346}`):
             Size of the image after `resize`. Can be overridden by `size` in `preprocess`.
-        resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
+        resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.NEAREST`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
@@ -86,7 +86,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        resample: PILImageResampling = PIL.Image.BICUBIC,
+        resample: PILImageResampling = PIL.Image.NEAREST,
         do_center_crop: bool = True,
         crop_size: Dict[str, int] = None,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -119,7 +119,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        resample: PILImageResampling = PIL.Image.BICUBIC,
+        resample: PILImageResampling = PIL.Image.NEAREST,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
@@ -131,7 +131,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Size of the output image.
-            resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
+            resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.NEAREST`):
                 Resampling filter to use when resizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
