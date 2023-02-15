@@ -145,6 +145,9 @@ def get_class_in_module(class_name, module_path):
     """
     module_dir = Path(HF_MODULES_CACHE) / os.path.dirname(module_path)
     module_dir_backup_temp = str(module_dir) + "_backup_temp"
+    # make sure it doesn't exist yet
+    if os.path.isdir(module_dir_backup_temp):
+        shutil.rmtree(module_dir_backup_temp)
     # copy to a temporary directory
     shutil.copytree(module_dir, module_dir_backup_temp)
 
@@ -152,7 +155,8 @@ def get_class_in_module(class_name, module_path):
     # modules, while configuration module has been imported previously.
     # TODO: This is only a simple heuristic. In general, we might need to consider any dynamic module that has been
     #       imported. However, we don't have this information so far.
-    os.system(f"rm -rf {module_dir}/configuration.py")
+    if os.path.isfile(f"{module_dir}/configuration.py"):
+        os.remove(f"{module_dir}/configuration.py")
 
     # copy back the target module file - and ONLY this single file
     # Without this hack, we may get error: `ModuleNotFoundError: No module named 'transformers_modules.local.modeling'`
@@ -163,12 +167,12 @@ def get_class_in_module(class_name, module_path):
     module_path = module_path.replace(os.path.sep, ".")
     module = importlib.import_module(module_path)
 
-    # copy the whole directory back
-    os.system(f"rm -rf {module_dir}")
+    # copy the whole directory backg
+    shutil.rmtree(f"{module_dir}")
     shutil.copytree(module_dir_backup_temp, module_dir)
 
     # remove the backup directory
-    os.system(f"rm -rf {module_dir_backup_temp}")
+    shutil.rmtree(module_dir_backup_temp)
 
     return getattr(module, class_name)
 
