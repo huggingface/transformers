@@ -17,8 +17,8 @@
 import warnings
 
 from transformers import BertTokenizer, GPT2Tokenizer
-from transformers.utils.generic import ExplicitEnum
 from transformers.utils import is_torch_available
+from transformers.utils.generic import ExplicitEnum
 
 from ...processing_utils import ProcessorMixin
 
@@ -56,7 +56,7 @@ class MGPSTRProcessor(ProcessorMixin):
             The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
-    feature_extractor_class = "ViTImageProcessor"
+    image_processor_class = "ViTImageProcessor"
     tokenizer_class = "MGPSTRTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, *kwargs):
@@ -83,8 +83,8 @@ class MGPSTRProcessor(ProcessorMixin):
     def __call__(self, *args, **kwargs):
         """
         When used in normal mode, this method forwards all its arguments to ViTImageProcessor's
-        [`~ViTImageProcessor.__call__`] and returns its output. 
-        Please refer to the doctsring of the above method for more information.
+        [`~ViTImageProcessor.__call__`] and returns its output. Please refer to the doctsring of the above method for
+        more information.
         """
         images = kwargs.pop("images", None)
         text = kwargs.pop("text", None)
@@ -166,15 +166,15 @@ class MGPSTRProcessor(ProcessorMixin):
         """
         if format == DecodeType.CHARACTER:
             decoder = self.char_tokenizer.batch_decode
-            eos_token = DecodeType.CHARACTER_EOS_TOKEN
+            eos_token = int(DecodeType.CHARACTER_EOS_TOKEN)
             eos_str = DecodeType.CHARACTER_EOS_STR
         elif format == DecodeType.BPE:
             decoder = self.bpe_decode
-            eos_token = DecodeType.BPE_EOS_TOKEN
+            eos_token = int(DecodeType.BPE_EOS_TOKEN)
             eos_str = DecodeType.BPE_EOS_STR
         elif format == DecodeType.WORDPIECE:
             decoder = self.wp_decode
-            eos_token = DecodeType.WORDPIECE_EOS_TOKEN
+            eos_token = int(DecodeType.WORDPIECE_EOS_TOKEN)
             eos_str = DecodeType.WORDPIECE_EOS_STR
         else:
             raise ValueError(f"Format {format} is not supported.")

@@ -50,7 +50,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_mgp_str import MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST, MGPSTRModel, MGPSTRPreTrainedModel, MGPSTRForSceneTextRecognition
+        from .modeling_mgp_str import (
+            MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MGPSTRForSceneTextRecognition,
+            MGPSTRModel,
+            MGPSTRPreTrainedModel,
+        )
 else:
     import sys
 

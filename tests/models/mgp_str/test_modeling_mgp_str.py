@@ -86,9 +86,9 @@ class MGPSTRModelTester:
         model = MGPSTRForSceneTextRecognition(config)
         model.to(torch_device)
         model.eval()
-        generated_ids, attens = model(pixel_values)
+        generated_ids = model(pixel_values)
         self.parent.assertEqual(
-            generated_ids[0].shape, (self.batch_size, self.max_token_length, self.num_character_labels)
+            generated_ids[0][0].shape, (self.batch_size, self.max_token_length, self.num_character_labels)
         )
 
     def prepare_config_and_inputs_for_common(self):

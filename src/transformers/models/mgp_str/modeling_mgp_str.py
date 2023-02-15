@@ -15,6 +15,7 @@
 """ PyTorch MGP-STR model."""
 
 import collections.abc
+from dataclasses import dataclass
 from functools import partial
 from typing import Optional, Tuple, Union
 
@@ -23,10 +24,8 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from dataclasses import dataclass
-from ...modeling_utils import PreTrainedModel
 from ...modeling_outputs import BaseModelOutput
-from ...utils import add_start_docstrings, logging
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -89,9 +88,10 @@ class MGPSTRModelOutput(ModelOutput):
 
     Args:
         logits (`tuple(torch.FloatTensor)` of shape `(batch_size, config.num_character_labels)`):
-            Tuple of `torch.FloatTensor` (one for the output of character of shape `(batch_size, config.max_token_length, config.num_character_labels)`, 
-            + one for the output of bpe of shape `(batch_size, config.max_token_length, config.num_bpe_labels)`,  + one for the output of wordpiece of 
-            shape `(batch_size, config.max_token_length, config.num_wordpiece_labels)`) .
+            Tuple of `torch.FloatTensor` (one for the output of character of shape `(batch_size,
+            config.max_token_length, config.num_character_labels)`, + one for the output of bpe of shape `(batch_size,
+            config.max_token_length, config.num_bpe_labels)`, + one for the output of wordpiece of shape `(batch_size,
+            config.max_token_length, config.num_wordpiece_labels)`) .
 
             Classification scores (before SoftMax) of character, bpe and wordpiece.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -100,14 +100,14 @@ class MGPSTRModelOutput(ModelOutput):
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, config.max_token_length, sequence_length,
-            sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, config.max_token_length,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         a3_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_a3_attentions=True` is passed or when `config.output_a3_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for the attention of character, + one for the attention of bpe`,  + one for the attention of wordpiece) of shape 
-            `(batch_size, config.max_token_length, sequence_length)`.
+            Tuple of `torch.FloatTensor` (one for the attention of character, + one for the attention of bpe`, + one
+            for the attention of wordpiece) of shape `(batch_size, config.max_token_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -137,7 +137,9 @@ class MGPSTRPatchEmbeddings(nn.Module):
     def forward(self, pixel_values):
         batch_size, channel, height, width = pixel_values.shape
         if height != self.image_size[0] or width != self.image_size[1]:
-            raise ValueError(f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]}).")
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
 
         embeddings = self.proj(pixel_values)
         embeddings = embeddings.flatten(2).transpose(1, 2)  # BCHW -> BNC
@@ -180,7 +182,11 @@ class MGPSTRAttention(nn.Module):
 
     def forward(self, hidden_states):
         batch_size, num, channel = hidden_states.shape
-        qkv = self.qkv(hidden_states).reshape(batch_size, num, 3, self.num_heads, channel // self.num_heads).permute(2, 0, 3, 1, 4)
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(batch_size, num, 3, self.num_heads, channel // self.num_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
         query, key, value = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
 
         attention_probs = (query @ key.transpose(-2, -1)) * self.scale
@@ -194,16 +200,7 @@ class MGPSTRAttention(nn.Module):
 
 
 class MGPSTRLayer(nn.Module):
-    def __init__(
-        self,
-        dim,
-        num_heads,
-        mlp_ratio=4.0,
-        qkv_bias=False,
-        drop=0.0,
-        attn_drop=0.0,
-        drop_path=0.0
-    ):
+    def __init__(self, dim, num_heads, mlp_ratio=4.0, qkv_bias=False, drop=0.0, attn_drop=0.0, drop_path=0.0):
         super().__init__()
         norm_layer = partial(nn.LayerNorm, eps=1e-6)
         self.norm1 = norm_layer(dim)
@@ -225,7 +222,7 @@ class MGPSTRLayer(nn.Module):
         # second residual connection is done here
         layer_output = hidden_states + self.drop_path(self.mlp(self.norm2(hidden_states)))
 
-        outputs = (layer_output,) + outputs
+        outputs = (layer_output, outputs)
         return outputs
 
 
@@ -239,7 +236,7 @@ class MGPSTREncoder(nn.Module):
         qkv_bias=True,
         drop_rate=0.0,
         attn_drop_rate=0.0,
-        drop_path_rate=0.0
+        drop_path_rate=0.0,
     ):
         super().__init__()
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
@@ -253,14 +250,14 @@ class MGPSTREncoder(nn.Module):
                     qkv_bias=qkv_bias,
                     drop=drop_rate,
                     attn_drop=attn_drop_rate,
-                    drop_path=dpr[i]
+                    drop_path=dpr[i],
                 )
                 for i in range(depth)
             ]
         )
 
     def forward(
-        self, 
+        self,
         hidden_states,
         output_attentions=False,
         output_hidden_states=False,
@@ -303,21 +300,21 @@ class MGPSTRA3Module(nn.Module):
         self.norm = nn.LayerNorm(input_embed_dim)
 
     def forward(
-        self, 
+        self,
         hidden_states,
-        ):
-        selected = self.token_norm(hidden_states)
-        selected = selected.transpose(1, 2).unsqueeze(-1)
-        selected = self.tokenLearner(selected)
+    ):
+        hidden_states = self.token_norm(hidden_states)
+        hidden_states = hidden_states.transpose(1, 2).unsqueeze(-1)
+        selected = self.tokenLearner(hidden_states)
         selected = selected.flatten(2)
         attentions = F.softmax(selected, dim=-1)
-        
+
         feat = self.feat(hidden_states)
         feat = feat.flatten(2).transpose(1, 2)
-        feat = torch.einsum("...si,...id->...sd", selected, feat)
+        feat = torch.einsum("...si,...id->...sd", attentions, feat)
         a3_out = self.norm(feat)
 
-        return tuple(a3_out, attentions)
+        return tuple((a3_out, attentions))
 
 
 class MGPSTRPreTrainedModel(PreTrainedModel):
@@ -383,7 +380,9 @@ class MGPSTRModel(MGPSTRPreTrainedModel):
         self.num_tokens = 2 if config.distilled else 1
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.patch_embed = MGPSTRPatchEmbeddings(config.image_size, config.patch_size, config.num_channels, config.hidden_size)
+        self.patch_embed = MGPSTRPatchEmbeddings(
+            config.image_size, config.patch_size, config.num_channels, config.hidden_size
+        )
         num_patches = self.patch_embed.num_patches
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + self.num_tokens, config.hidden_size))
         self.pos_drop = nn.Dropout(p=config.drop_rate)
@@ -396,12 +395,12 @@ class MGPSTRModel(MGPSTRPreTrainedModel):
             config.qkv_bias,
             config.drop_rate,
             config.attn_drop_rate,
-            config.drop_path_rate
+            config.drop_path_rate,
         )
 
     @add_start_docstrings_to_model_forward(MGP_STR_INPUTS_DOCSTRING)
     def forward(
-        self, 
+        self,
         pixel_values,
         output_attentions=False,
         output_hidden_states=False,
@@ -428,16 +427,16 @@ class MGPSTRModel(MGPSTRPreTrainedModel):
         if not return_dict:
             return encoder_outputs
         return BaseModelOutput(
-            last_hidden_state=encoder_outputs.hidden_states,
-            hidden_states=encoder_outputs.all_hidden_states,
-            attentions=encoder_outputs.all_self_attentions,
+            last_hidden_state=encoder_outputs.last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
 @add_start_docstrings(
     """
-    MGP-STR Model transformer with three classification heads on top (three A^3 modules and three linear 
-    layer on top of the transformer encoder output) e.g. for scene text recognition (STR) .
+    MGP-STR Model transformer with three classification heads on top (three A^3 modules and three linear layer on top
+    of the transformer encoder output) e.g. for scene text recognition (STR) .
     """,
     MGP_STR_START_DOCSTRING,
 )
@@ -446,7 +445,7 @@ class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.mgp_str = MGPSTRModel(config, add_pooling_layer=False)
+        self.mgp_str = MGPSTRModel(config)
 
         self.char_a3_module = MGPSTRA3Module(config.hidden_size, config.max_token_length)
         self.bpe_a3_module = MGPSTRA3Module(config.hidden_size, config.max_token_length)
@@ -464,7 +463,7 @@ class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
         output_attentions=False,
         output_a3_attentions=False,
         output_hidden_states=False,
-        return_dict=True
+        return_dict=True,
     ):
         r"""
         Returns:
@@ -499,7 +498,6 @@ class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
         mgp_outputs = self.mgp_str(
             pixel_values,
             output_attentions=output_attentions,
-            output_a3_attentions=output_a3_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -520,10 +518,9 @@ class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
         if not return_dict:
             outputs = (all_logits, all_a3_attentions) + mgp_outputs[1:]
             return tuple(output for output in outputs if output is not None)
-
         return MGPSTRModelOutput(
             logits=all_logits,
             hidden_states=mgp_outputs.hidden_states,
             attentions=mgp_outputs.attentions,
-            a3_attentions=all_a3_attentions
+            a3_attentions=all_a3_attentions,
         )

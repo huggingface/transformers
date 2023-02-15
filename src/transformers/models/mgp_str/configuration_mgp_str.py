@@ -72,6 +72,8 @@ class MGPSTRConfig(PretrainedConfig):
             The stochastic depth rate.
         output_a3_attentions (`bool`, *optional*, defaults to `False`):
             Whether or not the model should returns A^3 module attentions.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
@@ -109,6 +111,7 @@ class MGPSTRConfig(PretrainedConfig):
         attn_drop_rate=0.0,
         drop_path_rate=0.0,
         output_a3_attentions=False,
+        initializer_range=0.02,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -132,3 +135,4 @@ class MGPSTRConfig(PretrainedConfig):
         self.attn_drop_rate = attn_drop_rate
         self.drop_path_rate = drop_path_rate
         self.output_a3_attentions = output_a3_attentions
+        self.initializer_range = initializer_range

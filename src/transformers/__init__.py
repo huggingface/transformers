@@ -1905,9 +1905,9 @@ else:
     _import_structure["models.mgp_str"].extend(
         [
             "MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MGPSTRForSceneTextRecognition",
             "MGPSTRModel",
             "MGPSTRPreTrainedModel",
-            "MGPSTRForSceneTextRecognition",
         ]
     )
     _import_structure["models.mmbt"].extend(["MMBTForClassification", "MMBTModel", "ModalEmbeddings"])
@@ -5251,7 +5251,12 @@ if TYPE_CHECKING:
             MegatronBertModel,
             MegatronBertPreTrainedModel,
         )
-        from .models.mgp_str import MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST, MGPSTRModel, MGPSTRPreTrainedModel, MGPSTRForSceneTextRecognition
+        from .models.mgp_str import (
+            MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MGPSTRForSceneTextRecognition,
+            MGPSTRModel,
+            MGPSTRPreTrainedModel,
+        )
         from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
         from .models.mobilebert import (
             MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
