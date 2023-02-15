@@ -397,18 +397,14 @@ class FlaxWhisperTimeStampLogitsProcessor(FlaxLogitsProcessor):
         scores = scores.at[:, self.no_timestamps_token_id].set(-float("inf"))
 
         def handle_pairs(input_ids_k, scores_k):
-            last_was_timestamp = jnp.where(
-                (cur_len - self.begin_index) >= 1, True, False
-            )
+            last_was_timestamp = jnp.where((cur_len - self.begin_index) >= 1, True, False)
             last_was_timestamp = jnp.where(
                 input_ids_k[cur_len - 1] >= self.timestamp_begin,
                 True and last_was_timestamp,
                 False,
             )
 
-            penultimate_was_timestamp = jnp.where(
-                (cur_len - self.begin_index) < 2, True, False
-            )
+            penultimate_was_timestamp = jnp.where((cur_len - self.begin_index) < 2, True, False)
             penultimate_was_timestamp = jnp.where(
                 input_ids_k[cur_len - 2] >= self.timestamp_begin,
                 True,
@@ -426,9 +422,7 @@ class FlaxWhisperTimeStampLogitsProcessor(FlaxLogitsProcessor):
 
         scores = jax.vmap(handle_pairs)(input_ids, scores)
 
-        apply_max_initial_timestamp = jnp.where(
-            cur_len == self.begin_index, True, False
-        )
+        apply_max_initial_timestamp = jnp.where(cur_len == self.begin_index, True, False)
         apply_max_initial_timestamp = jnp.where(
             self.max_initial_timestamp_index is not None,
             True and apply_max_initial_timestamp,
