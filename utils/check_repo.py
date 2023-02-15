@@ -17,6 +17,7 @@ import importlib
 import inspect
 import os
 import re
+import sys
 import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
@@ -311,7 +312,9 @@ spec = importlib.util.spec_from_file_location(
     os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
     submodule_search_locations=[PATH_TO_TRANSFORMERS],
 )
-transformers = spec.loader.load_module()
+transformers = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(transformers)
+transformers = sys.modules["transformers"]
 
 
 def check_model_list():
