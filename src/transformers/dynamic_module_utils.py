@@ -159,7 +159,26 @@ def get_class_in_module(class_name, module_path):
 
     # import the module
     module_path = module_path.replace(os.path.sep, ".")
-    module = importlib.import_module(module_path)
+
+    # up to the parent of the target module
+    parent_module_path = ".".join(module_path.split(".")[:-1])
+
+    try:
+        module = importlib.import_module(module_path)
+    except ModuleNotFoundError as e:
+        # 'transformers_modules.hf-internal-testing.test_dynamic_model_with_util.b731e5fae6d80a4a775461251c4388886fb7a249.util"
+        missing_module_path = str(e).replace("No module named ", "")[1:-1]
+
+        # anything after the parent of the target module
+        missing_module_path_short = missing_module_path.replace(parent_module_path + ".", "")
+        missing_module_file_path_short = missing_module_path_short.replace(".", os.path.sep)
+
+        # full path to the missing module
+        missing_module_file_path = module_dir / missing_module_file_path_short
+
+        missing_module_file_path_2 = Path(module_dir_backup_temp) / missing_module_file_path_short
+        shutil.copytree(os.path.join(missing_module_file_path_2, missing_module_file_path), module_dir)
+        module = importlib.import_module(module_path)
 
     # copy the whole directory back
     os.system(f"rm -rf {module_dir}")
