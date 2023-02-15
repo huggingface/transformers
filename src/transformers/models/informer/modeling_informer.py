@@ -1818,16 +1818,6 @@ class InformerModel(InformerPreTrainedModel):
 
         return transformer_inputs, scale, static_feat
 
-    def enc_dec_outputs(self, transformer_inputs):
-        enc_input = transformer_inputs[:, : self.config.context_length, ...]
-        dec_input = transformer_inputs[:, self.config.context_length :, ...]
-
-        encoder_outputs = self.encoder(inputs_embeds=enc_input)
-        decoder_outputs = self.decoder(
-            inputs_embeds=dec_input, encoder_hidden_states=encoder_outputs.last_hidden_state
-        )
-        return encoder_outputs, decoder_outputs
-
     def get_encoder(self):
         return self.encoder
 
