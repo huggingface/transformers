@@ -58,6 +58,8 @@ class EfficientNetConfig(PretrainedConfig):
             List of input channel sizes to be used in each block for convolutional layers.
         out_channels (`List[int]`, optional, defaults to [16, 24, 40, 80, 112, 192, 320]):
             List of output channel sizes to be used in each block for convolutional layers.
+        depthwise_padding (`List[int]`, optional, defaults to []):
+            List of block indices with square padding.
         strides: (`List[int]`, optional, defaults to [1, 2, 2, 2, 1, 2, 1]):
             List of stride sizes to be used in each block for convolutional layers.
         num_block_repeats (`List[int]`, optional, defaults to [1, 2, 2, 3, 3, 4, 1]):
@@ -83,9 +85,6 @@ class EfficientNetConfig(PretrainedConfig):
             The dropout rate to be applied before final classifier layer.
         drop_connect_rate (`float`, *optional*, defaults to 0.2):
             The drop rate for skip connections.
-        out_features (`List[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). Will default to the last stage if unset.
 
     Example:
     ```python
@@ -112,6 +111,7 @@ class EfficientNetConfig(PretrainedConfig):
         kernel_sizes=[3, 3, 5, 3, 5, 5, 3],
         in_channels=[32, 16, 24, 40, 80, 112, 192],
         out_channels=[16, 24, 40, 80, 112, 192, 320],
+        depthwise_padding=[],
         strides=[1, 2, 2, 2, 1, 2, 1],
         num_block_repeats=[1, 2, 2, 3, 3, 4, 1],
         expand_ratios=[1, 6, 6, 6, 6, 6, 6],
@@ -124,7 +124,6 @@ class EfficientNetConfig(PretrainedConfig):
         batch_norm_momentum=0.99,
         dropout_rate=0.5,
         drop_connect_rate=0.2,
-        out_features=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -137,6 +136,7 @@ class EfficientNetConfig(PretrainedConfig):
         self.kernel_sizes = kernel_sizes
         self.in_channels = in_channels
         self.out_channels = out_channels
+        self.depthwise_padding = depthwise_padding
         self.strides = strides
         self.num_block_repeats = num_block_repeats
         self.expand_ratios = expand_ratios
@@ -149,16 +149,6 @@ class EfficientNetConfig(PretrainedConfig):
         self.batch_norm_momentum = batch_norm_momentum
         self.dropout_rate = dropout_rate
         self.drop_connect_rate = drop_connect_rate
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.kernel_sizes) + 1)]
-        if out_features is not None:
-            if not isinstance(out_features, list):
-                raise ValueError("out_features should be a list")
-            for feature in out_features:
-                if feature not in self.stage_names:
-                    raise ValueError(
-                        f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
-                    )
-        self.out_features = out_features
 
 
 class EfficientNetOnnxConfig(OnnxConfig):

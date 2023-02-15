@@ -52,23 +52,81 @@ model_classes = {
 }
 
 CONFIG_MAP = {
-    "b0": {"width_coef": 1.0, "depth_coef": 1.0, "image_size": 224, "dropout_rate": 0.2},
-    "b1": {"width_coef": 1.0, "depth_coef": 1.1, "image_size": 240, "dropout_rate": 0.2},
-    "b2": {"width_coef": 1.1, "depth_coef": 1.2, "image_size": 260, "dropout_rate": 0.3},
-    "b3": {"width_coef": 1.2, "depth_coef": 1.4, "image_size": 300, "dropout_rate": 0.3},
-    "b4": {"width_coef": 1.4, "depth_coef": 1.8, "image_size": 380, "dropout_rate": 0.4},
-    "b5": {"width_coef": 1.6, "depth_coef": 2.2, "image_size": 456, "dropout_rate": 0.4},
-    "b6": {"width_coef": 1.8, "depth_coef": 2.6, "image_size": 528, "dropout_rate": 0.5},
-    "b7": {"width_coef": 2.0, "depth_coef": 3.1, "image_size": 600, "dropout_rate": 0.5},
+    "b0": {
+        "hidden_dim": 1280,
+        "width_coef": 1.0,
+        "depth_coef": 1.0,
+        "image_size": 224,
+        "dropout_rate": 0.2,
+        "dw_padding": [],
+    },
+    "b1": {
+        "hidden_dim": 1280,
+        "width_coef": 1.0,
+        "depth_coef": 1.1,
+        "image_size": 240,
+        "dropout_rate": 0.2,
+        "dw_padding": [16],
+    },
+    "b2": {
+        "hidden_dim": 1408,
+        "width_coef": 1.1,
+        "depth_coef": 1.2,
+        "image_size": 260,
+        "dropout_rate": 0.3,
+        "dw_padding": [5, 8, 16],
+    },
+    "b3": {
+        "hidden_dim": 1536,
+        "width_coef": 1.2,
+        "depth_coef": 1.4,
+        "image_size": 300,
+        "dropout_rate": 0.3,
+        "dw_padding": [5, 18],
+    },
+    "b4": {
+        "hidden_dim": 1792,
+        "width_coef": 1.4,
+        "depth_coef": 1.8,
+        "image_size": 380,
+        "dropout_rate": 0.4,
+        "dw_padding": [6],
+    },
+    "b5": {
+        "hidden_dim": 2048,
+        "width_coef": 1.6,
+        "depth_coef": 2.2,
+        "image_size": 456,
+        "dropout_rate": 0.4,
+        "dw_padding": [13, 27],
+    },
+    "b6": {
+        "hidden_dim": 2304,
+        "width_coef": 1.8,
+        "depth_coef": 2.6,
+        "image_size": 528,
+        "dropout_rate": 0.5,
+        "dw_padding": [31],
+    },
+    "b7": {
+        "hidden_dim": 2560,
+        "width_coef": 2.0,
+        "depth_coef": 3.1,
+        "image_size": 600,
+        "dropout_rate": 0.5,
+        "dw_padding": [18],
+    },
 }
 
 
 def get_efficientnet_config(model_name):
     config = EfficientNetConfig()
+    config.hidden_dim = CONFIG_MAP[model_name]["hidden_dim"]
     config.width_coefficient = CONFIG_MAP[model_name]["width_coef"]
     config.depth_coefficient = CONFIG_MAP[model_name]["depth_coef"]
     config.image_size = CONFIG_MAP[model_name]["image_size"]
     config.dropout_rate = CONFIG_MAP[model_name]["dropout_rate"]
+    config.depthwise_padding = CONFIG_MAP[model_name]["dw_padding"]
 
     repo_id = "huggingface/label-files"
     filename = "imagenet-1k-id2label.json"
@@ -217,6 +275,7 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_m
     hf_params = hf_model.state_dict()
 
     # Create src-to-dst parameter name mapping dictionary
+    print("Converting parameters...")
     key_mapping = rename_keys(tf_param_names)
     replace_params(hf_params, tf_params, key_mapping)
 
@@ -230,8 +289,6 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_m
         outputs = hf_model(**inputs)
 
     hf_logits = outputs.logits.detach().numpy()
-    print(hf_logits.shape)
-    print(hf_logits[0, :10])
 
     # Original model inference
     original_model.trainable = False
@@ -240,11 +297,10 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_m
     x = image.img_to_array(img)
     x = np.expand_dims(x, axis=0)
     original_logits = original_model.predict(x)
-    print(original_logits.shape)
-    print(original_logits[0, :10])
 
     # Check whether original and HF model outputs match  -> np.allclose
     assert np.allclose(original_logits, hf_logits, atol=1e-3), "The predicted logits are not the same."
+    print("Model outputs match!")
 
     if save_model:
         # Create folder to save model
@@ -256,6 +312,7 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_m
 
     if push_to_hub:
         # Push model and feature extractor to hub
+        print("Pushing converted model to the hub...")
         model_name = f"efficientnet-{model_name}"
         preprocessor.push_to_hub(model_name)
         hf_model.push_to_hub(model_name)

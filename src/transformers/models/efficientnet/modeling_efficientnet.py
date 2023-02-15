@@ -84,7 +84,7 @@ EFFICIENTNET_INPUTS_DOCSTRING = r"""
 
 
 def round_filters(config: EfficientNetConfig, num_channels: int):
-    """
+    r"""
     Round number of filters based on depth multiplier.
     """
     divisor = config.depth_divisor
@@ -98,15 +98,31 @@ def round_filters(config: EfficientNetConfig, num_channels: int):
     return int(new_dim)
 
 
-def correct_pad(kernel_size: Union[int, Tuple]):
+def correct_pad(kernel_size: Union[int, Tuple], adjust: bool = True):
+    r"""
+    Utility function to get the tuple padding value for the depthwise convolution.
+
+    Args:
+        kernel_size (Union[`int`, Tuple]):
+            Kernel size of the convolution layers.
+        adjust (`bool`, *optional*, defaults to `True`):
+            Adjusts padding value to apply to two sides only.
+    """
     if isinstance(kernel_size, int):
         kernel_size = (kernel_size, kernel_size)
 
     correct = (kernel_size[0] // 2, kernel_size[1] // 2)
-    return (correct[1] - 1, correct[1], correct[0] - 1, correct[0])
+    if adjust:
+        return (correct[1] - 1, correct[1], correct[0] - 1, correct[0])
+    else:
+        return (correct[1], correct[1], correct[0], correct[0])
 
 
 class EfficientNetEmbeddings(nn.Module):
+    r"""
+    A module that corresponds to the stem module of the original work.
+    """
+
     def __init__(self, config: EfficientNetConfig):
         super().__init__()
 
@@ -154,14 +170,8 @@ class DepthwiseConv2d(nn.Conv2d):
 
 
 class EfficientNetExpansionLayer(nn.Module):
-    """This corresponds to the expansion phase of each block in the original implementation.
-
-    Args:
-        config ([`EfficientNetConfig`]): Model configuration class.
-        in_dim (`int`): Number of input channels.
-        out_dim (`int`): Number of output channels.
-        stride (`int`): Stride size.
-        drop_rate (`float`): Dropout rate to be used.
+    r"""
+    This corresponds to the expansion phase of each block in the original implementation.
     """
 
     def __init__(
@@ -192,13 +202,8 @@ class EfficientNetExpansionLayer(nn.Module):
 
 
 class EfficientNetDepthwiseLayer(nn.Module):
-    """This corresponds to the depthwise convolution phase of each block in the original implementation.
-
-    Args:
-        config ([`EfficientNetConfig`]): Model configuration class.
-        in_dim (`int`): Number of input channels.
-        stride (`int`): Stride size.
-        kernel_size (`int`): Kernel size.
+    r"""
+    This corresponds to the depthwise convolution phase of each block in the original implementation.
     """
 
     def __init__(
@@ -207,11 +212,13 @@ class EfficientNetDepthwiseLayer(nn.Module):
         in_dim: int,
         stride: int,
         kernel_size: int,
+        adjust_padding: bool,
     ):
         super().__init__()
         self.stride = stride
         conv_pad = "valid" if self.stride == 2 else "same"
-        padding = correct_pad(kernel_size)
+        padding = correct_pad(kernel_size, adjust=adjust_padding)
+
         self.depthwise_conv_pad = nn.ZeroPad2d(padding=padding)
         self.depthwise_conv = DepthwiseConv2d(
             in_dim, kernel_size=kernel_size, stride=stride, padding=conv_pad, bias=False
@@ -229,15 +236,13 @@ class EfficientNetDepthwiseLayer(nn.Module):
         hidden_states = self.depthwise_conv(hidden_states)
         hidden_states = self.depthwise_norm(hidden_states)
         hidden_states = self.depthwise_act(hidden_states)
+
         return hidden_states
 
 
 class EfficientNetSqueezeExciteLayer(nn.Module):
-    """This corresponds to the Squeeze and Excitement phase of each block in the original implementation.
-
-    Args:
-        config ([`EfficientNetConfig`]): Model configuration class.
-        dim (`int`): Number of input channels.
+    r"""
+    This corresponds to the Squeeze and Excitement phase of each block in the original implementation.
     """
 
     def __init__(self, config: EfficientNetConfig, in_dim: int, expand_dim: int, expand: bool = False):
@@ -275,14 +280,8 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
 
 
 class EfficientNetFinalLayer(nn.Module):
-    """This corresponds to the final phase of each block in the original implementation.
-
-    Args:
-        config ([`EfficientNetConfig`]): Model configuration class.
-        in_dim (`int`): Number of input channels.
-        out_dim (`int`): Number of output channels.
-        stride (`int`): Stride size.
-        drop_rate (`float`): Dropout rate to be used.
+    r"""
+    This corresponds to the final phase of each block in the original implementation.
     """
 
     def __init__(
@@ -297,7 +296,6 @@ class EfficientNetFinalLayer(nn.Module):
             padding="same",
             bias=False,
         )
-        # print(stride, in_dim, out_dim)
         self.project_bn = nn.BatchNorm2d(
             num_features=out_dim, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum
         )
@@ -310,20 +308,29 @@ class EfficientNetFinalLayer(nn.Module):
         if self.apply_dropout:
             hidden_states = self.dropout(hidden_states)
             hidden_states = hidden_states + embeddings
+
         return hidden_states
 
 
 class EfficientNetBlock(nn.Module):
-    """This corresponds to the expansion and depthwise convolution phase of each block in the original implementation.
+    r"""
+    This corresponds to the expansion and depthwise convolution phase of each block in the original implementation.
 
     Args:
-        config ([`EfficientNetConfig`]): Model configuration class.
-        in_dim (`int`): Number of input channels.
-        out_dim (`int`): Number of output channels.
-        stride (`int`): Stride size.
-        expand_ratio (`int`): Expand ratio.
-        kernel_size (`int`): Kernel size.
-        drop_rate (`float`): Dropout rate to be used.
+        config ([`EfficientNetConfig`]):
+            Model configuration class.
+        in_dim (`int`):
+            Number of input channels.
+        out_dim (`int`):
+            Number of output channels.
+        stride (`int`):
+            Stride size.
+        expand_ratio (`int`):
+            Expand ratio.
+        kernel_size (`int`):
+            Kernel size.
+        drop_rate (`float`):
+            Dropout rate to be used.
     """
 
     def __init__(
@@ -336,6 +343,7 @@ class EfficientNetBlock(nn.Module):
         kernel_size: int,
         drop_rate: float,
         id_skip: bool,
+        adjust_padding: bool,
     ):
         super().__init__()
         self.expand_ratio = expand_ratio
@@ -352,6 +360,7 @@ class EfficientNetBlock(nn.Module):
             in_dim=expand_in_dim if self.expand else in_dim,
             stride=stride,
             kernel_size=kernel_size,
+            adjust_padding=adjust_padding,
         )
         self.squeeze_excite = EfficientNetSqueezeExciteLayer(
             config=config, in_dim=in_dim, expand_dim=expand_in_dim, expand=self.expand
@@ -375,16 +384,16 @@ class EfficientNetBlock(nn.Module):
         # Squeeze and excite phase
         hidden_states = self.squeeze_excite(hidden_states)
         hidden_states = self.projection(embeddings, hidden_states)
-
         return hidden_states
 
 
 class EfficientNetEncoder(nn.Module):
-    """
+    r"""
     Forward propogates the embeddings through each EfficientNet block.
 
     Args:
-        config ([`EfficientNetConfig`]): Model configuration class.
+        config ([`EfficientNetConfig`]):
+            Model configuration class.
     """
 
     def __init__(self, config: EfficientNetConfig):
@@ -412,6 +421,7 @@ class EfficientNetEncoder(nn.Module):
                 id_skip = True if j == 0 else False
                 stride = 1 if j > 0 else stride
                 in_dim = out_dim if j > 0 else in_dim
+                adjust_padding = False if curr_block_num in config.depthwise_padding else True
                 drop_rate = config.drop_connect_rate * curr_block_num / num_blocks
 
                 block = EfficientNetBlock(
@@ -423,6 +433,7 @@ class EfficientNetEncoder(nn.Module):
                     expand_ratio=expand_ratio,
                     drop_rate=drop_rate,
                     id_skip=id_skip,
+                    adjust_padding=adjust_padding,
                 )
                 blocks.append(block)
                 curr_block_num += 1
@@ -430,7 +441,7 @@ class EfficientNetEncoder(nn.Module):
         self.blocks = nn.ModuleList(blocks)
         self.top_conv = nn.Conv2d(
             in_channels=out_dim,
-            out_channels=round_filters(config, config.hidden_dim),
+            out_channels=round_filters(config, 1280),
             kernel_size=1,
             padding="same",
             bias=False,
