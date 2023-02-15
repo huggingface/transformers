@@ -18,6 +18,8 @@ import inspect
 import tempfile
 import unittest
 
+import numpy as np
+
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
@@ -56,6 +58,7 @@ class InformerModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         lags_sequence=[1, 2, 3, 4, 5],
+        factor=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -74,8 +77,10 @@ class InformerModelTester:
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
-        self.encoder_seq_length = context_length
-        self.decoder_seq_length = prediction_length
+        self.encoder_seq_length = min(factor * np.ceil(np.log1p(context_length)).astype("int").item(), context_length)
+        self.decoder_seq_length = min(
+            factor * np.ceil(np.log1p(prediction_length)).astype("int").item(), prediction_length
+        )
 
     def get_config(self):
         return InformerConfig(
@@ -264,6 +269,8 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        context_length = getattr(self.model_tester, "context_length", seq_len)
+        prediction_length = getattr(self.model_tester, "prediction_length", seq_len)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -290,7 +297,7 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+                [self.model_tester.num_attention_heads, encoder_seq_length, context_length],
             )
             out_len = len(outputs)
 
@@ -316,7 +323,7 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_seq_length],
+                [self.model_tester.num_attention_heads, decoder_seq_length, prediction_length],
             )
 
             # cross attentions
@@ -327,8 +334,8 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
                 list(cross_attentions[0].shape[-3:]),
                 [
                     self.model_tester.num_attention_heads,
-                    decoder_seq_length,
-                    encoder_seq_length,
+                    prediction_length,
+                    context_length,
                 ],
             )
 
@@ -348,7 +355,7 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
         self.assertListEqual(
             list(self_attentions[0].shape[-3:]),
-            [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+            [self.model_tester.num_attention_heads, encoder_seq_length, context_length],
         )
 
     @is_flaky()
