@@ -6068,6 +6068,37 @@ class TrOCRPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+TVLT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TvltForAudioVisualClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TvltForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TvltModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TvltPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
