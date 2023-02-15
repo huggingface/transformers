@@ -1446,8 +1446,7 @@ class InformerEncoder(InformerPreTrainedModel):
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Informer
 class InformerDecoder(InformerPreTrainedModel):
     """
-    Informer decoder consisting of *config.decoder_layers* layers. Each layer is a
-    [`InformerDecoderLayer`]
+    Informer decoder consisting of *config.decoder_layers* layers. Each layer is a [`InformerDecoderLayer`]
 
     Args:
         config: InformerConfig
