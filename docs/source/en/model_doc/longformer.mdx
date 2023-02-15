@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # Longformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=longformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-longformer-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/longformer-base-4096-finetuned-squadv1">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The Longformer model was presented in [Longformer: The Long-Document Transformer](https://arxiv.org/pdf/2004.05150.pdf) by Iz Beltagy, Matthew E. Peters, Arman Cohan.
@@ -33,6 +42,7 @@ Tips:
 - Since the Longformer is based on RoBERTa, it doesn't have `token_type_ids`. You don't need to indicate which
   token belongs to which segment. Just separate your segments with the separation token `tokenizer.sep_token` (or
   `</s>`).
+- A transformer model replacing the attention matrices by sparse matrices to go faster. Often, the local context (e.g., what are the two tokens left and right?) is enough to take action for a given token. Some preselected input tokens are still given global attention, but the attention matrix has way less parameters, resulting in a speed-up. See the local attention section for more information.
 
 This model was contributed by [beltagy](https://huggingface.co/beltagy). The Authors' code can be found [here](https://github.com/allenai/longformer).
 

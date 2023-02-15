@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # Reformer
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=reformer">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-reformer-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/reformer-crime-and-punishment">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 **DISCLAIMER:** This model is still a work in progress, if you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title).
 
 ## Overview
@@ -31,9 +40,13 @@ while being much more memory-efficient and much faster on long sequences.*
 This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The Authors' code can be
 found [here](https://github.com/google/trax/tree/master/trax/models/reformer).
 
-**Note**:
+Tips:
 
-- Reformer does **not** work with *torch.nn.DataParallel* due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035)
+- Reformer does **not** work with *torch.nn.DataParallel* due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035).
+- Use Axial position encoding (see below for more details). It’s a mechanism to avoid having a huge positional encoding matrix (when the sequence length is very big) by factorizing it into smaller matrices.
+- Replace traditional attention by LSH (local-sensitive hashing) attention (see below for more details). It’s a technique to avoid computing the full product query-key in the attention layers.
+- Avoid storing the intermediate results of each layer by using reversible transformer layers to obtain them during the backward pass (subtracting the residuals from the input of the next layer gives them back) or recomputing them for results inside a given layer (less efficient than storing them but saves memory).
+- Compute the feedforward operations by chunks and not on the whole batch.
 
 ## Axial Positional Encodings
 

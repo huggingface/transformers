@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # XLM
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xlm">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/xlm-mlm-en-2048">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The XLM model was proposed in [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by
@@ -38,6 +47,11 @@ Tips:
 - XLM has many different checkpoints, which were trained using different objectives: CLM, MLM or TLM. Make sure to
   select the correct objective for your task (e.g. MLM checkpoints are not suitable for generation).
 - XLM has multilingual checkpoints which leverage a specific `lang` parameter. Check out the [multi-lingual](../multilingual) page for more information.
+- A transformer model trained on several languages. There are three different type of training for this model and the library provides checkpoints for all of them:
+
+    * Causal language modeling (CLM) which is the traditional autoregressive training (so this model could be in the previous section as well). One of the languages is selected for each training sample, and the model input is a sentence of 256 tokens, that may span over several documents in one of those languages.
+    * Masked language modeling (MLM) which is like RoBERTa. One of the languages is selected for each training sample, and the model input is a sentence of 256 tokens, that may span over several documents in one of those languages, with dynamic masking of the tokens.
+    * A combination of MLM and translation language modeling (TLM). This consists of concatenating a sentence in two different languages, with random masking. To predict one of the masked tokens, the model can use both, the surrounding context in language 1 and the context given by language 2.
 
 This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/facebookresearch/XLM/).
 

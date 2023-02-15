@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # XLM-RoBERTa
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xlm-roberta">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm--roberta-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/xlm-roberta-base">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The XLM-RoBERTa model was proposed in [Unsupervised Cross-lingual Representation Learning at Scale](https://arxiv.org/abs/1911.02116) by Alexis Conneau, Kartikay Khandelwal, Naman Goyal, Vishrav Chaudhary, Guillaume
@@ -38,6 +47,7 @@ Tips:
 - XLM-RoBERTa is a multilingual model trained on 100 different languages. Unlike some XLM multilingual models, it does
   not require `lang` tensors to understand which language is used, and should be able to determine the correct
   language from the input ids.
+- Uses RoBERTa tricks on the XLM approach, but does not use the translation language modeling objective. It only uses masked language modeling on sentences coming from one language.
 - This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](roberta) for usage examples
   as well as the information relative to the inputs and outputs.
 

@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # DistilBERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=distilbert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-distilbert-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/distilbert-base-uncased">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The DistilBERT model was proposed in the blog post [Smaller, faster, cheaper, lighter: Introducing DistilBERT, a
@@ -41,6 +50,11 @@ Tips:
   separate your segments with the separation token `tokenizer.sep_token` (or `[SEP]`).
 - DistilBERT doesn't have options to select the input positions (`position_ids` input). This could be added if
   necessary though, just let us know if you need this option.
+- Same as BERT but smaller. Trained by distillation of the pretrained BERT model, meaning it’s been trained to predict the same probabilities as the larger model. The actual objective is a combination of:
+
+    * finding the same probabilities as the teacher model
+    * predicting the masked tokens correctly (but no next-sentence objective)
+    * a cosine similarity between the hidden states of the student and the teacher model
 
 This model was contributed by [victorsanh](https://huggingface.co/victorsanh). This model jax version was
 contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/huggingface/transformers/tree/main/examples/research_projects/distillation).
