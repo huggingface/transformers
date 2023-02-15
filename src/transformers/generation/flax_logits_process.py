@@ -395,54 +395,44 @@ class FlaxWhisperTimeStampLogitsProcessor(FlaxLogitsProcessor):
     def __call__(self, input_ids, scores, cur_len):
         # suppress <|notimestamps|> which is handled by without_timestamps
         scores = scores.at[:, self.no_timestamps_token_id].set(-float("inf"))
-        # if input_ids.shape[1] == self.begin_index:
-        #     scores[:, self.timestamp_begin] = 0
 
         def handle_pairs(input_ids_k, scores_k):
-            last_was_timestamp_1 = jax.lax.cond(
-                (cur_len - self.begin_index) >= 1,
-                lambda: True,
-                lambda: False,
+            last_was_timestamp = jnp.where(
+                (cur_len - self.begin_index) >= 1, True, False
             )
-            last_was_timestamp_2 = jax.lax.cond(
+            last_was_timestamp = jnp.where(
                 input_ids_k[cur_len - 1] >= self.timestamp_begin,
-                lambda: True,
-                lambda: False,
+                True and last_was_timestamp,
+                False,
             )
-            last_was_timestamp = last_was_timestamp_1 * last_was_timestamp_2
 
-            penultimate_was_timestamp_1 = jax.lax.cond(
-                (cur_len - self.begin_index) < 2,
-                lambda: True,
-                lambda: False,
+            penultimate_was_timestamp = jnp.where(
+                (cur_len - self.begin_index) < 2, True, False
             )
-            penultimate_was_timestamp_2 = jax.lax.cond(
+            penultimate_was_timestamp = jnp.where(
                 input_ids_k[cur_len - 2] >= self.timestamp_begin,
-                lambda: True,
-                lambda: False,
+                True,
+                penultimate_was_timestamp,
             )
-            penultimate_was_timestamp = penultimate_was_timestamp_1 + penultimate_was_timestamp_2
 
             def if_true():
-                return jax.lax.cond(
+                return jnp.where(
                     penultimate_was_timestamp > 0,
-                    lambda: scores_k.at[self.timestamp_begin :].set(-float("inf")),
-                    lambda: scores_k.at[: self.eos_token_id].set(-float("inf")),
+                    scores_k.at[self.timestamp_begin :].set(-float("inf")),
+                    scores_k.at[: self.eos_token_id].set(-float("inf")),
                 )
 
-            return jax.lax.cond(last_was_timestamp, if_true, lambda: scores_k)
+            return jnp.where(last_was_timestamp, if_true(), scores_k)
 
         scores = jax.vmap(handle_pairs)(input_ids, scores)
 
-        apply_max_initial_timestamp = jax.lax.cond(
-            cur_len == self.begin_index,
-            lambda: True,
-            lambda: False,
+        apply_max_initial_timestamp = jnp.where(
+            cur_len == self.begin_index, True, False
         )
-        apply_max_initial_timestamp = jax.lax.cond(
+        apply_max_initial_timestamp = jnp.where(
             self.max_initial_timestamp_index is not None,
-            lambda: True and apply_max_initial_timestamp,
-            lambda: False,
+            True and apply_max_initial_timestamp,
+            False,
         )
 
         def if_true():
