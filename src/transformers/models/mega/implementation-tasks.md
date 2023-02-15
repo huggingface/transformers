@@ -79,7 +79,7 @@ This is mostly pretty standard: cross-attention takes cross-attn keys and values
 * Accept previous keys and values from `prev_key_values` (new input, in place of incremental_state)
 * Return a tuple in the style of the HF attention modules (layer output, attention weights, key, value, EMA state) with contents controlled by `output_attentions` and `use_cache` (new inputs)
 * **status:** done - removed incremental state and refactored into a single combined `attention_mask` for padding and unidirectional self-attention
-  * Possibly revisit to see how other models handle causal masking (or do we assume that self-attention is fine on the full inputs? that seems to be RoBERTa's assumption)
+  * fixed causal masking, but might want to revisit what's happening with incremental decoding (since it's generating the mask based on input sequence length and not past k/v)
 
 prev_key_values inputs for ^ will be expected as:
 
@@ -87,7 +87,7 @@ prev_key_values inputs for ^ will be expected as:
 (self_key, self_value, self_ema_state, cross_key, cross_value)
 ```
 
-GatedCrossAttention
+~~GatedCrossAttention~~
 * Accept previous cross-attention keys and values from `prev_key_values` (new input, in place of incremental_state)
 * Return keys and values if `use_cache` (new input)
 * What about `pidx`?

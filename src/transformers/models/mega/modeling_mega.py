@@ -91,6 +91,18 @@ def get_activation_fn(activation: str) -> Callable:
     else:
         raise RuntimeError("--activation-fn {} not supported".format(activation))
 
+# utility for causal LM masking in the format that Mega expects
+def generate_causal_mask(seq_len):
+    '''
+    Tiny utility to generate a `seq_len` by `seq_len` causal mask,
+    where 1 corresponds to *not masked* and 0 corresponds to *masked*
+
+    causal_mask[i][j] corresponds to whether token `i` can attend to token `j`
+    '''
+    seq_ids = torch.arange(seq_len)
+    causal_mask = seq_ids[None, :].repeat(seq_len, 1) <= seq_ids[:, None]
+    return causal_mask.to(torch.long)
+
 # EMA attention module
 class MultiHeadEMA(nn.Module):
     """Exponential Moving Average Layer.
@@ -832,17 +844,28 @@ class MovingAverageGatedAttention(nn.Module):
         nn.init.normal_(self.gamma, mean=mean, std=std)
         nn.init.constant_(self.beta, 0.0)
     
-    def element_attention(self, q, k, attention_mask, before_attn_fn):
-        'Apply element-wise attention via relu^2 or laplace - same as original implementation but with unified attention mask'
+    def element_attention(self, q, k, padding_mask, causal_mask, before_attn_fn):
+        '''
+        Apply element-wise attention via relu^2 or laplace. Same as original 
+        implementation but with standardized causal attention mask
+
+        padding_mask: tensor with shape (batch x no. chunks x chunk size x sequence length), or None
+        causal_mask: tensor with shape (sequence length x sequence length), or None
+
+        Both masks expect 1 to indicate *not masked* and 0 to indicate *masked*
+        '''
         slen = k.size(2)
-        if attention_mask is not None:
+        if padding_mask is not None:
             # 1 for *not masked*
             # 0 for *masked*
 
             # B x K x 1
-            lengths = attention_mask.sum(-1, keepdim=True)
+            lengths = padding_mask.sum(-1, keepdim=True)
             # B x K x 1 x 1
             lengths = lengths.clamp(min=1.0).unsqueeze(-1)
+        
+        if causal_mask is not None:
+            lengths = causal_mask.sum(dim=-1, keepdim=True)
 
         # C x C
         bias = self.rel_pos_bias(slen)
@@ -864,12 +887,15 @@ class MovingAverageGatedAttention(nn.Module):
         else:
             raise ValueError(f"Unknown attention activation function: {self.config.attention_activation}")
     
-        if attention_mask is not None:
-            attn_weights = attn_weights * attention_mask.unsqueeze(2) 
+        if padding_mask is not None:
+            attn_weights = attn_weights * padding_mask.unsqueeze(2) 
+
+        if causal_mask is not None:
+            attn_weights = attn_weights * causal_mask
     
         return attn_weights
 
-    def softmax_attention(self, q, k, attention_mask, before_attn_fn):
+    def softmax_attention(self, q, k, padding_mask, causal_mask, before_attn_fn):
         'Standard softmax attention with combined padding/attention mask'
         slen = k.size(2)
         # C x C
@@ -882,16 +908,24 @@ class MovingAverageGatedAttention(nn.Module):
         # scaled attention
         q = q * self.scaling 
 
-        # B x K x C x C
+        # B x K x C x C (if chunking)
+        # B x 1 x S x S (otherwise)
         qk = torch.matmul(q, k.transpose(2, 3)) + bias 
 
-        if attention_mask is not None:
+        # apply causal mask (presumed to be 1/0 for not masked / masked)
+        # additive, but convert to 0/-inf (which is not explicitly in the Mega source code)
+        if causal_mask is not None:
+            additive_causal_mask = torch.zeros_like(causal_mask, dtype=torch.float)
+            additive_causal_mask = additive_causal_mask.masked_fill((1 - causal_mask).bool(), float("-inf"))
+            qk = qk + additive_causal_mask
+
+        if padding_mask is not None:
             # 1 for tokens which are *not masked*
             # 0 for tokens which are *masked*
             # replace masked tokens with -inf to make softmax ignore them
-            mask_all = attention_mask.all(dim=-1, keepdim=True)
-            attention_mask = torch.logical_and(attention_mask, ~mask_all)
-            qk = qk.masked_fill(attention_mask.unsqueeze(2).to(torch.bool), float('-inf'))
+            padding_mask_all = padding_mask.all(dim=-1, keepdim=True)
+            padding_mask = torch.logical_and(padding_mask, ~padding_mask_all)
+            qk = qk.masked_fill(padding_mask.unsqueeze(2).to(torch.bool), float('-inf'))
 
         if before_attn_fn:
             return qk
@@ -902,7 +936,8 @@ class MovingAverageGatedAttention(nn.Module):
     def forward(
         self, 
         x, 
-        attention_mask: Optional[torch.Tensor] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        causal_mask: Optional[torch.Tensor] = None,
         prev_key_values: Optional[Tuple[torch.Tensor]] = None,
         output_attentions = False,
         before_attn_fn = False,
@@ -912,8 +947,9 @@ class MovingAverageGatedAttention(nn.Module):
         Mega self-attention block, combining multi-headed EMA with traditional attention
 
         x: embeddings on which to perform Mega attention, shape = (time, batch, embedding size)
-        attention_mask: 1 if unmasked, 0 if masked
-        prev_key_values: a tuple of tensors representing past state for
+        padding_mask (optional): 1 if unmasked, 0 if masked; shape = (batch size, time)
+        causal_mask (optional): 1 if unmasked, 0 if masked; shape = (time, time)
+        prev_key_values (optional): a tuple of tensors representing past state for
             incremental decoding - (self_key, self_value, self_ema_state)
         output_attentions: if True, attention weights will be returned 
         before_attn_fn: whether to return attention values before softmax (retained from original Mega)
@@ -944,7 +980,7 @@ class MovingAverageGatedAttention(nn.Module):
 
         # L x B x D
         # updated_ema_state will be None if use_cache=False
-        mx, updated_ema_state = self.move(x, attention_mask=attention_mask, prev_state=prev_ema_state, use_cache=use_cache)
+        mx, updated_ema_state = self.move(x, attention_mask=padding_mask, prev_state=prev_ema_state, use_cache=use_cache)
         mx = self.dropout(mx)
 
         # L x B x D -> L x B x (2*D+S+E)
@@ -1006,9 +1042,9 @@ class MovingAverageGatedAttention(nn.Module):
             q = q.unsqueeze(1)
             k = k.unsqueeze(1)
             v = v.unsqueeze(1)
-            if attention_mask is not None:
+            if padding_mask is not None:
                 # B x L -> B x 1 x L
-                attention_mask = attention_mask.unsqueeze(1)
+                padding_mask = padding_mask.unsqueeze(1)
         else:
             # otherwise, split the sequences in the batch into K chunks of size C
             if seq_len < self.config.chunk_size:
@@ -1021,21 +1057,24 @@ class MovingAverageGatedAttention(nn.Module):
             if ctx_len < self.config.chunk_size:
                 k = k.unsqueeze(1)
                 v = v.unsqueeze(1)
-                if attention_mask is not None:
-                    attention_mask = attention_mask.unsqueeze(1)
+                if padding_mask is not None:
+                    padding_mask = padding_mask.unsqueeze(1)
             else:
                 # B x L x S -> B x K x C x S
                 nc = ctx_len // self.config.chunk_size 
                 k = k.reshape(bsz, nc, self.config.chunk_size, self.config.shared_representation_size)
                 v = v.reshape(bsz, nc, self.config.chunk_size, self.config.intermediate_size)
-                if attention_mask is not None:
-                    attention_mask = attention_mask.view(bsz, nc, self.config.chunk_size)
+                if padding_mask is not None:
+                    padding_mask = padding_mask.view(bsz, nc, self.config.chunk_size)
         
         # this is in the original Mega implementation to work around fork/join parallelism not supporting optional types
-        if attention_mask is not None and attention_mask.dim() == 0:
-            attention_mask = None 
+        if padding_mask is not None and padding_mask.dim() == 0:
+            padding_mask = None 
 
-        attn_weights = self.attention_function(q, k, attention_mask=attention_mask, before_attn_fn=before_attn_fn)
+        attn_weights = self.attention_function(q, k, 
+                                               padding_mask=padding_mask, 
+                                               causal_mask=causal_mask,
+                                               before_attn_fn=before_attn_fn)
     
         v = self.hidden_dropout(v, batch_first=True)
         kernel = self.attention_dropout(attn_weights)
@@ -1278,8 +1317,15 @@ class MegaLayer(nn.Module):
     ) -> Tuple[torch.Tensor]:
 
         # Mega self-attention
+        # create a causal mask for self-attention if we're decoding
+        if self.is_decoder:
+            sequence_length = hidden_states.size(0)
+            causal_mask = generate_causal_mask(sequence_length)
+        else:
+            causal_mask = None
         mega_outputs = self.mega_layer(x=hidden_states, 
-                                       attention_mask=attention_mask, 
+                                       padding_mask=attention_mask, 
+                                       causal_mask=causal_mask,
                                        prev_key_values=past_key_value, 
                                        output_attentions=output_attentions, 
                                        before_attn_fn=False, 
