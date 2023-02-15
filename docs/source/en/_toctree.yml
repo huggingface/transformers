@@ -154,6 +154,8 @@
     title: Summary of the models
   - local: tokenizer_summary
     title: Summary of the tokenizers
+  - local: attention
+    title: Attention mechanisms
   - local: pad_truncation
     title: Padding and truncation
   - local: bertology
