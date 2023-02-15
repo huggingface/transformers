@@ -26,7 +26,11 @@ logger = logging.get_logger(__name__)
 
 CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = {
     "laion/clap-htsat-fused": "https://huggingface.co/laion/clap-htsat-fused/resolve/main/config.json",
+<<<<<<< HEAD
     "laion/clap-htsat-unfused": "https://huggingface.co/laion/clap-htsat-unfused/resolve/main/config.json",
+=======
+    "laion-ai/clap-htsat-unfused": "https://huggingface.co/laion-ai/clap-htsat-unfused/resolve/main/config.json",
+>>>>>>> b1e75d9e3... Update src/transformers/models/clap/configuration_clap.py
 }
 
 
