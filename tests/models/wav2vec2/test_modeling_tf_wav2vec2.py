@@ -512,20 +512,15 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
-    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
-    @unittest.skip("Fix me!")
+    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
     def test_dataset_conversion(self):
-        default_batch_size = self.model_tester.batch_size
-        self.model_tester.batch_size = 2
-        super().test_dataset_conversion()
-        self.model_tester.batch_size = default_batch_size
+        # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
+        pass
 
-    # We override here as passing a full batch of 13 samples results in OOM errors for CTC
+    @unittest.skip(reason="Fix me! Wav2Vec2 hits OOM errors when loss is computed on full batch")
     def test_keras_fit(self):
-        default_batch_size = self.model_tester.batch_size
-        self.model_tester.batch_size = 2
-        super().test_keras_fit()
-        self.model_tester.batch_size = default_batch_size
+        # TODO: (Amy) - check whether skipping CTC model resolves this issue and possible resolutions for CTC
+        pass
 
 
 @require_tf
