@@ -17,6 +17,7 @@ import importlib
 import inspect
 import os
 import re
+import sys
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -30,7 +31,9 @@ spec = importlib.util.spec_from_file_location(
     os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
     submodule_search_locations=[PATH_TO_TRANSFORMERS],
 )
-transformers = spec.loader.load_module()
+transformers = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(transformers)
+transformers = sys.modules["transformers"]
 
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 

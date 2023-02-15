@@ -18,6 +18,7 @@ import collections
 import importlib.util
 import os
 import re
+import sys
 import tempfile
 
 import pandas as pd
@@ -36,7 +37,9 @@ spec = importlib.util.spec_from_file_location(
     os.path.join(TRANSFORMERS_PATH, "__init__.py"),
     submodule_search_locations=[TRANSFORMERS_PATH],
 )
-transformers_module = spec.loader.load_module()
+transformers_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(transformers_module)
+transformers_module = sys.modules["transformers"]
 
 
 # Regexes that match TF/Flax/PT model names.
