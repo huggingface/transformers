@@ -97,6 +97,7 @@ class InformerModelTester:
             lags_sequence=self.lags_sequence,
             num_time_features=self.num_time_features,
             num_static_categorical_features=1,
+            num_static_real_features=1,
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
             factor=self.factor,

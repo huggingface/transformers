@@ -45,7 +45,7 @@ _CONFIG_FOR_DOC = "InformerConfig"
 
 
 INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "elisim/informer",
+    "kashif/informer-tourism-monthly",
     # See all Informer models at https://huggingface.co/models?filter=informer
 ]
 
