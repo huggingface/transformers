@@ -1016,8 +1016,9 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             context".
 
             The `sequence_length` here is equal to `config.context_length` + `max(config.lags_sequence)`, which if no
-            `lags_sequence` is configured, is equal to `config.context_length` + 7 (as by default, the largest look-back 
-            index in `config.lags_sequence` is 7). The property `_past_length` returns the actual length of the past.
+            `lags_sequence` is configured, is equal to `config.context_length` + 7 (as by default, the largest
+            look-back index in `config.lags_sequence` is 7). The property `_past_length` returns the actual length of
+            the past.
 
             The `past_values` is what the Transformer encoder gets as input (with optional additional features, such as
             `static_categorical_features`, `static_real_features`, `past_time_features` and lags).
