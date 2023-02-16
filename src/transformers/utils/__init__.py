@@ -94,6 +94,7 @@ from .import_utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     ccl_version,
+    direct_transformers_import,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,

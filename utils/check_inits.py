@@ -14,10 +14,8 @@
 # limitations under the License.
 
 import collections
-import importlib.util
 import os
 import re
-import sys
 from pathlib import Path
 
 
@@ -275,14 +273,9 @@ IGNORE_SUBMODULES = [
 
 def check_submodules():
     # This is to make sure the transformers module imported is the one in the repo.
-    spec = importlib.util.spec_from_file_location(
-        "transformers",
-        os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
-        submodule_search_locations=[PATH_TO_TRANSFORMERS],
-    )
-    transformers = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(transformers)
-    transformers = sys.modules["transformers"]
+    from transformers.utils import direct_transformers_import
+
+    transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
     module_not_registered = [
         module

@@ -15,13 +15,13 @@
 
 import argparse
 import glob
-import importlib.util
 import os
 import re
-import sys
 
 import black
 from doc_builder.style_doc import style_docstrings_in_code
+
+from transformers.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -99,14 +99,7 @@ LOCALIZED_READMES = {
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(TRANSFORMERS_PATH, "__init__.py"),
-    submodule_search_locations=[TRANSFORMERS_PATH],
-)
-transformers_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(transformers_module)
-transformers_module = sys.modules["transformers"]
+transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
 def _should_continue(line, indent):
