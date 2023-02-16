@@ -35,8 +35,7 @@ class InformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of an [`InformerModel`]. It is used to instantiate an
     Informer model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Informer
-    [huggingface/informer-tourism-monthly](https://huggingface.co/huggingface/informer-tourism-monthly)
-    architecture.
+    [huggingface/informer-tourism-monthly](https://huggingface.co/huggingface/informer-tourism-monthly) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
