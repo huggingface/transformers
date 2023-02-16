@@ -40,6 +40,8 @@ src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/camembert/configuration_camembert.py
 src/transformers/models/canine/configuration_canine.py
 src/transformers/models/canine/modeling_canine.py
+src/transformers/models/clap/configuration_clap.py
+src/transformers/models/clap/modeling_clap.py
 src/transformers/models/clip/configuration_clip.py
 src/transformers/models/clipseg/modeling_clipseg.py
 src/transformers/models/codegen/configuration_codegen.py

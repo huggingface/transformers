@@ -235,11 +235,13 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Pad inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
-            processed_features:
+            processed_features (`Union[Dict[str, np.ndarray], BatchFeature]`):
                 Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
                 of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
-            max_length: maximum length of the returned list and optionally padding length (see below)
-            padding_strategy: PaddingStrategy to use for padding.
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see below)
+            padding_strategy (`PaddingStrategy`, *optional*, default to `PaddingStrategy.DO_NOT_PAD`):
+                PaddingStrategy to use for padding.
 
                 - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
                 - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
@@ -248,11 +250,12 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
                     - 'left': pads on the left of the sequences
                     - 'right': pads on the right of the sequences
-            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
-                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            return_attention_mask:
-                (optional) Set to False to avoid returning attention mask (default: set to model specifics)
+            pad_to_multiple_of (`int`, *optional*):
+                Integer if set will pad the sequence to a multiple of the provided value. This is especially useful to
+                enable the use of Tensor Core on NVIDIA hardware with compute capability `>= 7.5` (Volta), or on TPUs
+                which benefit from having sequence lengths be a multiple of 128.
+            return_attention_mask (`bool`, *optional*):
+                Set to False to avoid returning attention mask (default: set to model specifics)
         """
         required_input = processed_features[self.model_input_names[0]]
 
@@ -303,15 +306,17 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         Truncate inputs to predefined length or max length in the batch
 
         Args:
-            processed_features:
+            processed_features(`Union[Dict[str, np.ndarray], BatchFeature]`):
                 Dictionary of input values (`np.ndarray[float]`) / input vectors (`List[np.ndarray[float]]`) or batch
                 of inputs values (`List[np.ndarray[int]]`) / input vectors (`List[np.ndarray[int]]`)
-            max_length: maximum length of the returned list and optionally padding length (see below)
-            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
-                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
-            truncation:
-                (optional) Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            max_length (`int`, *optional*):
+                maximum length of the returned list and optionally padding length (see below)
+            pad_to_multiple_of (`int`, *optional*) :
+                Integer if set will pad the sequence to a multiple of the provided value. This is especially useful to
+                enable the use of Tensor Core on NVIDIA hardware with compute capability `>= 7.5` (Volta), or on TPUs
+                which benefit from having sequence lengths be a multiple of 128.
+            truncation (`bool`, *optional*):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
         """
         if not truncation:
             return processed_features
