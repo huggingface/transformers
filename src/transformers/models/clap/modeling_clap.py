@@ -2068,6 +2068,7 @@ class ClapModel(ClapPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        is_longer: Optional[torch.BoolTensor] = None,
         input_features: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -2108,6 +2109,7 @@ class ClapModel(ClapPreTrainedModel):
 
         audio_outputs = self.audio_model(
             input_features=input_features,
+            is_longer=is_longer,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
