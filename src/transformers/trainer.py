@@ -2291,11 +2291,6 @@ class Trainer:
 
         self.save_model(output_dir, _internal_call=True)
 
-        if is_sagemaker_mp_enabled() and IS_SAGEMAKER_MP_POST_1_15 and smp.state.cfg.sharded_data_parallel_degree > 1:
-            smp.save_checkpoint(
-                path=output_dir, partial=True, tag=WEIGHTS_NAME, model=self.model_wrapped, optimizer=self.optimizer
-            )
-
         if self.deepspeed:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
             # config `stage3_gather_16bit_weights_on_model_save` is True
@@ -2312,7 +2307,12 @@ class Trainer:
                 xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
-            if not (IS_SAGEMAKER_MP_POST_1_15 and smp.state.cfg.sharded_data_parallel_degree > 1):
+            if IS_SAGEMAKER_MP_POST_1_15 and smp.state.cfg.sharded_data_parallel_degree > 1:
+                # Save checkpoint for sharded data parallel
+                smp.save_checkpoint(
+                    path=output_dir, partial=True, tag=WEIGHTS_NAME, model=self.model_wrapped, optimizer=self.optimizer
+                )
+            else:
                 opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
                 smp.barrier()
                 if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
