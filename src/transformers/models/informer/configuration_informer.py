@@ -31,8 +31,8 @@ class InformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InformerModel`]. It is used to instantiate an
     Informer model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Time Series Transformer
-    [huggingface/time-series-transformer-tourism-monthly](https://huggingface.co/huggingface/time-series-transformer-tourism-monthly)
+    with the defaults will yield a similar configuration to that of the Informer
+    [huggingface/informer-tourism-monthly](https://huggingface.co/huggingface/informer-tourism-monthly)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
