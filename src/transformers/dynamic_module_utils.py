@@ -148,19 +148,12 @@ def get_class_in_module(class_name, module_path):
     
         module_dir = Path(HF_MODULES_CACHE) / os.path.dirname(module_path)
         module_file_name = module_path.split(os.path.sep)[-1] + ".py"
-        other_module_files = ["__init__.py", "__pycache__"]
-        if module_file_name != "configuration.py":
-            other_module_files += ["configuration.py"]
-    
+
         # copy to a temporary directory
-        for fn in [module_file_name] + other_module_files:
-            if os.path.isfile(f"{module_dir}/{fn}"):
-                shutil.copy(f"{module_dir}/{fn}", tmp_dir)
-                cmd = f'import os; os.remove("{module_dir}/{fn}")'
-                os.system(f"python3 -c '{cmd}'")
-                # os.remove(f"{module_dir}/{fn}")
-            elif os.path.isdir(f"{module_dir}/{fn}"):
-                shutil.rmtree(f"{module_dir}/{fn}")
+        shutil.copy(f"{module_dir}/{module_file_name}", tmp_dir)
+        cmd = f'import os; os.remove("{module_dir}/{module_file_name}")'
+        os.system(f"python3 -c '{cmd}'")
+        # os.remove(f"{module_dir}/{module_file_name}")
 
         # copy back the file that we want to import
         shutil.copyfile(f"{tmp_dir}/{module_file_name}", f"{module_dir}/{module_file_name}")
@@ -169,10 +162,6 @@ def get_class_in_module(class_name, module_path):
         module_path = module_path.replace(os.path.sep, ".")
         module = importlib.import_module(module_path)
 
-        # copy back the config file
-        if os.path.isfile(f"{tmp_dir}/configuration.py"):
-            shutil.copyfile(f"{tmp_dir}/configuration.py", f"{module_dir}/configuration.py")
-    
         return getattr(module, class_name)
 
 
