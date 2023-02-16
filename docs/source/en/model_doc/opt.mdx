@@ -15,8 +15,7 @@ specific language governing permissions and limitations under the License.
 ## Overview
 
 The OPT model was proposed in [Open Pre-trained Transformer Language Models](https://arxiv.org/pdf/2205.01068) by Meta AI.
-OPT is a series of open-sourced large causal language models which perform similar in performance to GPT3. 
-
+OPT is a series of open-sourced large causal language models which perform similar in performance to GPT3.
 
 The abstract from the paper is the following:
 
@@ -29,6 +28,35 @@ Tips:
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ), [Younes Belkada](https://huggingface.co/ybelkada), and [Patrick Von Platen](https://huggingface.co/patrickvonplaten).
 The original code can be found [here](https://github.com/facebookresearch/metaseq).
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with OPT. If you're
+interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
+The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+<PipelineTag pipeline="text-generation" />
+
+- A notebook on [fine-tuning OPT with PEFT, bitsandbytes, and Transformers](https://colab.research.google.com/drive/1jCkpikz0J2o20FBQmYmAGdiKmJGOMo-o?usp=sharing). 🌎
+- A blog post on [decoding strategies with OPT](https://huggingface.co/blog/introducing-csearch#62-example-two---opt).
+- [Causal language modeling](https://huggingface.co/course/en/chapter7/6?fw=pt#training-a-causal-language-model-from-scratch) chapter of the 🤗 Hugging Face Course.
+- [`OPTForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+- [`TFOPTForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_clmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
+- [`FlaxOPTForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#causal-language-modeling).
+
+<PipelineTag pipeline="text-classification" />
+
+- [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
+- [`OPTForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb).
+
+<PipelineTag pipeline="question-answering" />
+
+- [`OPTForQuestionAnswering`] is supported by this [question answering example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
+- [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter
+  of the 🤗 Hugging Face Course.
+
+⚡️ Inference
+
+- A blog bost on [How 🤗 Accelerate runs very large models thanks to PyTorch](https://huggingface.co/blog/accelerate-large-models) with OPT.
 
 ## OPTConfig
 
