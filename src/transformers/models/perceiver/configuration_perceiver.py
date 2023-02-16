@@ -133,7 +133,6 @@ class PerceiverConfig(PretrainedConfig):
         cross_attention_widening_factor=1,
         hidden_act="gelu",
         attention_probs_dropout_prob=0.1,
-        position_embedding_init_scale=0.02,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_query_residual=True,

@@ -18,6 +18,7 @@ import glob
 import importlib.util
 import os
 import re
+import sys
 
 import black
 from doc_builder.style_doc import style_docstrings_in_code
@@ -103,7 +104,9 @@ spec = importlib.util.spec_from_file_location(
     os.path.join(TRANSFORMERS_PATH, "__init__.py"),
     submodule_search_locations=[TRANSFORMERS_PATH],
 )
-transformers_module = spec.loader.load_module()
+transformers_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(transformers_module)
+transformers_module = sys.modules["transformers"]
 
 
 def _should_continue(line, indent):
