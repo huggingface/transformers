@@ -49,6 +49,7 @@ INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.AffineTransformed
 class AffineTransformed(TransformedDistribution):
     def __init__(self, base_distribution: Distribution, loc=None, scale=None, event_dim=0):
         self.scale = 1.0 if scale is None else scale
@@ -78,6 +79,7 @@ class AffineTransformed(TransformedDistribution):
         return self.variance.sqrt()
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.ParameterProjection
 class ParameterProjection(nn.Module):
     def __init__(
         self, in_features: int, args_dim: Dict[str, int], domain_map: Callable[..., Tuple[torch.Tensor]], **kwargs
@@ -93,6 +95,7 @@ class ParameterProjection(nn.Module):
         return self.domain_map(*params_unbounded)
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.LambdaLayer
 class LambdaLayer(nn.Module):
     def __init__(self, function):
         super().__init__()
@@ -102,6 +105,7 @@ class LambdaLayer(nn.Module):
         return self.function(x, *args)
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.DistributionOutput
 class DistributionOutput:
     distribution_class: type
     in_features: int
@@ -179,6 +183,7 @@ class DistributionOutput:
         return (x + torch.sqrt(torch.square(x) + 4.0)) / 2.0
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.StudentTOutput
 class StudentTOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"df": 1, "loc": 1, "scale": 1}
     distribution_class: type = StudentT
@@ -190,6 +195,7 @@ class StudentTOutput(DistributionOutput):
         return df.squeeze(-1), loc.squeeze(-1), scale.squeeze(-1)
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.NormalOutput
 class NormalOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"loc": 1, "scale": 1}
     distribution_class: type = Normal
@@ -200,6 +206,7 @@ class NormalOutput(DistributionOutput):
         return loc.squeeze(-1), scale.squeeze(-1)
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.NegativeBinomialOutput
 class NegativeBinomialOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"total_count": 1, "logits": 1}
     distribution_class: type = NegativeBinomial
@@ -231,8 +238,7 @@ class NegativeBinomialOutput(DistributionOutput):
         return self._base_distribution((total_count, logits))
 
 
-# Eli: FeatureEmbedder, MeanScaler and NOPScaler are from GlounTS (see the exact source below)
-# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/feature.py
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.FeatureEmbedder
 class FeatureEmbedder(nn.Module):
     def __init__(self, cardinalities: List[int], embedding_dims: List[int]) -> None:
         super().__init__()
@@ -257,7 +263,7 @@ class FeatureEmbedder(nn.Module):
         )
 
 
-# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/scaler.py
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.MeanScaler
 class MeanScaler(nn.Module):
     """
     Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
@@ -312,7 +318,7 @@ class MeanScaler(nn.Module):
         return data / scale, scale if self.keepdim else scale.squeeze(dim=self.dim)
 
 
-# source: https://github.com/awslabs/gluonts/blob/dev/src/gluonts/torch/modules/scaler.py
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.NOPScaler
 class NOPScaler(nn.Module):
     """
     Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
@@ -334,6 +340,7 @@ class NOPScaler(nn.Module):
         return data, scale
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.weighted_average
 def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
     """
     Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
@@ -358,6 +365,7 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         return input_tensor.mean(dim=dim)
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.NegativeLogLikelihood
 class NegativeLogLikelihood:
     """
     Computes the negative log likelihood loss from input distribution with respect to target.
@@ -398,8 +406,8 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer
 @dataclass
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.Seq2SeqTimeSeriesModelOutput
 class Seq2SeqTimeSeriesModelOutput(ModelOutput):
     """
     Base class for model encoder's outputs that also contains pre-computed hidden states that can speed up sequential
@@ -467,8 +475,8 @@ class Seq2SeqTimeSeriesModelOutput(ModelOutput):
     static_features: Optional[torch.FloatTensor] = None
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer
 @dataclass
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.Seq2SeqTimeSeriesPredictionOutput
 class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
     """
     Base class for model's predictions outputs that also contain the loss as well parameters of the chosen
@@ -536,8 +544,8 @@ class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
     static_features: Optional[torch.FloatTensor] = None
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer
 @dataclass
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.SampleTimeSeriesPredictionOutput
 class SampleTimeSeriesPredictionOutput(ModelOutput):
     sequences: torch.FloatTensor = None
 
@@ -689,7 +697,7 @@ class InformerAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned across GPUs when using tensor-parallelism.
+        # partitioned aross GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -1129,7 +1137,6 @@ class InformerDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerPreTrainedModel with TimeSeriesTransformer->Informer
 class InformerPreTrainedModel(PreTrainedModel):
     config_class = InformerConfig
     base_model_prefix = "model"
@@ -1311,7 +1318,6 @@ INFORMER_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerEncoder with TimeSeriesTransformer->Informer
 class InformerEncoder(InformerPreTrainedModel):
     """
     Informer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1453,7 +1459,6 @@ class InformerEncoder(InformerPreTrainedModel):
         )
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Informer
 class InformerDecoder(InformerPreTrainedModel):
     """
     Informer decoder consisting of *config.decoder_layers* layers. Each layer is a [`InformerDecoderLayer`]
@@ -1694,7 +1699,6 @@ class InformerDecoder(InformerPreTrainedModel):
     "The bare Informer Model outputting raw hidden-states without any specific head on top.",
     INFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER
 class InformerModel(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
@@ -1960,7 +1964,6 @@ class InformerModel(InformerPreTrainedModel):
 class InformerForPrediction(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
-
         self.model = InformerModel(config)
         if config.distribution_output == "student_t":
             self.distribution_output = StudentTOutput(dim=config.input_size)
@@ -2024,6 +2027,15 @@ class InformerForPrediction(InformerPreTrainedModel):
         r"""
         Returns:
 
+        future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+
+            This mask is used to filter out missing values for the final loss calculation.
+
         Examples:
 
         ```python
@@ -2036,7 +2048,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = InformerForPrediction.from_pretrained("kashif/informer-tourism-monthly")
+        >>> model = InformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features
