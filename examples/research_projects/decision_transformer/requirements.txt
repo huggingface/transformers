@@ -85,7 +85,7 @@ importlib-metadata==4.11.3
 importlib-resources==5.4.0
 iniconfig==1.1.1
 ipadic==1.0.0
-ipython==8.1.1
+ipython==8.10.0
 isodate==0.6.1
 isort==5.10.1
 itsdangerous==2.1.1

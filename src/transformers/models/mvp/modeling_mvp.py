@@ -1610,8 +1610,8 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
             config.classifier_dropout,
         )
 
-        self.model._init_weights(self.classification_head.dense)
-        self.model._init_weights(self.classification_head.out_proj)
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def set_lightweight_tuning(self):
         self.model.set_lightweight_tuning()
@@ -1737,7 +1737,8 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
         self.model = MvpModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.model._init_weights(self.qa_outputs)
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def set_lightweight_tuning(self):
         self.model.set_lightweight_tuning()

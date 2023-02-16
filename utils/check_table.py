@@ -18,6 +18,7 @@ import collections
 import importlib.util
 import os
 import re
+import sys
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -68,7 +69,9 @@ spec = importlib.util.spec_from_file_location(
     os.path.join(TRANSFORMERS_PATH, "__init__.py"),
     submodule_search_locations=[TRANSFORMERS_PATH],
 )
-transformers_module = spec.loader.load_module()
+transformers_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(transformers_module)
+transformers_module = sys.modules["transformers"]
 
 
 # Thanks to https://stackoverflow.com/questions/29916065/how-to-do-camelcase-split-in-python

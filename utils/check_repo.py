@@ -17,6 +17,7 @@ import importlib
 import inspect
 import os
 import re
+import sys
 import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
@@ -53,8 +54,10 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "DetaEncoder",  # Building part of bigger (tested) model.
     "DetaDecoder",  # Building part of bigger (tested) model.
+    "ErnieMForInformationExtraction",
     "GraphormerEncoder",  # Building part of bigger (tested) model.
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "CLIPSegDecoder",  # Building part of bigger (tested) model.
@@ -171,6 +174,10 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "Blip2ForConditionalGeneration",
+    "Blip2QFormerModel",
+    "Blip2VisionModel",
+    "ErnieMForInformationExtraction",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
@@ -282,6 +289,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPTextModel",
     "AltCLIPVisionModel",
     "AltRobertaModel",
+    "TvltForAudioVisualClassification",
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
@@ -305,7 +313,9 @@ spec = importlib.util.spec_from_file_location(
     os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
     submodule_search_locations=[PATH_TO_TRANSFORMERS],
 )
-transformers = spec.loader.load_module()
+transformers = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(transformers)
+transformers = sys.modules["transformers"]
 
 
 def check_model_list():
