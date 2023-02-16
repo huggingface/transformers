@@ -98,6 +98,7 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
+    "beautifulsoup4",
     "black~=23.1",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
@@ -125,6 +126,7 @@ _deps = [
     "jieba",
     "kenlm",
     "keras-nlp>=0.3.1",
+    "librosa",
     "nltk",
     "natten>=0.14.4",
     "numpy>=1.17",
@@ -147,6 +149,7 @@ _deps = [
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
+    "rhoknp>=1.1.0",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff>=0.0.241",
@@ -157,8 +160,9 @@ _deps = [
     "scikit-learn",
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
-    "librosa",
     "starlette",
+    "sudachipy>=0.6.6",
+    "sudachidict_core>=20220729",
     "tensorflow-cpu>=2.4,<2.12",
     "tensorflow>=2.4,<2.12",
     "tensorflow-text",
@@ -174,10 +178,6 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
-    "beautifulsoup4",
-    "sudachipy>=0.6.6",
-    "sudachidict_core>=20220729",
-    "rhoknp>=1.1.0",
 ]
 
 
