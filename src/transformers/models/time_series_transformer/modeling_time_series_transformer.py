@@ -1022,7 +1022,6 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             `static_categorical_features`, `static_real_features`, `past_time_features` and lags).
 
             Optionally, missing values need to be replaced with zeros and indicated via the `past_observed_mask`.
-
         past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`):
             Required time features, which the model internally will add to `past_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
@@ -1035,7 +1034,6 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Transformer requires to provide additional time features.
 
             The Time Series Transformer only learns additional embeddings for `static_categorical_features`.
-
         past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected in
             `[0, 1]`:
@@ -1050,14 +1048,12 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Static categorical features are features which have the same value for all time steps (static over time).
 
             A typical example of a static categorical feature is a time series ID.
-
         static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
             Optional static real features which the model will add to the values of the time series.
 
             Static real features are features which have the same value for all time steps (static over time).
 
             A typical example of a static real feature is promotion information.
-
         future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)`, *optional*):
             Future values of the time series, that serve as labels for the model. The `future_values` is what the
             Transformer needs during training to learn to output, given the `past_values`.
@@ -1068,7 +1064,6 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
 
             Optionally, during training any missing values need to be replaced with zeros and indicated via the
             `future_observed_mask`.
-
         future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
             Optional time features, which the model internally will add to `future_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
@@ -1081,7 +1076,6 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Transformer requires to provide additional features.
 
             The Time Series Transformer only learns additional embeddings for `static_categorical_features`.
-
         future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
             in `[0, 1]`:
@@ -1090,7 +1084,6 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
             This mask is used to filter out missing values for the final loss calculation.
-        
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on certain token indices. Mask values selected in `[0, 1]`:
 
@@ -1098,11 +1091,9 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-
         decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Mask to avoid performing attention on certain token indices. By default, a causal mask will be used, to
             make sure the model can only look at previous inputs in order to predict the future.
-
         head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -1125,7 +1116,6 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
@@ -1137,24 +1127,19 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
-
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-            
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
