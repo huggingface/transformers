@@ -159,7 +159,7 @@ def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
         label_col_name = None
     if label_col_name is not None:
         if isinstance(first[label_col_name], tf.Tensor):
-            dtype = tf.int64 if first[label_col_name].dtype.is_integer() else tf.float32
+            dtype = tf.int64 if first[label_col_name].dtype.is_integer else tf.float32
         elif isinstance(first[label_col_name], np.ndarray) or isinstance(first[label_col_name], np.generic):
             dtype = tf.int64 if np.issubdtype(first[label_col_name].dtype, np.integer) else tf.float32
         elif isinstance(first[label_col_name], (tuple, list)):

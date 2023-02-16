@@ -106,7 +106,6 @@ class ViTMAEConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         image_size=224,
         patch_size=16,
         num_channels=3,
@@ -117,7 +116,7 @@ class ViTMAEConfig(PretrainedConfig):
         decoder_intermediate_size=2048,
         mask_ratio=0.75,
         norm_pix_loss=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

@@ -6,10 +6,10 @@ import sys
 from collections import namedtuple
 
 import torch
+from modeling_bertabs import BertAbs, build_predictor
 from torch.utils.data import DataLoader, SequentialSampler
 from tqdm import tqdm
 
-from modeling_bertabs import BertAbs, build_predictor
 from transformers import BertTokenizer
 
 from .utils_summarization import (
@@ -45,7 +45,6 @@ def evaluate(args):
         generated_summaries = []
 
         import nltk
-
         import rouge
 
         nltk.download("punkt")

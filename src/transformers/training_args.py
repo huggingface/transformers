@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import contextlib
+import io
 import json
 import math
 import os
@@ -46,11 +47,11 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_neuroncore_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
     requires_backends,
-    torch_required,
 )
 
 
@@ -60,6 +61,17 @@ if is_torch_available():
 
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
+
+if is_torch_neuroncore_available(check_device=False):
+    # torchrun support
+    # https://github.com/pytorch/xla/pull/3609
+    if os.environ.get("TORCHELASTIC_RUN_ID"):
+        import torch_xla.distributed.xla_backend as xbn
+
+        if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+            torch.distributed.init_process_group(backend="xla")
+            if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+                raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
 
 if is_sagemaker_mp_enabled():
@@ -73,7 +85,7 @@ log_levels = logging.get_log_levels_dict().copy()
 trainer_log_levels = dict(**log_levels, passive=-1)
 
 
-DYNAMO_BACKENDS = [
+TORCH_COMPILE_BACKENDS = [
     "eager",
     "aot_eager",
     "inductor",
@@ -341,8 +353,9 @@ class TrainingArguments:
         label_names (`List[str]`, *optional*):
             The list of keys in your dictionary of inputs that correspond to the labels.
 
-            Will eventually default to `["labels"]` except if the model used is one of the `XxxForQuestionAnswering` in
-            which case it will default to `["start_positions", "end_positions"]`.
+            Will eventually default to the list of argument names accepted by the model that contain the word "label",
+            except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
+            `["start_positions", "end_positions"]` keys.
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
             Whether or not to load the best model found during training at the end of training.
 
@@ -395,8 +408,34 @@ class TrainingArguments:
             - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and
               `"shard_grad_op"`).
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
-        fsdp_min_num_params (`int`, *optional*, defaults to `0`):
-            FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is passed).
+        fsdp_config (`str` or `dict`, *optional*):
+            Config to be used with fsdp (Pytorch Distributed Parallel Training). The value is either a location of
+            deepspeed json config file (e.g., `ds_config.json`) or an already loaded json file as `dict`.
+
+            A List of config and its options:
+                - fsdp_min_num_params (`int`, *optional*, defaults to `0`):
+                    FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
+                    passed).
+                - fsdp_backward_prefetch (`str`, *optional*)
+                    FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when
+                    `fsdp` field is passed).
+
+                    A list of options along the following:
+
+                    - `"backward_pre"` : Prefetches the next set of parameters before the current set of parameter's
+                      gradient
+                        computation.
+                    - `"backward_pos"` : This prefetches the next set of parameters after the current set of
+                      parameter’s
+                        gradient computation.
+                - fsdp_forward_prefetch (`bool`, *optional*, defaults to `False`)
+                    FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
+                     If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the
+                     forward pass.
+                - limit_all_gathers (`bool`, *optional*, defaults to `False`)
+                    FSDP's limit_all_gathers (useful only when `fsdp` field is passed).
+                     If `"True"`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight
+                     all-gathers.
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
@@ -514,6 +553,21 @@ class TrainingArguments:
             information.
         use_mps_device (`bool`, *optional*, defaults to `False`):
             Whether to use Apple Silicon chip based `mps` device.
+        torch_compile (`bool`, *optional*, defaults to `False`):
+            Whether or not to compile the model using PyTorch 2.0
+            [`torch.compile`](https://pytorch.org/get-started/pytorch-2.0/) (requires a nighlty install of PyTorch).
+
+            If set, the backend will default to `"inductor"` (can be customized with `torch_compile_backend`) and the
+            mode will default to `"default"` (can be customized with `torch_compile_mode`).
+        torch_compile_backend (`str`, *optional*):
+            The backend to use in `torch.compile`. If set to any value, `torch_compile` will be set to `True`.
+
+            Possible choices are `"eager"`, `"aot_eager"`, `"inductor"`, `"nvfuser"`, `"aot_nvfuser"`,
+            `"aot_cudagraphs"`, `"ofi"`, `"fx2trt"`, `"onnxrt"` and `"ipex"`.
+        torch_compile_mode (`str`, *optional*):
+            The mode to use in `torch.compile`. If set to any value, `torch_compile` will be set to `True`.
+
+            Possible choices are `"default"`, `"reduce-overhead"` and `"max-autotune"`.
     """
 
     framework = "pt"
@@ -844,8 +898,17 @@ class TrainingArguments:
         default=0,
         metadata={
             "help": (
-                "FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is"
-                " passed)."
+                "This parameter is deprecatetd. FSDP's minimum number of parameters for Default Auto Wrapping. (useful"
+                " only when `fsdp` field is passed)."
+            )
+        },
+    )
+    fsdp_config: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The  value is either a"
+                "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded  json file as `dict`."
             )
         },
     )
@@ -983,8 +1046,8 @@ class TrainingArguments:
     torchdynamo: Optional[str] = field(
         default=None,
         metadata={
-            "help": "Sets up the backend compiler for TorchDynamo.",
-            "choices": DYNAMO_BACKENDS,
+            "help": "This argument is deprecated, use `--torch_compile_backend` instead.",
+            "choices": TORCH_COMPILE_BACKENDS,
         },
     )
     ray_scope: Optional[str] = field(
@@ -1006,6 +1069,23 @@ class TrainingArguments:
             "help": "Overrides the default timeout for distributed training (value should be given in seconds)."
         },
     )
+    torch_compile: bool = field(
+        default=False, metadata={"help": "If set to `True`, the model will be wrapped in `torch.compile`."}
+    )
+    torch_compile_backend: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Which backend to use with `torch.compile`, passing one will trigger a model compilation.",
+            "choices": TORCH_COMPILE_BACKENDS,
+        },
+    )
+    torch_compile_mode: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Which mode to use with `torch.compile`, passing one will trigger a model compilation.",
+            "choices": ["default", "reduce-overhead", "max-autotune"],
+        },
+    )
 
     def __post_init__(self):
         # Handle --use_env option in torch.distributed.launch (local_rank not passed as an arg then).
@@ -1016,7 +1096,7 @@ class TrainingArguments:
 
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
-        #  see https://github.com/huggingface/transformers/issues/10628
+        # see https://github.com/huggingface/transformers/issues/10628
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
         if self.logging_dir is None and self.output_dir is not None:
@@ -1089,10 +1169,9 @@ class TrainingArguments:
                 self.half_precision_backend = self.fp16_backend
 
             if self.bf16 or self.bf16_full_eval:
-
-                if self.no_cuda and not is_torch_bf16_cpu_available():
+                if self.no_cuda and not is_torch_bf16_cpu_available() and not is_torch_tpu_available():
                     # cpu
-                    raise ValueError("Your setup doesn't support bf16/cpu. You need torch>=1.10")
+                    raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
                 elif not self.no_cuda and torch.cuda.is_available() and not is_torch_bf16_gpu_available():
                     # gpu
                     raise ValueError(
@@ -1140,18 +1219,33 @@ class TrainingArguments:
             and is_torch_available()
             and (self.device.type != "cuda")
             and (get_xla_device_type(self.device) != "GPU")
+            and (get_xla_device_type(self.device) != "TPU")
             and (self.device.type != "cpu")
             and (self.bf16 or self.bf16_full_eval)
         ):
             raise ValueError(
                 "BF16 Mixed precision training with AMP (`--bf16`) and BF16 half precision evaluation"
-                " (`--bf16_full_eval`) can only be used on CUDA or CPU devices."
+                " (`--bf16_full_eval`) can only be used on CUDA or CPU/TPU/NeuronCore devices."
             )
 
-        if self.framework == "pt" and is_torch_available() and self.torchdynamo is not None:
+        if self.torchdynamo is not None:
+            warnings.warn(
+                "`torchdynamo` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
+                " `torch_compile_backend` instead",
+                FutureWarning,
+            )
+            self.torch_compile_backend = self.torchdynamo
+        if (self.torch_compile_mode is not None or self.torch_compile_backend is not None) and not self.torch_compile:
+            self.torch_compile = True
+        if self.torch_compile and self.torch_compile_backend is None:
+            self.torch_compile_backend = "inductor"
+        if self.framework == "pt" and is_torch_available() and self.torch_compile:
             if is_torch_tf32_available():
                 if self.tf32 is None and not self.fp16 or self.bf16:
-                    logger.info("Setting TF32 in CUDA backends to speedup torchdynamo.")
+                    logger.info(
+                        "Setting TF32 in CUDA backends to speedup torch compile, you won't see any improvement"
+                        " otherwise."
+                    )
                     torch.backends.cuda.matmul.allow_tf32 = True
             else:
                 logger.warning(
@@ -1219,13 +1313,31 @@ class TrainingArguments:
         elif FSDPOption.FULL_SHARD in self.fsdp and FSDPOption.SHARD_GRAD_OP in self.fsdp:
             raise ValueError("`--fsdp full_shard` is not compatible with `--fsdp shard_grad_op`.")
 
-        if len(self.fsdp) == 0 and self.fsdp_min_num_params > 0:
+        if self.fsdp_config is None:
+            self.fsdp_config = {}
+
+        if isinstance(self.fsdp_config, str):
+            with io.open(self.fsdp_config, "r", encoding="utf-8") as f:
+                self.fsdp_config = json.load(f)
+
+        if self.fsdp_min_num_params > 0:
+            warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
+
+        self.fsdp_config["fsdp_min_num_params"] = max(
+            getattr(self.fsdp_config, "fsdp_min_num_params", 0), self.fsdp_min_num_params
+        )
+
+        if len(self.fsdp) == 0 and self.fsdp_config["fsdp_min_num_params"] > 0:
             warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
 
         if len(self.fsdp) == 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
             warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
 
-        if len(self.fsdp) > 0 and self.fsdp_min_num_params > 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+        if (
+            len(self.fsdp) > 0
+            and self.fsdp_config["fsdp_min_num_params"] > 0
+            and self.fsdp_transformer_layer_cls_to_wrap is not None
+        ):
             raise ValueError(
                 "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
             )
@@ -1339,8 +1451,8 @@ class TrainingArguments:
         return timedelta(seconds=self.ddp_timeout)
 
     @cached_property
-    @torch_required
     def _setup_devices(self) -> "torch.device":
+        requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
         if torch.distributed.is_available() and torch.distributed.is_initialized() and self.local_rank == -1:
             logger.warning(
@@ -1490,15 +1602,14 @@ class TrainingArguments:
         return device
 
     @property
-    @torch_required
     def device(self) -> "torch.device":
         """
         The device used by this process.
         """
+        requires_backends(self, ["torch"])
         return self._setup_devices
 
     @property
-    @torch_required
     def n_gpu(self):
         """
         The number of GPUs used by this process.
@@ -1507,12 +1618,12 @@ class TrainingArguments:
             This will only be greater than one when you have multiple GPUs available but are not using distributed
             training. For distributed training, it will always be 1.
         """
+        requires_backends(self, ["torch"])
         # Make sure `self._n_gpu` is properly setup.
         _ = self._setup_devices
         return self._n_gpu
 
     @property
-    @torch_required
     def parallel_mode(self):
         """
         The current mode used for parallelism if multiple GPUs/TPU cores are available. One of:
@@ -1523,6 +1634,7 @@ class TrainingArguments:
           `torch.nn.DistributedDataParallel`).
         - `ParallelMode.TPU`: several TPU cores.
         """
+        requires_backends(self, ["torch"])
         if is_torch_tpu_available():
             return ParallelMode.TPU
         elif is_sagemaker_mp_enabled():
@@ -1537,11 +1649,12 @@ class TrainingArguments:
             return ParallelMode.NOT_PARALLEL
 
     @property
-    @torch_required
     def world_size(self):
         """
         The number of processes used in parallel.
         """
+        requires_backends(self, ["torch"])
+
         if is_torch_tpu_available():
             return xm.xrt_world_size()
         elif is_sagemaker_mp_enabled():
@@ -1553,11 +1666,11 @@ class TrainingArguments:
         return 1
 
     @property
-    @torch_required
     def process_index(self):
         """
         The index of the current process used.
         """
+        requires_backends(self, ["torch"])
         if is_torch_tpu_available():
             return xm.get_ordinal()
         elif is_sagemaker_mp_enabled():
@@ -1569,11 +1682,11 @@ class TrainingArguments:
         return 0
 
     @property
-    @torch_required
     def local_process_index(self):
         """
         The index of the local process used.
         """
+        requires_backends(self, ["torch"])
         if is_torch_tpu_available():
             return xm.get_local_ordinal()
         elif is_sagemaker_mp_enabled():

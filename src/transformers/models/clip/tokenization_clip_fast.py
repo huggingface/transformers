@@ -84,7 +84,7 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
         bos_token="<|startoftext|>",
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",  # hack to enable padding
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,

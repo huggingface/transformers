@@ -52,7 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/markuplm-base"
 _CONFIG_FOR_DOC = "MarkupLMConfig"
-_TOKENIZER_FOR_DOC = "MarkupLMTokenizer"
 
 MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/markuplm-base",
@@ -641,7 +640,6 @@ class MarkupLMEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -756,7 +754,7 @@ MARKUPLM_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MarkupLMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -854,9 +852,9 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MarkupLMProcessor, MarkupLMModel
+        >>> from transformers import AutoProcessor, MarkupLMModel
 
-        >>> processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/markuplm-base")
         >>> model = MarkupLMModel.from_pretrained("microsoft/markuplm-base")
 
         >>> html_string = "<html> <head> <title>Page Title</title> </head> </html>"
@@ -937,27 +935,29 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         )
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=True, **model_kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=True, **model_kwargs
+    ):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        # cut decoder_input_ids if past is used
-        if past is not None:
+        # cut decoder_input_ids if past_key_values is used
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
     # Copied from transformers.models.bert.modeling_bert.BertModel._reorder_cache
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
@@ -1016,10 +1016,10 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MarkupLMProcessor, MarkupLMForQuestionAnswering
+        >>> from transformers import AutoProcessor, MarkupLMForQuestionAnswering
         >>> import torch
 
-        >>> processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
         >>> model = MarkupLMForQuestionAnswering.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
 
         >>> html_string = "<html> <head> <title>My name is Niels</title> </head> </html>"

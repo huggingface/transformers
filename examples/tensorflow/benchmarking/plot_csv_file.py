@@ -132,7 +132,7 @@ class Plot:
                 if self.args.plot_along_batch:
                     y_axis_array = np.asarray(
                         [results[(x, inner_loop_value)] for x in x_axis_array if (x, inner_loop_value) in results],
-                        dtype=np.int,
+                        dtype=int,
                     )
                 else:
                     y_axis_array = np.asarray(
@@ -144,7 +144,7 @@ class Plot:
                     ("batch_size", "len") if self.args.plot_along_batch else ("in #tokens", "bsz")
                 )
 
-                x_axis_array = np.asarray(x_axis_array, np.int)[: len(y_axis_array)]
+                x_axis_array = np.asarray(x_axis_array, int)[: len(y_axis_array)]
                 plt.scatter(
                     x_axis_array, y_axis_array, label=f"{label_model_name} - {inner_loop_label}: {inner_loop_value}"
                 )

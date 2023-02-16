@@ -37,9 +37,6 @@ baselines.*
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/facebookresearch/detr).
 
-The quickest way to get started with DETR is by checking the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR) (which showcase both inference and
-fine-tuning on custom data).
-
 Here's a TLDR explaining how [`~transformers.DetrForObjectDetection`] works:
 
 First, an image is sent through a pre-trained convolutional backbone (in the paper, the authors use
@@ -153,6 +150,15 @@ outputs of the model using one of the postprocessing methods of [`~transformers.
 be be provided to either `CocoEvaluator` or `PanopticEvaluator`, which allow you to calculate metrics like
 mean Average Precision (mAP) and Panoptic Quality (PQ). The latter objects are implemented in the [original repository](https://github.com/facebookresearch/detr). See the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR) for more info regarding evaluation.
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DETR.
+
+<PipelineTag pipeline="object-detection"/>
+
+- All example notebooks illustrating fine-tuning [`DetrForObjectDetection`] and [`DetrForSegmentation`] on a custom dataset an be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/DETR).
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## DETR specific outputs
 

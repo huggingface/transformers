@@ -353,6 +353,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "feature_extraction_sequence_utils.py": "test_sequence_feature_extraction_common.py",
     "feature_extraction_utils.py": "test_feature_extraction_common.py",
     "file_utils.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
+    "image_processing_utils.py": ["test_image_processing_common.py", "utils/test_image_processing_utils.py"],
     "image_transforms.py": "test_image_transforms.py",
     "utils/generic.py": ["utils/test_file_utils.py", "utils/test_model_output.py", "utils/test_generic.py"],
     "utils/hub.py": "utils/test_hub_utils.py",
@@ -375,6 +376,10 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "models/gpt2/modeling_gpt2.py": [
         "models/gpt2/test_modeling_gpt2.py",
         "models/megatron_gpt2/test_modeling_megatron_gpt2.py",
+    ],
+    "models/dpt/modeling_dpt.py": [
+        "models/dpt/test_modeling_dpt.py",
+        "models/dpt/test_modeling_dpt_hybrid.py",
     ],
     "optimization.py": "optimization/test_optimization.py",
     "optimization_tf.py": "optimization/test_optimization_tf.py",
@@ -461,12 +466,13 @@ def module_to_test_file(module_fname):
 # This list contains the list of test files we expect never to be launched from a change in a module/util. Those are
 # launched separately.
 EXPECTED_TEST_FILES_NEVER_TOUCHED = [
-    "tests/utils/test_doc_samples.py",  # Doc tests
+    "tests/generation/test_framework_agnostic.py",  # Mixins inherited by actual test classes
+    "tests/mixed_int8/test_mixed_int8.py",  # Mixed-int8 bitsandbytes test
     "tests/pipelines/test_pipelines_common.py",  # Actually checked by the pipeline based file
     "tests/sagemaker/test_single_node_gpu.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_model_parallel.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_data_parallel.py",  # SageMaker test
-    "tests/mixed_int8/test_mixed_int8.py",  # Mixed-int8 bitsandbytes test
+    "tests/utils/test_doc_samples.py",  # Doc tests
 ]
 
 
@@ -559,6 +565,8 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
             elif f.startswith("examples/pytorch"):
                 test_files_to_run.append("examples/pytorch/test_pytorch_examples.py")
                 test_files_to_run.append("examples/pytorch/test_accelerate_examples.py")
+            elif f.startswith("examples/tensorflow"):
+                test_files_to_run.append("examples/tensorflow/test_tensorflow_examples.py")
             elif f.startswith("examples/flax"):
                 test_files_to_run.append("examples/flax/test_flax_examples.py")
             else:

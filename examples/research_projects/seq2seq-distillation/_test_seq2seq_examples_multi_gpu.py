@@ -98,7 +98,6 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
 
     @require_torch_multi_gpu
     def test_multi_gpu(self):
-
         updates = dict(
             no_teacher=True,
             freeze_encoder=True,

@@ -41,7 +41,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "GLPNConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "GLPNImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "vinvino02/glpn-kitti"
@@ -82,8 +81,8 @@ class GLPNDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
@@ -464,7 +463,7 @@ GLPN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`GLPNImageProcessor`]. See [`GLPNImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`GLPNImageProcessor.__call__`] for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -503,7 +502,6 @@ class GLPNModel(GLPNPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GLPN_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -713,7 +711,7 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import GLPNImageProcessor, GLPNForDepthEstimation
+        >>> from transformers import AutoImageProcessor, GLPNForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
@@ -722,7 +720,7 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = GLPNImageProcessor.from_pretrained("vinvino02/glpn-kitti")
+        >>> image_processor = AutoImageProcessor.from_pretrained("vinvino02/glpn-kitti")
         >>> model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti")
 
         >>> # prepare image for the model

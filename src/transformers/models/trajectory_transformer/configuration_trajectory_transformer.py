@@ -45,8 +45,6 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 100):
             Vocabulary size of the TrajectoryTransformer model. Defines the number of different tokens that can be
             represented by the `trajectories` passed when calling [`TrajectoryTransformerModel`]
-        batch_size (`int`, *optional*, defaults to 256):
-            Size of the batch of trajectories passed to the model.
         action_weight (`int`, *optional*, defaults to 5):
             Weight of the action in the loss function
         reward_weight (`int`, *optional*, defaults to 1):
@@ -79,8 +77,6 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`TrajectoryTransformerModel`]
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -115,7 +111,6 @@ class TrajectoryTransformerConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=100,
-        batch_size=256,
         action_weight=5,
         reward_weight=1,
         value_weight=1,
@@ -131,19 +126,16 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         resid_pdrop=0.1,
         learning_rate=0.0006,
         max_position_embeddings=512,
-        type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         kaiming_initializer_range=1,
         use_cache=True,
-        is_encoder_decoder=False,
         pad_token_id=1,
         bos_token_id=50256,
         eos_token_id=50256,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.batch_size = batch_size
         self.action_weight = action_weight
         self.reward_weight = reward_weight
         self.value_weight = value_weight
@@ -160,7 +152,6 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.resid_pdrop = resid_pdrop
         self.initializer_range = initializer_range
-        self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.kaiming_initializer_range = kaiming_initializer_range
         self.use_cache = use_cache

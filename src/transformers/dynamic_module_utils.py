@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-from huggingface_hub import HfFolder, model_info
+from huggingface_hub import model_info
 
 from .utils import HF_MODULES_CACHE, TRANSFORMERS_DYNAMIC_MODULE_NAME, cached_file, is_offline_mode, logging
 
@@ -251,14 +251,7 @@ def get_cached_module_file(
     else:
         # Get the commit hash
         # TODO: we will get this info in the etag soon, so retrieve it from there and not here.
-        if isinstance(use_auth_token, str):
-            token = use_auth_token
-        elif use_auth_token is True:
-            token = HfFolder.get_token()
-        else:
-            token = None
-
-        commit_hash = model_info(pretrained_model_name_or_path, revision=revision, token=token).sha
+        commit_hash = model_info(pretrained_model_name_or_path, revision=revision, token=use_auth_token).sha
 
         # The module file will end up being placed in a subfolder with the git hash of the repo. This way we get the
         # benefit of versioning.

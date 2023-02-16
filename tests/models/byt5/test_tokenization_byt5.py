@@ -36,7 +36,6 @@ else:
 
 
 class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = ByT5Tokenizer
     test_rust_tokenizer = False
 

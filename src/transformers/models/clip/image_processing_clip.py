@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for CLIP."""
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -23,13 +23,21 @@ from transformers.utils.generic import TensorType
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     center_crop,
+    convert_to_rgb,
     get_resize_output_image_size,
     normalize,
     rescale,
     resize,
     to_channel_dimension_format,
 )
-from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, is_batched, to_numpy_array, valid_images
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+)
 from ...utils import logging
 from ...utils.import_utils import is_vision_available
 
@@ -39,20 +47,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
-
-
-def convert_to_rgb(image: Union[Any, PIL.Image.Image]) -> Union[Any, PIL.Image.Image]:
-    """
-    Converts `PIL.Image.Image` to RGB format. Images in other formats are returned as is.
-
-    Args:
-        image (`PIL.Image.Image`):
-            The image to convert.
-    """
-    if not isinstance(image, PIL.Image.Image):
-        return image
-
-    return image.convert("RGB")
 
 
 class CLIPImageProcessor(BaseImageProcessor):
@@ -83,10 +77,10 @@ class CLIPImageProcessor(BaseImageProcessor):
             method.
         do_normalize:
             Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
             Image standard deviation.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
@@ -108,7 +102,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 224}
@@ -134,7 +128,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
@@ -161,7 +155,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Center crop an image. If the image is too small to be cropped to the size given, it will be padded (so the
@@ -185,7 +179,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -206,7 +200,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
@@ -239,7 +233,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -299,8 +293,7 @@ class CLIPImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

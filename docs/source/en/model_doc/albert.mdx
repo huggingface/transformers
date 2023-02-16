@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # ALBERT
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=albert">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-albert-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/albert-base-v2">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The ALBERT model was proposed in [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942) by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma,
@@ -39,6 +48,10 @@ Tips:
 - ALBERT uses repeating layers which results in a small memory footprint, however the computational cost remains
   similar to a BERT-like architecture with the same number of hidden layers as it has to iterate through the same
   number of (repeating) layers.
+- Embedding size E is different from hidden size H justified because the embeddings are context independent (one embedding vector represents one token), whereas hidden states are context dependent (one hidden state represents a sequence of tokens) so it's more logical to have H >> E. Also, the embedding matrix is large since it's V x E (V being the vocab size). If E < H, it has less parameters.
+- Layers are split in groups that share parameters (to save memory).
+Next sentence prediction is replaced by a sentence ordering prediction: in the inputs, we have two sentences A and B (that are consecutive) and we either feed A followed by B or B followed by A. The model must predict if they have been swapped or not.
+
 
 This model was contributed by [lysandre](https://huggingface.co/lysandre). This model jax version was contributed by
 [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/google-research/ALBERT).

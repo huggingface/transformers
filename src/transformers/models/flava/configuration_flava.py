@@ -109,7 +109,7 @@ class FlavaImageConfig(PretrainedConfig):
         qkv_bias: bool = True,
         mask_token: bool = True,
         vocab_size: int = 8192,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -131,7 +131,6 @@ class FlavaImageConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the image config dict if we are loading from FlavaConfig
@@ -237,7 +236,7 @@ class FlavaTextConfig(PretrainedConfig):
         layer_norm_eps: float = 1e-12,
         pad_token_id: int = 0,
         qkv_bias: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -259,7 +258,6 @@ class FlavaTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from FlavaConfig
@@ -343,7 +341,7 @@ class FlavaMultimodalConfig(PretrainedConfig):
         layer_norm_eps: float = 1e-12,
         qkv_bias: bool = True,
         use_cls_token: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -444,7 +442,6 @@ class FlavaImageCodebookConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the image codebook config dict if we are loading from FlavaConfig
@@ -555,7 +552,7 @@ class FlavaConfig(PretrainedConfig):
         global_backprop_contrastive: bool = True,
         skip_unmasked_multimodal_encoder: bool = True,
         return_loss: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -621,7 +618,7 @@ class FlavaConfig(PretrainedConfig):
         text_config: FlavaTextConfig,
         multimodal_config: FlavaMultimodalConfig,
         image_codebook_config: FlavaImageCodebookConfig,
-        **kwargs
+        **kwargs,
     ):
         r"""
         Instantiate a [`FlavaConfig`] (or a derived class) from flava text model configuration, flava image model

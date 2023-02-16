@@ -766,6 +766,7 @@ def parse_log_history(log_history):
             _ = metrics.pop("eval_runtime", None)
             _ = metrics.pop("eval_samples_per_second", None)
             _ = metrics.pop("eval_steps_per_second", None)
+            _ = metrics.pop("eval_jit_compilation_time", None)
             values = {"Training Loss": training_loss, "Epoch": epoch, "Step": step}
             for k, v in metrics.items():
                 if k == "eval_loss":

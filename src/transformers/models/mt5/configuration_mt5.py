@@ -91,7 +91,7 @@ class MT5Config(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         decoder_start_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,

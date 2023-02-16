@@ -419,7 +419,6 @@ class TFTapasModelTester:
 @require_tensorflow_probability
 @require_tf
 class TFTapasModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             TFTapasModel,

@@ -14,7 +14,8 @@
 # limitations under the License.
 """Image processor class for OwlViT"""
 
-from typing import Dict, List, Optional, Union
+import warnings
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -28,7 +29,13 @@ from transformers.image_transforms import (
     to_channel_dimension_format,
     to_numpy_array,
 )
-from transformers.image_utils import ChannelDimension, ImageInput, PILImageResampling, is_batched, valid_images
+from transformers.image_utils import (
+    ChannelDimension,
+    ImageInput,
+    PILImageResampling,
+    make_list_of_images,
+    valid_images,
+)
 from transformers.utils import TensorType, is_torch_available, logging
 
 
@@ -81,10 +88,10 @@ def box_iou(boxes1, boxes2):
 
 class OwlViTImageProcessor(BaseImageProcessor):
     r"""
-    Constructs an OWL-ViT feature extractor.
+    Constructs an OWL-ViT image processor.
 
-    This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
-    should refer to this superclass for more information regarding those methods.
+    This image processor inherits from [`ImageProcessingMixin`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -115,7 +122,6 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image_std (`List[int]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
-
     model_input_names = ["pixel_values"]
 
     def __init__(
@@ -130,7 +136,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         do_normalize=True,
         image_mean=None,
         image_std=None,
-        **kwargs
+        **kwargs,
     ):
         size = size if size is not None else {"height": 768, "width": 768}
         size = get_size_dict(size, default_to_square=True)
@@ -139,7 +145,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         crop_size = get_size_dict(crop_size, default_to_square=True)
 
         # Early versions of the OWL-ViT config on the hub had "rescale" as a flag. This clashes with the
-        # vision feature extractor method `rescale` as it would be set as an attribute during the super().__init__
+        # vision image processor method `rescale` as it would be set as an attribute during the super().__init__
         # call. This is for backwards compatibility.
         if "rescale" in kwargs:
             rescale_val = kwargs.pop("rescale")
@@ -163,7 +169,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to a certain size.
@@ -179,7 +185,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         crop_size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Center crop an image to a certain size.
@@ -195,7 +201,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         rescale_factor: float,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Rescale an image by a certain factor.
@@ -208,7 +214,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         mean: List[float],
         std: List[float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image with a certain mean and standard deviation.
@@ -230,7 +236,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Prepares an image or batch of images for the model.
@@ -300,8 +306,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         if do_normalize is not None and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -330,7 +335,8 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of [`OwlViTForObjectDetection`] into the format expected by the COCO api.
+        Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format.
 
         Args:
             outputs ([`OwlViTObjectDetectionOutput`]):
@@ -344,6 +350,12 @@ class OwlViTImageProcessor(BaseImageProcessor):
             in the batch as predicted by the model.
         """
         # TODO: (amy) add support for other frameworks
+        warnings.warn(
+            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_object_detection`",
+            FutureWarning,
+        )
+
         logits, boxes = outputs.logits, outputs.pred_boxes
 
         if len(logits) != len(target_sizes):
@@ -364,6 +376,61 @@ class OwlViTImageProcessor(BaseImageProcessor):
         boxes = boxes * scale_fct[:, None, :]
 
         results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+
+        return results
+
+    def post_process_object_detection(
+        self, outputs, threshold: float = 0.1, target_sizes: Union[TensorType, List[Tuple]] = None
+    ):
+        """
+        Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format.
+
+        Args:
+            outputs ([`OwlViTObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
+        """
+        # TODO: (amy) add support for other frameworks
+        logits, boxes = outputs.logits, outputs.pred_boxes
+
+        if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+        probs = torch.max(logits, dim=-1)
+        scores = torch.sigmoid(probs.values)
+        labels = probs.indices
+
+        # Convert to [x0, y0, x1, y1] format
+        boxes = center_to_corners_format(boxes)
+
+        # Convert from relative [0, 1] to absolute [0, height] coordinates
+        if target_sizes is not None:
+            if isinstance(target_sizes, List):
+                img_h = torch.Tensor([i[0] for i in target_sizes])
+                img_w = torch.Tensor([i[1] for i in target_sizes])
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+            boxes = boxes * scale_fct[:, None, :]
+
+        results = []
+        for s, l, b in zip(scores, labels, boxes):
+            score = s[s > threshold]
+            label = l[s > threshold]
+            box = b[s > threshold]
+            results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
 

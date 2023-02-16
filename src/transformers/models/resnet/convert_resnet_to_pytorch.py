@@ -22,12 +22,12 @@ from functools import partial
 from pathlib import Path
 from typing import List
 
+import timm
 import torch
 import torch.nn as nn
+from huggingface_hub import hf_hub_download
 from torch import Tensor
 
-import timm
-from huggingface_hub import hf_hub_download
 from transformers import AutoFeatureExtractor, ResNetConfig, ResNetForImageClassification
 from transformers.utils import logging
 

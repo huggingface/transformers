@@ -37,9 +37,6 @@ Tips:
 - For Data2VecAudio, preprocessing is identical to [`Wav2Vec2Model`], including feature extraction
 - For Data2VecText, preprocessing is identical to [`RobertaModel`], including tokenization.
 - For Data2VecVision, preprocessing is identical to [`BeitModel`], including feature extraction.
-- To know how a pre-trained Data2Vec vision model can be fine-tuned on the task of image classification, you can check out
-[this notebook](https://colab.research.google.com/github/sayakpaul/TF-2.0-Hacks/blob/master/data2vec_vision_image_classification.ipynb).
-
 
 This model was contributed by [edugp](https://huggingface.co/edugp) and [patrickvonplaten](https://huggingface.co/patrickvonplaten).
 [sayakpaul](https://github.com/sayakpaul) and [Rocketknight1](https://github.com/Rocketknight1) contributed Data2Vec for vision in TensorFlow.
@@ -47,6 +44,17 @@ This model was contributed by [edugp](https://huggingface.co/edugp) and [patrick
 The original code (for NLP and Speech) can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/data2vec).
 The original code for vision can be found [here](https://github.com/facebookresearch/data2vec_vision/tree/main/beit).
 
+
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Data2Vec.
+
+<PipelineTag pipeline="image-classification"/>
+
+- [`Data2VecVisionForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+- To fine-tune [`TFData2VecVisionForImageClassification`] on a custom dataset, see [this notebook](https://colab.research.google.com/github/sayakpaul/TF-2.0-Hacks/blob/master/data2vec_vision_image_classification.ipynb).
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## Data2VecTextConfig
 

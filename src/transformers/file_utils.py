@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -127,10 +123,8 @@ from .utils import (
     is_vision_available,
     replace_return_docstrings,
     requires_backends,
-    tf_required,
     to_numpy,
     to_py_obj,
     torch_only_method,
-    torch_required,
     torch_version,
 )

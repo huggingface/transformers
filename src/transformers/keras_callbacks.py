@@ -6,10 +6,9 @@ from typing import Callable, List, Optional, Union
 
 import numpy as np
 import tensorflow as tf
+from huggingface_hub import Repository, create_repo
 from packaging.version import parse
 from tensorflow.keras.callbacks import Callback
-
-from huggingface_hub import Repository, create_repo
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
 from .modelcard import TrainingSummary
@@ -320,7 +319,7 @@ class PushToHubCallback(Callback):
         hub_model_id: Optional[str] = None,
         hub_token: Optional[str] = None,
         checkpoint: bool = False,
-        **model_card_args
+        **model_card_args,
     ):
         super().__init__()
         if checkpoint and save_strategy != "epoch":
@@ -340,11 +339,7 @@ class PushToHubCallback(Callback):
         self.output_dir = output_dir
         self.hub_model_id = hub_model_id
         create_repo(self.hub_model_id, exist_ok=True)
-        self.repo = Repository(
-            str(self.output_dir),
-            clone_from=self.hub_model_id,
-            use_auth_token=hub_token if hub_token else True,
-        )
+        self.repo = Repository(str(self.output_dir), clone_from=self.hub_model_id, token=hub_token)
 
         self.tokenizer = tokenizer
         self.last_job = None

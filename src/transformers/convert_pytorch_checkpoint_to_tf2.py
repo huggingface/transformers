@@ -58,6 +58,7 @@ from . import (
     T5Config,
     TFAlbertForPreTraining,
     TFBartForConditionalGeneration,
+    TFBartForSequenceClassification,
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
@@ -136,6 +137,7 @@ MODEL_CLASSES = {
     "bart": (
         BartConfig,
         TFBartForConditionalGeneration,
+        TFBartForSequenceClassification,
         BartForConditionalGeneration,
         BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     ),
@@ -356,7 +358,6 @@ def convert_all_pt_checkpoints_to_tf(
     remove_cached_files=False,
     only_convert_finetuned_models=False,
 ):
-
     if args_model_type is None:
         model_types = list(MODEL_CLASSES.keys())
     else:

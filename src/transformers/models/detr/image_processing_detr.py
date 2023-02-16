@@ -43,7 +43,7 @@ from transformers.image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_coco_detection_annotations,
     valid_coco_panoptic_annotations,
@@ -74,6 +74,9 @@ if is_vision_available():
 if is_scipy_available():
     import scipy.special
     import scipy.stats
+
+
+AnnotationType = Dict[str, Union[int, str, List[Dict]]]
 
 
 class AnnotionFormat(ExplicitEnum):
@@ -189,6 +192,7 @@ def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
     return norm_annotation
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.max_across_indices
 def max_across_indices(values: Iterable[Any]) -> List[Any]:
     """
     Return the maximum value across all indices of an iterable of values.
@@ -196,6 +200,7 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
     return [max(values_i) for values_i in zip(*values)]
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.get_max_height_width
 def get_max_height_width(images: List[np.ndarray]) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -211,6 +216,7 @@ def get_max_height_width(images: List[np.ndarray]) -> List[int]:
     return (max_height, max_width)
 
 
+# Copied from transformers.models.vilt.image_processing_vilt.make_pixel_mask
 def make_pixel_mask(image: np.ndarray, output_size: Tuple[int, int]) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -764,7 +770,7 @@ class DetrImageProcessor(BaseImageProcessor):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         do_pad: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
@@ -793,6 +799,29 @@ class DetrImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+
+    @property
+    def max_size(self):
+        warnings.warn(
+            "The `max_size` parameter is deprecated and will be removed in v4.27. "
+            "Please specify in `size['longest_edge'] instead`.",
+            FutureWarning,
+        )
+        return self.size["longest_edge"]
+
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
+        created using from_dict and kwargs e.g. `DetrImageProcessor.from_pretrained(checkpoint, size=600,
+        max_size=800)`
+        """
+        image_processor_dict = image_processor_dict.copy()
+        if "max_size" in kwargs:
+            image_processor_dict["max_size"] = kwargs.pop("max_size")
+        if "pad_and_return_pixel_mask" in kwargs:
+            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
+        return super().from_dict(image_processor_dict, **kwargs)
 
     def prepare_annotation(
         self,
@@ -846,7 +875,7 @@ class DetrImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[ChannelDimension] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
@@ -1011,7 +1040,7 @@ class DetrImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[List[Dict], List[List[Dict]]]] = None,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
         return_segmentation_masks: bool = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
@@ -1026,7 +1055,7 @@ class DetrImageProcessor(BaseImageProcessor):
         format: Optional[Union[str, AnnotionFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
@@ -1034,7 +1063,7 @@ class DetrImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image or batch of images to preprocess.
-            annotations (`List[Dict]` or `List[List[Dict]]`, *optional*):
+            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
                 List of annotations associated with the image or batch of images. If annotionation is for object
                 detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
@@ -1112,9 +1141,9 @@ class DetrImageProcessor(BaseImageProcessor):
         if do_normalize is not None and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
-        if not is_batched(images):
-            images = [images]
-            annotations = [annotations] if annotations is not None else None
+        images = make_list_of_images(images)
+        if annotations is not None and isinstance(annotations, dict):
+            annotations = [annotations]
 
         if annotations is not None and len(images) != len(annotations):
             raise ValueError(
@@ -1219,8 +1248,8 @@ class DetrImageProcessor(BaseImageProcessor):
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api. Only supports
-        PyTorch.
+        Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
@@ -1282,6 +1311,7 @@ class DetrImageProcessor(BaseImageProcessor):
             FutureWarning,
         )
         out_logits, raw_masks = outputs.logits, outputs.pred_masks
+        empty_label = out_logits.shape[-1] - 1
         preds = []
 
         def to_tuple(tup):
@@ -1291,16 +1321,15 @@ class DetrImageProcessor(BaseImageProcessor):
 
         for cur_logits, cur_masks, size in zip(out_logits, raw_masks, target_sizes):
             # we filter empty queries and detection below threshold
-            scores, labels = cur_logits.softmax(-1).max(-1)
-            keep = labels.ne(outputs.logits.shape[-1] - 1) & (scores > threshold)
-            cur_scores, cur_classes = cur_logits.softmax(-1).max(-1)
+            cur_scores, cur_labels = cur_logits.softmax(-1).max(-1)
+            keep = cur_labels.ne(empty_label) & (cur_scores > threshold)
             cur_scores = cur_scores[keep]
-            cur_classes = cur_classes[keep]
+            cur_labels = cur_labels[keep]
             cur_masks = cur_masks[keep]
             cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
             cur_masks = (cur_masks.sigmoid() > mask_threshold) * 1
 
-            predictions = {"scores": cur_scores, "labels": cur_classes, "masks": cur_masks}
+            predictions = {"scores": cur_scores, "labels": cur_labels, "masks": cur_masks}
             preds.append(predictions)
         return preds
 
@@ -1394,6 +1423,7 @@ class DetrImageProcessor(BaseImageProcessor):
             raise ValueError(
                 "Make sure that you pass in as many target sizes as the batch dimension of the logits and masks"
             )
+        empty_label = out_logits.shape[-1] - 1
         preds = []
 
         def to_tuple(tup):
@@ -1405,24 +1435,23 @@ class DetrImageProcessor(BaseImageProcessor):
             out_logits, raw_masks, raw_boxes, processed_sizes, target_sizes
         ):
             # we filter empty queries and detection below threshold
-            scores, labels = cur_logits.softmax(-1).max(-1)
-            keep = labels.ne(outputs.logits.shape[-1] - 1) & (scores > threshold)
-            cur_scores, cur_classes = cur_logits.softmax(-1).max(-1)
+            cur_scores, cur_labels = cur_logits.softmax(-1).max(-1)
+            keep = cur_labels.ne(empty_label) & (cur_scores > threshold)
             cur_scores = cur_scores[keep]
-            cur_classes = cur_classes[keep]
+            cur_labels = cur_labels[keep]
             cur_masks = cur_masks[keep]
             cur_masks = nn.functional.interpolate(cur_masks[:, None], to_tuple(size), mode="bilinear").squeeze(1)
             cur_boxes = center_to_corners_format(cur_boxes[keep])
 
             h, w = cur_masks.shape[-2:]
-            if len(cur_boxes) != len(cur_classes):
+            if len(cur_boxes) != len(cur_labels):
                 raise ValueError("Not as many boxes as there are classes")
 
             # It may be that we have several predicted masks for the same stuff class.
             # In the following, we track the list of masks ids for each stuff class (they are merged later on)
             cur_masks = cur_masks.flatten(1)
             stuff_equiv_classes = defaultdict(lambda: [])
-            for k, label in enumerate(cur_classes):
+            for k, label in enumerate(cur_labels):
                 if not is_thing_map[label.item()]:
                     stuff_equiv_classes[label.item()].append(k)
 
@@ -1462,28 +1491,28 @@ class DetrImageProcessor(BaseImageProcessor):
                 return area, seg_img
 
             area, seg_img = get_ids_area(cur_masks, cur_scores, dedup=True)
-            if cur_classes.numel() > 0:
+            if cur_labels.numel() > 0:
                 # We know filter empty masks as long as we find some
                 while True:
                     filtered_small = torch.as_tensor(
-                        [area[i] <= 4 for i, c in enumerate(cur_classes)], dtype=torch.bool, device=keep.device
+                        [area[i] <= 4 for i, c in enumerate(cur_labels)], dtype=torch.bool, device=keep.device
                     )
                     if filtered_small.any().item():
                         cur_scores = cur_scores[~filtered_small]
-                        cur_classes = cur_classes[~filtered_small]
+                        cur_labels = cur_labels[~filtered_small]
                         cur_masks = cur_masks[~filtered_small]
                         area, seg_img = get_ids_area(cur_masks, cur_scores)
                     else:
                         break
 
             else:
-                cur_classes = torch.ones(1, dtype=torch.long, device=cur_classes.device)
+                cur_labels = torch.ones(1, dtype=torch.long, device=cur_labels.device)
 
             segments_info = []
             for i, a in enumerate(area):
-                cat = cur_classes[i].item()
+                cat = cur_labels[i].item()
                 segments_info.append({"id": i, "isthing": is_thing_map[cat], "category_id": cat, "area": a})
-            del cur_classes
+            del cur_labels
 
             with io.BytesIO() as out:
                 seg_img.save(out, format="PNG")
@@ -1496,8 +1525,8 @@ class DetrImageProcessor(BaseImageProcessor):
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
         """
-        Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api. Only supports
-        PyTorch.
+        Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
             outputs ([`DetrObjectDetectionOutput`]):

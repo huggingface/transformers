@@ -29,9 +29,6 @@ import numpy as np
 from .import_utils import is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
 
 
-if is_tf_available():
-    import tensorflow as tf
-
 if is_flax_available():
     import jax.numpy as jnp
 
@@ -121,6 +118,24 @@ def is_torch_device(x):
     Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
     """
     return False if not is_torch_available() else _is_torch_device(x)
+
+
+def _is_torch_dtype(x):
+    import torch
+
+    if isinstance(x, str):
+        if hasattr(torch, x):
+            x = getattr(torch, x)
+        else:
+            return False
+    return isinstance(x, torch.dtype)
+
+
+def is_torch_dtype(x):
+    """
+    Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
+    """
+    return False if not is_torch_available() else _is_torch_dtype(x)
 
 
 def _is_tensorflow(x):
@@ -419,6 +434,8 @@ def transpose(array, axes=None):
     elif is_torch_tensor(array):
         return array.T if axes is None else array.permute(*axes)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.transpose(array, perm=axes)
     elif is_jax_tensor(array):
         return jnp.transpose(array, axes=axes)
@@ -436,6 +453,8 @@ def reshape(array, newshape):
     elif is_torch_tensor(array):
         return array.reshape(*newshape)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.reshape(array, newshape)
     elif is_jax_tensor(array):
         return jnp.reshape(array, newshape)
@@ -453,6 +472,8 @@ def squeeze(array, axis=None):
     elif is_torch_tensor(array):
         return array.squeeze() if axis is None else array.squeeze(dim=axis)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.squeeze(array, axis=axis)
     elif is_jax_tensor(array):
         return jnp.squeeze(array, axis=axis)
@@ -470,6 +491,8 @@ def expand_dims(array, axis):
     elif is_torch_tensor(array):
         return array.unsqueeze(dim=axis)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.expand_dims(array, axis=axis)
     elif is_jax_tensor(array):
         return jnp.expand_dims(array, axis=axis)
@@ -486,6 +509,8 @@ def tensor_size(array):
     elif is_torch_tensor(array):
         return array.numel()
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.size(array)
     elif is_jax_tensor(array):
         return array.size

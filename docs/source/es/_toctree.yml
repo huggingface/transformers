@@ -52,13 +52,25 @@
       title: Guías de tareas
     title: Procesamiento del Lenguaje Natural
   - sections:
+    - local: tasks/asr
+      title: Reconocimiento automático del habla
+    title: Audio
+  - sections:
     - local: tasks/image_classification
       title: Clasificación de imágenes
     title: Visión Artificial
   - sections:
+    - local: debugging
+      title: Debugging
+    title: Rendimiento y escalabilidad
+  - sections:
+    - local: add_new_pipeline
+      title: ¿Cómo puedo añadir un pipeline a 🤗 Transformers?
     - local: pr_checks
       title: Verificaciones en un Pull Request
     title: Contribuir
+  - local: community
+    title: Los recursos de la comunidad
   title: Guías prácticas
 - sections:
   - local: philosophy

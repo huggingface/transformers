@@ -19,7 +19,14 @@ import tempfile
 import unittest
 
 from transformers import T5Config, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -66,7 +73,6 @@ class T5ModelTester:
         scope=None,
         decoder_layers=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -513,7 +519,6 @@ class T5ModelTester:
 
 @require_torch
 class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
     all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
@@ -696,7 +701,6 @@ class T5EncoderOnlyModelTester:
         pad_token_id=0,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -818,6 +822,50 @@ class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 
 def use_task_specific_params(model, task):
     model.config.update(model.config.task_specific_params[task])
+
+
+@require_torch
+@require_accelerate
+@require_tokenizers
+@slow
+class T5ModelFp16Tests(unittest.TestCase):
+    def test_fp16_fp32_conversion(self):
+        r"""
+        A test to check whether the argument `keep_in_fp32_modules` correctly does its job
+        """
+        # Load without using `accelerate`
+        model = T5ForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.float16)
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
+
+        # Load without in bf16
+        model = T5ForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.bfloat16)
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
+
+        # Load using `accelerate` in bf16
+        model = T5ForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.bfloat16, device_map="auto")
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
+
+        # Load using `accelerate` in bf16
+        model = T5ForConditionalGeneration.from_pretrained(
+            "t5-small", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        )
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
+
+        # Load without using `accelerate`
+        model = T5ForConditionalGeneration.from_pretrained(
+            "t5-small", torch_dtype=torch.float16, low_cpu_mem_usage=True
+        )
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
+
+        # Load using `accelerate`
+        model = T5ForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.float16, device_map="auto")
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
+        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
 
 @require_torch

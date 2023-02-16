@@ -62,14 +62,13 @@ class MaskFormerSwinConfig(PretrainedConfig):
             `"selu"` and `"gelu_new"` are supported.
         use_absolute_embeddings (`bool`, *optional*, defaults to False):
             Whether or not to add absolute position embeddings to the patch embeddings.
-        patch_norm (`bool`, *optional*, defaults to True):
-            Whether or not to add layer normalization after patch embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         out_features (`List[str]`, *optional*):
-            If used as a backbone, list of feature names to output, e.g. `["stem", "stage1"]`.
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). Will default to the last stage if unset.
 
     Example:
 
@@ -108,11 +107,10 @@ class MaskFormerSwinConfig(PretrainedConfig):
         drop_path_rate=0.1,
         hidden_act="gelu",
         use_absolute_embeddings=False,
-        patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         out_features=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -131,7 +129,6 @@ class MaskFormerSwinConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.hidden_act = hidden_act
         self.use_absolute_embeddings = use_absolute_embeddings
-        self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel

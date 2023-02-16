@@ -21,8 +21,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/swinv2_tiny_patch4_windows8_256": (
-        "https://huggingface.co/microsoft/swinv2_tiny_patch4_windows8_256/resolve/main/config.json"
+    "microsoft/swinv2-tiny-patch4-window8-256": (
+        "https://huggingface.co/microsoft/swinv2-tiny-patch4-window8-256/resolve/main/config.json"
     ),
 }
 
@@ -32,7 +32,7 @@ class Swinv2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Swinv2Model`]. It is used to instantiate a Swin
     Transformer v2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Swin Transformer v2
-    [microsoft/swinv2_tiny_patch4_windows8_256](https://huggingface.co/microsoft/swinv2_tiny_patch4_windows8_256)
+    [microsoft/swinv2-tiny-patch4-window8-256](https://huggingface.co/microsoft/swinv2-tiny-patch4-window8-256)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -68,8 +68,6 @@ class Swinv2Config(PretrainedConfig):
             `"selu"` and `"gelu_new"` are supported.
         use_absolute_embeddings (`bool`, *optional*, defaults to `False`):
             Whether or not to add absolute position embeddings to the patch embeddings.
-        patch_norm (`bool`, *optional*, defaults to `True`):
-            Whether or not to add layer normalization after patch embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -82,10 +80,10 @@ class Swinv2Config(PretrainedConfig):
     ```python
     >>> from transformers import Swinv2Config, Swinv2Model
 
-    >>> # Initializing a Swinv2 microsoft/swinv2_tiny_patch4_windows8_256 style configuration
+    >>> # Initializing a Swinv2 microsoft/swinv2-tiny-patch4-window8-256 style configuration
     >>> configuration = Swinv2Config()
 
-    >>> # Initializing a model (with random weights) from the microsoft/swinv2_tiny_patch4_windows8_256 style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/swinv2-tiny-patch4-window8-256 style configuration
     >>> model = Swinv2Model(configuration)
 
     >>> # Accessing the model configuration
@@ -114,11 +112,10 @@ class Swinv2Config(PretrainedConfig):
         drop_path_rate=0.1,
         hidden_act="gelu",
         use_absolute_embeddings=False,
-        patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         encoder_stride=32,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -137,7 +134,6 @@ class Swinv2Config(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.hidden_act = hidden_act
         self.use_absolute_embeddings = use_absolute_embeddings
-        self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.encoder_stride = encoder_stride

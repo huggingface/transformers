@@ -25,14 +25,14 @@ import random
 
 import numpy as np
 import torch
+from pabee.modeling_pabee_albert import AlbertForSequenceClassificationWithPabee
+from pabee.modeling_pabee_bert import BertForSequenceClassificationWithPabee
 from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 import transformers
-from pabee.modeling_pabee_albert import AlbertForSequenceClassificationWithPabee
-from pabee.modeling_pabee_bert import BertForSequenceClassificationWithPabee
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -173,7 +173,6 @@ def train(args, train_dataset, model, tokenizer):
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
-
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
@@ -263,7 +262,6 @@ def train(args, train_dataset, model, tokenizer):
 
 
 def evaluate(args, model, tokenizer, prefix="", patience=0):
-
     if args.model_type == "albert":
         model.albert.set_regression_threshold(args.regression_threshold)
         model.albert.set_patience(patience)
@@ -736,7 +734,6 @@ def main():
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
         for checkpoint in checkpoints:
-
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
             prefix = checkpoint.split("/")[-1] if checkpoint.find("checkpoint") != -1 else ""
 

@@ -110,8 +110,6 @@ class RealmConfig(PretrainedConfig):
         searcher_beam_size (`int`, *optional*, defaults to 5000):
             Beam size of the searcher. Note that when eval mode is enabled, *searcher_beam_size* will be the same as
             *reader_beam_size*.
-        searcher_seq_len (`int`, *optional*, defaults to 64):
-            Maximum sequence length of the searcher.
 
     Example:
 
@@ -152,11 +150,10 @@ class RealmConfig(PretrainedConfig):
         reader_seq_len=320,  # 288 + 32
         num_block_records=13353718,
         searcher_beam_size=5000,
-        searcher_seq_len=64,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -186,4 +183,3 @@ class RealmConfig(PretrainedConfig):
         # Retrieval config
         self.num_block_records = num_block_records
         self.searcher_beam_size = searcher_beam_size
-        self.searcher_seq_len = searcher_seq_len

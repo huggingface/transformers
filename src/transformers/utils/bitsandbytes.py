@@ -4,10 +4,9 @@ from transformers.utils import is_accelerate_available, is_bitsandbytes_availabl
 
 
 if is_bitsandbytes_available():
+    import bitsandbytes as bnb
     import torch
     import torch.nn as nn
-
-    import bitsandbytes as bnb
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
@@ -150,7 +149,7 @@ def get_keys_to_not_convert(model):
 
     # Ignore this for base models (BertModel, GPT2Model, etc.)
     if (not has_tied_params) and is_base_model:
-        return ""
+        return []
 
     # otherwise they have an attached head
     list_modules = list(model.named_parameters())

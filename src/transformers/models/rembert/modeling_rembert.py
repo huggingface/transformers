@@ -50,7 +50,6 @@ from .configuration_rembert import RemBertConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RemBertConfig"
-_TOKENIZER_FOR_DOC = "RemBertTokenizer"
 _CHECKPOINT_FOR_DOC = "google/rembert"
 
 REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -522,7 +521,6 @@ class RemBertEncoder(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -537,7 +535,6 @@ class RemBertEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -695,7 +692,7 @@ REMBERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`RemBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -785,7 +782,6 @@ class RemBertModel(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -938,7 +934,6 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1018,7 +1013,6 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
     """RemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", REMBERT_START_DOCSTRING
 )
 class RemBertForCausalLM(RemBertPreTrainedModel):
-
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):
@@ -1086,10 +1080,10 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RemBertTokenizer, RemBertForCausalLM, RemBertConfig
+        >>> from transformers import AutoTokenizer, RemBertForCausalLM, RemBertConfig
         >>> import torch
 
-        >>> tokenizer = RemBertTokenizer.from_pretrained("google/rembert")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/rembert")
         >>> config = RemBertConfig.from_pretrained("google/rembert")
         >>> config.is_decoder = True
         >>> model = RemBertForCausalLM.from_pretrained("google/rembert", config=config)
@@ -1141,7 +1135,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
 
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1149,14 +1143,14 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
             attention_mask = input_ids.new_ones(input_shape)
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
@@ -1183,7 +1177,6 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1280,7 +1273,6 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1373,7 +1365,6 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1452,7 +1443,6 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
