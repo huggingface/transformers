@@ -774,6 +774,7 @@ class BloomModel(BloomPreTrainedModel):
                     hidden_states,
                     alibi,
                     causal_mask,
+                    layer_past,
                     head_mask[i],
                 )
             else:
