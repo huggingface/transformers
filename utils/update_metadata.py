@@ -23,7 +23,7 @@ import pandas as pd
 from datasets import Dataset
 from huggingface_hub import Repository
 
-from transformers.utils import direct_import
+from transformers.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -32,7 +32,7 @@ TRANSFORMERS_PATH = "src/transformers"
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-transformers_module = direct_import("transformers", TRANSFORMERS_PATH)
+transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
 # Regexes that match TF/Flax/PT model names.

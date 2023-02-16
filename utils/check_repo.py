@@ -23,7 +23,7 @@ from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.utils import ENV_VARS_TRUE_VALUES, direct_import
+from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -305,7 +305,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-transformers = direct_import("transformers", PATH_TO_TRANSFORMERS)
+transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
 def check_model_list():

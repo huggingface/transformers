@@ -21,13 +21,13 @@ from pathlib import Path
 
 from .dynamic_module_utils import custom_object_save
 from .tokenization_utils_base import PreTrainedTokenizerBase
-from .utils import PushToHubMixin, copy_func, direct_import, logging
+from .utils import PushToHubMixin, copy_func, direct_transformers_import, logging
 
 
 logger = logging.get_logger(__name__)
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
-transformers_module = direct_import("transformers", Path(__file__).parent)
+transformers_module = direct_transformers_import(Path(__file__).parent)
 
 
 AUTO_TO_BASE_CLASS_MAPPING = {

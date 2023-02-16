@@ -273,9 +273,9 @@ IGNORE_SUBMODULES = [
 
 def check_submodules():
     # This is to make sure the transformers module imported is the one in the repo.
-    from transformers.utils import direct_import
+    from transformers.utils import direct_transformers_import
 
-    transformers = direct_import("transformers", PATH_TO_TRANSFORMERS)
+    transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
     module_not_registered = [
         module

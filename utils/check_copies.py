@@ -21,7 +21,7 @@ import re
 import black
 from doc_builder.style_doc import style_docstrings_in_code
 
-from transformers.utils import direct_import
+from transformers.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -99,7 +99,7 @@ LOCALIZED_READMES = {
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-transformers_module = direct_import("transformers", TRANSFORMERS_PATH)
+transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
 def _should_continue(line, indent):

@@ -16,7 +16,7 @@
 import inspect
 import re
 
-from transformers.utils import direct_import
+from transformers.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -25,7 +25,7 @@ PATH_TO_TRANSFORMERS = "src/transformers"
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-transformers = direct_import("transformers", PATH_TO_TRANSFORMERS)
+transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 

@@ -21,6 +21,7 @@ import numbers
 import os
 import pickle
 import shutil
+import sys
 import tempfile
 from dataclasses import asdict
 from pathlib import Path
@@ -326,11 +327,12 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         if is_datasets_available():
             import datasets.load
 
-            from transformers.utils import direct_import
-
-            path = datasets.load.init_dynamic_modules()
+            dynamic_modules_path = os.path.join(datasets.load.init_dynamic_modules(), "__init__.py")
             # load dynamic_modules from path
-            direct_import("datasets_modules", path)
+            spec = importlib.util.spec_from_file_location("datasets_modules", dynamic_modules_path)
+            datasets_modules = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = datasets_modules
+            spec.loader.exec_module(datasets_modules)
         return trainable(*args, **kwargs)
 
     # special attr set by tune.with_parameters

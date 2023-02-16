@@ -52,7 +52,7 @@ from transformers.testing_utils import (
     require_torch_or_tf,
     slow,
 )
-from transformers.utils import direct_import, is_tf_available, is_torch_available
+from transformers.utils import direct_transformers_import, is_tf_available, is_torch_available
 from transformers.utils import logging as transformers_logging
 
 
@@ -68,7 +68,7 @@ PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent.parent, "src/tr
 
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
-transformers_module = direct_import("transformers", PATH_TO_TRANSFORMERS)
+transformers_module = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
 class ANY:
