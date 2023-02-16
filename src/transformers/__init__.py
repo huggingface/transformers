@@ -47,6 +47,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
+    "audio_utils": [],
     "benchmark": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
@@ -205,6 +206,13 @@ _import_structure = {
         "ChineseCLIPProcessor",
         "ChineseCLIPTextConfig",
         "ChineseCLIPVisionConfig",
+    ],
+    "models.clap": [
+        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ClapAudioConfig",
+        "ClapConfig",
+        "ClapProcessor",
+        "ClapTextConfig",
     ],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1229,6 +1237,18 @@ else:
             "ChineseCLIPPreTrainedModel",
             "ChineseCLIPTextModel",
             "ChineseCLIPVisionModel",
+        ]
+    )
+    _import_structure["models.clap"].extend(
+        [
+            "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ClapAudioModel",
+            "ClapAudioModelWithProjection",
+            "ClapFeatureExtractor",
+            "ClapModel",
+            "ClapPreTrainedModel",
+            "ClapTextModel",
+            "ClapTextModelWithProjection",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -3730,6 +3750,13 @@ if TYPE_CHECKING:
         ChineseCLIPTextConfig,
         ChineseCLIPVisionConfig,
     )
+    from .models.clap import (
+        CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ClapAudioConfig,
+        ClapConfig,
+        ClapProcessor,
+        ClapTextConfig,
+    )
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
@@ -4622,6 +4649,16 @@ if TYPE_CHECKING:
             ChineseCLIPPreTrainedModel,
             ChineseCLIPTextModel,
             ChineseCLIPVisionModel,
+        )
+        from .models.clap import (
+            CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClapAudioModel,
+            ClapAudioModelWithProjection,
+            ClapFeatureExtractor,
+            ClapModel,
+            ClapPreTrainedModel,
+            ClapTextModel,
+            ClapTextModelWithProjection,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
