@@ -104,11 +104,11 @@ class InformerConfig(PretrainedConfig):
             The standard deviation of the truncated normal weight initialization distribution.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
-        attn (`str`, defaults to `prob`):
+        attention_type (`str`, *optional*, defaults to `prob`):
             Attention used in encoder. This can be set to prob (informer) or full (transformer)
-        factor (`int`, defaults to 2):
+        attention_factor (`int`, *optional*, defaults to 2):
             ProbSparse attention factor.
-        distil (`bool`, defaults to `True`):
+        distil (`bool`, *optional*, defaults to `True`):
             Whether to use distilling in encoder.
 
 
