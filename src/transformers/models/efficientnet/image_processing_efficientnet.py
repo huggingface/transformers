@@ -55,7 +55,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
             Size of the image after `resize`. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.NEAREST`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
+        do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
             is padded with 0's and then center cropped. Can be overridden by `do_center_crop` in `preprocess`.
         crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 289, "width": 289}`):
@@ -78,6 +78,8 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        include_top (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image again. Should be set to True if the inputs are used for image classification.
     """
 
     model_input_names = ["pixel_values"]
@@ -87,7 +89,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         size: Dict[str, int] = None,
         resample: PILImageResampling = PIL.Image.NEAREST,
-        do_center_crop: bool = True,
+        do_center_crop: bool = False,
         crop_size: Dict[str, int] = None,
         rescale_factor: Union[int, float] = 1 / 255,
         rescale_offset: bool = False,
@@ -95,6 +97,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        include_top: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -114,6 +117,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.include_top = include_top
 
     def resize(
         self,
@@ -234,6 +238,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        include_top: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         **kwargs,
@@ -268,6 +273,8 @@ class EfficientNetImageProcessor(BaseImageProcessor):
                 Image mean.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
+            include_top (`bool`, *optional*, defaults to `self.include_top`):
+                Rescales the image again for image classification if set to True.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - `None`: Return a list of `np.ndarray`.
@@ -289,6 +296,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
+        include_top = include_top if include_top is not None else self.include_top
 
         size = size if size is not None else self.size
         size = get_size_dict(size)
@@ -331,7 +339,9 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
+        if include_top:
+            images = [self.normalize(image=image, mean=[0, 0, 0], std=image_std) for image in images]
+            images = [to_channel_dimension_format(image, data_format) for image in images]
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)

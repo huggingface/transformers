@@ -287,7 +287,6 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_m
     hf_model.eval()
     with torch.no_grad():
         outputs = hf_model(**inputs)
-
     hf_logits = outputs.logits.detach().numpy()
 
     # Original model inference
@@ -312,7 +311,7 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_m
 
     if push_to_hub:
         # Push model and feature extractor to hub
-        print("Pushing converted model to the hub...")
+        print(f"Pushing converted {model_name} to the hub...")
         model_name = f"efficientnet-{model_name}"
         preprocessor.push_to_hub(model_name)
         hf_model.push_to_hub(model_name)
