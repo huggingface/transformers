@@ -173,7 +173,6 @@ class MaskFormerModelTester:
 
 @require_torch
 class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (MaskFormerModel, MaskFormerForInstanceSegmentation) if is_torch_available() else ()
 
     is_encoder_decoder = False

@@ -18,6 +18,7 @@ import subprocess
 from os.path import dirname
 
 from parameterized import parameterized
+
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -267,7 +268,7 @@ def make_task_cmds():
             --dataset_name hf-internal-testing/cats_vs_dogs_sample
             --remove_unused_columns False
             --max_steps 10
-            --feature_extractor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
+            --image_processor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
         """,
     )
 

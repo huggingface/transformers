@@ -150,7 +150,7 @@ Condividi un modello nell'Hub con [`PushToHubCallback`]. Nella funzione [`PushTo
 - L'`hub_model_id`, che è il tuo username sull'Hub e il nome del modello.
 
 ```py
->>> from transformers.keras.callbacks import PushToHubCallback
+>>> from transformers import PushToHubCallback
 
 >>> push_to_hub_callback = PushToHubCallback(
 ...     output_dir="./il_path_dove_salvare_il_tuo_modello",

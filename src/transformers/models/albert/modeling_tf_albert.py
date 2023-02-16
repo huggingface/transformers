@@ -61,7 +61,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
-_TOKENIZER_FOR_DOC = "AlbertTokenizer"
 
 TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "albert-base-v1",
@@ -582,7 +581,6 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -738,7 +736,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`AlbertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -802,7 +800,6 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -895,9 +892,9 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import AlbertTokenizer, TFAlbertForPreTraining
+        >>> from transformers import AutoTokenizer, TFAlbertForPreTraining
 
-        >>> tokenizer = AlbertTokenizer.from_pretrained("albert-base-v2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
         >>> model = TFAlbertForPreTraining.from_pretrained("albert-base-v2")
 
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]
@@ -1015,9 +1012,9 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import AlbertTokenizer, TFAlbertForMaskedLM
+        >>> from transformers import AutoTokenizer, TFAlbertForMaskedLM
 
-        >>> tokenizer = AlbertTokenizer.from_pretrained("albert-base-v2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
         >>> model = TFAlbertForMaskedLM.from_pretrained("albert-base-v2")
 
         >>> # add mask_token
@@ -1101,7 +1098,6 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="vumichien/albert-base-v2-imdb",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1196,15 +1192,9 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="vumichien/tiny-albert",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=(
-            "['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_1', 'LABEL_1', "
-            "'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_1']"
-        ),
-        expected_loss=0.66,
     )
     def call(
         self,
@@ -1285,7 +1275,6 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="vumichien/albert-base-v2-squad2",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1400,7 +1389,6 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,

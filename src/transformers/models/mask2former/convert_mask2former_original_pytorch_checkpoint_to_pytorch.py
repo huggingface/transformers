@@ -20,21 +20,21 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
 
+import requests
 import torch
 import torchvision.transforms as T
-from PIL import Image
-from torch import Tensor, nn
-
-import requests
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
 from huggingface_hub import hf_hub_download
+from PIL import Image
+from torch import Tensor, nn
+
 from transformers import (
     Mask2FormerConfig,
     Mask2FormerForUniversalSegmentation,
+    Mask2FormerImageProcessor,
     Mask2FormerModel,
-    MaskFormerImageProcessor,
     SwinConfig,
 )
 from transformers.models.mask2former.modeling_mask2former import (
@@ -193,11 +193,11 @@ class OriginalMask2FormerConfigToOursConverter:
 
 
 class OriginalMask2FormerConfigToFeatureExtractorConverter:
-    def __call__(self, original_config: object) -> MaskFormerImageProcessor:
+    def __call__(self, original_config: object) -> Mask2FormerImageProcessor:
         model = original_config.MODEL
         model_input = original_config.INPUT
 
-        return MaskFormerImageProcessor(
+        return Mask2FormerImageProcessor(
             image_mean=(torch.tensor(model.PIXEL_MEAN) / 255).tolist(),
             image_std=(torch.tensor(model.PIXEL_STD) / 255).tolist(),
             size=model_input.MIN_SIZE_TEST,
@@ -624,7 +624,6 @@ class OriginalMask2FormerCheckpointToOursConverter:
 
         rename_keys = []
         for i in range(self.config.decoder_layers - 1):
-
             rename_keys.append(
                 (
                     f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.out_proj.weight",
@@ -847,7 +846,7 @@ class OriginalMask2FormerCheckpointToOursConverter:
 def test(
     original_model,
     our_model: Mask2FormerForUniversalSegmentation,
-    feature_extractor: MaskFormerImageProcessor,
+    feature_extractor: Mask2FormerImageProcessor,
     tolerance: float,
 ):
     with torch.no_grad():

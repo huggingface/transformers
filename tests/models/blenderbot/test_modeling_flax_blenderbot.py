@@ -34,6 +34,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+
     from transformers import BlenderbotTokenizer
     from transformers.models.blenderbot.modeling_flax_blenderbot import (
         FlaxBlenderbotForConditionalGeneration,

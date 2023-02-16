@@ -263,7 +263,6 @@ class PerceiverModelTester:
 
 @require_torch
 class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             PerceiverModel,
@@ -739,7 +738,6 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             for problem_type in problem_types:
                 with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
-
                     config.problem_type = problem_type["title"]
                     config.num_labels = problem_type["num_labels"]
 
@@ -849,7 +847,6 @@ def extract_image_patches(x, kernel, stride=1, dilation=1):
 class PerceiverModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-
         tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
         model = PerceiverForMaskedLM.from_pretrained("deepmind/language-perceiver")
         model.to(torch_device)
@@ -884,7 +881,6 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification(self):
-
         feature_extractor = PerceiverFeatureExtractor()
         model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
         model.to(torch_device)
@@ -909,7 +905,6 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_fourier(self):
-
         feature_extractor = PerceiverFeatureExtractor()
         model = PerceiverForImageClassificationFourier.from_pretrained("deepmind/vision-perceiver-fourier")
         model.to(torch_device)
@@ -934,7 +929,6 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_conv(self):
-
         feature_extractor = PerceiverFeatureExtractor()
         model = PerceiverForImageClassificationConvProcessing.from_pretrained("deepmind/vision-perceiver-conv")
         model.to(torch_device)

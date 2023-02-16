@@ -499,7 +499,7 @@ def main():
         # region TF Dataset preparation
         num_replicas = training_args.strategy.num_replicas_in_sync
         data_collator = DataCollatorForLanguageModeling(
-            tokenizer=tokenizer, mlm_probability=data_args.mlm_probability, return_tensors="tf"
+            tokenizer=tokenizer, mlm_probability=data_args.mlm_probability, return_tensors="np"
         )
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF

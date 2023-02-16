@@ -112,7 +112,7 @@ class GLPNConfig(PretrainedConfig):
         decoder_hidden_size=64,
         max_depth=10,
         head_in_index=-1,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

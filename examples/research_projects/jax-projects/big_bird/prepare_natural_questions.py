@@ -1,9 +1,8 @@
 import os
 
+import jsonlines
 import numpy as np
 from tqdm import tqdm
-
-import jsonlines
 
 
 DOC_STRIDE = 2048

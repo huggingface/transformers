@@ -50,7 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
-_TOKENIZER_FOR_DOC = "LongformerTokenizer"
 
 LARGE_NEGATIVE = -1e8
 
@@ -1693,7 +1692,6 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ):
-
         if input_ids is not None and not isinstance(input_ids, tf.Tensor):
             input_ids = tf.convert_to_tensor(input_ids, dtype=tf.int64)
         elif input_ids is not None:
@@ -1889,9 +1887,6 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
         global_attention_mask = tf.convert_to_tensor(
             [[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]], dtype=tf.int32
         )
-        global_attention_mask = tf.convert_to_tensor(
-            [[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]], dtype=tf.int32
-        )
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -1960,7 +1955,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
         input_ids (`np.ndarray` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`LongformerTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -2064,7 +2059,6 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[TFLongformerBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-
         outputs = self.longformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -2119,7 +2113,6 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="allenai/longformer-base-4096",
         output_type=TFLongformerMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2214,7 +2207,6 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="allenai/longformer-large-4096-finetuned-triviaqa",
         output_type=TFLongformerQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2380,12 +2372,9 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="hf-internal-testing/tiny-random-longformer",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'LABEL_1'",
-        expected_loss=0.69,
     )
     def call(
         self,
@@ -2402,7 +2391,6 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
     ) -> Union[TFLongformerSequenceClassifierOutput, Tuple[tf.Tensor]]:
-
         if input_ids is not None and not isinstance(input_ids, tf.Tensor):
             input_ids = tf.convert_to_tensor(input_ids, dtype=tf.int64)
         elif input_ids is not None:
@@ -2506,7 +2494,6 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLongformerMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2635,16 +2622,9 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="hf-internal-testing/tiny-random-longformer",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=(
-            "['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1',"
-            " 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_1',"
-            " 'LABEL_1', 'LABEL_1']"
-        ),
-        expected_loss=0.59,
     )
     def call(
         self,

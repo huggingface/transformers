@@ -29,7 +29,6 @@ from transformers import AutoTokenizer
 
 
 def pack_examples(tok, src_examples, tgt_examples, max_tokens=1024):
-
     finished_src, finished_tgt = [], []
 
     sorted_examples = list(zip(src_examples, tgt_examples))

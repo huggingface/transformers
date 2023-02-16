@@ -25,12 +25,12 @@ import timeit
 
 import numpy as np
 import torch
+from emmental import MaskedBertConfig, MaskedBertForQuestionAnswering
 from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from emmental import MaskedBertConfig, MaskedBertForQuestionAnswering
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -236,7 +236,6 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
-
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1

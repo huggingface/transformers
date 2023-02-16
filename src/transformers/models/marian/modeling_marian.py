@@ -48,7 +48,6 @@ from .configuration_marian import MarianConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MarianConfig"
-_TOKENIZER_FOR_DOC = "MarianTokenizer"
 _CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
 
 
@@ -539,14 +538,14 @@ MARIAN_GENERATION_EXAMPLE = r"""
     Examples:
 
     ```python
-    >>> from transformers import MarianTokenizer, MarianMTModel
+    >>> from transformers import AutoTokenizer, MarianMTModel
 
     >>> src = "fr"  # source language
     >>> trg = "en"  # target language
 
     >>> model_name = f"Helsinki-NLP/opus-mt-{src}-{trg}"
     >>> model = MarianMTModel.from_pretrained(model_name)
-    >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
+    >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     >>> sample_text = "où est l'arrêt de bus ?"
     >>> batch = tokenizer([sample_text], return_tensors="pt")
@@ -563,7 +562,7 @@ MARIAN_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -577,7 +576,7 @@ MARIAN_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -705,7 +704,7 @@ class MarianEncoder(MarianPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -897,7 +896,7 @@ class MarianDecoder(MarianPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1020,7 +1019,6 @@ class MarianDecoder(MarianPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1045,7 +1043,6 @@ class MarianDecoder(MarianPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -1203,9 +1200,9 @@ class MarianModel(MarianPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MarianTokenizer, MarianModel
+        >>> from transformers import AutoTokenizer, MarianModel
 
-        >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
         >>> model = MarianModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
 
         >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
@@ -1524,9 +1521,9 @@ class MarianMTModel(MarianPreTrainedModel):
         return logits
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
@@ -1606,7 +1603,7 @@ class MarianForCausalLM(MarianPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MarianTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1671,9 +1668,9 @@ class MarianForCausalLM(MarianPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MarianTokenizer, MarianForCausalLM
+        >>> from transformers import AutoTokenizer, MarianForCausalLM
 
-        >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
+        >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
         >>> model = MarianForCausalLM.from_pretrained("Helsinki-NLP/opus-mt-fr-en", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -1745,8 +1742,8 @@ class MarianForCausalLM(MarianPreTrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

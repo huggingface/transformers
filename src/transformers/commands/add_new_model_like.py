@@ -1556,6 +1556,8 @@ def get_user_input():
                 "What will be the name of the image processor class for this model? ",
                 default_value=f"{model_camel_cased}ImageProcessor",
             )
+        else:
+            image_processor_class = None
         if old_feature_extractor_class is not None:
             feature_extractor_class = get_user_field(
                 "What will be the name of the feature extractor class for this model? ",

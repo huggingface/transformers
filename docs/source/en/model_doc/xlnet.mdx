@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # XLNet
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=xlnet">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlnet-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/xlnet-base-cased">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The XLNet model was proposed in [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) by Zhilin Yang, Zihang Dai, Yiming Yang, Jaime Carbonell, Ruslan Salakhutdinov,
@@ -40,6 +49,8 @@ Tips:
   `target_mapping` inputs to control the attention span and outputs (see examples in
   *examples/pytorch/text-generation/run_generation.py*)
 - XLNet is one of the few models that has no sequence length limit.
+- XLNet is not a traditional autoregressive model but uses a training strategy that builds on that. It permutes the tokens in the sentence, then allows the model to use the last n tokens to predict the token n+1. Since this is all done with a mask, the sentence is actually fed in the model in the right order, but instead of masking the first n tokens for n+1, XLNet uses a mask that hides the previous tokens in some given permutation of 1,…,sequence length.
+- XLNet also uses the same recurrence mechanism as Transformer-XL to build long-term dependencies.
 
 This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/zihangdai/xlnet/).
 

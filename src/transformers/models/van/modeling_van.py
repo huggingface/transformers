@@ -374,7 +374,7 @@ class VanPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            nn.init.trunc_normal_(module.weight, std=0.02)
+            nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 nn.init.constant_(module.bias, 0)
         elif isinstance(module, nn.LayerNorm):
@@ -407,7 +407,7 @@ VAN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            [`ConvNextImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all stages. See `hidden_states` under returned tensors for

@@ -44,7 +44,7 @@ from transformers.image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_coco_detection_annotations,
     valid_coco_panoptic_annotations,
@@ -75,6 +75,9 @@ if is_vision_available():
 if is_scipy_available():
     import scipy.special
     import scipy.stats
+
+
+AnnotationType = Dict[str, Union[int, str, List[Dict]]]
 
 
 class AnnotionFormat(ExplicitEnum):
@@ -785,7 +788,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         do_pad: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
@@ -814,6 +817,16 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
+
+    @property
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.max_size
+    def max_size(self):
+        warnings.warn(
+            "The `max_size` parameter is deprecated and will be removed in v4.27. "
+            "Please specify in `size['longest_edge'] instead`.",
+            FutureWarning,
+        )
+        return self.size["longest_edge"]
 
     @classmethod
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->ConditionalDetr
@@ -888,7 +901,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[ChannelDimension] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
@@ -1061,7 +1074,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[List[Dict], List[List[Dict]]]] = None,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
         return_segmentation_masks: bool = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
@@ -1076,7 +1089,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         format: Optional[Union[str, AnnotionFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
@@ -1084,7 +1097,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image or batch of images to preprocess.
-            annotations (`List[Dict]` or `List[List[Dict]]`, *optional*):
+            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
                 List of annotations associated with the image or batch of images. If annotionation is for object
                 detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
@@ -1162,9 +1175,9 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         if do_normalize is not None and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
-        if not is_batched(images):
-            images = [images]
-            annotations = [annotations] if annotations is not None else None
+        images = make_list_of_images(images)
+        if annotations is not None and isinstance(annotations, dict):
+            annotations = [annotations]
 
         if annotations is not None and len(images) != len(annotations):
             raise ValueError(

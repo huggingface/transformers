@@ -34,7 +34,6 @@ from .configuration_trocr import TrOCRConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "TrOCRConfig"
-_TOKENIZER_FOR_DOC = "TrOCRTokenizer"
 _CHECKPOINT_FOR_DOC = "microsoft/trocr-base-handwritten"
 
 
@@ -558,7 +557,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`TrOCRTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -690,7 +689,6 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache ="
@@ -716,7 +714,6 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -840,7 +837,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`TrOCRTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1010,8 +1007,8 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

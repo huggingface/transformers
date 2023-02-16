@@ -129,7 +129,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             bos_token=bos_token,
