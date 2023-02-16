@@ -52,7 +52,7 @@ class TimeSeriesTransformerModelTester:
         prediction_length=7,
         context_length=14,
         cardinality=19,
-        embedding_dimension=4,
+        embedding_dimension=5,
         num_time_features=4,
         is_training=True,
         hidden_size=64,
@@ -187,13 +187,18 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TimeSeriesTransformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TimeSeriesTransformerConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=TimeSeriesTransformerConfig,
+            has_text_modality=False,
+            prediction_length=self.model_tester.prediction_length,
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_save_load_strict(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        config, _ = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
             model = model_class(config)
 

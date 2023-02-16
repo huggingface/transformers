@@ -135,7 +135,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        prediction_length: int,
+        prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
         loss: str = "nll",

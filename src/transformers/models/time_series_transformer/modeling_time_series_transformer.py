@@ -1706,6 +1706,8 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
         r"""
+        Returns:
+
         Examples:
 
         ```python
@@ -1868,6 +1870,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
         r"""
+        Returns:
+
         Examples:
 
         ```python
