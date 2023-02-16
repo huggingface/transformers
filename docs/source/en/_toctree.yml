@@ -83,6 +83,12 @@
       title: Object detection
     title: Computer Vision
   - sections:
+    - local: tasks/image_captioning
+      title: Image captioning
+    - local: tasks/document_question_answering
+      title: Document Question Answering
+    title: Multimodal
+  - sections:
     - local: performance
       title: Overview
     - local: perf_train_gpu_one
@@ -151,9 +157,11 @@
   - local: tasks_explained
     title: How 🤗 Transformers solve tasks
   - local: model_summary
-    title: Summary of the models
+    title: The Transformer model family
   - local: tokenizer_summary
     title: Summary of the tokenizers
+  - local: attention
+    title: Attention mechanisms
   - local: pad_truncation
     title: Padding and truncation
   - local: bertology
@@ -265,6 +273,8 @@
         title: Encoder Decoder Models
       - local: model_doc/ernie
         title: ERNIE
+      - local: model_doc/ernie_m
+        title: ErnieM
       - local: model_doc/esm
         title: ESM
       - local: model_doc/flan-t5
@@ -381,6 +391,8 @@
         title: Transformer XL
       - local: model_doc/ul2
         title: UL2
+      - local: model_doc/xmod
+        title: X-MOD
       - local: model_doc/xglm
         title: XGLM
       - local: model_doc/xlm
@@ -568,6 +580,8 @@
         title: TAPAS
       - local: model_doc/trocr
         title: TrOCR
+      - local: model_doc/tvlt
+        title: TVLT
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vision-encoder-decoder

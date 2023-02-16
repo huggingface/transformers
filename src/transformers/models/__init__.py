@@ -69,6 +69,7 @@ from . import (
     electra,
     encoder_decoder,
     ernie,
+    ernie_m,
     esm,
     flaubert,
     flava,
@@ -169,6 +170,7 @@ from . import (
     trajectory_transformer,
     transfo_xl,
     trocr,
+    tvlt,
     unispeech,
     unispeech_sat,
     upernet,
@@ -195,6 +197,7 @@ from . import (
     xlm_roberta,
     xlm_roberta_xl,
     xlnet,
+    xmod,
     yolos,
     yoso,
 )

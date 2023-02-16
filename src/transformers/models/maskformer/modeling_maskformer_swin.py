@@ -866,6 +866,9 @@ class MaskFormerSwinBackbone(MaskFormerSwinPreTrainedModel, BackboneMixin):
 
         self.hidden_states_norms = nn.ModuleList([nn.LayerNorm(num_channels) for num_channels in self.channels])
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     @property
     def channels(self):
         return [self.out_feature_channels[name] for name in self.out_features]
