@@ -135,11 +135,11 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        input_size: int = 1,
-        prediction_length: Optional[int] = None,
+        prediction_length: int,
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
+        input_size: int = 1,
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
         scaling: Optional[Union[str, bool]] = "mean",
         num_dynamic_real_features: int = 0,
