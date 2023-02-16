@@ -39,7 +39,6 @@ def parse_args():
         help="Batch size during training.",
     )
     parser.add_argument(
-        "-vs",
         "--vocab_size",
         type=int,
         default=10000,
