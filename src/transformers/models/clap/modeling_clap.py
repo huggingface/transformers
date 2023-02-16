@@ -1673,7 +1673,7 @@ class ClapPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = ClapTextConfig
+    config_class = ClapConfig
     base_model_prefix = "clap"
     supports_gradient_checkpointing = False
     _keys_to_ignore_on_load_missing = [r"position_ids", r"logit_scale_a", r"logit_scale_t"]
