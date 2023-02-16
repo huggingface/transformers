@@ -1132,7 +1132,7 @@ class OptionalDependencyNotAvailable(BaseException):
 
 
 def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
-    """Imports a source file directly (https://docs.python.org/3/library/importlib.html#importing-a-source-file-directly)
+    """Imports transformers directly
 
     Args:
         path (`str`): The path to the source file
