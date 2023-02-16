@@ -187,7 +187,10 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = InformerModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=InformerConfig, has_text_modality=False, prediction_length=12
+            self,
+            config_class=InformerConfig,
+            has_text_modality=False,
+            prediction_length=self.model_tester.prediction_length,
         )
 
     def test_config(self):
