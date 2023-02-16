@@ -19,8 +19,8 @@ import os
 import re
 import shutil
 import sys
-from pathlib import Path
 import tempfile
+from pathlib import Path
 from typing import Dict, Optional, Union
 
 from huggingface_hub import model_info
@@ -145,7 +145,6 @@ def get_class_in_module(class_name, module_path):
     Import a module on the cache directory for modules and extract a class from it.
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
-    
         module_dir = Path(HF_MODULES_CACHE) / os.path.dirname(module_path)
         module_file_name = module_path.split(os.path.sep)[-1] + ".py"
 
@@ -157,7 +156,7 @@ def get_class_in_module(class_name, module_path):
 
         # copy back the file that we want to import
         shutil.copyfile(f"{tmp_dir}/{module_file_name}", f"{module_dir}/{module_file_name}")
-    
+
         # import the module
         module_path = module_path.replace(os.path.sep, ".")
         module = importlib.import_module(module_path)
