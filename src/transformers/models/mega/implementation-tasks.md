@@ -25,12 +25,25 @@
   * ~~`MegaLayer` - start with something like this for the combined encoder/decoder layer~~
     * There's also a nice handling of cross-attention already
     * If `output_attentions`, do we want self-attention or cross attention? both? (both)
-  * `MegaEncoder`: pass through multiple mega layers
+  * ~~`MegaEncoder`: pass through multiple mega layers~~
     * Might not be needed, but especially helps with using cached values between layers
-  * `MegaModel`: pass through the embeddings and encoder
+    * Actually going to delete this, but here's what we should keep from it:
+      * Final hidden states (each token from the last layer)
+      * Tuple of updated decoder caches from each layer (if `use_cache`, otherwise `None`)
+      * Layerwise hidden states (if `output_hidden_states`, otherwise None)
+      * Self-attentions from each layer (if `output_attentions`, otherwise None)
+      * Cross-attentions from each layer (if `output_attentions` and `config.add_cross_attention`, otherwise None)
+    * **STATUS**: done
+  * ~~`MegaModel`: pass through the embeddings and encoder~~
     * Should also set it up to work with `inputs_embeds` so that we can pass token embeddings directly (helpful for explainability tooling like gradient-based attribution)
     * Might need to name things like in the MegaLM class I used 
+      * `embedding_layer` and `encoders`
+    * Optional pooling layer
+    * **STATUS**: finished
   * `MegaPretrainedModel` - initialization, remove checkpointing (?)
+  * Downstream work: 
+    * ~~Remove position_ids and head_mask everywhere~~
+    * Documentation updates
 * Decoder stuff:
   * Probably untangle the incremental state in OG Mega to look more like the `forward` method in the auto-generated `MegaEncoder` (which is meant to be the stack of N encoder or decoder layers)
 * Initialization: once modules are ready to go into the `PretrainedModel` class, try to use its default initialization instead of one-off `reset_parameters` methods (which might be doing the same thing)
@@ -95,13 +108,8 @@ prev_key_values inputs for ^ will be expected as:
   * Currently getting this from the cached self-attention keys (cached self sequence length + 1)
 * Attention masks
 
-MegaDecoder
-* Accept `prev_key_values` and `use_cache` (new input) and pass relevant information along to component modules
-* **Open question**: do we expect input IDs for incremental decoding to have sequence length of exactly 1? 
-  * Mega code is written to assume only 1 token in the inputs while the others are represented in `past_key_values`
-  * Could take the last one if we need to, but I can't find documentation
 
-Then delete the IncrementalState class entirely
+~~Then delete the IncrementalState class entirely~~
 
 ## Arguments needed for forward pass
 
@@ -128,3 +136,12 @@ Decoder
   * Hugging Face combines padding masks with causal LM masks
 * Incremental state (if doing incremental decoding)
 * Encoder hidden states (if doing cross-attention)
+
+## Final Checklist for Implementation
+* Initialization - either do this in the `MegaPretrainedModel` class or take it out of there and keep the `reset_parameters` methods
+* Documentation: 
+  * Docstrings of individual classes
+  * Main docstring
+* Run the tests and get ready for opening a PR
+* Load my MLM weights and test
+* Tokenizer
