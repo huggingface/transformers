@@ -42,15 +42,15 @@ from .configuration_xmod import XmodConfig
 logger = logging.get_logger(__name__)
 
 XMOD_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "jvamvas/xmod-base",
-    "jvamvas/xmod-large-prenorm",
-    "jvamvas/xmod-base-13-125k",
-    "jvamvas/xmod-base-30-125k",
-    "jvamvas/xmod-base-30-195k",
-    "jvamvas/xmod-base-60-125k",
-    "jvamvas/xmod-base-60-265k",
-    "jvamvas/xmod-base-75-125k",
-    "jvamvas/xmod-base-75-269k",
+    "facebook/xmod-base",
+    "facebook/xmod-large-prenorm",
+    "facebook/xmod-base-13-125k",
+    "facebook/xmod-base-30-125k",
+    "facebook/xmod-base-30-195k",
+    "facebook/xmod-base-60-125k",
+    "facebook/xmod-base-60-265k",
+    "facebook/xmod-base-75-125k",
+    "facebook/xmod-base-75-269k",
     # See all X-MOD models at https://huggingface.co/models?filter=xmod
 ]
 
@@ -1069,9 +1069,9 @@ class XmodForCausalLM(XmodPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
-        >>> config = AutoConfig.from_pretrained("jvamvas/xmod-base")
+        >>> config = AutoConfig.from_pretrained("facebook/xmod-base")
         >>> config.is_decoder = True
-        >>> model = XmodForCausalLM.from_pretrained("jvamvas/xmod-base", config=config)
+        >>> model = XmodForCausalLM.from_pretrained("facebook/xmod-base", config=config)
         >>> model.set_default_language("en_XX")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
