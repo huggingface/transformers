@@ -2143,7 +2143,7 @@ class ClapModel(ClapPreTrainedModel):
         loss = None
         if return_loss:
             caption_loss = contrastive_loss(logits_per_text)
-            audio_loss = contrastive_loss(logits_per_text.t())
+            audio_loss = contrastive_loss(logits_per_audio.t())
             loss = (caption_loss + audio_loss) / 2.0
 
         if not return_dict:
