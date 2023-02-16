@@ -125,7 +125,7 @@ def main(args):
     for shard in range(0, len(wikitext), args.shard_size):
         dataset_snapshot = wikitext[shard : shard + args.shard_size]["text"]
         shard_size = len(dataset_snapshot)
-        filename = os.path.join(split_dir, f"wikitext-{args.limit}-{shard_count}-{shard_size}.tfrecord")
+        filename = os.path.join(split_dir, f"wikitext-{shard_count}-{shard_size}.tfrecord")
         serialized_examples = get_serialized_examples_fn(dataset_snapshot)
 
         with tf.io.TFRecordWriter(filename) as out_file:
