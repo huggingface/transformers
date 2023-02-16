@@ -190,14 +190,14 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
             # Adding fix for https://github.com/pytorch/xla/issues/4152
             # Fixes issue where the model code passes a value that is out of range for XLA_USE_BF16=1
             # and XLA_DOWNCAST_BF16=1 so the conversion would cast it to -inf
-            if is_torch_tpu_available():
-                if XLA_USE_BF16 in ENV_VARS_TRUE_VALUES:
+            # NOTE: `is_torch_tpu_available()` is checked last as it induces a graph break in torch dynamo
+            if XLA_USE_BF16 in ENV_VARS_TRUE_VALUES and is_torch_tpu_available():
+                return torch.bfloat16
+            if XLA_DOWNCAST_BF16 in ENV_VARS_TRUE_VALUES and is_torch_tpu_available():
+                if t.dtype == torch.float:
                     return torch.bfloat16
-                if XLA_DOWNCAST_BF16 in ENV_VARS_TRUE_VALUES:
-                    if t.dtype == torch.float:
-                        return torch.bfloat16
-                    if t.dtype == torch.double:
-                        return torch.float32
+                if t.dtype == torch.double:
+                    return torch.float32
             return t.dtype
 
     if last_dtype is not None:
@@ -1147,6 +1147,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if "GenerationMixin" in str(self.prepare_inputs_for_generation):
             return False
         return True
+
+    def enable_input_require_grads(self):
+        """
+        Enables the gradients for the input embeddings. This is useful for fine-tuning adapter weights while keeping
+        the model weights fixed.
+        """
+
+        def make_inputs_require_grads(module, input, output):
+            output.requires_grad_(True)
+
+        self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
+
+    def disable_input_require_grads(self):
+        """
+        Removes the `_require_grads_hook`.
+        """
+        self._require_grads_hook.remove()
 
     def get_input_embeddings(self) -> nn.Module:
         """
@@ -2631,7 +2648,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     _from_pipeline=from_pipeline,
                     **kwargs,
                 )
-            except OSError:
+            except (OSError, TypeError):
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
                 )

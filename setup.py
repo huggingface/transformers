@@ -98,6 +98,7 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
+    "beautifulsoup4",
     "black~=23.1",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
@@ -125,6 +126,7 @@ _deps = [
     "jieba",
     "kenlm",
     "keras-nlp>=0.3.1",
+    "librosa",
     "nltk",
     "natten>=0.14.4",
     "numpy>=1.17",
@@ -147,6 +149,7 @@ _deps = [
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
+    "rhoknp>=1.1.0",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff>=0.0.241",
@@ -157,8 +160,9 @@ _deps = [
     "scikit-learn",
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
-    "librosa",
     "starlette",
+    "sudachipy>=0.6.6",
+    "sudachidict_core>=20220729",
     "tensorflow-cpu>=2.4,<2.12",
     "tensorflow>=2.4,<2.12",
     "tensorflow-text",
@@ -174,10 +178,6 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
-    "beautifulsoup4",
-    "sudachipy>=0.6.6",
-    "sudachidict_core>=20220729",
-    "rhoknp>=1.1.0",
 ]
 
 
@@ -202,7 +202,7 @@ deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] f
 # You can then feed this for example to `pip`:
 #
 # pip install -U $(python -c 'import sys; from transformers.dependency_versions_table import deps; \
-# print(" ".join([ deps[x] for x in sys.argv[1:]]))' tokenizers datasets)
+# print(" ".join([deps[x] for x in sys.argv[1:]]))' tokenizers datasets)
 #
 
 
@@ -423,8 +423,8 @@ setup(
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
     long_description=open("README.md", "r", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    keywords="NLP vision speech deep learning transformer pytorch tensorflow BERT GPT-2 Wav2Vec2 ViT",
-    license="Apache",
+    keywords="NLP vision speech deep learning transformer pytorch tensorflow jax BERT GPT-2 Wav2Vec2 ViT",
+    license="Apache 2.0 License",
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
     packages=find_packages("src"),
@@ -446,6 +446,7 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},

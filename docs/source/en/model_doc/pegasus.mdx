@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # Pegasus
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=pegasus">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-pegasus-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/pegasus_paraphrase">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 **DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title)
 and assign @patrickvonplaten.
 
@@ -29,6 +38,12 @@ According to the abstract,
 
 This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The Authors' code can be found [here](https://github.com/google-research/pegasus).
 
+Tips:
+
+- Sequence-to-sequence model with the same encoder-decoder model architecture as BART. Pegasus is pre-trained jointly on two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pretraining objective, called Gap Sentence Generation (GSG).
+
+  * MLM: encoder input tokens are randomly replaced by a mask tokens and have to be predicted by the encoder (like in BERT)
+  * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a causal mask to hide the future words like a regular auto-regressive transformer decoder.
 
 ## Checkpoints
 
