@@ -70,37 +70,36 @@ class GPTSANJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.emoji_file, "w") as emoji_writer:
             emoji_writer.write(json.dumps(emoji_tokens))
 
-    # Copied from transformers.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest with GPTNeoXJapanese->GPTSANJapanese
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return GPTSANJapaneseTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
-    # Copied from transformers.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest
+    # Copied from tests.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest.get_input_output_texts
     def get_input_output_texts(self, tokenizer):
         input_text = "こんにちは、世界。 \nこんばんは、㔺界。😀"
         output_text = "こんにちは、世界。 \nこんばんは、世界。😀"
         return input_text, output_text
 
-    # Copied from transformers.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest
+    # Copied from tests.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest.get_clean_sequence
     def get_clean_sequence(self, tokenizer):
         input_text, output_text = self.get_input_output_texts(tokenizer)
         ids = tokenizer.encode(output_text, add_special_tokens=False)
         text = tokenizer.decode(ids, clean_up_tokenization_spaces=False)
         return text, ids
 
-    # Copied from transformers.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest
+    # Copied from tests.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest.test_pretokenized_inputs
     def test_pretokenized_inputs(self):
         pass  # TODO add if relevant
 
-    # Copied from transformers.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest
+    # Copied from tests.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest.test_maximum_encoding_length_pair_input
     def test_maximum_encoding_length_pair_input(self):
         pass  # TODO add if relevant
 
-    # Copied from transformers.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest
+    # Copied from tests.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest.test_maximum_encoding_length_single_input
     def test_maximum_encoding_length_single_input(self):
         pass  # TODO add if relevant
 
-    # Copied from transformers.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest
+    # Copied from tests.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest.test_full_tokenizer
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
 
@@ -186,12 +185,12 @@ class GPTSANJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(x_token_1[1], x_token_2[-1])  # SEG token
         self.assertEqual(x_token_1[1], x_token_3[3])  # SEG token
 
-    # Copied from transformers.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest
+    # Copied from tests.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest.test_conversion_reversible
     def test_conversion_reversible(self):
         # Intentionally convert some words to accommodate character fluctuations unique to Japanese
         pass
 
-    # Copied from transformers.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest
+    # Copied from tests.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest.test_padding_different_model_input_name
     def test_padding_different_model_input_name(self):
         # tokenizer has no padding token
         pass
