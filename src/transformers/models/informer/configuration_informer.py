@@ -29,7 +29,7 @@ INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class InformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`InformerModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of an [`InformerModel`]. It is used to instantiate an
     Informer model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Informer
     [huggingface/informer-tourism-monthly](https://huggingface.co/huggingface/informer-tourism-monthly)
