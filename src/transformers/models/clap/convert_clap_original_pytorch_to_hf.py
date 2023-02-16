@@ -35,7 +35,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "bn0": "batch_norm",
 }
 
-processor = AutoFeatureExtractor.from_pretrained("ybelkada/clap-htsat-unfused", truncation="rand_trunc")
+processor = AutoFeatureExtractor.from_pretrained("laion/clap-htsat-unfused", truncation="rand_trunc")
 
 
 def init_clap(checkpoint_path, enable_fusion=False):

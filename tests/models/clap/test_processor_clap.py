@@ -26,7 +26,7 @@ from .test_feature_extraction_clap import floats_list
 @require_sentencepiece
 class ClapProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "ybelkada/clap-htsat-unfused"
+        self.checkpoint = "laion/clap-htsat-unfused"
         self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
