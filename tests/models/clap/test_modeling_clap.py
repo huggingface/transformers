@@ -66,9 +66,8 @@ class ClapAudioModelTester:
         freq_ratio=2,
         num_channels=3,
         is_training=True,
-        hidden_size=32,
+        hidden_size=256,
         patch_embeds_hidden_size=32,
-        projection_hidden_size=256,
         projection_dim=32,
         num_hidden_layers=4,
         num_heads=[2, 2, 2, 2],
@@ -91,7 +90,6 @@ class ClapAudioModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_heads = num_heads
         self.num_attention_heads = num_heads[0]
-        self.projection_hidden_size = projection_hidden_size
         self.seq_length = seq_length
         self.spec_size = spec_size
         self.freq_ratio = freq_ratio
@@ -128,7 +126,6 @@ class ClapAudioModelTester:
             spec_size=self.spec_size,
             freq_ratio=self.freq_ratio,
             patch_embeds_hidden_size=self.patch_embeds_hidden_size,
-            projection_hidden_size=self.projection_hidden_size,
         )
 
     def create_and_check_model(self, config, input_features):
@@ -137,11 +134,7 @@ class ClapAudioModelTester:
         model.eval()
         with torch.no_grad():
             result = model(input_features)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        embedding_shape = self.hidden_size * self.window_size * self.freq_ratio
-        self.parent.assertEqual(
-            result.fine_grained_embedding.shape, (self.batch_size, embedding_shape, embedding_shape)
-        )
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_model_with_projection(self, config, input_features):
         model = ClapAudioModelWithProjection(config=config)
@@ -149,7 +142,7 @@ class ClapAudioModelTester:
         model.eval()
         with torch.no_grad():
             result = model(input_features)
-        self.parent.assertEqual(result.audio_embeds.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(result.audio_embeds.shape, (self.batch_size, self.projection_dim))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -200,7 +193,7 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = outputs.hidden_states
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
@@ -209,7 +202,7 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [self.model_tester.hidden_size, self.model_tester.hidden_size],
+                [self.model_tester.patch_embeds_hidden_size, self.model_tester.patch_embeds_hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -341,7 +334,6 @@ class ClapTextModelTester:
         return ClapTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            projection_hidden_size=self.hidden_size,
             projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,

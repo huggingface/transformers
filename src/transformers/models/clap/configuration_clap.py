@@ -25,17 +25,17 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CLAP_PRETRAINED_MODEL_ARCHIVE_LIST = {
-    "laion-ai/clap-htsat-fused": "https://huggingface.co/laion-ai/clap-htsat-fused/resolve/main/config.json",
-    "laion-ai/clap-htsat-unfused": "https://huggingface.co/laion-ai/clap-htsat-unfused/resolve/main/config.json",
+    "laion/clap-htsat-fused": "https://huggingface.co/laion/clap-htsat-fused/resolve/main/config.json",
+    "laion/clap-htsat-unfused": "https://huggingface.co/laion/clap-htsat-unfused/resolve/main/config.json",
 }
 
 
 class ClapTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ClapTextModel`]. It is used to instantiate a
-    RoBERTa model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the RoBERTa
-    [roberta-base](https://huggingface.co/roberta-base) architecture.
+    This is the configuration class to store the configuration of a [`ClapTextModel`]. It is used to instantiate a CLAP
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the CLAP
+    [calp-hsat-fused](https://huggingface.co/laion/clap-hsat-fused) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -43,7 +43,7 @@ class ClapTextConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the RoBERTa model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the CLAP model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`ClapTextModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
@@ -82,13 +82,18 @@ class ClapTextConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
+            The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        projection_dim (`int`, *optional*, defaults to 512)
+            Dimension of the projection head of the `ClapTextModelWithProjection`.
 
     Examples:
 
     ```python
     >>> from transformers import ClapTextConfig, ClapTextModel
 
-    >>> # Initializing a RoBERTa configuration
+    >>> # Initializing a CLAP text configuration
     >>> configuration = ClapTextConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
@@ -97,13 +102,12 @@ class ClapTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "roberta"
+    model_type = "clap_text_model"
 
     def __init__(
         self,
         vocab_size=50265,
         hidden_size=768,
-        fusion_hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
@@ -115,20 +119,20 @@ class ClapTextConfig(PretrainedConfig):
         initializer_range=0.02,
         initializer_factor=1.0,
         layer_norm_eps=1e-12,
-        projection_hidden_size=768,
+        projection_dim=512,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
+        projection_hidden_act="relu",
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.fusion_hidden_size = fusion_hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.hidden_act = hidden_act
@@ -143,7 +147,8 @@ class ClapTextConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
-        self.projection_hidden_size = projection_hidden_size
+        self.projection_hidden_act = projection_hidden_act
+        self.projection_dim = projection_dim
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -167,7 +172,7 @@ class ClapAudioConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ClapAudioModel`]. It is used to instantiate a
     CLAP audio encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the audio encoder of the CLAP
-    [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
+    [laion/clap-htsat-fused](https://huggingface.co/laion/clap-htsat-fused) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -190,10 +195,11 @@ class ClapAudioConfig(PretrainedConfig):
             Patch stride for the audio spectrogram
         num_classes (`int`, *optional*, defaults to 527):
             Number of classes used for the head training
-        hidden_size (`int`, *optional*, defaults to 96):
-            Hidden size of the audio model
-        projection_hidden_size (`int`, *optional*, defaults to 768):
-            Hidden size of the projection layer
+        hidden_size (`int`, *optional*, defaults to 768):
+            Hidden size of the output of the audio encoder. Correspond to the dimension of the penultimate layer's
+            output,which is sent to the projection MLP layer.
+        projection_dim (`int`, *optional*, defaults to 512):
+            Hidden size of the projection layer.
         depths (`list`, *optional*, defaults to `[2, 2, 6, 2]`):
             Depths used for the Swin Layers of the audio model
         num_attention_heads (`list`, *optional*, defaults to `[4, 8, 16, 32]`):
@@ -210,7 +216,7 @@ class ClapAudioConfig(PretrainedConfig):
         flatten_patch_embeds (`bool`, *optional*, defaults to `True`):
             Whether or not to flatten the patch embeddings
         patch_embeds_hidden_size (`int`, *optional*, defaults to 96):
-            Hidden size of the patch embeddings
+            Hidden size of the patch embeddings. It is used as the number of output channels.
         enable_patch_layer_norm (`bool`, *optional*, defaults to `True`):
             Whether or not to enable layer normalization for the patch embeddings
         drop_path_rate (`float`, *optional*, defaults to 0.0):
@@ -239,10 +245,10 @@ class ClapAudioConfig(PretrainedConfig):
     ```python
     >>> from transformers import ClapAudioConfig, ClapAudioModel
 
-    >>> # Initializing a ClapAudioConfig with laion-ai/base style configuration
+    >>> # Initializing a ClapAudioConfig with laion/clap-htsat-fused style configuration
     >>> configuration = ClapAudioConfig()
 
-    >>> # Initializing a ClapAudioModel (with random weights) from the laion-ai/base style configuration
+    >>> # Initializing a ClapAudioModel (with random weights) from the laion/clap-htsat-fused style configuration
     >>> model = ClapAudioModel(configuration)
 
     >>> # Accessing the model configuration
@@ -260,8 +266,8 @@ class ClapAudioConfig(PretrainedConfig):
         patch_size=4,
         patch_stride=[4, 4],
         num_classes=527,
-        hidden_size=96,
-        projection_hidden_size=768,
+        hidden_size=768,
+        projection_dim=512,
         depths=[2, 2, 6, 2],
         num_attention_heads=[4, 8, 16, 32],
         enable_fusion=False,
@@ -298,7 +304,7 @@ class ClapAudioConfig(PretrainedConfig):
         self.fusion_type = fusion_type
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.projection_hidden_size = projection_hidden_size
+        self.projection_dim = projection_dim
         self.flatten_patch_embeds = flatten_patch_embeds
         self.patch_embeds_hidden_size = patch_embeds_hidden_size
         self.enable_patch_layer_norm = enable_patch_layer_norm
@@ -334,7 +340,7 @@ class ClapConfig(PretrainedConfig):
     [`ClapConfig`] is the configuration class to store the configuration of a [`ClapModel`]. It is used to instantiate
     a CLAP model according to the specified arguments, defining the text model and audio model configs. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the CLAP
-    [laion-ai/base](https://huggingface.co/laion-ai/base) architecture.
+    [laion/clap-htsat-fused](https://huggingface.co/laion/clap-htsat-fused) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -348,10 +354,6 @@ class ClapConfig(PretrainedConfig):
             Dimentionality of text and audio projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* paramter. Default is used as per the original CLAP implementation.
-        fusion_num_hidden_layers (`int`, *optional*, defaults to 2):
-            Number of hidden layers in the fusion layer.
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and audio projection layers.
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             Activation function for the projection layers.
         initializer_factor (`float`, *optional*, defaults to 1.0):
@@ -391,7 +393,6 @@ class ClapConfig(PretrainedConfig):
         text_config=None,
         audio_config=None,
         logit_scale_init_value=(1 / 0.07),
-        fusion_num_hidden_layers=2,
         projection_dim=512,
         projection_hidden_act="relu",
         initializer_factor=1.0,
@@ -409,10 +410,6 @@ class ClapConfig(PretrainedConfig):
 
         self.text_config = ClapTextConfig(**text_config)
         self.audio_config = ClapAudioConfig(**audio_config)
-
-        self.text_config.fusion_num_hidden_layers = fusion_num_hidden_layers
-        self.audio_config.fusion_num_hidden_layers = fusion_num_hidden_layers
-
         self.text_config.projection_dim = projection_dim
         self.audio_config.projection_dim = projection_dim
 
