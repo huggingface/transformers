@@ -112,7 +112,7 @@ class InformerConfig(PretrainedConfig):
             Whether to use distilling in encoder.
 
 
-Example:
+       Example:
 
     ```python
     >>> from transformers import InformerConfig, InformerModel
