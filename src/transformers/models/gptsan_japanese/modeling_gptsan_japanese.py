@@ -818,6 +818,11 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            An input that masks the Prefix part in the Prefix-LM input. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **prefix** input,
+            - 0 for tokens that are **not-prefix** input.
         spout (`torch.Tensor` of shape `(batch_size, config.d_spout)`):
                 This vector is transformed through an 8-layer FFN and can be used instead of `past_key_values`.
         past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
@@ -852,82 +857,6 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_experts)`.
             Router logits of the decoder model, useful to compute the auxiliary loss for Mixture of Experts models.
 """
-
-
-# Create a mask to be used when making the prefix Input length of Prefix-LM variable
-# When prefix_area_len=0, it is equivalent to regular causal mask
-# When prefix_area_len=total_seq, it is equivalent to no mask
-# Otherwise, no mask at token positions from 0 to prefix_area_len, and regular causal mask thereafter.
-#
-# ex, total_seq=6, output_seq=6;
-# prefix_area_len=0  prefix_area_len=3  prefix_area_len=5
-# | 1 0 0 0 0 0 |    | 1 1 1 0 0 0 |    | 1 1 1 1 1 0 |
-# | 1 1 0 0 0 0 |    | 1 1 1 0 0 0 |    | 1 1 1 1 1 0 |
-# | 1 1 1 0 0 0 |    | 1 1 1 0 0 0 |    | 1 1 1 1 1 0 |
-# | 1 1 1 1 0 0 |    | 1 1 1 1 0 0 |    | 1 1 1 1 1 0 |
-# | 1 1 1 1 1 0 |    | 1 1 1 1 1 0 |    | 1 1 1 1 1 0 |
-# | 1 1 1 1 1 1 |    | 1 1 1 1 1 1 |    | 1 1 1 1 1 1 |
-#
-# Normally, the length of the prefix is set according to the position of the separator_token inserted by the tokenizer.
-# Since the prefix part refers back and forth, it can also work as an MLM. The part after that can be used for text generation as LM.
-#
-# ex;
-# input tokens are: x_token = tokenizer.encode("ぁぃぅぇ")
-# mask is;
-# SOT | 1 0 0 0 0 0 |
-# SEG | 1 1 0 0 0 0 |
-# ぁ  | 1 1 1 0 0 0 |
-# ぃ  | 1 1 1 1 0 0 |
-# ぅ  | 1 1 1 1 1 0 |
-# ぇ  | 1 1 1 1 1 1 |
-#
-# input tokens are: x_token = tokenizer.encode("", prefix_text="ぁぃぅぇ")
-# mask is;
-# SOT | 1 1 1 1 1 0 |
-# ぁ  | 1 1 1 1 1 0 |
-# ぃ  | 1 1 1 1 1 0 |
-# ぅ  | 1 1 1 1 1 0 |
-# ぇ  | 1 1 1 1 1 0 |
-# SEG | 1 1 1 1 1 1 |
-#
-# input tokens are: x_token = tokenizer.encode("ぅぇ", prefix_text="ぁぃ")
-# mask is;
-# SOT | 1 1 1 0 0 0 |
-# ぁ  | 1 1 1 0 0 0 |
-# ぃ  | 1 1 1 0 0 0 |
-# SEG | 1 1 1 1 0 0 |
-# ぅ  | 1 1 1 1 1 0 |
-# ぇ  | 1 1 1 1 1 1 |
-def make_variable_prefix_area_mask(total_seq, output_seq, prefix_area_len):
-    r"""
-    Args:
-        total_seq (`int`) :
-            inputs to token length.
-        output_seq (`int`) :
-            inputs to output token length.
-        prefix_area_len (`torch.Tensor` of shape [batch_size]) :
-            inputs to prefix area length of each batch.
-    Returns:
-        torch.Tensor[batch_size, 1, total_seq, output_seq]
-    """
-    device = prefix_area_len.device
-    inp_index = torch.arange(total_seq)[:, None].to(device)
-    out_index = torch.arange(output_seq).to(device)
-    m = inp_index >= out_index - output_seq + total_seq
-    lm_mask = m.float()  # language model mask
-    lm_mask = torch.reshape(lm_mask, [total_seq, output_seq])
-    # lm_mask shuld be [sequence, sequence]
-    weight = torch.transpose(torch.arange(output_seq)[:, None].to(device) < prefix_area_len, 1, 0)
-    weight = weight.float()  # mask for prefix area
-    # weight shuld be [batch, sequence]
-    mlm_mask = torch.reshape(weight, [1, -1, output_seq]).float()
-    mlm_ones = torch.ones(size=[total_seq, 1, 1], dtype=torch.float32).to(device)
-    mlm_mask = mlm_ones * mlm_mask
-    mlm_mask = torch.transpose(mlm_mask, 1, 0)
-    # mlm_mask shuld be [batch, sequence, sequence]
-    mask = ((lm_mask + mlm_mask) > 0).float()  # marge prefix area to causal mask
-    # mask shuld be [batch, sequence, sequence]
-    return mask.unsqueeze(dim=1)  # [batch, 1, sequence, sequence]
 
 
 @add_start_docstrings(
@@ -973,6 +902,7 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
@@ -1080,15 +1010,59 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
         for i in range(num_batch):
             hidden_states[i] += torch.gather(self.position_embeddings.weight, dim=0, index=gather_position[i])
 
-        # Merge GPTSAN mask and attention_mask
-        extended_attention_mask = make_variable_prefix_area_mask(
-            num_input_contexts, num_output_contexts, num_precontext
+        # Create a mask to be used when making the prefix Input length of Prefix-LM variable
+        # When token_type_ids=None or all zero, it is equivalent to regular causal mask
+        #
+        # ex;
+        # >>> x_token = tokenizer("ｱｲｳｴ")
+        # input_ids:      | SOT | SEG | ｱ | ｲ | ｳ | ｴ |
+        # token_type_ids: | 1   | 0   | 0 | 0 | 0 | 0 |
+        # prefix_lm_mask:
+        # SOT | 1 0 0 0 0 0 |
+        # SEG | 1 1 0 0 0 0 |
+        # ｱ   | 1 1 1 0 0 0 |
+        # ｲ   | 1 1 1 1 0 0 |
+        # ｳ   | 1 1 1 1 1 0 |
+        # ｴ   | 1 1 1 1 1 1 |
+        #
+        # >>> x_token = tokenizer("", prefix_text="ｱｲｳｴ")
+        # input_ids:      | SOT | ｱ | ｲ | ｳ | ｴ | SEG |
+        # token_type_ids: | 1   | 1 | 1 | 1 | 1 | 0  |
+        # prefix_lm_mask:
+        # SOT | 1 1 1 1 1 0 |
+        # ｱ   | 1 1 1 1 1 0 |
+        # ｲ   | 1 1 1 1 1 0 |
+        # ｳ   | 1 1 1 1 1 0 |
+        # ｴ   | 1 1 1 1 1 0 |
+        # SEG | 1 1 1 1 1 1 |
+        #
+        # >>> x_token = tokenizer("ｳｴ", prefix_text="ｱｲ")
+        # input_ids:      | SOT | ｱ | ｲ | SEG | ｳ | ｴ |
+        # token_type_ids: | 1   | 1 | 1 | 0   | 0 | 0 |
+        # prefix_lm_mask:
+        # SOT | 1 1 1 0 0 0 |
+        # ｱ   | 1 1 1 0 0 0 |
+        # ｲ   | 1 1 1 0 0 0 |
+        # SEG | 1 1 1 1 0 0 |
+        # ｳ   | 1 1 1 1 1 0 |
+        # ｴ   | 1 1 1 1 1 1 |
+        causal_mask = (
+            torch.tril(torch.ones((num_output_contexts, num_output_contexts), dtype=torch.uint8))
+            .view(1, 1, num_output_contexts, num_output_contexts)
+            .to(device)
         )
-        extended_attention_mask = extended_attention_mask * attention_mask.unsqueeze(1).unsqueeze(2)
+        prefix_lm_mask = causal_mask[:, :, -num_input_contexts:, :]
+        if token_type_ids is not None:
+            token_type_ids = token_type_ids.unsqueeze(1).unsqueeze(2)
+            prefix_lm_mask = ((prefix_lm_mask + token_type_ids) > 0).float()
+        # Marge prefix_lm_mask and attention_mask
+        extended_attention_mask = prefix_lm_mask * attention_mask.unsqueeze(1).unsqueeze(2)
 
         # Prepare head mask if needed
         if head_mask is not None:
-            head_mask = self.get_head_mask(head_mask, self.config.n_layer)  # n_layer x batch x n_heads x N x N
+            head_mask = self.get_head_mask(
+                head_mask, self.config.num_switch_layers + self.config.num_ext_layers
+            )  # n_layer x batch x n_heads x N x N
 
         # outputs
         present_key_value_states = tuple() if self.config.use_cache or use_cache else None
@@ -1187,6 +1161,7 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         head_mask: Optional[torch.FloatTensor] = None,
@@ -1211,53 +1186,56 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         Example:
 
         Text Generation with regular LM Model
-        ```python
-        from transformers import AutoModel, AutoTokenizer, trainer_utils
+        ```
+        >>> from transformers import AutoModel, AutoTokenizer, trainer_utils
 
-        device = "cuda"
-        model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
-        tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
-        x_token = tokenizer.encode("織田信長は、", return_tensors="pt").to(device)
-        trainer_utils.set_seed(30)
-        gen_token = model.generate(x_token, max_new_tokens=50)
-        tokenizer.decode(gen_token[0])
+        >>> device = "cuda"
+        >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
+        >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        >>> x_token = tokenizer("織田信長は、", return_tensors="pt")
+        >>> trainer_utils.set_seed(30)
+        >>> input_ids = x_token.input_ids.to(device)
+        >>> gen_token = model.generate(input_ids, max_new_tokens=50)
+        >>> tokenizer.decode(gen_token[0])
         "織田信長は、政治・軍事の中枢まで掌握した政治家であり、日本史上類を見ない驚異的な軍事侵攻を続け..."
         ```
 
         Text Generation with Prefix-LM Model
-        ```python
-        from transformers import AutoModel, AutoTokenizer, trainer_utils
+        ```
+        >>> from transformers import AutoModel, AutoTokenizer, trainer_utils
 
-        device = "cuda"
-        model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
-        tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
-        x_token = tokenizer.encode("", prefix_text="織田信長は、", return_tensors="pt").to(device)
-        trainer_utils.set_seed(30)
-        gen_token = model.generate(x_token, max_new_tokens=50)
-        tokenizer.decode(gen_token[0])
+        >>> device = "cuda"
+        >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
+        >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        >>> x_token = tokenizer("", prefix_text="織田信長は、", return_tensors="pt")
+        >>> trainer_utils.set_seed(30)
+        >>> input_ids = x_token.input_ids.to(device)
+        >>> token_type_ids = x_token.token_type_ids.to(device)
+        >>> gen_token = model.generate(input_ids, token_type_ids=token_type_ids, max_new_tokens=50)
+        >>> tokenizer.decode(gen_token[0])
         "織田信長は、政治・外交で数々の戦果を上げるが、1568年からは、いわゆる本能寺の変で細川晴元に暗殺される..."
         ```
 
         Simultaneously Text Generation And Masked Language Model
-        ```python
-        from transformers import AutoModel, AutoTokenizer, trainer_utils
+        ```
+        >>> from transformers import AutoModel, AutoTokenizer, trainer_utils
 
-        device = "cuda"
-        model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
-        tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
-        x_token = tokenizer.encode(
-            "", prefix_text="武田信玄は、<|inputmask|>時代ファンならぜひ押さえ<|inputmask|>きたい名将の一人。", return_tensors="pt"
-        ).to(device)
-        trainer_utils.set_seed(30)
-        out_lm_token = model.generate(x_token, max_new_tokens=50)
-        out_mlm_token = model(x_token).logits.argmax(axis=-1)
-        tokenizer.decode(out_mlm_token[0])
+        >>> device = "cuda"
+        >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
+        >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        >>> x_token = tokenizer(
+                "", prefix_text="武田信玄は、<|inputmask|>時代ファンならぜひ押さえ<|inputmask|>きたい名将の一人。", return_tensors="pt"
+            )
+        >>> trainer_utils.set_seed(30)
+        >>> input_ids = x_token.input_ids.to(device)
+        >>> token_type_ids = x_token.token_type_ids.to(device)
+        >>> out_lm_token = model.generate(input_ids, token_type_ids=token_type_ids, max_new_tokens=50)
+        >>> out_mlm_token = model(input_ids, token_type_ids=token_type_ids).logits.argmax(axis=-1)
+        >>> tokenizer.decode(out_mlm_token[0])
         "武田信玄は、戦国時代ファンならぜひ押さえておきたい名将の一人。"
-        tokenizer.decode(out_lm_token[0][x_token.shape[1] :])
+        >>> tokenizer.decode(out_lm_token[0][input_ids.shape[1] :])
         "武田氏の三代に渡った武田家のひとり\n甲斐市に住む、日本史上最大の戦国大名。..."
         ```"""
-        SEP_TOKEN = self.config.pad_token_id
-        NOT_TOKEN = self.config.unk_token_id
         SEG_TOKEN = self.config.separator_token_id
         use_cache = use_cache or self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1273,6 +1251,7 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         outputs = self.model(
             input_ids,
             attention_mask,
+            token_type_ids,
             spout,
             past_key_values,
             head_mask,
@@ -1306,12 +1285,6 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
 
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
 
-        # Ignore the two tokens when generating
-        if SEP_TOKEN < lm_logits.shape[2]:
-            lm_logits[:, :, SEP_TOKEN] = -1e10
-        if NOT_TOKEN < lm_logits.shape[2]:
-            lm_logits[:, :, NOT_TOKEN] = -1e10
-
         if not return_dict:
             return tuple(
                 v
@@ -1341,7 +1314,8 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        attention_mask: torch.LongTensor,
+        attention_mask: torch.FloatTensor,
+        token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[Union[List, torch.FloatTensor]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         **kwargs,
@@ -1352,14 +1326,16 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
                 spout = spout.to(input_ids.device)
         if past_key_values is not None:
             return {
-                "input_ids": input_ids[:, -1:],
+                "input_ids": input_ids[:, -1:] if input_ids is not None else None,
                 "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids[:, -1:] if token_type_ids is not None else None,
                 "spout": spout,
                 "past_key_values": past_key_values,
             }
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
             "spout": spout,
             "past_key_values": None,
         }

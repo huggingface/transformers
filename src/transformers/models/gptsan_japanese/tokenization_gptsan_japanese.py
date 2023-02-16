@@ -97,11 +97,6 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
             File containing the vocabulary.
         emoji_file (`str`):
             File containing the emoji.
-        breakline (`str`, *optional*, defaults to `"\\n"`):
-            Charactor to replace <BR> token.
-        unk_token (`str`, *optional*, defaults to `"nottoken"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
         unk_token (`str`, *optional*, defaults to `"<|nottoken|>"`):
             The token used for unknown charactor
         pad_token (`str`, *optional*, defaults to `"<|separator|>"`):
@@ -110,8 +105,8 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
-        mask_token (`str`, *optional*, defaults to `"<|inputmask|>"`):
-            The mask token for mlm.
+        sep_token (`str`, *optional*, defaults to `"<|segmenter|>"`):
+            A special token to separate token to prefix part and general input part.
         do_clean_text (`bool`, *optional*, defaults to `False`):
             Whether or not to clean text for URL, EMAIL, TEL, Japanese DATE and Japanese PRICE.
     """
@@ -119,18 +114,17 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["input_ids", "attention_mask"]
+    model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
 
     def __init__(
         self,
         vocab_file,
         emoji_file,
-        breakline="\n",
         unk_token="<|nottoken|>",
         pad_token="<|separator|>",
         bos_token="<|startoftext|>",
         eos_token="<|endoftext|>",
-        mask_token="<|inputmask|>",
+        sep_token="<|segmenter|>",
         do_clean_text=False,
         **kwargs,
     ):
@@ -139,6 +133,7 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            sep_token=sep_token,
             do_clean_text=do_clean_text,
             **kwargs,
         )
@@ -152,7 +147,6 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
                 f"Can't find a emoji file at path '{emoji_file}'. To load the emoji information from a Google"
                 " pretrained model use `tokenizer = GPTSANJapaneseTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
-        self.breakline = breakline
         self.do_clean_text = do_clean_text
         self.vocab, self.raw_vocab, self.ids_to_tokens, self.emoji = load_vocab_and_emoji(vocab_file, emoji_file)
         self.subword_tokenizer = SubWordJapaneseTokenizer(
@@ -199,7 +193,7 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
                 elif word == "<SP>":
                     words.append(" ")
                 elif word == "<BR>":
-                    words.append(self.breakline)
+                    words.append("\n")
                 elif word == "<TAB>":
                     words.append("\t")
                 elif word == "<BLOCK>":
@@ -264,8 +258,43 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
             json.dump(self.emoji, writer)
         return vocab_file, emoji_file
 
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        # The tokenizer returns token_type_ids as separators between the Prefix part and the rest.
+        # token_type_ids is 1 for the Prefix part and 0 for the rest of the token.
+        #
+        # ex;
+        # >>> x_token = tokenizer("ｱｲｳｴ")
+        # input_ids:      | SOT | SEG | ｱ | ｲ | ｳ | ｴ |
+        # token_type_ids: | 1   | 0   | 0 | 0 | 0 | 0 |
+        #
+        # >>> x_token = tokenizer("", prefix_text="ｱｲｳｴ")
+        # input_ids:      | SOT | ｱ | ｲ | ｳ | ｴ | SEG |
+        # token_type_ids: | 1   | 1 | 1 | 1 | 1 | 0  |
+        #
+        # >>> x_token = tokenizer("ｳｴ", prefix_text="ｱｲ")
+        # input_ids:      | SOT | ｱ | ｲ | SEG | ｳ | ｴ |
+        # token_type_ids: | 1   | 1 | 1 | 0   | 0 | 0 |
+        prefix_len = 0
+        if self.sep_token in self.vocab:
+            segid = self.vocab[self.sep_token]
+            if segid in token_ids_0:
+                prefix_len = token_ids_0.index(segid)
+        if token_ids_1 is None:
+            total_len = len(token_ids_0)
+        else:
+            total_len = len(token_ids_0 + token_ids_1)
+        return prefix_len * [1] + (total_len - prefix_len) * [0]
+
     def prepare_for_tokenization(self, text, prefix_text="", **kwargs):
-        return ("<|startoftext|>" + prefix_text + "<|segmenter|>" + text, kwargs)
+        # GPTSAN inserts extra SEP tokens in Prefix-LM in addition to SOT for text generation.
+        # SOT at the beginning of the text, and SEP at the separator between the Prefix part and the rest.
+        prepared = self.bos_token if self.bos_token in self.vocab else ""
+        prepared += prefix_text
+        prepared += self.sep_token if self.sep_token in self.vocab else ""
+        prepared += text
+        return (prepared, kwargs)
 
 
 class SubWordJapaneseTokenizer(object):

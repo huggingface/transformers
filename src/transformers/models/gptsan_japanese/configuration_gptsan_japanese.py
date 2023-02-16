@@ -125,7 +125,7 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         separator_token_id=35998,
         pad_token_id=35995,
         eos_token_id=35999,
-        unk_token_id=35996,
+        bad_words_ids=[35995, 35996],
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -151,11 +151,11 @@ class GPTSANJapaneseConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.output_router_logits = output_router_logits
         self.use_cache = use_cache
+        self.bad_words_ids = bad_words_ids
 
         super().__init__(
             separator_token_id=separator_token_id,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
-            unk_token_id=unk_token_id,
             **kwargs,
         )
