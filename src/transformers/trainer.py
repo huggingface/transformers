@@ -1475,7 +1475,10 @@ class Trainer:
                 try:
                     from torch_xla.distributed.fsdp import XlaFullyShardedDataParallel as FSDP
                     from torch_xla.distributed.fsdp import checkpoint_module
-                    from torch_xla.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+                    from torch_xla.distributed.fsdp.wrap import (
+                        size_based_auto_wrap_policy,
+                        transformer_auto_wrap_policy,
+                    )
                 except ImportError:
                     raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
                 auto_wrap_policy = None
@@ -1503,7 +1506,10 @@ class Trainer:
                     auto_wrapper_callable = lambda m, *args, **kwargs: FSDP(checkpoint_module(m), *args, **kwargs)
                 # Wrap the base model with an outer FSDP wrapper
                 self.model = model = FSDP(
-                    model, auto_wrap_policy=auto_wrap_policy, auto_wrapper_callable=auto_wrapper_callable, **fsdp_kwargs
+                    model,
+                    auto_wrap_policy=auto_wrap_policy,
+                    auto_wrapper_callable=auto_wrapper_callable,
+                    **fsdp_kwargs,
                 )
                 # Patch `xm.optimizer_step` should not reduce gradients in this case,
                 # as FSDP does not need gradient reduction over sharded parameters.
