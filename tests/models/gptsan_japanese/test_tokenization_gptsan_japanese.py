@@ -185,6 +185,26 @@ class GPTSANJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(x_token_1[1], x_token_2[-1])  # SEG token
         self.assertEqual(x_token_1[1], x_token_3[3])  # SEG token
 
+    @slow
+    def test_batch_encode(self):
+        tokenizer = self.tokenizer_class.from_pretrained("Tanrei/GPTSAN-japanese")
+
+        input_pairs = [["武田信玄", "は、"], ["織田信長", "の配下の、"]]
+        x_token = tokenizer(input_pairs, padding=True)
+        x_token_2 = tokenizer.batch_encode_plus(input_pairs, padding=True)
+
+        # fmt: off
+        expected_outputs = [[35993, 8640, 25948, 35998, 30647, 35675, 35999, 35999], [35993, 10382, 9868, 35998, 30646, 9459, 30646, 35675]]
+        expected_typeids = [[1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 0, 0, 0, 0, 0]]
+        expected_attmask = [[1, 1, 1, 1, 1, 1, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1]]
+        # fmt: om
+        self.assertListEqual(x_token.input_ids, expected_outputs)
+        self.assertListEqual(x_token.token_type_ids, expected_typeids)
+        self.assertListEqual(x_token.attention_mask, expected_attmask)
+        self.assertListEqual(x_token_2.input_ids, expected_outputs)
+        self.assertListEqual(x_token_2.token_type_ids, expected_typeids)
+        self.assertListEqual(x_token_2.attention_mask, expected_attmask)
+
     # Copied from tests.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest.test_conversion_reversible
     def test_conversion_reversible(self):
         # Intentionally convert some words to accommodate character fluctuations unique to Japanese

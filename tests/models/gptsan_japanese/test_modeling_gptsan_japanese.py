@@ -375,3 +375,54 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertListEqual(batch_out_sentence, [out1_sentence, out2_sentence])
+
+    @slow
+    def test_prefix_lm_generation(self):
+        model = GPTSANJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
+        tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        model.to(torch_device)
+
+        # set deterministically
+        generation_config = GenerationConfig.from_pretrained("Tanrei/GPTSAN-japanese")
+        generation_config.top_k = 1
+
+        prefix_text_1 = "武田信玄"
+        prefix_text_2 = "織田信長"
+        input_text_1 = "は、"
+        input_text_2 = "が、"
+        input_tok_1 = tokenizer(input_text_1, prefix_text=prefix_text_1, return_tensors="pt")
+        input_tok_2 = tokenizer(input_text_2, prefix_text=prefix_text_2, return_tensors="pt")
+        input_tok_3 = tokenizer([[prefix_text_1, input_text_1], [prefix_text_2, input_text_2]], return_tensors="pt")
+
+        output1 = model.generate(
+            input_ids=input_tok_1.input_ids.to(torch_device),
+            token_type_ids=input_tok_1.token_type_ids.to(torch_device),
+            max_new_tokens=20,
+            generation_config=generation_config,
+        )
+
+        output2 = model.generate(
+            input_ids=input_tok_2.input_ids.to(torch_device),
+            token_type_ids=input_tok_2.token_type_ids.to(torch_device),
+            max_new_tokens=20,
+            generation_config=generation_config,
+        )
+
+        output3 = model.generate(
+            input_ids=input_tok_3.input_ids.to(torch_device),
+            token_type_ids=input_tok_3.token_type_ids.to(torch_device),
+            attention_mask=input_tok_3.attention_mask.to(torch_device),
+            max_new_tokens=20,
+            generation_config=generation_config,
+        )
+
+        out1_sentence = tokenizer.decode(output1[0])
+        out2_sentence = tokenizer.decode(output2[0])
+        batch_out_sentence = tokenizer.batch_decode(output3)
+
+        expected_output_sentence = [
+            "武田信玄は、武田氏の祖である武田信虎を、その子・武田信友を擁して",
+            "織田信長が、織田信長の妻・お市の方を妻として迎えたという逸話が残",
+        ]
+        self.assertListEqual(expected_output_sentence, batch_out_sentence)
+        self.assertListEqual(batch_out_sentence, [out1_sentence, out2_sentence])

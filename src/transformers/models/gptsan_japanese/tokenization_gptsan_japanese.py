@@ -17,12 +17,20 @@ import collections
 import json
 import os
 import re
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 
+from ...tokenization_utils_base import (
+    BatchEncoding,
+    PreTokenizedInput,
+    PreTokenizedInputPair,
+    TextInput,
+    TextInputPair,
+    TruncationStrategy,
+)
 from ...tokenization_utils_fast import PreTrainedTokenizer
-from ...utils import logging
+from ...utils import PaddingStrategy, logging
 
 
 if TYPE_CHECKING:
@@ -73,9 +81,12 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
     This tokenizer is based on GPTNeoXJapaneseTokenizer and has the following modifications
     - Decoding byte0~byte255 tokens correctly
     - Added bagofword token handling
+    - Return token_type_ids for Prefix-LM model
     The bagofword token represents a repetition of the previous token and is converted to 3 consecutive tokens when
     decoding In addition, the original Japanese special Sub-Word-Encoding has been released in this repository
-    (https://github.com/tanreinama/Japanese-BPEEncoder_V2).
+    (https://github.com/tanreinama/Japanese-BPEEncoder_V2). The token_type_ids is a mask indicating the prefix input
+    position of the Prefix-LM model. To specify a prefix position, specify a prefix input for prefix_text, or specify a
+    sentence of the prefix part and the part after it as a text pair of batch input.
 
     Example:
 
@@ -90,6 +101,38 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
     >>> # Both 慶応 and 慶應 are decoded to 慶応
     >>> tokenizer.decode(tokenizer("吾輩は猫である🐯。実は慶応(慶應)大学出身")["input_ids"])
     '吾輩は猫である🐯。実は慶応(慶応)大学出身'
+    ```
+
+    Example for Prefix-LM:
+
+    ```python
+    >>> from transformers import GPTSANJapaneseTokenizer
+
+    >>> tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+    >>> tokenizer("実は慶応(慶應)大学出身", prefix_text="吾輩は猫である🐯。")["input_ids"]
+    [35993, 34347, 31459, 30647, 31448, 25, 30659, 35729, 35676, 35998, 32417, 30647, 17750, 35589, 17750, 35590, 321, 1281]
+
+    >>> # Mask for Prefix-LM inputs
+    >>> tokenizer("実は慶応(慶應)大学出身", prefix_text="吾輩は猫である🐯。")["token_type_ids"]
+    [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    ```
+
+    Example for batch encode:
+
+    ```python
+    >>> from transformers import GPTSANJapaneseTokenizer
+
+    >>> tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+    >>> tokenizer([["武田信玄", "は、"], ["織田信長", "の配下の、"]], padding=True)["input_ids"]
+    [[35993, 8640, 25948, 35998, 30647, 35675, 35999, 35999], [35993, 10382, 9868, 35998, 30646, 9459, 30646, 35675]]
+
+    >>> # Mask for Prefix-LM inputs
+    >>> tokenizer([["武田信玄", "は、"], ["織田信長", "の配下の、"]], padding=True)["token_type_ids"]
+    [[1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 0, 0, 0, 0, 0]]
+
+    >>> # Mask for padding
+    >>> tokenizer([["武田信玄", "は、"], ["織田信長", "の配下の、"]], padding=True)["attention_mask"]
+    [[1, 1, 1, 1, 1, 1, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1]]
     ```
 
     Args:
@@ -287,14 +330,65 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
             total_len = len(token_ids_0 + token_ids_1)
         return prefix_len * [1] + (total_len - prefix_len) * [0]
 
-    def prepare_for_tokenization(self, text, prefix_text="", **kwargs):
+    def prepare_for_tokenization(self, text, prefix_text=None, add_sep_token=None, **kwargs):
         # GPTSAN inserts extra SEP tokens in Prefix-LM in addition to SOT for text generation.
         # SOT at the beginning of the text, and SEP at the separator between the Prefix part and the rest.
+        if add_sep_token is None:
+            add_sep_token = self.sep_token not in text  # If insert un-prefix position explicitly
         prepared = self.bos_token if self.bos_token in self.vocab else ""
-        prepared += prefix_text
-        prepared += self.sep_token if self.sep_token in self.vocab else ""
+        prepared += prefix_text if prefix_text is not None else ""
+        if add_sep_token:
+            prepared += self.sep_token if self.sep_token in self.vocab else ""
         prepared += text
         return (prepared, kwargs)
+
+    def _batch_encode_plus(
+        self,
+        batch_text_or_text_pairs: Union[
+            List[TextInput], List[TextInputPair], List[PreTokenizedInput], List[PreTokenizedInputPair]
+        ],
+        add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[str] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+    ) -> BatchEncoding:
+        # This tokenizer converts input text pairs into Prefix input and subsequent input
+        if type(batch_text_or_text_pairs[0]) is tuple or type(batch_text_or_text_pairs[0]) is list:
+            # As a single text with an explicit un-prefix position
+            batch_prefix_texts = []
+            for pref, txt in batch_text_or_text_pairs:
+                batch_prefix_texts.append(pref + self.sep_token + txt)
+            batch_text_or_text_pairs = batch_prefix_texts
+
+        return super()._batch_encode_plus(
+            batch_text_or_text_pairs,
+            add_special_tokens,
+            padding_strategy,
+            truncation_strategy,
+            max_length,
+            stride,
+            is_split_into_words,
+            pad_to_multiple_of,
+            return_tensors,
+            return_token_type_ids,
+            return_attention_mask,
+            return_overflowing_tokens,
+            return_special_tokens_mask,
+            return_offsets_mapping,
+            return_length,
+            verbose,
+        )
 
 
 class SubWordJapaneseTokenizer(object):
