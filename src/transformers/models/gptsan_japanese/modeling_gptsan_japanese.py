@@ -1186,7 +1186,7 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         Example:
 
         Text Generation with regular LM Model
-        ```
+        ```python
         >>> from transformers import AutoModel, AutoTokenizer, trainer_utils
 
         >>> device = "cuda"
@@ -1201,7 +1201,7 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         ```
 
         Text Generation with Prefix-LM Model
-        ```
+        ```python
         >>> from transformers import AutoModel, AutoTokenizer, trainer_utils
 
         >>> device = "cuda"
@@ -1217,15 +1217,14 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         ```
 
         Simultaneously Text Generation And Masked Language Model
-        ```
+        ```python
         >>> from transformers import AutoModel, AutoTokenizer, trainer_utils
 
         >>> device = "cuda"
         >>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").to(device)
         >>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
-        >>> x_token = tokenizer(
-                "", prefix_text="武田信玄は、<|inputmask|>時代ファンならぜひ押さえ<|inputmask|>きたい名将の一人。", return_tensors="pt"
-            )
+        >>> masked_sentence = "武田信玄は、<|inputmask|>時代ファンならぜひ押さえ<|inputmask|>きたい名将の一人。"
+        >>> x_token = tokenizer("", prefix_text=masked_sentence, return_tensors="pt")
         >>> trainer_utils.set_seed(30)
         >>> input_ids = x_token.input_ids.to(device)
         >>> token_type_ids = x_token.token_type_ids.to(device)
@@ -1233,6 +1232,7 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
         >>> out_mlm_token = model(input_ids, token_type_ids=token_type_ids).logits.argmax(axis=-1)
         >>> tokenizer.decode(out_mlm_token[0])
         "武田信玄は、戦国時代ファンならぜひ押さえておきたい名将の一人。"
+
         >>> tokenizer.decode(out_lm_token[0][input_ids.shape[1] :])
         "武田氏の三代に渡った武田家のひとり\n甲斐市に住む、日本史上最大の戦国大名。..."
         ```"""
