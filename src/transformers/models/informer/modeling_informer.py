@@ -1960,7 +1960,7 @@ class InformerModel(InformerPreTrainedModel):
     "The Informer Model with a distribution head on top for time-series forecasting.",
     INFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerForPrediction with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerForPrediction with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER,time-series-transformer->informer
 class InformerForPrediction(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
@@ -2048,7 +2048,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = InformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly")
+        >>> model = InformerForPrediction.from_pretrained("huggingface/informer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features
