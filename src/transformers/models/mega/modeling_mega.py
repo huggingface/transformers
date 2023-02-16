@@ -1318,13 +1318,24 @@ class MegaLayer(nn.Module):
 
         # Mega self-attention
         # create a causal mask for self-attention if we're decoding
+        # note that the Mega code does not account for any past key values in the causal mask - only the input sequence
         if self.is_decoder:
             sequence_length = hidden_states.size(0)
             causal_mask = generate_causal_mask(sequence_length)
         else:
             causal_mask = None
+        
+        # incremental decoding in the MultiHeadEMA module requires that the attention mask has the same 
+        # sequence length as the input tensor; if we're caching incremental states, we assume the input 
+        # sequence length is 1 (Mega will break otherwise), so we take the padding mask for the final 
+        # token in the input (mask is received as [batch X sequence length])
+        if use_cache and (past_key_value is not None):
+            mega_padding_mask = attention_mask[:, -1].unsqueeze(-1)
+        else:
+            mega_padding_mask = attention_mask
+
         mega_outputs = self.mega_layer(x=hidden_states, 
-                                       padding_mask=attention_mask, 
+                                       padding_mask=mega_padding_mask,
                                        causal_mask=causal_mask,
                                        prev_key_values=past_key_value, 
                                        output_attentions=output_attentions, 
