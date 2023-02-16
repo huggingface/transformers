@@ -20,6 +20,7 @@ import re
 import shutil
 import sys
 from pathlib import Path
+import tempfile
 from typing import Dict, Optional, Union
 
 from huggingface_hub import model_info
@@ -143,44 +144,36 @@ def get_class_in_module(class_name, module_path):
     """
     Import a module on the cache directory for modules and extract a class from it.
     """
-    module_dir = Path(HF_MODULES_CACHE) / os.path.dirname(module_path)
-    module_dir_backup_temp = str(module_dir) + "_backup_temp"
-    # make sure it doesn't exist yet
-    if os.path.isdir(module_dir_backup_temp):
-        shutil.rmtree(module_dir_backup_temp)
-    # copy to a temporary directory
-    shutil.copytree(module_dir, module_dir_backup_temp)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+    
+        module_dir = Path(HF_MODULES_CACHE) / os.path.dirname(module_path)
+        module_file_name = module_path.split(os.path.sep)[-1] + ".py"
+        other_module_files = ["__init__.py", "__pycache__"]
+        if module_file_name != "configuration.py":
+            other_module_files += ["configuration.py"]
+    
+        # copy to a temporary directory
+        for fn in [module_file_name] + other_module_files:
+            if os.path.isfile(f"{module_dir}/{fn}"):
+                shutil.copy(f"{module_dir}/{fn}", tmp_dir)
+                cmd = f'import os; os.remove("{module_dir}/{fn}")'
+                os.system(f"python3 -c '{cmd}'")
+                # os.remove(f"{module_dir}/{fn}")
+            elif os.path.isdir(f"{module_dir}/{fn}"):
+                shutil.rmtree(f"{module_dir}/{fn}")
 
-    # remove `configuration.py`: this is necessary when we try to import modeling module, or other tokenizer/processor
-    # modules, while configuration module has been imported previously.
-    # TODO: This is only a simple heuristic. In general, we might need to consider any dynamic module that has been
-    #       imported. However, we don't have this information so far.
-    if os.path.isfile(f"{module_dir}/configuration.py"):
-        os.remove(f"{module_dir}/configuration.py")
-    # `__init__.py` has to be deleted too!
-    if os.path.isfile(f"{module_dir}/__init__.py"):
-        os.remove(f"{module_dir}/__init__.py")
-    # `__pycache__` directory has to be deleted too!
-    if os.path.isdir(f"{module_dir}/__pycache__"):
-        shutil.rmtree(f"{module_dir}/__pycache__")
+        # copy back the file that we want to import
+        shutil.copyfile(f"{tmp_dir}/{module_file_name}", f"{module_dir}/{module_file_name}")
+    
+        # import the module
+        module_path = module_path.replace(os.path.sep, ".")
+        module = importlib.import_module(module_path)
 
-    # copy back the target module file - and ONLY this single file
-    # Without this hack, we may get error: `ModuleNotFoundError: No module named 'transformers_modules.local.modeling'`
-    module_file_name = module_path.split(os.path.sep)[-1] + ".py"
-    shutil.copy(os.path.join(module_dir_backup_temp, module_file_name), module_dir)
-
-    # import the module
-    module_path = module_path.replace(os.path.sep, ".")
-    module = importlib.import_module(module_path)
-
-    # copy the deleted file back
-    if os.path.isfile(f"{module_dir_backup_temp}/configuration.py"):
-        shutil.copy(f"{module_dir_backup_temp}/configuration.py", module_dir)
-
-    # remove the backup directory
-    shutil.rmtree(module_dir_backup_temp)
-
-    return getattr(module, class_name)
+        # copy back the config file
+        if os.path.isfile(f"{tmp_dir}/configuration.py"):
+            shutil.copyfile(f"{tmp_dir}/configuration.py", f"{module_dir}/configuration.py")
+    
+        return getattr(module, class_name)
 
 
 def get_cached_module_file(
