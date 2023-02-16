@@ -819,7 +819,7 @@ class ProbSparseAttention(nn.Module):
         Q_K_sample = torch.bmm(query_states, K_sample.transpose(1, 2))
         # torch.Size([52, 14, 4]) x torch.Size([52, 4, 14])
 
-        # find the Top_k query with sparisty measurement
+        # find the Top_k query with sparsity measurement
         if u > 0:
             M = Q_K_sample.max(dim=-1)[0] - torch.div(Q_K_sample.sum(dim=-1), L_K)
             M_top = M.topk(u, sorted=False)[1]
