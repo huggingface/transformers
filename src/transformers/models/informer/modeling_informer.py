@@ -706,11 +706,11 @@ class ProbSparseAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_decoder: bool = False,
-        factor: int = 5,
+        attention_factor: int = 5,
         bias: bool = True,
     ):
         super().__init__()
-        self.factor = factor
+        self.factor = attention_factor
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
@@ -931,12 +931,12 @@ class InformerEncoderLayer(nn.Module):
     def __init__(self, config: InformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        if config.attn == "prob":
+        if config.attention_type == "prob":
             self.self_attn = ProbSparseAttention(
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
-                factor=config.factor,
+                attention_factor=config.attention_factor,
             )
         else:
             self.self_attn = InformerAttention(
@@ -1008,12 +1008,12 @@ class InformerDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        if config.attn == "prob":
+        if config.attention_type == "prob":
             self.self_attn = ProbSparseAttention(
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
-                factor=config.factor,
+                attention_factor=config.attention_factor,
                 is_decoder=True,
             )
         else:
@@ -1857,6 +1857,8 @@ class InformerModel(InformerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
         r"""
+        Returns:
+
         Examples:
 
         ```python
@@ -2020,6 +2022,8 @@ class InformerForPrediction(InformerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
         r"""
+        Returns:
+
         Examples:
 
         ```python

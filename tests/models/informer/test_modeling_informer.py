@@ -57,7 +57,7 @@ class InformerModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         lags_sequence=[1, 2, 3, 4, 5],
-        factor=10,
+        attention_factor=10,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -76,14 +76,17 @@ class InformerModelTester:
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
-        self.encoder_seq_length = min(factor * np.ceil(np.log1p(context_length)).astype("int").item(), context_length)
-        self.decoder_seq_length = min(
-            factor * np.ceil(np.log1p(prediction_length)).astype("int").item(), prediction_length
+        self.encoder_seq_length = min(
+            attention_factor * np.ceil(np.log1p(context_length)).astype("int").item(), context_length
         )
-        self.factor = factor
+        self.decoder_seq_length = min(
+            attention_factor * np.ceil(np.log1p(prediction_length)).astype("int").item(), prediction_length
+        )
+        self.attention_factor = attention_factor
 
     def get_config(self):
         return InformerConfig(
+            prediction_length=self.prediction_length,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
             encoder_attention_heads=self.num_attention_heads,
@@ -92,7 +95,6 @@ class InformerModelTester:
             decoder_ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
-            prediction_length=self.prediction_length,
             context_length=self.context_length,
             lags_sequence=self.lags_sequence,
             num_time_features=self.num_time_features,
@@ -100,7 +102,7 @@ class InformerModelTester:
             num_static_real_features=1,
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
-            factor=self.factor,
+            attention_factor=self.attention_factor,
         )
 
     def prepare_informer_inputs_dict(self, config):
@@ -184,13 +186,15 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = InformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=InformerConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=InformerConfig, has_text_modality=False, prediction_length=12
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_save_load_strict(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        config, _ = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
             model = model_class(config)
 

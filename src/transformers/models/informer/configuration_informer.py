@@ -23,7 +23,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "elisim/informer": "https://huggingface.co/elisim/informer/resolve/main/config.json",
+    "kashif/informer-tourism-monthly": (
+        "https://huggingface.co/kashif/informer-tourism-monthly/resolve/main/config.json"
+    ),
+    # See all Informer models at https://huggingface.co/models?filter=informer
 }
 
 
@@ -104,15 +107,14 @@ class InformerConfig(PretrainedConfig):
             The standard deviation of the truncated normal weight initialization distribution.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
-        attention_type (`str`, *optional*, defaults to `prob`):
-            Attention used in encoder. This can be set to prob (informer) or full (transformer)
+        attention_type (`str`, *optional*, defaults to "prob"):
+            Attention used in encoder. This can be set to "prob" (Informer's ProbAttention) or "full" (transformer).
         attention_factor (`int`, *optional*, defaults to 2):
             ProbSparse attention factor.
         distil (`bool`, *optional*, defaults to `True`):
             Whether to use distilling in encoder.
 
-
-       Example:
+    Example:
 
     ```python
     >>> from transformers import InformerConfig, InformerModel
@@ -135,11 +137,11 @@ class InformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        input_size: int = 1,
         prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
+        input_size: int = 1,
         lags_sequence: List[int] = None,
         scaling: bool = True,
         num_dynamic_real_features: int = 0,
@@ -165,8 +167,8 @@ class InformerConfig(PretrainedConfig):
         init_std: float = 0.02,
         use_cache=True,
         # Informer arguments
-        attn: str = "prob",
-        factor: int = 2,
+        attention_type: str = "prob",
+        attention_factor: int = 2,
         distil: bool = True,
         **kwargs,
     ):
@@ -229,8 +231,8 @@ class InformerConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         # Informer
-        self.attn = attn
-        self.factor = factor
+        self.attention_type = attention_type
+        self.attention_factor = attention_factor
         self.distil = distil
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
