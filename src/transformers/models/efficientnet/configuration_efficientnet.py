@@ -15,7 +15,7 @@
 """ EfficientNet model configuration"""
 
 from collections import OrderedDict
-from typing import Mapping
+from typing import List, Mapping
 
 from packaging import version
 
@@ -103,27 +103,27 @@ class EfficientNetConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_channels=3,
-        image_size=600,
-        width_coefficient=2.0,
-        depth_coefficient=3.1,
-        depth_divisor=8,
-        kernel_sizes=[3, 3, 5, 3, 5, 5, 3],
-        in_channels=[32, 16, 24, 40, 80, 112, 192],
-        out_channels=[16, 24, 40, 80, 112, 192, 320],
-        depthwise_padding=[],
-        strides=[1, 2, 2, 2, 1, 2, 1],
-        num_block_repeats=[1, 2, 2, 3, 3, 4, 1],
-        expand_ratios=[1, 6, 6, 6, 6, 6, 6],
-        squeeze_expansion_ratio=0.25,
-        hidden_act="swish",
-        hidden_dim=1280,
-        pooling="avg",
-        initializer_range=0.02,
-        batch_norm_eps=0.001,
-        batch_norm_momentum=0.99,
-        dropout_rate=0.5,
-        drop_connect_rate=0.2,
+        num_channels: int = 3,
+        image_size: int = 600,
+        width_coefficient: float = 2.0,
+        depth_coefficient: float = 3.1,
+        depth_divisor: int = 8,
+        kernel_sizes: List[int] = [3, 3, 5, 3, 5, 5, 3],
+        in_channels: List[int] = [32, 16, 24, 40, 80, 112, 192],
+        out_channels: List[int] = [16, 24, 40, 80, 112, 192, 320],
+        depthwise_padding: List[int] = [],
+        strides: List[int] = [1, 2, 2, 2, 1, 2, 1],
+        num_block_repeats: List[int] = [1, 2, 2, 3, 3, 4, 1],
+        expand_ratios: List[int] = [1, 6, 6, 6, 6, 6, 6],
+        squeeze_expansion_ratio: float = 0.25,
+        hidden_act: str = "swish",
+        hidden_dim: int = 2560,
+        pooling: str = "avg",
+        initializer_range: float = 0.02,
+        batch_norm_eps: float = 0.001,
+        batch_norm_momentum: float = 0.99,
+        dropout_rate: float = 0.5,
+        drop_connect_rate: float = 0.2,
         **kwargs,
     ):
         super().__init__(**kwargs)

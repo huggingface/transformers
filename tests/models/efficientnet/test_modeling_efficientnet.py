@@ -36,7 +36,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class EfficientNetModelTester:
@@ -46,33 +46,32 @@ class EfficientNetModelTester:
         batch_size=13,
         image_size=32,
         num_channels=3,
-        num_stages=4,
-        hidden_sizes=[10, 20, 30, 40],
-        depths=[2, 2, 3, 2],
+        kernel_sizes=[3, 3, 5],
+        in_channels=[32, 16, 24],
+        out_channels=[16, 24, 40],
+        strides=[1, 1, 2],
+        num_block_repeats=[1, 1, 2],
+        expand_ratios=[1, 6, 6],
         is_training=True,
         use_labels=True,
         intermediate_size=37,
         hidden_act="gelu",
         num_labels=10,
-        initializer_range=0.02,
-        out_features=["stage2", "stage3", "stage4"],
-        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
-        self.num_stages = num_stages
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
+        self.kernel_sizes = kernel_sizes
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.strides = strides
+        self.num_block_repeats = num_block_repeats
+        self.expand_ratios = expand_ratios
         self.is_training = is_training
-        self.use_labels = use_labels
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.num_labels = num_labels
-        self.initializer_range = initializer_range
-        self.out_features = out_features
-        self.scope = scope
+        self.use_labels = use_labels
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -82,19 +81,18 @@ class EfficientNetModelTester:
             labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
-
         return config, pixel_values, labels
 
     def get_config(self):
         return EfficientNetConfig(
             num_channels=self.num_channels,
-            hidden_sizes=self.hidden_sizes,
-            depths=self.depths,
-            num_stages=self.num_stages,
+            kernel_sizes=self.kernel_sizes,
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            strides=self.strides,
+            num_block_repeats=self.num_block_repeats,
+            expand_ratios=self.expand_ratios,
             hidden_act=self.hidden_act,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            out_features=self.out_features,
             num_labels=self.num_labels,
         )
 
@@ -103,10 +101,10 @@ class EfficientNetModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        # expected last hidden states: B, C, H // 32, W // 32
+        # expected last hidden states: B, C, H // 4, W // 4
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+            (self.batch_size, config.hidden_dim, self.image_size // 4, self.image_size // 4),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -201,14 +199,13 @@ class EfficientNetModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
-            expected_num_stages = self.model_tester.num_stages
-            self.assertEqual(len(hidden_states), expected_num_stages + 1)
+            num_blocks = sum(config.num_block_repeats) * 4
+            self.assertEqual(len(hidden_states), num_blocks)
 
             # EfficientNet's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
+                [self.model_tester.image_size // 2, self.model_tester.image_size // 2],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -244,16 +241,16 @@ def prepare_img():
 @require_vision
 class EfficientNetModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("google/efficientnet-b7") if is_vision_available() else None
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained("google/efficientnet-b7") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         model = EfficientNetForImageClassification.from_pretrained("google/efficientnet-b7").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -263,6 +260,5 @@ class EfficientNetModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0260, -0.4739, 0.1911]).to(torch_device)
-
+        expected_slice = torch.tensor([0.0001, 0.0002, 0.0002]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

@@ -580,12 +580,12 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
 class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        num_labels = config.num_labels
+        self.num_labels = config.num_labels
         self.config = config
         self.efficientnet = EfficientNetModel(config)
         # Classifier head
         self.dropout = nn.Dropout(p=config.dropout_rate)
-        self.classifier = nn.Linear(config.hidden_dim, num_labels) if num_labels > 0 else nn.Identity()
+        self.classifier = nn.Linear(config.hidden_dim, self.num_labels) if self.num_labels > 0 else nn.Identity()
         self.classifier_act = nn.Softmax(dim=1)
 
         # Initialize weights and apply final processing

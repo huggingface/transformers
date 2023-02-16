@@ -73,6 +73,7 @@ class ConvNextModelTester:
         self.initializer_range = initializer_range
         self.out_features = out_features
         self.scope = scope
+        print(self.hidden_sizes)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -82,7 +83,6 @@ class ConvNextModelTester:
             labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
-
         return config, pixel_values, labels
 
     def get_config(self):
