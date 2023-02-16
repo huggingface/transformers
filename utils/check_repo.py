@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
 import inspect
 import os
 import re
@@ -24,7 +23,7 @@ from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.utils import ENV_VARS_TRUE_VALUES
+from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -56,6 +55,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "DetaEncoder",  # Building part of bigger (tested) model.
     "DetaDecoder",  # Building part of bigger (tested) model.
+    "ErnieMForInformationExtraction",
     "GraphormerEncoder",  # Building part of bigger (tested) model.
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "CLIPSegDecoder",  # Building part of bigger (tested) model.
@@ -175,6 +175,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Blip2ForConditionalGeneration",
     "Blip2QFormerModel",
     "Blip2VisionModel",
+    "ErnieMForInformationExtraction",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
@@ -285,6 +286,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPTextModel",
     "AltCLIPVisionModel",
     "AltRobertaModel",
+    "TvltForAudioVisualClassification",
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
@@ -303,12 +305,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
-    submodule_search_locations=[PATH_TO_TRANSFORMERS],
-)
-transformers = spec.loader.load_module()
+transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
 def check_model_list():

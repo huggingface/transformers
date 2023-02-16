@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # RoBERTa
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=roberta">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-roberta-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/roberta-base">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The RoBERTa model was proposed in [RoBERTa: A Robustly Optimized BERT Pretraining Approach](https://arxiv.org/abs/1907.11692) by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer
@@ -39,6 +48,12 @@ Tips:
   different pretraining scheme.
 - RoBERTa doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just
   separate your segments with the separation token `tokenizer.sep_token` (or `</s>`)
+- Same as BERT with better pretraining tricks:
+
+    * dynamic masking: tokens are masked differently at each epoch, whereas BERT does it once and for all
+    * together to reach 512 tokens (so the sentences are in an order than may span several documents)
+    * train with larger batches
+    * use BPE with bytes as a subunit and not characters (because of unicode characters)
 - [CamemBERT](camembert) is a wrapper around RoBERTa. Refer to this page for usage examples.
 
 This model was contributed by [julien-c](https://huggingface.co/julien-c). The original code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/roberta).
