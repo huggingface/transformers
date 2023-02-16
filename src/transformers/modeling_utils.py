@@ -2116,21 +2116,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
                 )
 
-        quantization_config_kwargs = {
-            k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters
-        }
-        # pop the kwargs that are in the signature of the init function of BitsAndBytesConfig
-        for k in quantization_config_kwargs:
-            kwargs.pop(k)
-
-        if (len(quantization_config_kwargs) > 0 or load_in_8bit) and quantization_config is None:
-            quantization_config = BitsAndBytesConfig(load_in_8bit=load_in_8bit, **quantization_config_kwargs)
+        if quantization_config is None:
+            quantization_config, kwargs = BitsAndBytesConfig.from_dict(
+                config_dict={"load_in_8bit": load_in_8bit}, return_unused_kwargs=True, **kwargs
+            )
         elif quantization_config is not None:
             load_in_8bit = quantization_config.load_in_8bit
 
+            quantization_config_kwargs = {
+                k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters
+            }
+
             if len(quantization_config_kwargs) > 0:
                 raise ValueError(
-                    "You can't pass `load_in_8bit` or any other `BitsAndBytesConfig` argument as a kwarg and as an "
+                    "You can't pass `load_in_8bit` or any other `BitsAndBytesConfig` argument as a kwarg when passing "
                     "`quantization_config` argument at the same time."
                 )
 
