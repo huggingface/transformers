@@ -53,7 +53,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("conditional_detr", "ConditionalDetrModel"),
         ("convbert", "ConvBertModel"),
         ("convnext", "ConvNextModel"),
-        ("convnextv2", "ConvNeXTV2Model"),
+        ("convnextv2", "ConvNextV2Model"),
         ("ctrl", "CTRLModel"),
         ("cvt", "CvtModel"),
         ("data2vec-audio", "Data2VecAudioModel"),

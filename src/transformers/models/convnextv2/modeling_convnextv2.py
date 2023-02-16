@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ConvNeXTV2 model."""
+""" PyTorch ConvNextV2 model."""
 
 
 from typing import Optional, Tuple, Union
@@ -37,13 +37,13 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_convnextv2 import ConvNeXTV2Config
+from .configuration_convnextv2 import ConvNextV2Config
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "ConvNeXTV2Config"
+_CONFIG_FOR_DOC = "ConvNextV2Config"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/convnextv2-tiny-224"
@@ -55,9 +55,8 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnextv2-tiny-224",
-    # See all ConvNeXTV2 models at https://huggingface.co/models?filter=convnextv2
+    # See all ConvNextV2 models at https://huggingface.co/models?filter=convnextv2
 ]
-
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
@@ -81,8 +80,8 @@ def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->ConvNeXTV2
-class ConvNeXTV2DropPath(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->ConvNextV2
+class ConvNextV2DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -96,7 +95,7 @@ class ConvNeXTV2DropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-class ConvNeXTV2GRN(nn.Module):
+class ConvNextV2GRN(nn.Module):
     """GRN (Global Response Normalization) layer"""
 
     def __init__(self, dim: int):
@@ -113,8 +112,8 @@ class ConvNeXTV2GRN(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->ConvNeXTV2
-class ConvNeXTV2LayerNorm(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->ConvNextV2
+class ConvNextV2LayerNorm(nn.Module):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
@@ -144,8 +143,8 @@ class ConvNeXTV2LayerNorm(nn.Module):
         return x
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextEmbeddings with ConvNext->ConvNeXTV2
-class ConvNeXTV2Embeddings(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextEmbeddings with ConvNext->ConvNextV2
+class ConvNextV2Embeddings(nn.Module):
     """This class is comparable to (and inspired by) the SwinEmbeddings class
     found in src/transformers/models/swin/modeling_swin.py.
     """
@@ -155,7 +154,7 @@ class ConvNeXTV2Embeddings(nn.Module):
         self.patch_embeddings = nn.Conv2d(
             config.num_channels, config.hidden_sizes[0], kernel_size=config.patch_size, stride=config.patch_size
         )
-        self.layernorm = ConvNeXTV2LayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
+        self.layernorm = ConvNextV2LayerNorm(config.hidden_sizes[0], eps=1e-6, data_format="channels_first")
         self.num_channels = config.num_channels
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
@@ -169,8 +168,7 @@ class ConvNeXTV2Embeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayer with ConvNext->ConvNeXTV2
-class ConvNeXTV2Layer(nn.Module):
+class ConvNextV2Layer(nn.Module):
     """This corresponds to the `Block` class in the original implementation.
 
     There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
@@ -179,7 +177,7 @@ class ConvNeXTV2Layer(nn.Module):
     The authors used (2) as they find it slightly faster in PyTorch.
 
     Args:
-        config ([`ConvNeXTV2Config`]): Model configuration class.
+        config ([`ConvNextV2Config`]): Model configuration class.
         dim (`int`): Number of input channels.
         drop_path (`float`): Stochastic depth rate. Default: 0.0.
     """
@@ -187,12 +185,12 @@ class ConvNeXTV2Layer(nn.Module):
     def __init__(self, config, dim, drop_path=0):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
-        self.layernorm = ConvNeXTV2LayerNorm(dim, eps=1e-6)
+        self.layernorm = ConvNextV2LayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = ACT2FN[config.hidden_act]
-        self.grn = ConvNeXTV2GRN(4 * dim)
+        self.grn = ConvNextV2GRN(4 * dim)
         self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.drop_path = ConvNeXTV2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = ConvNextV2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
         input = hidden_states
@@ -209,12 +207,12 @@ class ConvNeXTV2Layer(nn.Module):
         return x
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextStage with ConvNext->ConvNeXTV2,ConvNeXT->ConvNeXTV2
-class ConvNeXTV2Stage(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextStage with ConvNeXT->ConvNeXTV2, ConvNext->ConvNextV2
+class ConvNextV2Stage(nn.Module):
     """ConvNeXTV2 stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
-        config ([`ConvNeXTV2Config`]): Model configuration class.
+        config ([`ConvNextV2Config`]): Model configuration class.
         in_channels (`int`): Number of input channels.
         out_channels (`int`): Number of output channels.
         depth (`int`): Number of residual blocks.
@@ -226,14 +224,14 @@ class ConvNeXTV2Stage(nn.Module):
 
         if in_channels != out_channels or stride > 1:
             self.downsampling_layer = nn.Sequential(
-                ConvNeXTV2LayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
+                ConvNextV2LayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
                 nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
             )
         else:
             self.downsampling_layer = nn.Identity()
         drop_path_rates = drop_path_rates or [0.0] * depth
         self.layers = nn.Sequential(
-            *[ConvNeXTV2Layer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
+            *[ConvNextV2Layer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
         )
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
@@ -242,8 +240,8 @@ class ConvNeXTV2Stage(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoder with ConvNext->ConvNeXTV2
-class ConvNeXTV2Encoder(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextEncoder with ConvNext->ConvNextV2
+class ConvNextV2Encoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.stages = nn.ModuleList()
@@ -253,7 +251,7 @@ class ConvNeXTV2Encoder(nn.Module):
         prev_chs = config.hidden_sizes[0]
         for i in range(config.num_stages):
             out_chs = config.hidden_sizes[i]
-            stage = ConvNeXTV2Stage(
+            stage = ConvNextV2Stage(
                 config,
                 in_channels=prev_chs,
                 out_channels=out_chs,
@@ -290,14 +288,14 @@ class ConvNeXTV2Encoder(nn.Module):
         )
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNeXTV2,convnext->convnextv2
-class ConvNeXTV2PreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextV2,convnext->convnextv2
+class ConvNextV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ConvNeXTV2Config
+    config_class = ConvNextV2Config
     base_model_prefix = "convnextv2"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -315,7 +313,7 @@ class ConvNeXTV2PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ConvNeXTV2Encoder):
+        if isinstance(module, ConvNextV2Encoder):
             module.gradient_checkpointing = value
 
 
@@ -325,7 +323,7 @@ CONVNEXTV2_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`ConvNeXTV2Config`]): Model configuration class with all the parameters of the model.
+        config ([`ConvNextV2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -345,17 +343,17 @@ CONVNEXTV2_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ConvNeXTV2 model outputting raw features without any specific head on top.",
+    "The bare ConvNextV2 model outputting raw features without any specific head on top.",
     CONVNEXTV2_START_DOCSTRING,
 )
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTV2,ConvNext->ConvNeXTV2
-class ConvNeXTV2Model(ConvNeXTV2PreTrainedModel):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2
+class ConvNextV2Model(ConvNextV2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ConvNeXTV2Embeddings(config)
-        self.encoder = ConvNeXTV2Encoder(config)
+        self.embeddings = ConvNextV2Embeddings(config)
+        self.encoder = ConvNextV2Encoder(config)
 
         # final layernorm layer
         self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
@@ -410,18 +408,18 @@ class ConvNeXTV2Model(ConvNeXTV2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    ConvNeXTV2 Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
+    ConvNextV2 Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
     ImageNet.
     """,
     CONVNEXTV2_START_DOCSTRING,
 )
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextForImageClassification with CONVNEXT->CONVNEXTV2,ConvNext->ConvNeXTV2,convnext->convnextv2
-class ConvNeXTV2ForImageClassification(ConvNeXTV2PreTrainedModel):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextForImageClassification with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,convnext->convnextv2
+class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.convnextv2 = ConvNeXTV2Model(config)
+        self.convnextv2 = ConvNextV2Model(config)
 
         # Classifier head
         self.classifier = (
@@ -494,18 +492,18 @@ class ConvNeXTV2ForImageClassification(ConvNeXTV2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    ConvNeXt backbone, to be used with frameworks like DETR and MaskFormer.
+    ConvNeXT V2 backbone, to be used with frameworks like DETR and MaskFormer.
     """,
     CONVNEXTV2_START_DOCSTRING,
 )
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextBackbone with CONVNEXT->CONVNEXTV2,ConvNext->ConvNeXTV2,facebook/convnext-tiny-224->facebook/convnextv2-tiny-224
-class ConvNeXTV2Backbone(ConvNeXTV2PreTrainedModel, BackboneMixin):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextBackbone with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,facebook/convnext-tiny-224->facebook/convnextv2-tiny-224
+class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
 
         self.stage_names = config.stage_names
-        self.embeddings = ConvNeXTV2Embeddings(config)
-        self.encoder = ConvNeXTV2Encoder(config)
+        self.embeddings = ConvNextV2Embeddings(config)
+        self.encoder = ConvNextV2Encoder(config)
 
         self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
 
@@ -519,7 +517,7 @@ class ConvNeXTV2Backbone(ConvNeXTV2PreTrainedModel, BackboneMixin):
         # Add layer norms to hidden states of out_features
         hidden_states_norms = dict()
         for stage, num_channels in zip(self.out_features, self.channels):
-            hidden_states_norms[stage] = ConvNeXTV2LayerNorm(num_channels, data_format="channels_first")
+            hidden_states_norms[stage] = ConvNextV2LayerNorm(num_channels, data_format="channels_first")
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
 
         # initialize weights and apply final processing

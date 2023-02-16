@@ -16,17 +16,16 @@
 
 URL: https://github.com/facebookresearch/ConvNeXt"""
 
-
 import argparse
 import json
-from pathlib import Path
-
-import torch
-from PIL import Image
+import os
 
 import requests
+import torch
 from huggingface_hub import hf_hub_download
-from transformers import ConvNeXTV2Config, ConvNextFeatureExtractor, ConvNeXTV2ForImageClassification
+from PIL import Image
+
+from transformers import ConvNextImageProcessor, ConvNextV2Config, ConvNextV2ForImageClassification
 from transformers.utils import logging
 
 
@@ -35,13 +34,22 @@ logger = logging.get_logger(__name__)
 
 
 def get_convnextv2_config(checkpoint_url):
-    config = ConvNeXTV2Config()
+    config = ConvNextV2Config()
 
+    if "atto" in checkpoint_url:
+        depths = [2, 2, 6, 2]
+        hidden_sizes = [40, 80, 160, 320]
+    if "femto" in checkpoint_url:
+        depths = [2, 2, 6, 2]
+        hidden_sizes = [48, 96, 192, 384]
+    if "pico" in checkpoint_url:
+        depths = [2, 2, 6, 2]
+        hidden_sizes = [64, 128, 256, 512]
+    if "nano" in checkpoint_url:
+        depths = [2, 2, 8, 2]
+        hidden_sizes = [80, 160, 320, 640]
     if "tiny" in checkpoint_url:
         depths = [3, 3, 9, 3]
-        hidden_sizes = [96, 192, 384, 768]
-    if "small" in checkpoint_url:
-        depths = [3, 3, 27, 3]
         hidden_sizes = [96, 192, 384, 768]
     if "base" in checkpoint_url:
         depths = [3, 3, 27, 3]
@@ -49,9 +57,9 @@ def get_convnextv2_config(checkpoint_url):
     if "large" in checkpoint_url:
         depths = [3, 3, 27, 3]
         hidden_sizes = [192, 384, 768, 1536]
-    if "xlarge" in checkpoint_url:
+    if "huge" in checkpoint_url:
         depths = [3, 3, 27, 3]
-        hidden_sizes = [256, 512, 1024, 2048]
+        hidden_sizes = [352, 704, 1408, 2816]
 
     if "1k" in checkpoint_url:
         num_labels = 1000
@@ -103,8 +111,6 @@ def rename_key(name):
         name = name.replace("stages", "encoder.stages")
     if "norm" in name:
         name = name.replace("norm", "layernorm")
-    if "gamma" in name:
-        name = name.replace("gamma", "layer_scale_parameter")
     if "head" in name:
         name = name.replace("head", "classifier")
 
@@ -118,8 +124,20 @@ def prepare_img():
     return im
 
 
+def convert_preprocessor(checkpoint_url):
+    if "224" in checkpoint_url:
+        size = 224
+    elif "384" in checkpoint_url:
+        size = 384
+    else:
+        size = 512
+
+    preprocessor = ConvNextImageProcessor(size=size)
+    return preprocessor
+
+
 @torch.no_grad()
-def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path):
+def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_model, push_to_hub):
     """
     Copy/paste/tweak model's weights to our ConvNeXTV2 structure.
     """
@@ -128,6 +146,7 @@ def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     config, expected_shape = get_convnextv2_config(checkpoint_url)
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
+
     # rename keys
     for key in state_dict.copy().keys():
         val = state_dict.pop(key)
@@ -140,86 +159,102 @@ def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         state_dict[key] = val
 
     # load HuggingFace model
-    model = ConvNeXTV2ForImageClassification(config)
+    model = ConvNextV2ForImageClassification(config)
     model.load_state_dict(state_dict)
     model.eval()
 
-    # Check outputs on an image, prepared by ConvNextFeatureExtractor
-    size = 224 if "224" in checkpoint_url else 384
-    feature_extractor = ConvNextFeatureExtractor(size=size)
-    pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
-
-    logits = model(pixel_values).logits
+    # Check outputs on an image, prepared by ConvNextImageProcessor
+    preprocessor = convert_preprocessor(checkpoint_url)
+    inputs = preprocessor(images=prepare_img(), return_tensors="pt")
+    logits = model(**inputs).logits
 
     # note: the logits below were obtained without center cropping
-    if checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_tiny_1k_224_ema.pth":
-        expected_logits = torch.tensor([-0.1210, -0.6605, 0.1918])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_small_1k_224_ema.pth":
-        expected_logits = torch.tensor([-0.4473, -0.1847, -0.6365])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_base_1k_224_ema.pth":
-        expected_logits = torch.tensor([0.4525, 0.7539, 0.0308])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_base_1k_384.pth":
-        expected_logits = torch.tensor([0.3561, 0.6350, -0.0384])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_large_1k_224_ema.pth":
-        expected_logits = torch.tensor([0.4174, -0.0989, 0.1489])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_large_1k_384.pth":
-        expected_logits = torch.tensor([0.2513, -0.1349, -0.1613])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_base_22k_224.pth":
-        expected_logits = torch.tensor([1.2980, 0.3631, -0.1198])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_large_22k_224.pth":
-        expected_logits = torch.tensor([1.2963, 0.1227, 0.1723])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_xlarge_22k_224.pth":
-        expected_logits = torch.tensor([1.7956, 0.8390, 0.2820])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_base_22k_1k_224.pth":
-        expected_logits = torch.tensor([-0.2822, -0.0502, -0.0878])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_base_22k_1k_384.pth":
-        expected_logits = torch.tensor([-0.5672, -0.0730, -0.4348])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_large_22k_1k_224.pth":
-        expected_logits = torch.tensor([0.2681, 0.2365, 0.6246])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_large_22k_1k_384.pth":
-        expected_logits = torch.tensor([-0.2642, 0.3931, 0.5116])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_xlarge_22k_1k_224_ema.pth":
-        expected_logits = torch.tensor([-0.6677, -0.1873, -0.8379])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnextv2/convnextv2_xlarge_22k_1k_384_ema.pth":
-        expected_logits = torch.tensor([-0.7749, -0.2967, -0.6444])
+    if checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_atto_1k_224_ema.pt":
+        expected_logits = torch.tensor([-0.3930, 0.1747, -0.5246, 0.4177, 0.4295])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_femto_1k_224_ema.pt":
+        expected_logits = torch.tensor([-0.2553, -0.6708, -0.1359, 0.2518, -0.2488])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_pico_1k_224_ema.pt":
+        expected_logits = torch.tensor([-0.0333, 0.1563, -0.9137, 0.1054, 0.0381])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_nano_1k_224_ema.pt":
+        expected_logits = torch.tensor([-0.1744, -0.1555, -0.0713, 0.0950, -0.1431])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_tiny_1k_224_ema.pth":
+        expected_logits = torch.tensor([0.9996, 0.1966, -0.4386, -0.3472, 0.6661])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_base_1k_224_ema.pt":
+        expected_logits = torch.tensor([-0.2553, -0.6708, -0.1359, 0.2518, -0.2488])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_large_1k_224_ema.pt":
+        expected_logits = torch.tensor([-0.0673, -0.5627, -0.3753, -0.2722, 0.0178])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_huge_1k_224_ema.pt":
+        expected_logits = torch.tensor([-0.6377, -0.7458, -0.2150, 0.1184, -0.0597])
+
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_nano_22k_224_ema.pt":
+        expected_logits = torch.tensor([1.0799, 0.2322, -0.8860, 1.0219, 0.6231])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_nano_22k_384_ema.pt":
+        expected_logits = torch.tensor([0.3766, 0.4917, -1.1426, 0.9942, 0.6024])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_tiny_22k_224_ema.pt":
+        expected_logits = torch.tensor([0.4220, -0.6919, -0.4317, -0.2881, -0.6609])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_tiny_22k_384_ema.pt":
+        expected_logits = torch.tensor([0.1082, -0.8286, -0.5095, 0.4681, -0.8085])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_base_22k_224_ema.pt":
+        expected_logits = torch.tensor([-0.2419, -0.6221, 0.2176, -0.0980, -0.7527])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_base_22k_384_ema.pt":
+        expected_logits = torch.tensor([0.0391, -0.4371, 0.3786, 0.1251, -0.2784])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_large_22k_224_ema.pt":
+        expected_logits = torch.tensor([-0.0504, 0.5636, -0.1729, -0.6507, -0.3949])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_large_22k_384_ema.pt":
+        expected_logits = torch.tensor([0.3560, 0.9486, 0.3149, -0.2667, -0.5138])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_huge_22k_384_ema.pt":
+        expected_logits = torch.tensor([-0.2469, -0.4550, -0.5853, -0.0810, 0.0309])
+    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_huge_22k_512_ema.pt":
+        expected_logits = torch.tensor([-0.3090, 0.0802, -0.0682, -0.1979, -0.2826])
     else:
         raise ValueError(f"Unknown URL: {checkpoint_url}")
 
-    assert torch.allclose(logits[0, :3], expected_logits, atol=1e-3)
+    assert torch.allclose(logits[0, :5], expected_logits, atol=1e-3)
     assert logits.shape == expected_shape
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    if save_model:
+        print("Saving model to local...")
+        # Create folder to save model
+        if not os.path.isdir(pytorch_dump_folder_path):
+            os.mkdir(pytorch_dump_folder_path)
 
-    print("Pushing model to the hub...")
+        model.save_pretrained(pytorch_dump_folder_path)
+        preprocessor.save_pretrained(pytorch_dump_folder_path)
+
     model_name = "convnextv2"
-    if "tiny" in checkpoint_url:
+    if "atto" in checkpoint_url:
+        model_name += "-atto"
+    if "femto" in checkpoint_url:
+        model_name += "-femto"
+    if "pico" in checkpoint_url:
+        model_name += "-pico"
+    if "nano" in checkpoint_url:
+        model_name += "-nano"
+    elif "tiny" in checkpoint_url:
         model_name += "-tiny"
-    elif "small" in checkpoint_url:
-        model_name += "-small"
     elif "base" in checkpoint_url:
         model_name += "-base"
-    elif "xlarge" in checkpoint_url:
-        model_name += "-xlarge"
     elif "large" in checkpoint_url:
         model_name += "-large"
+    elif "huge" in checkpoint_url:
+        model_name += "-huge"
     if "224" in checkpoint_url:
         model_name += "-224"
     elif "384" in checkpoint_url:
         model_name += "-384"
+    elif "512" in checkpoint_url:
+        model_name += "-512"
     if "22k" in checkpoint_url and "1k" not in checkpoint_url:
         model_name += "-22k"
     if "22k" in checkpoint_url and "1k" in checkpoint_url:
         model_name += "-22k-1k"
+    elif "1k" in checkpoint_url:
+        model_name += "-1k"
 
-    model.push_to_hub(
-        repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-        organization="nielsr",
-        commit_message="Add model",
-    )
+    if push_to_hub:
+        print(f"Pushing {model_name} to the hub...")
+        model.push_to_hub(model_name)
+        preprocessor.push_to_hub(model_name)
 
 
 if __name__ == "__main__":
@@ -227,17 +262,20 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_url",
-        default="https://dl.fbaipublicfiles.com/convnextv2/convnextv2_tiny_1k_224_ema.pth",
+        default="https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_atto_1k_224_ema.pt",
         type=str,
         help="URL of the original ConvNeXTV2 checkpoint you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default=None,
+        default="model",
         type=str,
-        required=True,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument("--save_model", action="store_true", help="Save model to local")
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image preprocessor to the hub")
 
     args = parser.parse_args()
-    convert_convnextv2_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path)
+    convert_convnextv2_checkpoint(
+        args.checkpoint_url, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub
+    )

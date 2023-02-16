@@ -31,12 +31,11 @@ CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
-class ConvNeXTV2Config(PretrainedConfig):
+class ConvNextV2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConvNeXTV2Model`]. It is used to instantiate an
-    ConvNeXTV2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the ConvNeXTV2
+    ConvNeXTV2 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the ConvNeXTV2
     [facebook/convnextv2-tiny-224](https://huggingface.co/facebook/convnextv2-tiny-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -97,7 +96,7 @@ class ConvNeXTV2Config(PretrainedConfig):
         drop_path_rate=0.0,
         image_size=224,
         out_features=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -124,8 +123,7 @@ class ConvNeXTV2Config(PretrainedConfig):
         self.out_features = out_features
 
 
-class ConvNeXTV2OnnxConfig(OnnxConfig):
-
+class ConvNextV2OnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

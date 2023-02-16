@@ -26,7 +26,11 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_convnextv2": ["CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNeXTV2Config", "ConvNeXTV2OnnxConfig"]
+    "configuration_convnextv2": [
+        "CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ConvNextV2Config",
+        "ConvNextV2OnnxConfig",
+    ]
 }
 
 try:
@@ -37,14 +41,18 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_convnextv2"] = [
         "CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ConvNeXTV2ForImageClassification",
-        "ConvNeXTV2Model",
-        "ConvNeXTV2PreTrainedModel",
-        "ConvNeXTV2Backbone",
+        "ConvNextV2ForImageClassification",
+        "ConvNextV2Model",
+        "ConvNextV2PreTrainedModel",
+        "ConvNextV2Backbone",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_convnextv2 import CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNeXTV2Config, ConvNeXTV2OnnxConfig
+    from .configuration_convnextv2 import (
+        CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ConvNextV2Config,
+        ConvNextV2OnnxConfig,
+    )
 
     try:
         if not is_torch_available():
@@ -54,10 +62,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_convnextv2 import (
             CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConvNeXTV2Backbone,
-            ConvNeXTV2ForImageClassification,
-            ConvNeXTV2Model,
-            ConvNeXTV2PreTrainedModel,
+            ConvNextV2Backbone,
+            ConvNextV2ForImageClassification,
+            ConvNextV2Model,
+            ConvNextV2PreTrainedModel,
         )
 
 else:

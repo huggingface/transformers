@@ -55,7 +55,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("conditional_detr", "ConditionalDetrConfig"),
         ("convbert", "ConvBertConfig"),
         ("convnext", "ConvNextConfig"),
-        ("convnextv2", "ConvNeXTV2Config"),
+        ("convnextv2", "ConvNextV2Config"),
         ("ctrl", "CTRLConfig"),
         ("cvt", "CvtConfig"),
         ("data2vec-audio", "Data2VecAudioConfig"),
