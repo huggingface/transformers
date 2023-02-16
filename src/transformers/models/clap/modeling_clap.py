@@ -2205,7 +2205,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         >>> model = ClapTextModelWithProjection.from_pretrained("laion/clap-htsat-unfused")
         >>> tokenizer = AutoTokenizer.from_pretrained("laion/clap-htsat-unfused")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = tokenizer(["a sound of a cat", "a sound of a dog"], padding=True, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> text_embeds = outputs.text_embeds
