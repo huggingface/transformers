@@ -197,7 +197,7 @@ class GPTSANJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected_outputs = [[35993, 8640, 25948, 35998, 30647, 35675, 35999, 35999], [35993, 10382, 9868, 35998, 30646, 9459, 30646, 35675]]
         expected_typeids = [[1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 0, 0, 0, 0, 0]]
         expected_attmask = [[1, 1, 1, 1, 1, 1, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1]]
-        # fmt: om
+        # fmt: on
         self.assertListEqual(x_token.input_ids, expected_outputs)
         self.assertListEqual(x_token.token_type_ids, expected_typeids)
         self.assertListEqual(x_token.attention_mask, expected_attmask)

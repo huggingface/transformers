@@ -1618,13 +1618,9 @@ else:
     _import_structure["models.gptsan_japanese"].extend(
         [
             "GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GPTSANJapaneseDenseActDense",
             "GPTSANJapaneseForConditionalGeneration",
             "GPTSANJapaneseModel",
             "GPTSANJapanesePreTrainedModel",
-            "GPTSANJapaneseSparseMLP",
-            "GPTSANJapaneseTokenizer",
-            "GPTSANJapaneseTop1Router",
         ]
     )
     _import_structure["models.graphormer"].extend(
@@ -4951,13 +4947,9 @@ if TYPE_CHECKING:
         )
         from .models.gptsan_japanese import (
             GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTSANJapaneseDenseActDense,
             GPTSANJapaneseForConditionalGeneration,
             GPTSANJapaneseModel,
             GPTSANJapanesePreTrainedModel,
-            GPTSANJapaneseSparseMLP,
-            GPTSANJapaneseTokenizer,
-            GPTSANJapaneseTop1Router,
         )
         from .models.graphormer import (
             GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -38,7 +38,6 @@ from .configuration_gptsan_japanese import GPTSANJapaneseConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPTSANJapaneseConfig"
-_TOKENIZER_FOR_DOC = "GPTSANJapaneseTokenizer"
 _CHECKPOINT_FOR_DOC = "Tanrei/GPTSAN-japanese"
 
 ####################################################
@@ -792,7 +791,7 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
 
 GPTSAN_JAPANESE_START_DOCSTRING = r"""
 
-    The [GPTSAN_JAPANESE](https://github.com/tanreinama/GPTSAN) model was proposed in General-purpose Swich transformer
+    The [GPTSAN-japanese](https://github.com/tanreinama/GPTSAN) model was proposed in General-purpose Swich transformer
     based Japanese language model
 
     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
@@ -808,7 +807,7 @@ GPTSAN_JAPANESE_START_DOCSTRING = r"""
 GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. GPTSAN_JAPANESE is a model that generates sentence
+            Indices of input sequence tokens in the vocabulary. GPTSAN-japanese is a model that generates sentence
             continuations or predicts tokens at mask positions. Special tokens required for inputs to the model are
             automatically appended.
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -860,7 +859,7 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare GPTSAN_JAPANESE Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare GPTSAN-japanese Model transformer outputting raw hidden-states without any specific head on top.",
     GPTSAN_JAPANESE_START_DOCSTRING,
 )
 class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
@@ -1011,41 +1010,6 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
             hidden_states[i] += torch.gather(self.position_embeddings.weight, dim=0, index=gather_position[i])
 
         # Create a mask to be used when making the prefix Input length of Prefix-LM variable
-        # When token_type_ids=None or all zero, it is equivalent to regular causal mask
-        #
-        # ex;
-        # >>> x_token = tokenizer("ｱｲｳｴ")
-        # input_ids:      | SOT | SEG | ｱ | ｲ | ｳ | ｴ |
-        # token_type_ids: | 1   | 0   | 0 | 0 | 0 | 0 |
-        # prefix_lm_mask:
-        # SOT | 1 0 0 0 0 0 |
-        # SEG | 1 1 0 0 0 0 |
-        # ｱ   | 1 1 1 0 0 0 |
-        # ｲ   | 1 1 1 1 0 0 |
-        # ｳ   | 1 1 1 1 1 0 |
-        # ｴ   | 1 1 1 1 1 1 |
-        #
-        # >>> x_token = tokenizer("", prefix_text="ｱｲｳｴ")
-        # input_ids:      | SOT | ｱ | ｲ | ｳ | ｴ | SEG |
-        # token_type_ids: | 1   | 1 | 1 | 1 | 1 | 0  |
-        # prefix_lm_mask:
-        # SOT | 1 1 1 1 1 0 |
-        # ｱ   | 1 1 1 1 1 0 |
-        # ｲ   | 1 1 1 1 1 0 |
-        # ｳ   | 1 1 1 1 1 0 |
-        # ｴ   | 1 1 1 1 1 0 |
-        # SEG | 1 1 1 1 1 1 |
-        #
-        # >>> x_token = tokenizer("ｳｴ", prefix_text="ｱｲ")
-        # input_ids:      | SOT | ｱ | ｲ | SEG | ｳ | ｴ |
-        # token_type_ids: | 1   | 1 | 1 | 0   | 0 | 0 |
-        # prefix_lm_mask:
-        # SOT | 1 1 1 0 0 0 |
-        # ｱ   | 1 1 1 0 0 0 |
-        # ｲ   | 1 1 1 0 0 0 |
-        # SEG | 1 1 1 1 0 0 |
-        # ｳ   | 1 1 1 1 1 0 |
-        # ｴ   | 1 1 1 1 1 1 |
         causal_mask = (
             torch.tril(torch.ones((num_output_contexts, num_output_contexts), dtype=torch.uint8))
             .view(1, 1, num_output_contexts, num_output_contexts)
@@ -1140,13 +1104,11 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare GPTSAN_JAPANESE Model with a language modeling head.",
+    "The bare GPTSAN-japanese Model with a language modeling head.",
     GPTSAN_JAPANESE_START_DOCSTRING,
 )
 class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"lm_head.weight",
-    ]
+    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
     def __init__(self, config: GPTSANJapaneseConfig):
         super().__init__(config)

@@ -20,6 +20,23 @@ GPTSAN is a Japanese language model using Switch Transformer. It has the same st
 in the T5 paper, and support both Text Generation and Masked Language Modeling tasks. These basic tasks similarly can
 fine-tune for translation or summarization.
 
+### Generation
+
+The `generate()` method can be used to generate text using GPTSAN-Japanese model.
+
+```python
+>>> from transformers import AutoModel, AutoTokenizer
+>>> import torch
+
+>>> tokenizer = AutoTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+>>> model = AutoModel.from_pretrained("Tanrei/GPTSAN-japanese").cuda()
+>>> x_tok = tokenizer("は、", prefix_text="織田信長", return_tensors="pt")
+>>> torch.manual_seed(0)
+>>> gen_tok = model.generate(x_tok.input_ids.cuda(), token_type_ids=x_tok.token_type_ids.cuda(), max_new_tokens=20)
+>>> tokenizer.decode(gen_tok[0])
+'織田信長は、2004年に『戦国BASARA』のために、豊臣秀吉'
+```
+
 ## GPTSAN Features
 
 GPTSAN has some unique features. It has a model structure of Prefix-LM. It works as a shifted Masked Language Model for Prefix Input tokens. Un-prefixed inputs behave like normal generative models.
@@ -35,6 +52,46 @@ This length applies to the text entered in `prefix_text` for the tokenizer.
 The tokenizer returns the mask of the `Prefix` part of Prefix-LM as `token_type_ids`.
 The model treats the part where `token_type_ids` is 1 as a `Prefix` part, that is, the input can refer to both tokens before and after.
 
+Tips:
+
+Specifying the Prefix part is done with a mask passed to self-attention.
+When token_type_ids=None or all zero, it is equivalent to regular causal mask
+
+for example:
+
+>>> x_token = tokenizer("ｱｲｳｴ")
+input_ids:      | SOT | SEG | ｱ | ｲ | ｳ | ｴ |
+token_type_ids: | 1   | 0   | 0 | 0 | 0 | 0 |
+prefix_lm_mask:
+SOT | 1 0 0 0 0 0 |
+SEG | 1 1 0 0 0 0 |
+ｱ   | 1 1 1 0 0 0 |
+ｲ   | 1 1 1 1 0 0 |
+ｳ   | 1 1 1 1 1 0 |
+ｴ   | 1 1 1 1 1 1 |
+
+>>> x_token = tokenizer("", prefix_text="ｱｲｳｴ")
+input_ids:      | SOT | ｱ | ｲ | ｳ | ｴ | SEG |
+token_type_ids: | 1   | 1 | 1 | 1 | 1 | 0  |
+prefix_lm_mask:
+SOT | 1 1 1 1 1 0 |
+ｱ   | 1 1 1 1 1 0 |
+ｲ   | 1 1 1 1 1 0 |
+ｳ   | 1 1 1 1 1 0 |
+ｴ   | 1 1 1 1 1 0 |
+SEG | 1 1 1 1 1 1 |
+
+>>> x_token = tokenizer("ｳｴ", prefix_text="ｱｲ")
+input_ids:      | SOT | ｱ | ｲ | SEG | ｳ | ｴ |
+token_type_ids: | 1   | 1 | 1 | 0   | 0 | 0 |
+prefix_lm_mask:
+SOT | 1 1 1 0 0 0 |
+ｱ   | 1 1 1 0 0 0 |
+ｲ   | 1 1 1 0 0 0 |
+SEG | 1 1 1 1 0 0 |
+ｳ   | 1 1 1 1 1 0 |
+ｴ   | 1 1 1 1 1 1 |
+
 ### Spout Vector
 
 A Spout Vector is a special vector for controlling text generation.
@@ -46,25 +103,9 @@ The Spout Vector projected by the fully connected layer is split to be passed to
 
 [[autodoc]] GPTSANJapaneseConfig
 
-## GPTSANJapaneseTop1Router
+## GPTSANJapaneseTokenizer
 
-[[autodoc]] GPTSANJapaneseTop1Router
-    - _compute_router_probabilities
-    - forward
-
-## GPTSANJapaneseSparseMLP
-
-[[autodoc]] GPTSANJapaneseSparseMLP
-    - forward
-
-## GPTSANJapaneseDenseActDense
-
-[[autodoc]] GPTSANJapaneseDenseActDense
-    - forward
-
-## GPTSANJapanesePreTrainedModel
-
-[[autodoc]] GPTSANJapanesePreTrainedModel
+[[autodoc]] GPTSANJapaneseTokenizer
 
 ## GPTSANJapaneseModel
 
@@ -74,7 +115,3 @@ The Spout Vector projected by the fully connected layer is split to be passed to
 
 [[autodoc]] GPTSANJapaneseForConditionalGeneration
     - forward
-
-## GPTSANJapaneseTokenizer
-
-[[autodoc]] GPTSANJapaneseTokenizer

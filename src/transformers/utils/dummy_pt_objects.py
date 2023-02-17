@@ -3036,13 +3036,6 @@ class GPTJPreTrainedModel(metaclass=DummyObject):
 GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class GPTSANJapaneseDenseActDense(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class GPTSANJapaneseForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -3058,27 +3051,6 @@ class GPTSANJapaneseModel(metaclass=DummyObject):
 
 
 class GPTSANJapanesePreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class GPTSANJapaneseSparseMLP(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class GPTSANJapaneseTokenizer(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class GPTSANJapaneseTop1Router(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
