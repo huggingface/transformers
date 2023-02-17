@@ -150,6 +150,7 @@ class EfficientNetConfig(PretrainedConfig):
         self.batch_norm_momentum = batch_norm_momentum
         self.dropout_rate = dropout_rate
         self.drop_connect_rate = drop_connect_rate
+        self.num_hidden_layers = sum(num_block_repeats) * 4
 
 
 class EfficientNetOnnxConfig(OnnxConfig):
