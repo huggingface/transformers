@@ -411,14 +411,15 @@ class FlaxWhisperTimeStampLogitsProcessor(FlaxLogitsProcessor):
                 penultimate_was_timestamp,
             )
 
-            def if_true():
-                return jnp.where(
+            return jnp.where(
+                last_was_timestamp,
+                jnp.where(
                     penultimate_was_timestamp > 0,
                     scores_k.at[self.timestamp_begin :].set(-float("inf")),
                     scores_k.at[: self.eos_token_id].set(-float("inf")),
-                )
-
-            return jnp.where(last_was_timestamp, if_true(), scores_k)
+                ),
+                scores_k,
+            )
 
         scores = jax.vmap(handle_pairs)(input_ids, scores)
 
@@ -429,13 +430,11 @@ class FlaxWhisperTimeStampLogitsProcessor(FlaxLogitsProcessor):
             False,
         )
 
-        def if_true():
-            last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
-            return scores.at[:, last_allowed + 1 :].set(-float("inf"))
+        last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
 
         scores = jnp.where(
             apply_max_initial_timestamp,
-            if_true(),
+            scores.at[:, last_allowed + 1 :].set(-float("inf")),
             scores,
         )
 
