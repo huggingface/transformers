@@ -73,7 +73,7 @@ class PipelineTesterMixin:
         """
         if task not in self.pipieline_model_mapping:
             self.skipTest(
-                f"Test is skipped: task {task} is not in `self.pipieline_model_mapping` for {self.__class__.__name__}."
+                f"Test is skipped: task `{task}` is not in `self.pipieline_model_mapping` for `{self.__class__.__name__}`."
             )
 
         model_architectures = self.pipieline_model_mapping[task]
