@@ -379,9 +379,8 @@ class FlaxWhisperTimeStampLogitsProcessor(FlaxLogitsProcessor):
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
 
-        self.begin_index = decoder_input_length + 1  # len(generate_config.forced_decoder_ids) + 1
-        # if generate_config.forced_decoder_ids[-1][1] == self.no_timestamps_token_id:
-        #     self.begin_index -= 1
+        self.begin_index = decoder_input_length + 1
+
         if generate_config.is_multilingual:
             # room for language token and task token
             self.begin_index += 2
