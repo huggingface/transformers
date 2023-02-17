@@ -60,6 +60,13 @@ MEGA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # resources
 #   - paper: https://arxiv.org/abs/2209.10655
 #   - original implementation: https://github.com/facebookresearch/mega 
+# notable differences from the original implementation:
+#   - refactored away from stateful representation of incremental decoding 
+#     state in favor of Hugging Face's typical `past_key_values`
+#   - fixed inconsistency in how causal masks are expected by `softmax_attention`
+#     and `element_attention` in MovingAverageGatedAttention (see https://github.com/facebookresearch/mega/issues/11)
+#   - added support for token type embeddings (not specifically included 
+#     or excluded in the original implementation/paper)
 
 # starting with activation functions
 def relu2(x):
@@ -104,6 +111,7 @@ def generate_causal_mask(seq_len):
     return causal_mask.to(torch.long)
 
 # EMA attention module
+# largely left unmodified except the incremental state
 class MultiHeadEMA(nn.Module):
     """Exponential Moving Average Layer.
     See "https://arxiv.org/abs/2209.10655" for more details.
@@ -241,18 +249,21 @@ class MultiHeadEMA(nn.Module):
         prev_state: Optional[torch.Tensor] = None,
         use_cache: bool = False
     ) -> torch.Tensor:
-        """Input shape: Time x Batch x Channel
-        Args:
-            padding_mask (ByteTensor, optional): mask to exclude
-                keys that are pads, of shape `(batch, src_len)`, where
-                padding elements are indicated by 1s.
+        """
+        EMA-based self-attention
 
-        Refactoring:
-            attention_mask: 1 for unmasked, 0 for masked
-            prev_state (Tensor, optional): the hidden state returned from 
-                the previous timestep if performing incremental decoding
-            use_cache (boolean): whether to perform incremental decoding; 
-                if True, the hidden state output will be returned
+        Inputs
+            x (Tensor): hidden state input with shape (Sequence Length x Batch x Embedding Size)
+            attention_mask (Tensor): indicates which inputs are to be ignored (mostly due to padding),
+                where elements are either 1 = *not masked* or 0 = *masked*
+            prev_state (Tensor, optional): if provided, the hidden state returned from the previous 
+                timestep during incremental decoding
+            use_cache (boolean): if True, perfom incremental decoding; uses `prev_state` as the prior
+                timestep, and returns the updated EMA hidden state for use in the next step
+
+        Returns
+            - hidden states updated by EMA self-attention, with same shapes as inputs
+            - (if use_cache), the incremental EMA state for use in the next step of incremental decoding
         """
 
         seq_len, bsz, embed_dim = x.size()
@@ -303,6 +314,8 @@ class MultiHeadEMA(nn.Module):
             return out, None
 
 # Gated cross-attention
+# removed before_attn_fn argument and unused static_kv
+# otherwise left as-is with the exception of hidden states
 class GatedCrossAttention(nn.Module):
     """Gated Structured State Attention.
     See "" for more details.
@@ -355,7 +368,7 @@ class GatedCrossAttention(nn.Module):
         nn.init.normal_(self.h_proj.weight, mean=0.0, std=std)
         nn.init.constant_(self.h_proj.bias, 0.0)
 
-    def element_attention(self, q, k, key_padding_mask, pidx, before_attn_fn):
+    def element_attention(self, q, k, key_padding_mask, pidx):
         bsz, clen, _ = k.size()
         slen = q.size(1) if pidx is None else pidx + 1
         if key_padding_mask is not None:
@@ -377,9 +390,6 @@ class GatedCrossAttention(nn.Module):
         # B x L2 x L1
         qk = torch.bmm(q, k.transpose(1, 2)) / lengths + bias
 
-        if before_attn_fn:
-            return qk
-
         if self.attention_activation == 'relu2':
             attn_weights = relu2(qk).type_as(qk)
         elif self.attention_activation == 'laplace':
@@ -392,7 +402,7 @@ class GatedCrossAttention(nn.Module):
 
         return attn_weights
 
-    def softmax_attention(self, q, k, key_padding_mask, pidx, before_attn_fn):
+    def softmax_attention(self, q, k, key_padding_mask, pidx):
         bsz, clen, _ = k.size()
         slen = q.size(1) if pidx is None else pidx + 1
 
@@ -414,9 +424,6 @@ class GatedCrossAttention(nn.Module):
         if key_padding_mask is not None:
             qk = qk.masked_fill((1 - key_padding_mask).unsqueeze(1).to(torch.bool), float('-inf'))
 
-        if before_attn_fn:
-            return qk
-
         attn_weights = self.softmax(qk).type_as(qk)
         return attn_weights
 
@@ -429,26 +436,28 @@ class GatedCrossAttention(nn.Module):
         key_padding_mask: Optional[torch.Tensor] = None,
         prev_key_values: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
-        static_kv: bool = False,
-        before_attn_fn: bool = False,
         use_cache: bool = False
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Time x Batch x Channel
-        Args:
-            padding_mask (ByteTensor, optional): mask to exclude
-                queries that are pads, of shape `(batch, tgt_len)`, where
-                padding elements are indicated by 1s. 
-                (NOTE: this argument is not used in the original Mega repo and is left with original functionality)
-            output_attentions (bool, optional): return the attention weights,
-                averaged over heads (default: False).
-            static_kv (bool, optional): static key and value pair.
-            before_attn_fn (bool, optional): return the raw attention
-                weights and values before the attention softmax.
+        """
+        EMA-based self-attention
 
-        Refactoring:
-            key_padding_mask (optional Tensor): 1 for *not masked*, 0 for *masked*; size (batch size, source length)
-            prev_key_values: tuple of tensors for hidden state caching in incremental decoding
-            use_cache: whether to return keys and values for incremental decoding
+        Inputs
+            query (Tensor): the self (or target) sequence input with shape (Target Sequence Length x Batch x Embedding Size)
+            key (Tensor): the cross (or source) sequence input with shape (Source Sequence Length x Batch x Embedding Size)
+            value (Tensor): the cross (or source) sequence input with shape (Source Sequence Length x Batch x Embedding Size)
+            padding_mask (Tensor): NOT USED, but left in place to match the original implementation
+            key_padding_mask (optional, Tensor): padding mask corresponding to the source sequence (Batch Size x Source Sequence Length)
+            prev_key_values (tuple of Tensors, optional): if provided, the hidden state returned from the previous 
+                timestep during incremental decoding; expects that prior cross-attention keys and values will be the last two 
+                items in the tuple
+            output_attentions (boolean): if true, cross-attention weights will be returned
+            use_cache (boolean): if True, perfom incremental decoding; uses `prev_state` as the prior
+                timestep, and returns the updated EMA hidden state for use in the next step
+
+        Returns
+            - hidden states from target sequence updated by gated cross-attention, with same shapes as target inputs
+            - (if output_attentions) the cross-attention weights
+            - (if use_cache), the incremental EMA state for use in the next step of incremental decoding
         """
 
         seq_len, bsz, embed_dim = query.size()
@@ -460,7 +469,6 @@ class GatedCrossAttention(nn.Module):
                 raise ValueError(f"Incremental decoding requested with self-sequence length > 1: {seq_len}")
             # expect prev_key_values to have (self_key, self_value, self_ema, cross_key, cross_value)
             prev_cross_key, prev_cross_value = prev_key_values[-2:]
-            assert static_kv, "Incremental decoding requires static_kv in cross-attention"
             key = value = None
             
             # use the self-attention cache to get the position id of the current step
@@ -519,12 +527,9 @@ class GatedCrossAttention(nn.Module):
             assert key_padding_mask.size(1) == ctx_len
 
         if self.attention_activation == 'softmax':
-            attn_weights = self.softmax_attention(q, k, key_padding_mask, num_incremental_steps, before_attn_fn)
+            attn_weights = self.softmax_attention(q, k, key_padding_mask, num_incremental_steps)
         else:
-            attn_weights = self.element_attention(q, k, key_padding_mask, num_incremental_steps, before_attn_fn)
-
-        if before_attn_fn:
-            return attn_weights, v
+            attn_weights = self.element_attention(q, k, key_padding_mask, num_incremental_steps)
 
         v = self.hidden_dropout(v, batch_first=True)
         kernel = self.attention_dropout(attn_weights)
@@ -1257,8 +1262,6 @@ class MegaLayer(nn.Module):
                                                  key_padding_mask=encoder_attention_mask,
                                                  prev_key_values=past_key_value,
                                                  output_attentions=output_attentions,
-                                                 static_kv=True,
-                                                 before_attn_fn=False,
                                                  use_cache=use_cache)
 
             # update the hidden state from cross attention
@@ -1689,7 +1692,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        
+
         if self.dense is not None:
             sequence_output = self.dense(sequence_output)
             sequence_output = self.hidden_activation(sequence_output)
