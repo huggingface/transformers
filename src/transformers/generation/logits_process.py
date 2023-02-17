@@ -419,7 +419,7 @@ class EtaLogitsWarper(LogitsWarper):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         # Calculate the adaptive cutoff
         probabilities = scores.softmax(dim=-1)
-        entropy = torch.distributions.Categorical(probs=probabilities).entropy()
+        entropy = torch.distributions.Categorical(logits=scores).entropy()
         eta = torch.min(self.epsilon, torch.sqrt(self.epsilon) * torch.exp(-entropy))[..., None]
         indices_to_remove = probabilities < eta
 
