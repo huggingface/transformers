@@ -128,14 +128,7 @@ class EfficientNetModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            EfficientNetModel,
-            EfficientNetForImageClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (EfficientNetModel, EfficientNetForImageClassification) if is_torch_available() else ()
 
     fx_compatible = False
     test_pruning = False
