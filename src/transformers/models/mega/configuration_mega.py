@@ -135,6 +135,7 @@ class MegaConfig(PretrainedConfig):
         relative_positional_bias="rotary", # rotary or simple
         classifier_dropout=None,
         use_cache=True, # unsure if i'll need this or not
+        add_lm_hidden_dense_layer = True,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -170,6 +171,7 @@ class MegaConfig(PretrainedConfig):
         self.relative_positional_bias = relative_positional_bias
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
+        self.add_lm_hidden_dense_layer = add_lm_hidden_dense_layer
 
 
 class MegaOnnxConfig(OnnxConfig):

@@ -1591,7 +1591,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight", r"lm_head.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config: MegaConfig, add_dense_layer=True):
+    def __init__(self, config: MegaConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -1599,7 +1599,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
 
         self.mega = MegaModel(config, add_pooling_layer=False)
 
-        if add_dense_layer:
+        if config.add_lm_hidden_dense_layer:
             self.dense = nn.Linear(config.hidden_size, config.hidden_size)
             self.hidden_activation = nn.Tanh()
         else:
@@ -1752,7 +1752,7 @@ class MegaForMaskedLM(MegaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"mlm_head.weight", r"mlm_head.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config:MegaConfig, add_dense_layer=True):
+    def __init__(self, config:MegaConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1762,7 +1762,7 @@ class MegaForMaskedLM(MegaPreTrainedModel):
             )
 
         self.mega = MegaModel(config, add_pooling_layer=False)
-        if add_dense_layer:
+        if config.add_lm_hidden_dense_layer:
             self.dense = nn.Linear(config.hidden_size, config.hidden_size)
             self.hidden_activation = nn.Tanh()
         else:

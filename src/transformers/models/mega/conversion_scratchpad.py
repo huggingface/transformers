@@ -133,10 +133,11 @@ hf_config = MegaConfig(
     nffn_hidden_size=mega_original_args['mega_args'].encoder_ffn_embed_dim,
     normalize_before_ffn=mega_original_args['mega_args'].normalize_before,
     nffn_activation_dropout_prob=0.0,
-    add_token_type_embeddings=False
+    add_token_type_embeddings=False,
+    add_lm_hidden_dense_layer=False
 )
 
-hf_mlm = MegaForMaskedLM(hf_config, add_dense_layer=False).eval()
+hf_mlm = MegaForMaskedLM(hf_config).eval()
 
 hf_mlm.mega.embedding_layer.word_embeddings.weight = original_mlm.mega.embedding_layer.weight
 print("HF Mega encoder:", hf_mlm.mega.encoders.load_state_dict(original_mlm.mega.encoders.state_dict()))
@@ -152,7 +153,12 @@ hf_output = hf_mlm(input_ids, input_mask)[0]
 
 print(f"original output {original_output.shape}")
 print(f"hf output {hf_output.shape}")
+print(f"hf_config: {hf_config}")
 print(f"max diff: {(original_output - hf_output).max()}") # 0.0
-assert torch.allclose(original_output, hf_output, atol=1e-3), f"Original:\n{original_output}\n\nHF\n{hf_output}"
+success = torch.allclose(original_output, hf_output, atol=1e-3)
 
-hf_mlm.save_pretrained("/users/Mitch/Documents/MiscProjects/mega-base-wikitext")
+if success:
+    print("Yay!")
+    hf_mlm.save_pretrained("/users/Mitch/Documents/MiscProjects/mega-base-wikitext")
+else:
+    raise RuntimeError(f"Something's broken :(\nOriginal:\n{original_output}\n\nHF\n{hf_output}\n{hf_mlm}")

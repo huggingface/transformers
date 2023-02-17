@@ -145,6 +145,8 @@ Decoder
     * All of those are `nn.Parameter`, whereas `MegaPretrainedModel._init_weights` is working on embeddings, linear layers, and layernorm
   * Ultimately i think this is probably fine to have duplicated -- it seems that the defaults match what we're doing where they collide (and go a little farther on embeddings and other linear layers), and the option in the config would take precedence if a user changed it
 * ~~Load my MLM weights and test~~ (done!!!)
+* Figure out why extra weights are being loaded/initialized
+  * Looks like a mismatch in the names due to a utility function renaming keys `gamma` and `beta` in the state dictionary... (see `_load_state_dict_into_model` in [this link](https://huggingface.co/transformers/v4.7.0/_modules/transformers/modeling_utils.html))
 * Rewrite `convert_mega_original_pytorch_checkpoint_to_pytorch` to save the pretrained wikitext MLM
 * Rewrite tests in `tests/models/mega/test_modeling_mega`
 * Documentation: 
