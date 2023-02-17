@@ -199,6 +199,8 @@
       title: Pipelines
     - local: main_classes/processors
       title: Processors
+    - local: main_classes/quantization
+      title: Quantization
     - local: main_classes/tokenizer
       title: Tokenizer
     - local: main_classes/trainer

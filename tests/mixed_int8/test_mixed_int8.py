@@ -24,6 +24,7 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
+    BitsAndBytesConfig,
     pipeline,
 )
 from transformers.testing_utils import (
@@ -131,6 +132,38 @@ class MixedInt8Test(BaseMixedInt8Test):
         output_sequences = self.model_8bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    def test_generate_quality_config(self):
+        r"""
+        Test that loading the model with the config is equivalent
+        """
+        bnb_config = BitsAndBytesConfig()
+
+        model_8bit_from_config = AutoModelForCausalLM.from_pretrained(
+            self.model_name, quantization_config=bnb_config, device_map="auto"
+        )
+
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+        output_sequences = model_8bit_from_config.generate(
+            input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10
+        )
+
+        self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+    def test_raise_if_config_and_load_in_8bit(self):
+        r"""
+        Test that loading the model with the config and `load_in_8bit` raises an error
+        """
+        bnb_config = BitsAndBytesConfig()
+
+        with self.assertRaises(ValueError):
+            _ = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                quantization_config=bnb_config,
+                load_in_8bit=True,
+                device_map="auto",
+                llm_int8_enable_fp32_cpu_offload=True,
+            )
 
     def test_warns_save_pretrained(self):
         r"""
@@ -359,6 +392,151 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
         # Second real batch
         output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
         self.assertEqual(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+
+
+@require_torch_multi_gpu
+class MixedInt8TestCpuGpu(BaseMixedInt8Test):
+    def setUp(self):
+        super().setUp()
+
+    def check_inference_correctness(self, model):
+        # Check that inference pass works on the model
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+
+        # Check the exactness of the results
+        output_parallel = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        # Get the generation
+        output_text = self.tokenizer.decode(output_parallel[0], skip_special_tokens=True)
+        self.assertEqual(output_text, self.EXPECTED_OUTPUT)
+
+    def test_cpu_gpu_loading_random_device_map(self):
+        r"""
+        A test to check is dispatching a model on cpu & gpu works correctly using a random `device_map`.
+        """
+        device_map = {
+            "transformer.word_embeddings": 0,
+            "transformer.word_embeddings_layernorm": 0,
+            "lm_head": 0,
+            "transformer.h.0": "cpu",
+            "transformer.h.1": "cpu",
+            "transformer.h.2": 0,
+            "transformer.h.3": 0,
+            "transformer.h.4": 0,
+            "transformer.h.5": 0,
+            "transformer.h.6": 0,
+            "transformer.h.7": 0,
+            "transformer.h.8": 0,
+            "transformer.h.9": 1,
+            "transformer.h.10": 0,
+            "transformer.h.11": 1,
+            "transformer.h.12": 0,
+            "transformer.h.13": 0,
+            "transformer.h.14": 1,
+            "transformer.h.15": 0,
+            "transformer.h.16": 0,
+            "transformer.h.17": 1,
+            "transformer.h.18": 1,
+            "transformer.h.19": 0,
+            "transformer.h.20": 1,
+            "transformer.h.21": 1,
+            "transformer.h.22": 0,
+            "transformer.h.23": 0,
+            "transformer.ln_f": 1,
+        }
+
+        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
+
+        model_8bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map=device_map,
+            quantization_config=bnb_config,
+        )
+
+        # Check that the model has been correctly set on device 0, 1, and `cpu`.
+        self.assertEqual(set(model_8bit.hf_device_map.values()), {0, 1, "cpu"})
+
+        self.check_inference_correctness(model_8bit)
+
+    def test_cpu_gpu_loading_custom_device_map(self):
+        r"""
+        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
+        This time the device map is more organized than the test above and uses the abstraction
+        `transformer.h` to encapsulate all the decoder layers.
+        """
+        device_map = {
+            "transformer.word_embeddings": "cpu",
+            "transformer.word_embeddings_layernorm": "cpu",
+            "lm_head": "cpu",
+            "transformer.h": 0,
+            "transformer.ln_f": 1,
+        }
+        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
+
+        # Load model
+        model_8bit = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            device_map=device_map,
+            quantization_config=bnb_config,
+        )
+
+        # Check that the model has been correctly set on device 0, 1, and `cpu`.
+        self.assertEqual(set(model_8bit.hf_device_map.values()), {0, 1, "cpu"})
+
+        self.check_inference_correctness(model_8bit)
+
+    def test_cpu_gpu_disk_loading_custom_device_map(self):
+        r"""
+        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
+        This time we also add `disk` on the device_map.
+        """
+        device_map = {
+            "transformer.word_embeddings": 0,
+            "transformer.word_embeddings_layernorm": "cpu",
+            "lm_head": 0,
+            "transformer.h": 1,
+            "transformer.ln_f": "disk",
+        }
+        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Load model
+            model_8bit = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                device_map=device_map,
+                quantization_config=bnb_config,
+                offload_folder=tmpdirname,
+            )
+
+            # Check that the model has been correctly set on device 0, 1, and `cpu`.
+            self.assertEqual(set(model_8bit.hf_device_map.values()), {0, 1, "cpu", "disk"})
+
+            self.check_inference_correctness(model_8bit)
+
+    def test_cpu_gpu_disk_loading_custom_device_map_kwargs(self):
+        r"""
+        A test to check is dispatching a model on cpu & gpu works correctly using a custom `device_map`.
+        This time we also add `disk` on the device_map - using the kwargs directly instead of the quantization config
+        """
+        device_map = {
+            "transformer.word_embeddings": 0,
+            "transformer.word_embeddings_layernorm": "cpu",
+            "lm_head": 0,
+            "transformer.h": 1,
+            "transformer.ln_f": "disk",
+        }
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Load model
+            model_8bit = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                device_map=device_map,
+                llm_int8_enable_fp32_cpu_offload=True,
+                offload_folder=tmpdirname,
+            )
+
+            # Check that the model has been correctly set on device 0, 1, and `cpu`.
+            self.assertEqual(set(model_8bit.hf_device_map.values()), {0, 1, "cpu", "disk"})
+
+            self.check_inference_correctness(model_8bit)
 
 
 class MixedInt8TestTraining(BaseMixedInt8Test):
