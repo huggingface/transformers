@@ -27,6 +27,7 @@ from . import dependency_versions_check
 from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_bitsandbytes_available,
     is_flax_available,
     is_keras_nlp_available,
     is_sentencepiece_available,
@@ -596,6 +597,7 @@ _import_structure = {
         "add_end_docstrings",
         "add_start_docstrings",
         "is_apex_available",
+        "is_bitsandbytes_available",
         "is_datasets_available",
         "is_decord_available",
         "is_faiss_available",
@@ -622,6 +624,7 @@ _import_structure = {
         "logging",
     ],
     "utils.bitsandbytes": [],
+    "utils.quantization_config": ["BitsAndBytesConfig"],
 }
 
 # sentencepiece-backed objects
@@ -4114,6 +4117,7 @@ if TYPE_CHECKING:
         add_end_docstrings,
         add_start_docstrings,
         is_apex_available,
+        is_bitsandbytes_available,
         is_datasets_available,
         is_decord_available,
         is_faiss_available,
@@ -4139,6 +4143,9 @@ if TYPE_CHECKING:
         is_vision_available,
         logging,
     )
+
+    # bitsandbytes config
+    from .utils.quantization_config import BitsAndBytesConfig
 
     try:
         if not is_sentencepiece_available():
@@ -6534,6 +6541,7 @@ if TYPE_CHECKING:
             FlaxXLMRobertaModel,
             FlaxXLMRobertaPreTrainedModel,
         )
+
 
 else:
     import sys
