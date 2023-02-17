@@ -19,13 +19,20 @@ import gc
 import os
 import tempfile
 import warnings
-from typing import Optional
+from typing import Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, get_initializer, unpack_inputs
+from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
+    TFModelInputType,
+    TFPreTrainedModel,
+    get_initializer,
+    unpack_inputs,
+)
 from ...tf_utils import shape_list
 from ...utils import (
     DUMMY_INPUTS,
