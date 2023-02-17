@@ -551,6 +551,7 @@ class GatedCrossAttention(nn.Module):
 
 
 # Positional embeddings
+# copied without modification from original Mega code
 class SimpleRelativePositionalBias(nn.Module):
 
     def __init__(self, max_positions):
@@ -627,6 +628,7 @@ class RotaryRelativePositionalBias(nn.Module):
         return t
 
 # Normalization modules
+# copied without modification
 class ScaleNorm(nn.Module):
     def __init__(self, dim, eps=1e-6, affine=True):
         super().__init__()
@@ -706,6 +708,7 @@ class SequenceNorm(nn.Module):
         return self.normalize(x)
 
 # Dropout: standard dropout + feature dropout
+# unmodified, but changed name from Fairseq->Mega
 class MegaDropout(nn.Module):
 
     def __init__(self, p, module_name=None):
@@ -789,6 +792,7 @@ class MegaFeatureDropout(nn.Module):
                 logger.info('Disabling dropout for module: {}'.format(name))
 
 # Mega attention: EMA + self-attention
+# differences from original include hidden state refactor and fixed inconsistency with additive/multiplicative attention masks
 class MovingAverageGatedAttention(nn.Module):
     """
     Pure PyTorch implementation of Mega block; see https://arxiv.org/abs/2209.10655 
@@ -848,7 +852,7 @@ class MovingAverageGatedAttention(nn.Module):
         nn.init.normal_(self.gamma, mean=mean, std=std)
         nn.init.constant_(self.beta, 0.0)
     
-    def element_attention(self, q, k, padding_mask, causal_mask, before_attn_fn):
+    def element_attention(self, q, k, padding_mask, causal_mask):
         '''
         Apply element-wise attention via relu^2 or laplace. Same as original 
         implementation but with standardized causal attention mask
@@ -880,9 +884,6 @@ class MovingAverageGatedAttention(nn.Module):
     
         # B x K x C x C
         qk = torch.matmul(q, k.transpose(2, 3)) / lengths + bias 
-
-        if before_attn_fn:
-            return qk 
     
         if self.config.attention_activation == 'relu2':
             attn_weights = relu2(qk).type_as(qk)
@@ -899,7 +900,7 @@ class MovingAverageGatedAttention(nn.Module):
     
         return attn_weights
 
-    def softmax_attention(self, q, k, padding_mask, causal_mask, before_attn_fn):
+    def softmax_attention(self, q, k, padding_mask, causal_mask):
         'Standard softmax attention with combined padding/attention mask'
         slen = k.size(2)
         # C x C
@@ -930,9 +931,6 @@ class MovingAverageGatedAttention(nn.Module):
             padding_mask_all = padding_mask.all(dim=-1, keepdim=True)
             padding_mask = torch.logical_and(padding_mask, ~padding_mask_all)
             qk = qk.masked_fill(padding_mask.unsqueeze(2).to(torch.bool), float('-inf'))
-
-        if before_attn_fn:
-            return qk
     
         attn_weights = self.softmax(qk).type_as(qk)
         return attn_weights 
@@ -944,22 +942,31 @@ class MovingAverageGatedAttention(nn.Module):
         causal_mask: Optional[torch.Tensor] = None,
         prev_key_values: Optional[Tuple[torch.Tensor]] = None,
         output_attentions = False,
-        before_attn_fn = False,
         use_cache=False
     ):
-        '''
-        Mega self-attention block, combining multi-headed EMA with traditional attention
+        """
+        Mega's self-attention block, which combines multi-headed EMA with traditional self-attention
 
-        x: embeddings on which to perform Mega attention, shape = (time, batch, embedding size)
-        padding_mask (optional): 1 if unmasked, 0 if masked; shape = (batch size, time)
-        causal_mask (optional): 1 if unmasked, 0 if masked; shape = (time, time)
-        prev_key_values (optional): a tuple of tensors representing past state for
-            incremental decoding - (self_key, self_value, self_ema_state)
-        output_attentions: if True, attention weights will be returned 
-        before_attn_fn: whether to return attention values before softmax (retained from original Mega)
-        use_cache: whether you are performing incremental decoding - if True, 
-            states will be returned for use in the next step
-        '''
+        Inputs
+            x (Tensor): hidden states to be updated by Mega's self-attention, with shape (Sequence Length x Batch x Embedding Dim)
+            padding_mask (optional, Tensor): mask to indicate padding tokens, with expected shape 
+                (Batch x Sequence Length), where entries are 1 for *not masked* and 0 for *masked*
+            causal_mask (optional, Tensor): if provided, used to enforce causal attention;
+                expected shape is (Sequence Length x Sequence Length), and entries are 1 for *not masked* and
+                0 for *masked*
+            prev_key_values (tuple of Tensors, optional): if provided, the hidden state returned from the previous 
+                timestep during incremental decoding; expects that self-attention key, value, and EMA states 
+                are the first 3 entries in the tuple
+            output_attentions (boolean): if true, cross-attention weights will be returned
+            use_cache (boolean): if True, perfom incremental decoding and return incremental states for next step
+
+        Returns
+            - hidden states sequence updated by Mega self-attention, with same shapes as `x`
+            - (if output_attentions) the self-attention weights
+            - (if use_cache), the incremental state for use in the next step of incremental decoding; 
+                a tuple of tensors representing (key, value, EMA state)
+        """
+
         seq_len, bsz, embed_dim = x.size()
         assert embed_dim == self.config.hidden_size, f"Input embedding dimension should be {self.config.hidden_size}; received {embed_dim}"
 
@@ -1077,8 +1084,7 @@ class MovingAverageGatedAttention(nn.Module):
 
         attn_weights = self.attention_function(q, k, 
                                                padding_mask=padding_mask, 
-                                               causal_mask=causal_mask,
-                                               before_attn_fn=before_attn_fn)
+                                               causal_mask=causal_mask)
     
         v = self.hidden_dropout(v, batch_first=True)
         kernel = self.attention_dropout(attn_weights)
@@ -1103,7 +1109,11 @@ class MovingAverageGatedAttention(nn.Module):
         return return_values
 
 # Normalized feed-forward network
+# left as-is from original Mega repo aside from retrieving args from Hugging Face config
 class NormalizedFeedForwardNetwork(nn.Module):
+    """
+    Normalized feed-forward network used in Mega blocks
+    """
     def __init__(self, config : MegaConfig):
         super().__init__()
 
@@ -1331,10 +1341,6 @@ class MegaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MegaEncoder):
-            module.gradient_checkpointing = value
 
     def update_keys_to_ignore(self, config, del_keys_to_ignore):
         """Remove some keys from ignore list"""
