@@ -3036,21 +3036,21 @@ class GPTJPreTrainedModel(metaclass=DummyObject):
 GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class GPTSANJapaneseForConditionalGeneration(metaclass=DummyObject):
+class GPTSanJapaneseForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class GPTSANJapaneseModel(metaclass=DummyObject):
+class GPTSanJapaneseModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class GPTSANJapanesePreTrainedModel(metaclass=DummyObject):
+class GPTSanJapanesePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

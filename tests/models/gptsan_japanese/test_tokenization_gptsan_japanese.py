@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Team. All rights reserved.
+# Copyright 2023 Toshiyuki Sakamoto(tanreinama) and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import unittest
 
 from transformers.models.gptsan_japanese.tokenization_gptsan_japanese import (
     VOCAB_FILES_NAMES,
-    GPTSANJapaneseTokenizer,
+    GPTSanJapaneseTokenizer,
 )
 from transformers.testing_utils import require_tokenizers, slow
 
@@ -28,8 +28,8 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
-class GPTSANJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = GPTSANJapaneseTokenizer
+class GPTSanJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = GPTSanJapaneseTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"do_clean_text": False, "add_prefix_space": False}
 
@@ -72,7 +72,7 @@ class GPTSANJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
-        return GPTSANJapaneseTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return GPTSanJapaneseTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     # Copied from tests.models.gpt_neox_japanese.test_tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizationTest.get_input_output_texts
     def get_input_output_texts(self, tokenizer):

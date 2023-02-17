@@ -194,7 +194,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CLIPSegVisionModel",
     "CLIPSegTextModel",
     "EsmForProteinFolding",
-    "GPTSANJapaneseModel",
+    "GPTSanJapaneseModel",
     "TimeSeriesTransformerForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",

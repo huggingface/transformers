@@ -91,7 +91,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gpt_neox", "GPTNeoXConfig"),
         ("gpt_neox_japanese", "GPTNeoXJapaneseConfig"),
         ("gptj", "GPTJConfig"),
-        ("gptsan-japanese", "GPTSANJapaneseConfig"),
+        ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("graphormer", "GraphormerConfig"),
         ("groupvit", "GroupViTConfig"),
         ("hubert", "HubertConfig"),

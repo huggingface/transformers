@@ -24,8 +24,8 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_gptsan_japanese": ["GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSANJapaneseConfig"],
-    "tokenization_gptsan_japanese": ["GPTSANJapaneseTokenizer"],
+    "configuration_gptsan_japanese": ["GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTSanJapaneseConfig"],
+    "tokenization_gptsan_japanese": ["GPTSanJapaneseTokenizer"],
 }
 
 try:
@@ -36,21 +36,18 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_gptsan_japanese"] = [
         "GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GPTSANJapaneseDenseActDense",
-        "GPTSANJapaneseForConditionalGeneration",
-        "GPTSANJapaneseModel",
-        "GPTSANJapanesePreTrainedModel",
-        "GPTSANJapaneseSparseMLP",
-        "GPTSANJapaneseTop1Router",
+        "GPTSanJapaneseForConditionalGeneration",
+        "GPTSanJapaneseModel",
+        "GPTSanJapanesePreTrainedModel",
     ]
     _import_structure["tokenization_gptsan_japanese"] = [
-        "GPTSANJapaneseTokenizer",
+        "GPTSanJapaneseTokenizer",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_gptsan_japanese import GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSANJapaneseConfig
-    from .tokenization_gptsan_japanese import GPTSANJapaneseTokenizer
+    from .configuration_gptsan_japanese import GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTSanJapaneseConfig
+    from .tokenization_gptsan_japanese import GPTSanJapaneseTokenizer
 
     try:
         if not is_torch_available():
@@ -60,14 +57,11 @@ if TYPE_CHECKING:
     else:
         from .modeling_gptsan_japanese import (
             GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTSANJapaneseDenseActDense,
-            GPTSANJapaneseForConditionalGeneration,
-            GPTSANJapaneseModel,
-            GPTSANJapanesePreTrainedModel,
-            GPTSANJapaneseSparseMLP,
-            GPTSANJapaneseTop1Router,
+            GPTSanJapaneseForConditionalGeneration,
+            GPTSanJapaneseModel,
+            GPTSanJapanesePreTrainedModel,
         )
-        from .tokenization_gptsan_japanese import GPTSANJapaneseTokenizer
+        from .tokenization_gptsan_japanese import GPTSanJapaneseTokenizer
 
 
 else:

@@ -26,9 +26,9 @@ GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class GPTSANJapaneseConfig(PretrainedConfig):
+class GPTSanJapaneseConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GPTSANJapaneseModel`]. It is used to instantiate
+    This is the configuration class to store the configuration of a [`GPTSanJapaneseModel`]. It is used to instantiate
     a GPTSANJapanese model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPTSANJapanese
     [tanreinama/GPTSAN-2.8B-spout_is_uniform](https://huggingface.co/tanreinama/GPTSAN-2.8B-spout_is_uniform)
@@ -40,7 +40,7 @@ class GPTSANJapaneseConfig(PretrainedConfig):
     Arguments:
         vocab_size (`int`, *optional*, defaults to 36000):
             Vocabulary size of the GPTSANJapanese model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`GPTSANJapaneseModel`].
+            by the `inputs_ids` passed when calling [`GPTSanJapaneseModel`].
         max_position_embeddings (`int`, *optional*, defaults to 1280):
             The maximum sequence length that this model might ever be used with. Defaults set this to 1280.
         d_model (`int`, *optional*, defaults to 1024):

@@ -76,7 +76,7 @@ def load_vocab_and_emoji(vocab_file, emoji_file):
     return vocab, raw_vocab, ids_to_tokens, emoji
 
 
-class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
+class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
     """
     This tokenizer is based on GPTNeoXJapaneseTokenizer and has the following modifications
     - Decoding byte0~byte255 tokens correctly
@@ -91,9 +91,9 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
     Example:
 
     ```python
-    >>> from transformers import GPTSANJapaneseTokenizer
+    >>> from transformers import GPTSanJapaneseTokenizer
 
-    >>> tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+    >>> tokenizer = GPTSanJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
     >>> # You can confirm both 慶応 and 慶應 are encoded to 17750
     >>> tokenizer("吾輩は猫である🐯。実は慶応(慶應)大学出身")["input_ids"]
     [34347, 31459, 30647, 31448, 25, 30659, 35729, 35676, 32417, 30647, 17750, 35589, 17750, 35590, 321, 1281]
@@ -106,9 +106,9 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
     Example for Prefix-LM:
 
     ```python
-    >>> from transformers import GPTSANJapaneseTokenizer
+    >>> from transformers import GPTSanJapaneseTokenizer
 
-    >>> tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+    >>> tokenizer = GPTSanJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
     >>> tokenizer("実は慶応(慶應)大学出身", prefix_text="吾輩は猫である🐯。")["input_ids"]
     [35993, 34347, 31459, 30647, 31448, 25, 30659, 35729, 35676, 35998, 32417, 30647, 17750, 35589, 17750, 35590, 321, 1281]
 
@@ -120,9 +120,9 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
     Example for batch encode:
 
     ```python
-    >>> from transformers import GPTSANJapaneseTokenizer
+    >>> from transformers import GPTSanJapaneseTokenizer
 
-    >>> tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+    >>> tokenizer = GPTSanJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
     >>> tokenizer([["武田信玄", "は、"], ["織田信長", "の配下の、"]], padding=True)["input_ids"]
     [[35993, 8640, 25948, 35998, 30647, 35675, 35999, 35999], [35993, 10382, 9868, 35998, 30646, 9459, 30646, 35675]]
 
@@ -183,12 +183,12 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
-                " model use `tokenizer = GPTSANJapaneseTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                " model use `tokenizer = GPTSanJapaneseTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         if not os.path.isfile(emoji_file):
             raise ValueError(
                 f"Can't find a emoji file at path '{emoji_file}'. To load the emoji information from a Google"
-                " pretrained model use `tokenizer = GPTSANJapaneseTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                " pretrained model use `tokenizer = GPTSanJapaneseTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.do_clean_text = do_clean_text
         self.vocab, self.raw_vocab, self.ids_to_tokens, self.emoji = load_vocab_and_emoji(vocab_file, emoji_file)
@@ -322,7 +322,7 @@ class GPTSANJapaneseTokenizer(PreTrainedTokenizer):
         >>> x_token = tokenizer("ｳｴ", prefix_text="ｱｲ")
         >>> # input_ids:      | SOT | ｱ | ｲ | SEG | ｳ | ｴ |
         >>> # token_type_ids: | 1   | 1 | 1 | 0   | 0 | 0 |
-        """
+        ```"""
         prefix_len = 0
         if self.sep_token in self.vocab:
             segid = self.vocab[self.sep_token]

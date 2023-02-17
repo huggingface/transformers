@@ -32,12 +32,12 @@ from ...utils import (
     is_torch_fx_proxy,
     logging,
 )
-from .configuration_gptsan_japanese import GPTSANJapaneseConfig
+from .configuration_gptsan_japanese import GPTSanJapaneseConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "GPTSANJapaneseConfig"
+_CONFIG_FOR_DOC = "GPTSanJapaneseConfig"
 _CHECKPOINT_FOR_DOC = "Tanrei/GPTSAN-japanese"
 
 ####################################################
@@ -111,7 +111,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
 
-class GPTSANJapaneseDenseActDense(nn.Module):
+class GPTSanJapaneseDenseActDense(nn.Module):
     """
     FFN Layer for Switch Transformer and Extra layers
 
@@ -121,7 +121,7 @@ class GPTSANJapaneseDenseActDense(nn.Module):
 
     """
 
-    def __init__(self, config: GPTSANJapaneseConfig, ext_layer=False):
+    def __init__(self, config: GPTSanJapaneseConfig, ext_layer=False):
         super().__init__()
         d_inter = config.d_ext if ext_layer else config.d_ff
         self.wi = nn.Linear(config.d_model, d_inter, bias=ext_layer)
@@ -145,8 +145,8 @@ class GPTSANJapaneseDenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->GPTSANJapanese
-class GPTSANJapaneseTop1Router(nn.Module):
+# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->GPTSanJapanese
+class GPTSanJapaneseTop1Router(nn.Module):
     """
     Router using tokens choose top-1 experts assignment.
 
@@ -157,7 +157,7 @@ class GPTSANJapaneseTop1Router(nn.Module):
 
     """
 
-    def __init__(self, config: GPTSANJapaneseConfig):
+    def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__()
         self.num_experts = config.num_experts
         self.expert_capacity = config.expert_capacity
@@ -248,16 +248,16 @@ class GPTSANJapaneseTop1Router(nn.Module):
         return expert_index, router_probs, router_logits
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersSparseMLP with SwitchTransformers->GPTSANJapanese
-class GPTSANJapaneseSparseMLP(nn.Module):
+# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersSparseMLP with SwitchTransformers->GPTSanJapanese
+class GPTSanJapaneseSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module.
     """
 
-    def __init__(self, config: GPTSANJapaneseConfig, expert_class: nn.Module = GPTSANJapaneseDenseActDense):
+    def __init__(self, config: GPTSanJapaneseConfig, expert_class: nn.Module = GPTSanJapaneseDenseActDense):
         super().__init__()
         # Step 1: Get the correct router according to its class
-        self.router = GPTSANJapaneseTop1Router(config)
+        self.router = GPTSanJapaneseTop1Router(config)
 
         # Step 2: Get the experts
         self.experts = nn.ModuleDict()
@@ -292,19 +292,19 @@ class GPTSANJapaneseSparseMLP(nn.Module):
         return hidden_states, (router_logits, expert_index)
 
 
-class GPTSANJapaneseLayerSparseFF(nn.Module):
+class GPTSanJapaneseLayerSparseFF(nn.Module):
     r"""
     Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts module.
 
     Parameters:
-        config : ([`GPTSANJapaneseConfig`]): Model configuration class with all the parameters of the model.
+        config : ([`GPTSanJapaneseConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
     """
 
-    def __init__(self, config: GPTSANJapaneseConfig):
+    def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__()
-        self.mlp = GPTSANJapaneseSparseMLP(config)
+        self.mlp = GPTSanJapaneseSparseMLP(config)
         self.soft_bypass_mlp = nn.Linear(config.d_model, config.d_model, bias=False)
         self.norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
@@ -329,20 +329,20 @@ class GPTSANJapaneseLayerSparseFF(nn.Module):
             return output
 
 
-class GPTSANJapaneseLayerDenseFF(nn.Module):
+class GPTSanJapaneseLayerDenseFF(nn.Module):
     r"""
     Extra Transformers Feed Forward layer module.
 
     Parameters:
-        config : ([`GPTSANJapaneseConfig`]): Model configuration class with all the parameters of the model.
+        config : ([`GPTSanJapaneseConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
     """
 
-    def __init__(self, config: GPTSANJapaneseConfig):
+    def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__()
         # Check if it is a sparse layer, if not then it is a dense layer
-        self.mlp = GPTSANJapaneseDenseActDense(config, ext_layer=True)
+        self.mlp = GPTSanJapaneseDenseActDense(config, ext_layer=True)
         self.norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
     def forward(self, hidden_states):
@@ -359,8 +359,8 @@ class GPTSANJapaneseLayerDenseFF(nn.Module):
         return output
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->GPTSANJapanese
-class GPTSANJapaneseAttention(nn.Module):
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->GPTSanJapanese
+class GPTSanJapaneseAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -514,14 +514,14 @@ class GPTSANJapaneseAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class GPTSANJapaneseLayerSelfAttention(nn.Module):
+class GPTSanJapaneseLayerSelfAttention(nn.Module):
     """
     Self Attention and Normalization Unit
     """
 
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.self_attn = GPTSANJapaneseAttention(
+        self.self_attn = GPTSanJapaneseAttention(
             embed_dim=config.d_model,
             num_heads=config.num_heads,
             is_decoder=True,
@@ -600,15 +600,15 @@ class GPTSANJapaneseLayerSelfAttention(nn.Module):
         return outputs + attn_weights
 
 
-class GPTSANJapaneseBlock(nn.Module):
+class GPTSanJapaneseBlock(nn.Module):
     """
     Self Attention and FFN Unit
     """
 
     def __init__(self, config, ext_layer=False):
         super().__init__()
-        self.self_attn = GPTSANJapaneseLayerSelfAttention(config)
-        self.feed_forward = GPTSANJapaneseLayerDenseFF(config) if ext_layer else GPTSANJapaneseLayerSparseFF(config)
+        self.self_attn = GPTSanJapaneseLayerSelfAttention(config)
+        self.feed_forward = GPTSanJapaneseLayerDenseFF(config) if ext_layer else GPTSanJapaneseLayerSparseFF(config)
 
     def forward(
         self,
@@ -665,7 +665,7 @@ class GPTSANJapaneseBlock(nn.Module):
         )
         attention_output = atten_out[0]
 
-        if isinstance(self.feed_forward, GPTSANJapaneseLayerSparseFF):
+        if isinstance(self.feed_forward, GPTSanJapaneseLayerSparseFF):
             sparse_out = self.feed_forward(attention_output, output_router_tuple)
             if output_router_tuple:
                 hidden, router_tuple = sparse_out
@@ -676,22 +676,22 @@ class GPTSANJapaneseBlock(nn.Module):
 
         outputs = (hidden,) + atten_out[1:]
 
-        if isinstance(self.feed_forward, GPTSANJapaneseLayerSparseFF) and output_router_tuple:
+        if isinstance(self.feed_forward, GPTSanJapaneseLayerSparseFF) and output_router_tuple:
             outputs += (router_tuple,)
 
         return outputs
 
 
-class GPTSANJapanesePreTrainedModel(PreTrainedModel):
+class GPTSanJapanesePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = GPTSANJapaneseConfig
+    config_class = GPTSanJapaneseConfig
     base_model_prefix = "gptsan_japanese"
     supports_gradient_checkpointing = False
-    _no_split_modules = ["GPTSANJapaneseBlock"]
+    _no_split_modules = ["GPTSanJapaneseBlock"]
 
     @property
     def dummy_inputs(self):
@@ -715,20 +715,20 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, GPTSANJapaneseModel):
+        elif isinstance(module, GPTSanJapaneseModel):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.embed_tokens.weight.data.normal_(mean=0.0, std=factor * 1.0)
             module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "extra_position_embeddings") and module.extra_position_embeddings is not None:
                 module.extra_position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, (GPTSANJapaneseModel, GPTSANJapaneseForConditionalGeneration)):
+        elif isinstance(module, (GPTSanJapaneseModel, GPTSanJapaneseForConditionalGeneration)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.final_logits_bias.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
                 module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, GPTSANJapaneseDenseActDense):
+        elif isinstance(module, GPTSanJapaneseDenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
             # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
@@ -738,7 +738,7 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
-        elif isinstance(module, GPTSANJapaneseAttention):
+        elif isinstance(module, GPTSanJapaneseAttention):
             # Multi-headed attention
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_model
@@ -747,7 +747,7 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
             module.v_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
             module.q_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
             module.out_proj.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-        elif isinstance(module, GPTSANJapaneseSparseMLP):
+        elif isinstance(module, GPTSanJapaneseSparseMLP):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
@@ -759,7 +759,7 @@ class GPTSANJapanesePreTrainedModel(PreTrainedModel):
                 module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (GPTSANJapaneseAttention,)):
+        if isinstance(module, (GPTSanJapaneseAttention,)):
             module.gradient_checkpointing = value
 
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right
@@ -799,7 +799,7 @@ GPTSAN_JAPANESE_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`GPTSANJapaneseConfig`]): Model configuration class with all the parameters of the model.
+        config ([`GPTSanJapaneseConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -862,8 +862,8 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
     "The bare GPTSAN-japanese Model transformer outputting raw hidden-states without any specific head on top.",
     GPTSAN_JAPANESE_START_DOCSTRING,
 )
-class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
-    def __init__(self, config: GPTSANJapaneseConfig):
+class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
+    def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
         self.config = copy.deepcopy(config)
@@ -873,9 +873,9 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
 
         self.blocks = torch.nn.ModuleList([])
         for _ in range(config.num_switch_layers):
-            self.blocks.append(GPTSANJapaneseBlock(config))
+            self.blocks.append(GPTSanJapaneseBlock(config))
         for _ in range(config.num_ext_layers):
-            self.blocks.append(GPTSANJapaneseBlock(config, ext_layer=True))
+            self.blocks.append(GPTSanJapaneseBlock(config, ext_layer=True))
 
         if config.num_ext_layers > 0:
             self.extra_position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
@@ -1107,12 +1107,12 @@ class GPTSANJapaneseModel(GPTSANJapanesePreTrainedModel):
     "The bare GPTSAN-japanese Model with a language modeling head.",
     GPTSAN_JAPANESE_START_DOCSTRING,
 )
-class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
+class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
-    def __init__(self, config: GPTSANJapaneseConfig):
+    def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)
-        self.model = GPTSANJapaneseModel(config)
+        self.model = GPTSanJapaneseModel(config)
         self.register_buffer("final_logits_bias", torch.zeros([1, config.vocab_size]))
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
         if not self.config.torchscript:
@@ -1302,17 +1302,17 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
             "past_key_values": None,
         }
 
-    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration.prepare_decoder_input_ids_from_labels with SwitchTransformers->GPTSANJapanese
+    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration.prepare_decoder_input_ids_from_labels with SwitchTransformers->GPTSanJapanese
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
-    # Copied from transformers.models.mbart.modeling_mbart.MBartForConditionalGeneration.resize_token_embeddings with MBart->GPTSANJapanese
+    # Copied from transformers.models.mbart.modeling_mbart.MBartForConditionalGeneration.resize_token_embeddings with MBart->GPTSanJapanese
     def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
         self._resize_final_logits_bias(new_num_tokens)
         return new_embeddings
 
-    # Copied from transformers.models.mbart.modeling_mbart.MBartForConditionalGeneration._resize_final_logits_bias with MBart->GPTSANJapanese
+    # Copied from transformers.models.mbart.modeling_mbart.MBartForConditionalGeneration._resize_final_logits_bias with MBart->GPTSanJapanese
     def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
         old_num_tokens = self.final_logits_bias.shape[-1]
         if new_num_tokens <= old_num_tokens:
@@ -1328,15 +1328,15 @@ class GPTSANJapaneseForConditionalGeneration(GPTSANJapanesePreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.model.set_input_embeddings(new_embeddings)
 
-    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration.set_output_embeddings with SwitchTransformers->GPTSANJapanese
+    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration.set_output_embeddings with SwitchTransformers->GPTSanJapanese
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration.get_output_embeddings with SwitchTransformers->GPTSANJapanese
+    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration.get_output_embeddings with SwitchTransformers->GPTSanJapanese
     def get_output_embeddings(self):
         return self.lm_head
 
-    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration._unpack_router_logits with SwitchTransformers->GPTSANJapanese
+    # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersForConditionalGeneration._unpack_router_logits with SwitchTransformers->GPTSanJapanese
     def _unpack_router_logits(self, router_outputs):
         total_router_logits = []
         total_expert_indexes = []

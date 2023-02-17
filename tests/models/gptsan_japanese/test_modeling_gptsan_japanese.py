@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 GPTSANJapanese Authors and HuggingFace Inc. team.
+# Copyright 2023 Toshiyuki Sakamoto(tanreinama) and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,10 +19,10 @@ import unittest
 import numpy as np
 
 from transformers import (
-    GPTSANJapaneseConfig,
-    GPTSANJapaneseForConditionalGeneration,
-    GPTSANJapaneseModel,
-    GPTSANJapaneseTokenizer,
+    GPTSanJapaneseConfig,
+    GPTSanJapaneseForConditionalGeneration,
+    GPTSanJapaneseModel,
+    GPTSanJapaneseTokenizer,
     is_torch_available,
 )
 from transformers.generation import GenerationConfig
@@ -33,7 +33,7 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
-class GPTSANJapaneseTester:
+class GPTSanJapaneseTester:
     def __init__(
         self,
         parent,
@@ -78,7 +78,7 @@ class GPTSANJapaneseTester:
         self.router_jitter_noise = router_jitter_noise
 
     def get_large_model_config(self):
-        return GPTSANJapaneseConfig.from_pretrained("Tanrei/GPTSAN-japanese")
+        return GPTSanJapaneseConfig.from_pretrained("Tanrei/GPTSAN-japanese")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -95,7 +95,7 @@ class GPTSANJapaneseTester:
         return (config, {"input_ids": input_ids})
 
     def get_config(self):
-        return GPTSANJapaneseConfig(
+        return GPTSanJapaneseConfig(
             vocab_size=36000,
             num_contexts=self.seq_length,
             d_model=self.hidden_size,
@@ -117,7 +117,7 @@ class GPTSANJapaneseTester:
         config,
         input_ids,
     ):
-        model = GPTSANJapaneseForConditionalGeneration(config=config)
+        model = GPTSanJapaneseForConditionalGeneration(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -127,8 +127,8 @@ class GPTSANJapaneseTester:
 
 
 @require_torch
-class GPTSANJapaneseTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (GPTSANJapaneseModel,) if is_torch_available() else ()
+class GPTSanJapaneseTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (GPTSanJapaneseModel,) if is_torch_available() else ()
     fx_compatible = False
     is_encoder_decoder = False
     test_pruning = False
@@ -141,11 +141,11 @@ class GPTSANJapaneseTest(ModelTesterMixin, unittest.TestCase):
     model_split_percents = [0.8, 0.9]
 
     def setUp(self):
-        self.model_tester = GPTSANJapaneseTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTSANJapaneseConfig, d_model=37)
+        self.model_tester = GPTSanJapaneseTester(self)
+        self.config_tester = ConfigTester(self, config_class=GPTSanJapaneseConfig, d_model=37)
 
     def test_config(self):
-        GPTSANJapaneseConfig()
+        GPTSanJapaneseConfig()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -153,8 +153,8 @@ class GPTSANJapaneseTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (GPTSANJapaneseForConditionalGeneration,) if is_torch_available() else ()
+class GPTSanJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (GPTSanJapaneseForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     is_encoder_decoder = False
     test_pruning = False
@@ -165,11 +165,11 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
     model_split_percents = [0.8, 0.9]
 
     def setUp(self):
-        self.model_tester = GPTSANJapaneseTester(self)
-        self.config_tester = ConfigTester(self, config_class=GPTSANJapaneseConfig, d_model=37)
+        self.model_tester = GPTSanJapaneseTester(self)
+        self.config_tester = ConfigTester(self, config_class=GPTSanJapaneseConfig, d_model=37)
 
     def test_config(self):
-        GPTSANJapaneseConfig()
+        GPTSanJapaneseConfig()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -177,8 +177,8 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
 
     @slow
     def test_logits(self):
-        model = GPTSANJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
-        tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        model = GPTSanJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
+        tokenizer = GPTSanJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
         input_ids = tokenizer.encode("武田信玄は", return_tensors="pt")
         outputs = model(input_ids)
         output_logits = outputs.logits.detach().cpu().numpy()
@@ -217,8 +217,8 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
 
     @slow
     def test_batch_generation(self):
-        model = GPTSANJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
-        tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        model = GPTSanJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
+        tokenizer = GPTSanJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
         model.to(torch_device)
 
         # set deterministically
@@ -267,8 +267,8 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
 
     @tooslow
     def test_sample(self):
-        model = GPTSANJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
-        tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        model = GPTSanJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
+        tokenizer = GPTSanJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
         # Output of original model created with mesh-tensoflow
         target = [
             ("武田信玄は", 35675),
@@ -291,8 +291,8 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
 
     @slow
     def test_spout_generation(self):
-        model = GPTSANJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
-        tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        model = GPTSanJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
+        tokenizer = GPTSanJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
         model.to(torch_device)
 
         # set deterministically
@@ -378,8 +378,8 @@ class GPTSANJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
 
     @slow
     def test_prefix_lm_generation(self):
-        model = GPTSANJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
-        tokenizer = GPTSANJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
+        model = GPTSanJapaneseForConditionalGeneration.from_pretrained("Tanrei/GPTSAN-japanese")
+        tokenizer = GPTSanJapaneseTokenizer.from_pretrained("Tanrei/GPTSAN-japanese")
         model.to(torch_device)
 
         # set deterministically

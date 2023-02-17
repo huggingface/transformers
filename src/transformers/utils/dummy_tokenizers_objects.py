@@ -177,7 +177,7 @@ class GPTNeoXJapaneseTokenizer(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
-class GPTSANJapaneseTokenizer(metaclass=DummyObject):
+class GPTSanJapaneseTokenizer(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):
