@@ -27,6 +27,7 @@ from . import dependency_versions_check
 from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_bitsandbytes_available,
     is_flax_available,
     is_keras_nlp_available,
     is_sentencepiece_available,
@@ -47,6 +48,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
+    "audio_utils": [],
     "benchmark": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
@@ -205,6 +207,13 @@ _import_structure = {
         "ChineseCLIPProcessor",
         "ChineseCLIPTextConfig",
         "ChineseCLIPVisionConfig",
+    ],
+    "models.clap": [
+        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ClapAudioConfig",
+        "ClapConfig",
+        "ClapProcessor",
+        "ClapTextConfig",
     ],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -589,6 +598,7 @@ _import_structure = {
         "add_end_docstrings",
         "add_start_docstrings",
         "is_apex_available",
+        "is_bitsandbytes_available",
         "is_datasets_available",
         "is_decord_available",
         "is_faiss_available",
@@ -615,6 +625,7 @@ _import_structure = {
         "logging",
     ],
     "utils.bitsandbytes": [],
+    "utils.quantization_config": ["BitsAndBytesConfig"],
 }
 
 # sentencepiece-backed objects
@@ -1231,6 +1242,18 @@ else:
             "ChineseCLIPPreTrainedModel",
             "ChineseCLIPTextModel",
             "ChineseCLIPVisionModel",
+        ]
+    )
+    _import_structure["models.clap"].extend(
+        [
+            "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ClapAudioModel",
+            "ClapAudioModelWithProjection",
+            "ClapFeatureExtractor",
+            "ClapModel",
+            "ClapPreTrainedModel",
+            "ClapTextModel",
+            "ClapTextModelWithProjection",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -3740,6 +3763,13 @@ if TYPE_CHECKING:
         ChineseCLIPTextConfig,
         ChineseCLIPVisionConfig,
     )
+    from .models.clap import (
+        CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ClapAudioConfig,
+        ClapConfig,
+        ClapProcessor,
+        ClapTextConfig,
+    )
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
@@ -4098,6 +4128,7 @@ if TYPE_CHECKING:
         add_end_docstrings,
         add_start_docstrings,
         is_apex_available,
+        is_bitsandbytes_available,
         is_datasets_available,
         is_decord_available,
         is_faiss_available,
@@ -4123,6 +4154,9 @@ if TYPE_CHECKING:
         is_vision_available,
         logging,
     )
+
+    # bitsandbytes config
+    from .utils.quantization_config import BitsAndBytesConfig
 
     try:
         if not is_sentencepiece_available():
@@ -4634,6 +4668,16 @@ if TYPE_CHECKING:
             ChineseCLIPPreTrainedModel,
             ChineseCLIPTextModel,
             ChineseCLIPVisionModel,
+        )
+        from .models.clap import (
+            CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClapAudioModel,
+            ClapAudioModelWithProjection,
+            ClapFeatureExtractor,
+            ClapModel,
+            ClapPreTrainedModel,
+            ClapTextModel,
+            ClapTextModelWithProjection,
         )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6515,6 +6559,7 @@ if TYPE_CHECKING:
             FlaxXLMRobertaModel,
             FlaxXLMRobertaPreTrainedModel,
         )
+
 
 else:
     import sys
