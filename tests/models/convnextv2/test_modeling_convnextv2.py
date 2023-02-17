@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ConvNeXTV2 model. """
+""" Testing suite for the PyTorch ConvNextV2 model. """
 
 
 import inspect
 import unittest
 
-from transformers import ConvNeXTV2Config
+from transformers import ConvNextV2Config
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -29,17 +29,17 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import ConvNeXTV2Backbone, ConvNeXTV2ForImageClassification, ConvNeXTV2Model
+    from transformers import ConvNextV2Backbone, ConvNextV2ForImageClassification, ConvNextV2Model
     from transformers.models.convnextv2.modeling_convnextv2 import CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
-class ConvNeXTV2ModelTester:
+class ConvNextV2ModelTester:
     def __init__(
         self,
         parent,
@@ -86,7 +86,7 @@ class ConvNeXTV2ModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return ConvNeXTV2Config(
+        return ConvNextV2Config(
             num_channels=self.num_channels,
             hidden_sizes=self.hidden_sizes,
             depths=self.depths,
@@ -99,7 +99,7 @@ class ConvNeXTV2ModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = ConvNeXTV2Model(config=config)
+        model = ConvNextV2Model(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -110,14 +110,14 @@ class ConvNeXTV2ModelTester:
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        model = ConvNeXTV2ForImageClassification(config)
+        model = ConvNextV2ForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_backbone(self, config, pixel_values, labels):
-        model = ConvNeXTV2Backbone(config=config)
+        model = ConvNextV2Backbone(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -132,7 +132,7 @@ class ConvNeXTV2ModelTester:
 
         # verify backbone works with out_features=None
         config.out_features = None
-        model = ConvNeXTV2Backbone(config=config)
+        model = ConvNextV2Backbone(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
@@ -153,17 +153,17 @@ class ConvNeXTV2ModelTester:
 
 
 @require_torch
-class ConvNeXTV2ModelTest(ModelTesterMixin, unittest.TestCase):
+class ConvNextV2ModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ConvNeXTV2 does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as ConvNextV2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
         (
-            ConvNeXTV2Model,
-            ConvNeXTV2ForImageClassification,
-            ConvNeXTV2Backbone,
+            ConvNextV2Model,
+            ConvNextV2ForImageClassification,
+            ConvNextV2Backbone,
         )
         if is_torch_available()
         else ()
@@ -176,8 +176,8 @@ class ConvNeXTV2ModelTest(ModelTesterMixin, unittest.TestCase):
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = ConvNeXTV2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ConvNeXTV2Config, has_text_modality=False, hidden_size=37)
+        self.model_tester = ConvNextV2ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ConvNextV2Config, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.create_and_test_config_common_properties()
@@ -191,15 +191,15 @@ class ConvNeXTV2ModelTest(ModelTesterMixin, unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
-    @unittest.skip(reason="ConvNeXTV2 does not use inputs_embeds")
+    @unittest.skip(reason="ConvNextV2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="ConvNeXTV2 does not support input and output embeddings")
+    @unittest.skip(reason="ConvNextV2 does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="ConvNeXTV2 does not use feedforward chunking")
+    @unittest.skip(reason="ConvNextV2 does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
@@ -233,7 +233,7 @@ class ConvNeXTV2ModelTest(ModelTesterMixin, unittest.TestCase):
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
-            # ConvNeXTV2's feature maps are of shape (batch_size, num_channels, height, width)
+            # ConvNextV2's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
@@ -258,7 +258,7 @@ class ConvNeXTV2ModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ConvNeXTV2Model.from_pretrained(model_name)
+            model = ConvNextV2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -270,18 +270,18 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class ConvNeXTV2ModelIntegrationTest(unittest.TestCase):
+class ConvNextV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("facebook/convnextv2-tiny-224") if is_vision_available() else None
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained("facebook/convnextv2-tiny-1k-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ConvNeXTV2ForImageClassification.from_pretrained("facebook/convnextv2-tiny-224").to(torch_device)
+        model = ConvNextV2ForImageClassification.from_pretrained("facebook/convnextv2-tiny-1k-224").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        preprocessor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = preprocessor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -291,6 +291,5 @@ class ConvNeXTV2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0260, -0.4739, 0.1911]).to(torch_device)
-
+        expected_slice = torch.tensor([-0.3083, -0.3040, -0.4344]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

@@ -46,15 +46,15 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ConvNextV2Config"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/convnextv2-tiny-224"
+_CHECKPOINT_FOR_DOC = "facebook/convnextv2-tiny-1k-224"
 _EXPECTED_OUTPUT_SHAPE = [1, 768, 7, 7]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "facebook/convnextv2-tiny-224"
+_IMAGE_CLASS_CHECKPOINT = "facebook/convnextv2-tiny-1k-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/convnextv2-tiny-224",
+    "facebook/convnextv2-tiny-1k-224",
     # See all ConvNextV2 models at https://huggingface.co/models?filter=convnextv2
 ]
 
@@ -288,7 +288,7 @@ class ConvNextV2Encoder(nn.Module):
         )
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextV2,convnext->convnextv2
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextV2, convnext->convnextv2
 class ConvNextV2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -346,7 +346,7 @@ CONVNEXTV2_INPUTS_DOCSTRING = r"""
     "The bare ConvNextV2 model outputting raw features without any specific head on top.",
     CONVNEXTV2_START_DOCSTRING,
 )
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextModel with CONVNEXT->CONVNEXTV2, ConvNext->ConvNextV2
 class ConvNextV2Model(ConvNextV2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -496,7 +496,7 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
     """,
     CONVNEXTV2_START_DOCSTRING,
 )
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextBackbone with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,facebook/convnext-tiny-224->facebook/convnextv2-tiny-224
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextBackbone with CONVNEXT->CONVNEXTV2,ConvNext->ConvNextV2,facebook/convnext-tiny-224->facebook/convnextv2-tiny-1k-224
 class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
@@ -549,8 +549,8 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = AutoImageProcessor.from_pretrained("facebook/convnextv2-tiny-224")
-        >>> model = AutoBackbone.from_pretrained("facebook/convnextv2-tiny-224")
+        >>> processor = AutoImageProcessor.from_pretrained("facebook/convnextv2-tiny-1k-224")
+        >>> model = AutoBackbone.from_pretrained("facebook/convnextv2-tiny-1k-224")
 
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)

@@ -27,7 +27,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/convnextv2-tiny-224": "https://huggingface.co/facebook/convnextv2-tiny-224/resolve/main/config.json",
+    "facebook/convnextv2-tiny-1k-224": "https://huggingface.co/facebook/convnextv2-tiny-1k-224/resolve/main/config.json",
 }
 
 
@@ -36,7 +36,7 @@ class ConvNextV2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ConvNeXTV2Model`]. It is used to instantiate an
     ConvNeXTV2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the ConvNeXTV2
-    [facebook/convnextv2-tiny-224](https://huggingface.co/facebook/convnextv2-tiny-224) architecture.
+    [facebook/convnextv2-tiny-1k-224](https://huggingface.co/facebook/convnextv2-tiny-1k-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -71,10 +71,10 @@ class ConvNextV2Config(PretrainedConfig):
     ```python
     >>> from transformers import ConvNeXTV2Config, ConvNeXTV2Model
 
-    >>> # Initializing a ConvNeXTV2 convnextv2-tiny-224 style configuration
+    >>> # Initializing a ConvNeXTV2 convnextv2-tiny-1k-224 style configuration
     >>> configuration = ConvNeXTV2Config()
 
-    >>> # Initializing a model (with random weights) from the convnextv2-tiny-224 style configuration
+    >>> # Initializing a model (with random weights) from the convnextv2-tiny-1k-224 style configuration
     >>> model = ConvNeXTV2Model(configuration)
 
     >>> # Accessing the model configuration
