@@ -898,8 +898,8 @@ class ClapAudioEncoder(nn.Module):
     def forward(
         self,
         input_features,
-        head_mask: Optional[torch.FloatTensor] = None,
         is_longer: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         output_hidden_states_before_downsampling: Optional[bool] = False,
@@ -2068,8 +2068,8 @@ class ClapModel(ClapPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        is_longer: Optional[torch.BoolTensor] = None,
         input_features: Optional[torch.FloatTensor] = None,
+        is_longer: Optional[torch.BoolTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
