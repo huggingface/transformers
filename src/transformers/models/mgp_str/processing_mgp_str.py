@@ -83,9 +83,9 @@ class MGPSTRProcessor(ProcessorMixin):
     def __call__(self, *args, **kwargs):
         """
         When used in normal mode, this method forwards all its arguments to ViTImageProcessor's
-        [`~ViTImageProcessor.__call__`] and returns its output. This method also forwards the `text`
-        and `kwargs` arguments to MGPSTRTokenizer's [`~MGPSTRTokenizer.__call__`] if `text` is not `None` to encode
-        the text. Please refer to the doctsring of the above methods for more information.
+        [`~ViTImageProcessor.__call__`] and returns its output. This method also forwards the `text` and `kwargs`
+        arguments to MGPSTRTokenizer's [`~MGPSTRTokenizer.__call__`] if `text` is not `None` to encode the text. Please
+        refer to the doctsring of the above methods for more information.
         """
         images = kwargs.pop("images", None)
         text = kwargs.pop("text", None)
