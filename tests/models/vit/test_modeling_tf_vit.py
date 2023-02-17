@@ -165,7 +165,6 @@ class TFViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_tf_available()
         else {}
     )
-    PipelineTesterMixin.disable_irrelevant_tests()
 
     test_resize_embeddings = False
     test_head_masking = False

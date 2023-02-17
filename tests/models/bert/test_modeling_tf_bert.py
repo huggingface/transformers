@@ -621,7 +621,6 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
         if is_tf_available()
         else {}
     )
-    PipelineTesterMixin.disable_irrelevant_tests()
 
     test_head_masking = False
     test_onnx = True
