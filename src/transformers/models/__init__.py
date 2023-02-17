@@ -40,6 +40,7 @@ from . import (
     camembert,
     canine,
     chinese_clip,
+    clap,
     clip,
     clipseg,
     codegen,
