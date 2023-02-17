@@ -150,7 +150,6 @@ class Data2VecVisionEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.BoolTensor] = None) -> torch.Tensor:
-
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
 

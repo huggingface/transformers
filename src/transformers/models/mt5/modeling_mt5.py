@@ -117,7 +117,6 @@ class MT5LayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # MT5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -529,7 +528,6 @@ class MT5Block(nn.Module):
         output_attentions=False,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -845,6 +843,13 @@ class MT5Stack(MT5PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`MT5Stack.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your model"
+            " with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'block.0': 0,"
+            " 'block.1': 1, ...}",
+            FutureWarning,
+        )
         # Check validity of device_map
         self.device_map = (
             get_device_map(len(self.block), range(torch.cuda.device_count())) if device_map is None else device_map
@@ -866,6 +871,10 @@ class MT5Stack(MT5PreTrainedModel):
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.model_parallel = False
         self.device_map = None
         self.first_device = "cpu"
@@ -1316,6 +1325,13 @@ class MT5Model(MT5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5Model.parallelize
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`T5Model.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your model"
+            " with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'encoder.block.0':"
+            " 0, 'encoder.block.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
             if device_map is None
@@ -1329,6 +1345,10 @@ class MT5Model(MT5PreTrainedModel):
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5Model.deparallelize
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.encoder.deparallelize()
         self.decoder.deparallelize()
         self.encoder = self.encoder.to("cpu")
@@ -1541,6 +1561,13 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.parallelize
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`T5ForConditionalGeneration.parallelize` is deprecated and will be removed in v5 of Transformers, you"
+            " should load your model with `device_map='balanced'` in the call to `from_pretrained`. You can also"
+            " provide your own `device_map` but it needs to be a dictionary module_name to device, so for instance"
+            " {'encoder.block.0': 0, 'encoder.block.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
             if device_map is None
@@ -1555,6 +1582,10 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.deparallelize
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.encoder.deparallelize()
         self.decoder.deparallelize()
         self.encoder = self.encoder.to("cpu")
@@ -1755,9 +1786,8 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
-
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
@@ -1778,15 +1808,15 @@ class MT5ForConditionalGeneration(MT5PreTrainedModel):
         return self._shift_right(labels)
 
     # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration._reorder_cache
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
-        if past is None:
+        if past_key_values is None:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past
+            return past_key_values
 
         reordered_decoder_past = ()
-        for layer_past_states in past:
+        for layer_past_states in past_key_values:
             # get the correct batch idx from layer past batch dim
             # batch dim of `past` is at 2nd position
             reordered_layer_past_states = ()
@@ -1852,6 +1882,13 @@ class MT5EncoderModel(MT5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.parallelize
     def parallelize(self, device_map=None):
+        warnings.warn(
+            "`T5EncoderModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
+            " your model with `device_map='balanced'` in the call to `from_pretrained`. You can also provide your own"
+            " `device_map` but it needs to be a dictionary module_name to device, so for instance {'block.0': 0,"
+            " 'block.1': 1, ...}",
+            FutureWarning,
+        )
         self.device_map = (
             get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
             if device_map is None
@@ -1864,6 +1901,10 @@ class MT5EncoderModel(MT5PreTrainedModel):
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     # Copied from transformers.models.t5.modeling_t5.T5EncoderModel.deparallelize
     def deparallelize(self):
+        warnings.warn(
+            "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
+            FutureWarning,
+        )
         self.encoder.deparallelize()
         self.encoder = self.encoder.to("cpu")
         self.model_parallel = False

@@ -543,7 +543,6 @@ class MegatronBertEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1120,7 +1119,6 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"cls.predictions.decoder"]
 
@@ -1257,16 +1255,15 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
 
 @add_start_docstrings("""MegatronBert Model with a `language modeling` head on top.""", MEGATRON_BERT_START_DOCSTRING)
 class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"seq_relationship"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder"]
 
@@ -1375,7 +1372,6 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"predictions"]
 
     def __init__(self, config):
@@ -1401,7 +1397,7 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> Union[Tuple, NextSentencePredictorOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1672,7 +1668,6 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1753,7 +1748,6 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
     MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):

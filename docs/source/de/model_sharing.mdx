@@ -146,7 +146,7 @@ Geben Sie ein Modell mit [`PushToHubCallback`] an den Hub weiter. In der [`PushT
 - Die `hub_model_id`, die Ihr Hub-Benutzername und Modellname ist.
 
 ```py
->>> from transformers.keras.callbacks import PushToHubCallback
+>>> from transformers import PushToHubCallback
 
 >>> push_to_hub_callback = PushToHubCallback(
 ...     output_dir="./your_model_save_path", tokenizer=tokenizer, hub_model_id="your-username/my-awesome-model"

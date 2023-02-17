@@ -311,9 +311,9 @@ class XCLIPEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = XCLIPAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = XCLIPMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -403,15 +403,15 @@ class XCLIPVisionEncoderLayer(nn.Module):
         self.embed_dim = config.hidden_size
 
         self.message_fc = nn.Linear(self.embed_dim, self.embed_dim)
-        self.message_ln = nn.LayerNorm(self.embed_dim)
+        self.message_ln = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.message_attn = XCLIPAttention(config)
 
         self.drop_path = XCLIPDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.self_attn = XCLIPAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = XCLIPMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -744,7 +744,7 @@ class XCLIPTextTransformer(nn.Module):
         embed_dim = config.hidden_size
         self.embeddings = XCLIPTextEmbeddings(config)
         self.encoder = XCLIPEncoder(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim)
+        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(X_CLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=XCLIPTextConfig)
@@ -989,9 +989,9 @@ class XCLIPVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = XCLIPVisionEmbeddings(config)
-        self.pre_layernorm = nn.LayerNorm(embed_dim)
+        self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = XCLIPVisionEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(X_CLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=XCLIPVisionConfig)
@@ -1218,8 +1218,8 @@ class PromptGeneratorLayer(nn.Module):
 
         embed_dim = config.projection_dim
         self.cross_attn = XCLIPCrossAttention(config)
-        self.norm1 = nn.LayerNorm(embed_dim)
-        self.norm3 = nn.LayerNorm(embed_dim)
+        self.norm1 = nn.LayerNorm(embed_dim, eps=config.text_config.layer_norm_eps)
+        self.norm3 = nn.LayerNorm(embed_dim, eps=config.text_config.layer_norm_eps)
         self.mlp = nn.Sequential(
             nn.Linear(embed_dim, embed_dim * 4),
             ACT2FN[config.prompt_hidden_act],
@@ -1239,7 +1239,7 @@ class XCLIPPromptGenerator(nn.Module):
     def __init__(self, config):
         super().__init__()
         embed_dim = config.projection_dim
-        self.layernorm = nn.LayerNorm(embed_dim)
+        self.layernorm = nn.LayerNorm(embed_dim, eps=config.vision_config.layer_norm_eps)
         self.decoder = nn.ModuleList([PromptGeneratorLayer(config) for _ in range(config.prompt_layers)])
         self.alpha = nn.Parameter(torch.ones(embed_dim) * config.prompt_alpha)
 
@@ -1284,7 +1284,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
 
-        self.prompts_visual_layernorm = nn.LayerNorm(self.vision_embed_dim)
+        self.prompts_visual_layernorm = nn.LayerNorm(self.vision_embed_dim, eps=config.vision_config.layer_norm_eps)
         self.prompts_visual_projection = nn.Parameter(torch.randn(self.vision_embed_dim, self.projection_dim))
 
         mit_config = copy(vision_config)

@@ -29,14 +29,14 @@ from typing import Dict, List, Tuple
 
 import torch
 import torch.nn as nn
-from torch import Tensor
-
 from classy_vision.models.regnet import RegNet, RegNetParams
 from huggingface_hub import cached_download, hf_hub_url
+from torch import Tensor
+from vissl.models.model_helpers import get_trunk_forward_outputs
+
 from transformers import AutoFeatureExtractor, RegNetConfig, RegNetForImageClassification, RegNetModel
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
-from vissl.models.model_helpers import get_trunk_forward_outputs
 
 
 logging.set_verbosity_info()

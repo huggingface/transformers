@@ -15,7 +15,6 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
-
 import requests
 
 from ..utils import is_torch_available, logging
@@ -101,7 +100,7 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
         chunk_len, stride_left, stride_right = stride
         sequence = sequence.squeeze(0)
         # get rid of the `forced_decoder_idx` that are use to parametrize the generation
-        begin_idx = np.where(sequence == timestamp_begin)[0].item() if timestamp_begin in sequence else 0
+        begin_idx = np.where(sequence == timestamp_begin)[0][0] if timestamp_begin in sequence else 0
         sequence = sequence[begin_idx:]
 
         timestamp_tokens = sequence >= timestamp_begin
@@ -287,9 +286,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             installed. If no framework is specified, will default to the one currently installed. If no framework is
             specified and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
             no model is provided.
-        device (`int`, *optional*, defaults to -1):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id.
+        device (Union[`int`, `torch.device`], *optional*):
+            Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the
+            model on the associated CUDA device id.
         decoder (`pyctcdecode.BeamSearchDecoderCTC`, *optional*):
             [PyCTCDecode's
             BeamSearchDecoderCTC](https://github.com/kensho-technologies/pyctcdecode/blob/2fd33dc37c4111417e08d89ccd23d28e9b308d19/pyctcdecode/decoder.py#L180)
@@ -302,7 +301,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         feature_extractor: Union["SequenceFeatureExtractor", str],
         *,
         decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.feature_extractor = feature_extractor

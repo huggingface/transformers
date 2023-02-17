@@ -288,8 +288,8 @@ class DecisionTransformerGPT2Attention(nn.Module):
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
                 raise ValueError(
-                    "If class is used as cross attention, the weights `q_attn` have to be defined. Please make sure to"
-                    " instantiate class with `DecisionTransformerGPT2Attention(..., is_cross_attention=True)`."
+                    "If class is used as cross attention, the weights `q_attn` have to be defined. "
+                    "Please make sure to instantiate class with `DecisionTransformerGPT2Attention(..., is_cross_attention=True)`."
                 )
 
             query = self.q_attn(hidden_states)
@@ -612,7 +612,6 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-
             # Model parallel
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
@@ -628,7 +627,6 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."

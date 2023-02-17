@@ -23,12 +23,11 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
 
+import requests
 import torch
 import torchvision.transforms as T
 from PIL import Image
 from torch import Tensor, nn
-
-import requests
 
 
 try:

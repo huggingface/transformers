@@ -443,7 +443,6 @@ class GitEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -762,9 +761,9 @@ class GitVisionEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = GitVisionAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = GitVisionMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -935,9 +934,9 @@ class GitVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = GitVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim)
+        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = GitVisionEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(GIT_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=GitVisionConfig)
@@ -1048,7 +1047,8 @@ class GitProjection(nn.Module):
         super().__init__()
         self.config = config
         self.visual_projection = nn.Sequential(
-            nn.Linear(config.vision_config.hidden_size, config.hidden_size), nn.LayerNorm(config.hidden_size)
+            nn.Linear(config.vision_config.hidden_size, config.hidden_size),
+            nn.LayerNorm(config.hidden_size, eps=config.vision_config.layer_norm_eps),
         )
 
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
@@ -1512,9 +1512,11 @@ class GitForCausalLM(GitPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=True, **kwargs):
-        # cut decoder_input_ids if past is used
-        if past is not None:
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
+        # cut decoder_input_ids if past_key_values is used
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1526,12 +1528,12 @@ class GitForCausalLM(GitPreTrainedModel):
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": kwargs.get("pixel_values", None),
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "use_cache": use_cache,
         }
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

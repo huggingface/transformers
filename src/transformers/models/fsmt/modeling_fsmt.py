@@ -1186,6 +1186,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         base_model = FSMTModel(config)
         self.model = base_model
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @add_end_docstrings(FSMT_GENERATION_EXAMPLE)
@@ -1273,7 +1276,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1291,9 +1294,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         return shift_tokens_right(labels, self.config.pad_token_id)
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = []
-        for layer_past in past:
+        for layer_past in past_key_values:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()

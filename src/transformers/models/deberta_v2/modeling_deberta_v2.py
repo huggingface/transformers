@@ -498,7 +498,6 @@ class DebertaV2Encoder(nn.Module):
         rel_embeddings = self.get_rel_embedding()
         output_states = next_kv
         for i, layer_module in enumerate(self.layer):
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (output_states,)
 

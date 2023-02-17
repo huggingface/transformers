@@ -15,6 +15,7 @@
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING, VideoMAEFeatureExtractor
 from transformers.pipelines import VideoClassificationPipeline, pipeline
 from transformers.testing_utils import (
@@ -35,11 +36,11 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         example_video_filepath = hf_hub_download(
             repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset"
         )
-        video_classifier = VideoClassificationPipeline(model=model, feature_extractor=feature_extractor, top_k=2)
+        video_classifier = VideoClassificationPipeline(model=model, image_processor=processor, top_k=2)
         examples = [
             example_video_filepath,
             "https://huggingface.co/datasets/nateraw/video-demo/resolve/main/archery.mp4",
@@ -47,7 +48,6 @@ class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         return video_classifier, examples
 
     def run_pipeline_test(self, video_classifier, examples):
-
         for example in examples:
             outputs = video_classifier(example)
 

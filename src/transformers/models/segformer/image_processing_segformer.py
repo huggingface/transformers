@@ -30,7 +30,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -96,7 +96,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_reduce_labels: bool = False,
-        **kwargs
+        **kwargs,
     ) -> None:
         if "reduce_labels" in kwargs:
             warnings.warn(
@@ -146,7 +146,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to `(size["height"], size["width"])`.
@@ -173,7 +173,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -194,7 +194,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
@@ -385,9 +385,9 @@ class SegformerImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        if not is_batched(images):
-            images = [images]
-            segmentation_maps = [segmentation_maps] if segmentation_maps is not None else None
+        images = make_list_of_images(images)
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if not valid_images(images):
             raise ValueError(

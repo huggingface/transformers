@@ -329,7 +329,6 @@ class Transformer(nn.Module):
         output_hidden_states: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:  # docstyle-ignore
-
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim) Input sequence embedded.

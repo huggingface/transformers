@@ -44,7 +44,7 @@ from transformers.image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_coco_detection_annotations,
     valid_coco_panoptic_annotations,
@@ -74,6 +74,9 @@ if is_vision_available():
 if is_scipy_available():
     import scipy.special
     import scipy.stats
+
+
+AnnotationType = Dict[str, Union[int, str, List[Dict]]]
 
 
 class AnnotionFormat(ExplicitEnum):
@@ -783,7 +786,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         do_pad: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
@@ -896,7 +899,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[ChannelDimension] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
@@ -1069,7 +1072,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        annotations: Optional[Union[List[Dict], List[List[Dict]]]] = None,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
         return_segmentation_masks: bool = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         do_resize: Optional[bool] = None,
@@ -1084,7 +1087,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         format: Optional[Union[str, AnnotionFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
@@ -1092,7 +1095,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         Args:
             images (`ImageInput`):
                 Image or batch of images to preprocess.
-            annotations (`List[Dict]` or `List[List[Dict]]`, *optional*):
+            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
                 List of annotations associated with the image or batch of images. If annotionation is for object
                 detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
@@ -1170,9 +1173,9 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
         if do_normalize is not None and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
 
-        if not is_batched(images):
-            images = [images]
-            annotations = [annotations] if annotations is not None else None
+        images = make_list_of_images(images)
+        if annotations is not None and isinstance(annotations, dict):
+            annotations = [annotations]
 
         if annotations is not None and len(images) != len(annotations):
             raise ValueError(

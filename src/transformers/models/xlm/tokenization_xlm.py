@@ -611,7 +611,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         lang2id=None,
         id2lang=None,
         do_lowercase_and_remove_accent=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,

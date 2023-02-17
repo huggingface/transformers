@@ -484,9 +484,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         pretrained_model_name_or_path: Union[str, os.PathLike],
         dtype: jnp.dtype = jnp.float32,
         *model_args,
-        **kwargs
+        **kwargs,
     ):
-
         r"""
         Instantiate a pretrained flax model from a pre-trained model configuration.
 
@@ -810,7 +809,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if from_pt:
             state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file, is_sharded)
         else:
-
             if is_sharded:
                 state = cls.load_flax_sharded_weights(resolved_archive_file)
             else:
@@ -1018,7 +1016,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
+            repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # get abs dir
@@ -1077,7 +1075,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         if push_to_hub:
             self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=kwargs.get("use_auth_token"),
             )
 
     @classmethod

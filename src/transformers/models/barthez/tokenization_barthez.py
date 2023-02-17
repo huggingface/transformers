@@ -134,7 +134,7 @@ class BarthezTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token

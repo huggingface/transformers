@@ -84,7 +84,6 @@ class DependencyVersionCheckTest(TestCasePlus):
                 self.assertIn("need one of ", str(e))
 
     def test_python(self):
-
         # matching requirement
         require_version("python>=3.6.0")
 

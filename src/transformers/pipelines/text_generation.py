@@ -97,7 +97,7 @@ class TextGenerationPipeline(Pipeline):
         prefix=None,
         handle_long_generation=None,
         stop_sequence=None,
-        **generate_kwargs
+        **generate_kwargs,
     ):
         preprocess_params = {}
         if prefix is not None:

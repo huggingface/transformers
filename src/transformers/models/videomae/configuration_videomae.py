@@ -119,7 +119,7 @@ class VideoMAEConfig(PretrainedConfig):
         decoder_num_hidden_layers=4,
         decoder_intermediate_size=1536,
         norm_pix_loss=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

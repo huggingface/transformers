@@ -30,7 +30,7 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor, image_processor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         classifier = ZeroShotClassificationPipeline(
             model=model, tokenizer=tokenizer, candidate_labels=["polics", "health"]
         )

@@ -374,9 +374,9 @@ class BlipEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = BlipAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = BlipMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -665,7 +665,7 @@ class BlipVisionModel(BlipPreTrainedModel):
 
         self.embeddings = BlipVisionEmbeddings(config)
         self.encoder = BlipEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
         self.post_init()
 
@@ -1036,7 +1036,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         pixel_values: torch.FloatTensor,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
-        **generate_kwargs
+        **generate_kwargs,
     ) -> torch.LongTensor:
         r"""
         Overrides *generate* function to be able to use the model as a conditional generator
@@ -1263,7 +1263,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
         attention_mask: Optional[torch.LongTensor] = None,
-        **generate_kwargs
+        **generate_kwargs,
     ) -> torch.LongTensor:
         r"""
         Overrides *generate* function to be able to use the model as a conditional generator
