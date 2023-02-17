@@ -60,8 +60,6 @@ class MGPSTRConfig(PretrainedConfig):
             The ratio of mlp hidden dim to embedding dim.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        representation_size (`int`, *optional*, defaults to `None`):
-            Enable and set representation layer (pre-logits) to this value if set.
         distilled (`bool`, *optional*, defaults to `False`):
             Model includes a distillation token and head as in DeiT models.
         drop_rate (`float`, *optional*, defaults to 0.0):
@@ -105,7 +103,6 @@ class MGPSTRConfig(PretrainedConfig):
         num_attention_heads=12,
         mlp_ratio=4.0,
         qkv_bias=True,
-        representation_size=None,
         distilled=False,
         drop_rate=0.0,
         attn_drop_rate=0.0,
@@ -127,7 +124,6 @@ class MGPSTRConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
-        self.representation_size = representation_size
         self.distilled = distilled
         self.patch_size = patch_size
         self.drop_rate = drop_rate
