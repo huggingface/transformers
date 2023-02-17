@@ -192,7 +192,7 @@ class InformerConfig(PretrainedConfig):
                 )
             self.cardinality = cardinality
         else:
-            self.cardinality = [1]
+            self.cardinality = [0]
 
         # set embedding_dimension
         if embedding_dimension and num_static_categorical_features > 0:
