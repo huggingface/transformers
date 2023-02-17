@@ -417,7 +417,7 @@ class TrainingArguments:
                     FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
                     passed).
                 - fsdp_transformer_layer_cls_to_wrap (`List[str]`, *optional*):
-                    List of transformer layer class names (case-sensitive) to wrap, e.g, 
+                    List of transformer layer class names (case-sensitive) to wrap, e.g,
                     `BertLayer`, `GPTJBlock`, `T5Block` .... (useful only when `fsdp` flag is passed).
                 - fsdp_backward_prefetch (`str`, *optional*)
                     FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when
@@ -449,9 +449,9 @@ class TrainingArguments:
                     https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py).
                 - xla_fsdp_grad_ckpt (`bool`, *optional*, defaults to `False`):
                     Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
-                    used when the xla flag is set to true, and an auto wrapping policy is specified through 
+                    used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
-                    
+
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
@@ -584,8 +584,8 @@ class TrainingArguments:
             The mode to use in `torch.compile`. If set to any value, `torch_compile` will be set to `True`.
 
             Possible choices are `"default"`, `"reduce-overhead"` and `"max-autotune"`.
-        
-    
+
+
 
     """
 

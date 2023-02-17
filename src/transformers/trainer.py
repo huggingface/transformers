@@ -1423,7 +1423,7 @@ class Trainer:
                 # PyTorch FSDP!
                 from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload, MixedPrecision
                 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
-                    from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
+                from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy, transformer_auto_wrap_policy
 
                 if FSDPOption.OFFLOAD in self.args.fsdp:
                     cpu_offload = CPUOffload(offload_params=True)
@@ -1469,7 +1469,7 @@ class Trainer:
                         device_id=self.args.device,
                         backward_prefetch=self.backward_prefetch,
                         forward_prefetch=self.forword_prefetch,
-                    limit_all_gathers=self.limit_all_gathers,
+                        limit_all_gathers=self.limit_all_gathers,
                     )
             else:
                 try:
@@ -1518,6 +1518,7 @@ class Trainer:
                     if barrier:
                         xm.mark_step()
                     return loss
+
                 xm.optimizer_step = patched_optimizer_step
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
