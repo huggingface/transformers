@@ -58,6 +58,7 @@ class InformerModelTester:
         attention_probs_dropout_prob=0.1,
         lags_sequence=[1, 2, 3, 4, 5],
         attention_factor=10,
+        distil=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -83,6 +84,7 @@ class InformerModelTester:
             attention_factor * np.ceil(np.log1p(prediction_length)).astype("int").item(), prediction_length
         )
         self.attention_factor = attention_factor
+        self.distil = distil
 
     def get_config(self):
         return InformerConfig(
@@ -103,6 +105,7 @@ class InformerModelTester:
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
             attention_factor=self.attention_factor,
+            distil=self.distil,
         )
 
     def prepare_informer_inputs_dict(self, config):
@@ -402,8 +405,8 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
                 list(cross_attentions[0].shape[-3:]),
                 [
                     self.model_tester.num_attention_heads,
-                    prediction_length,
-                    context_length,
+                    decoder_seq_length,
+                    decoder_seq_length,
                 ],
             )
 
@@ -454,13 +457,12 @@ class InformerModelIntegrationTests(unittest.TestCase):
                 static_real_features=batch["static_real_features"],
                 future_values=batch["future_values"],
                 future_time_features=batch["future_time_features"],
-            )[0]
-
-        expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
+            ).last_hidden_state
+        expected_shape = torch.Size((64, model.config.context_length, model.config.d_model))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-1.4829, 0.7390, -1.3606], [-1.9992, 0.3949, -1.3191], [-1.1011, 0.2860, -1.5074]], device=torch_device
+            [[-0.6678, 0.4203, 0.0956], [-0.8622, 0.2728, 0.0858], [-0.5118, 0.2205, -0.0191]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -477,12 +479,14 @@ class InformerModelIntegrationTests(unittest.TestCase):
                 static_categorical_features=batch["static_categorical_features"],
                 static_real_features=batch["static_real_features"],
                 future_time_features=batch["future_time_features"],
-            )[1]
-        expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
+            ).encoder_last_hidden_state
+
+        # encoder distils the context length to 1/8th of the original length
+        expected_shape = torch.Size((64, model.config.context_length // 8, model.config.d_model))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.4427, 0.6329, 0.1136], [0.5492, 2.3569, 0.6203], [0.0812, 2.6220, 1.5276]], device=torch_device
+            [[-0.2993, 1.8141, -0.4122], [-0.3320, 2.0362, -0.7312], [-0.3640, 2.4771, -0.7129]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -503,6 +507,6 @@ class InformerModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
-        expected_slice = torch.tensor([3877.3796, 4988.0166, 7795.9473], device=torch_device)
+        expected_slice = torch.tensor([2726.9468, 3130.4065, 4020.5728], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
