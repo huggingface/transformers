@@ -2745,7 +2745,7 @@ class Trainer:
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
             if IS_SAGEMAKER_MP_POST_1_10:
-                if smp.state.cfg.sharded_data_parallel_degree > 1:
+                if IS_SAGEMAKER_MP_POST_1_15 and smp.state.cfg.sharded_data_parallel_degree > 1:
                     # delete bogus weights dump
                     if self.args.should_save:
                         file = os.path.join(output_dir, WEIGHTS_NAME)
