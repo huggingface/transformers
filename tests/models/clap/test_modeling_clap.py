@@ -268,7 +268,7 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in CLAP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ClapAudioModelWithProjection.from_pretrained(model_name)
             self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "visual_projection"))
+            self.assertTrue(hasattr(model, "audio_projection"))
 
 
 class ClapTextModelTester:
