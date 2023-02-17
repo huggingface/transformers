@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import copy
-import inspect
 import json
 import os
 import random
@@ -73,7 +72,9 @@ class PipelineTesterMixin:
                 A task name. This should be a key in the mapping `pipeline_test_mapping`.
         """
         if task not in self.pipieline_model_mapping:
-            self.skipTest(f"Test is skipped: task {task} is not in `self.pipieline_model_mapping`.")
+            self.skipTest(
+                f"Test is skipped: task {task} is not in `self.pipieline_model_mapping` for {self.__class__.__name__}."
+            )
 
         model_architectures = self.pipieline_model_mapping[task]
         if issubclass(model_architectures, (PreTrainedModel, TFPreTrainedModel)):
