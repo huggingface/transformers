@@ -395,9 +395,9 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
                 static_real_features=batch["static_real_features"],
                 future_values=batch["future_values"],
                 future_time_features=batch["future_time_features"],
-            )[0]
+            ).last_hidden_state
 
-        expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
+        expected_shape = torch.Size((64, model.config.context_length, model.config.d_model))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
@@ -418,8 +418,8 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
                 static_categorical_features=batch["static_categorical_features"],
                 static_real_features=batch["static_real_features"],
                 future_time_features=batch["future_time_features"],
-            )[1]
-        expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
+            ).encoder_last_hidden_state
+        expected_shape = torch.Size((64, model.config.context_length, model.config.d_model))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
