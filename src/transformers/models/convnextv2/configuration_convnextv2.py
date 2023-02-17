@@ -33,7 +33,7 @@ CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class ConvNextV2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ConvNeXTV2Model`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`ConvNextV2Model`]. It is used to instantiate an
     ConvNeXTV2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the ConvNeXTV2
     [facebook/convnextv2-tiny-1k-224](https://huggingface.co/facebook/convnextv2-tiny-1k-224) architecture.
@@ -59,8 +59,6 @@ class ConvNextV2Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        layer_scale_init_value (`float`, *optional*, defaults to 1e-6):
-            The initial value for the layer scale.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop rate for stochastic depth.
         out_features (`List[str]`, *optional*):
@@ -69,13 +67,13 @@ class ConvNextV2Config(PretrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import ConvNeXTV2Config, ConvNeXTV2Model
+    >>> from transformers import ConvNeXTV2Config, ConvNextV2Model
 
     >>> # Initializing a ConvNeXTV2 convnextv2-tiny-1k-224 style configuration
     >>> configuration = ConvNeXTV2Config()
 
     >>> # Initializing a model (with random weights) from the convnextv2-tiny-1k-224 style configuration
-    >>> model = ConvNeXTV2Model(configuration)
+    >>> model = ConvNextV2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -92,7 +90,6 @@ class ConvNextV2Config(PretrainedConfig):
         hidden_act="gelu",
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        layer_scale_init_value=1e-6,
         drop_path_rate=0.0,
         image_size=224,
         out_features=None,
@@ -108,7 +105,6 @@ class ConvNextV2Config(PretrainedConfig):
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.layer_scale_init_value = layer_scale_init_value
         self.drop_path_rate = drop_path_rate
         self.image_size = image_size
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(self.depths) + 1)]

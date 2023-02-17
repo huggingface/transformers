@@ -184,8 +184,9 @@ class ConvNextLayer(nn.Module):
         x = self.layernorm(x)
         x = self.pwconv1(x)
         x = self.act(x)
-        x = self.grn(x)
         x = self.pwconv2(x)
+        if self.layer_scale_parameter is not None:
+            x = self.layer_scale_parameter * x
         x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
 
         x = input + self.drop_path(x)

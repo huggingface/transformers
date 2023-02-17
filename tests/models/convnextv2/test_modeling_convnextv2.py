@@ -19,6 +19,8 @@ import inspect
 import unittest
 
 from transformers import ConvNextV2Config
+from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -151,6 +153,12 @@ class ConvNextV2ModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
+    def prepare_config_and_inputs_with_labels(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values, labels = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values, "labels": labels}
+        return config, inputs_dict
+
 
 @require_torch
 class ConvNextV2ModelTest(ModelTesterMixin, unittest.TestCase):
@@ -202,6 +210,51 @@ class ConvNextV2ModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="ConvNextV2 does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
+
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_with_labels()
+            config.return_dict = True
+
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+            ]:
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_training_gradient_checkpointing(self):
+        if not self.model_tester.is_training:
+            return
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_with_labels()
+            config.use_cache = False
+            config.return_dict = True
+
+            if (
+                model_class.__name__
+                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
+                or not model_class.supports_gradient_checkpointing
+            ):
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.gradient_checkpointing_enable()
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
