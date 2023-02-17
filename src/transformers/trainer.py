@@ -1505,6 +1505,7 @@ class Trainer:
                     # Apply gradient checkpointing to auto-wrapped sub-modules if specified
                     def auto_wrapper_callable(m, *args, **kwargs):
                         return FSDP(checkpoint_module(m), *args, **kwargs)
+
                 # Wrap the base model with an outer FSDP wrapper
                 self.model = model = FSDP(
                     model,
