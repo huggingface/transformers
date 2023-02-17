@@ -1581,13 +1581,21 @@ class MegaForCausalLM(MegaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight", r"lm_head.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config: MegaConfig):
+    def __init__(self, config: MegaConfig, add_dense_layer=True):
         super().__init__(config)
 
         if not config.is_decoder:
             logger.warning("If you want to use `MegaForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.mega = MegaModel(config, add_pooling_layer=False)
+
+        if add_dense_layer:
+            self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+            self.hidden_activation = nn.Tanh()
+        else:
+            self.dense = None
+            self.hidden_activation = None
+
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
@@ -1597,10 +1605,10 @@ class MegaForCausalLM(MegaPreTrainedModel):
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.lm_head.decoder
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_head.decoder = new_embeddings
+        self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(MEGA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
@@ -1681,6 +1689,11 @@ class MegaForCausalLM(MegaPreTrainedModel):
         )
 
         sequence_output = outputs[0]
+        
+        if self.dense is not None:
+            sequence_output = self.dense(sequence_output)
+            sequence_output = self.hidden_activation(sequence_output)
+
         prediction_scores = self.lm_head(sequence_output)
 
         lm_loss = None
@@ -1729,16 +1742,22 @@ class MegaForMaskedLM(MegaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"mlm_head.weight", r"mlm_head.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config:MegaConfig):
+    def __init__(self, config:MegaConfig, add_dense_layer=True):
         super().__init__(config)
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `MegaForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `MegaForMaskedLM`, set `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
         self.mega = MegaModel(config, add_pooling_layer=False)
+        if add_dense_layer:
+            self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+            self.hidden_activation = nn.Tanh()
+        else:
+            self.dense = None
+            self.hidden_activation = None
         self.mlm_head = nn.Linear(config.hidden_size, config.vocab_size)
         self.dropout = nn.Dropout(config.dropout_prob)
 
@@ -1798,6 +1817,9 @@ class MegaForMaskedLM(MegaPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = outputs[0]
+        if self.dense is not None:
+            sequence_output = self.dense(sequence_output)
+            sequence_output = self.hidden_activation(sequence_output)
         prediction_scores = self.mlm_head(sequence_output)
 
         masked_lm_loss = None

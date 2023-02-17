@@ -138,10 +138,16 @@ Decoder
 * Encoder hidden states (if doing cross-attention)
 
 ## Final Checklist for Implementation
-* Initialization - either do this in the `MegaPretrainedModel` class or take it out of there and keep the `reset_parameters` methods
+* ~~Initialization - either do this in the `MegaPretrainedModel` class or take it out of there and keep the `reset_parameters` methods~~
+  * Maybe leave in for MultiHeadEMA, ScaleNorm, and RMSNorm?
+    * All of those are `nn.Parameter`, whereas `MegaPretrainedModel._init_weights` is working on embeddings, linear layers, and layernorm
+  * Ultimately i think this is probably fine to have duplicated -- it seems that the defaults match what we're doing where they collide (and go a little farther on embeddings and other linear layers), and the option in the config would take precedence if a user changed it
+* Load my MLM weights and test
+* Rewrite `convert_mega_original_pytorch_checkpoint_to_pytorch` to save the pretrained wikitext MLM
+* Rewrite tests in `tests/models/mega/test_modeling_mega`
 * Documentation: 
   * Docstrings of individual classes
   * Main docstring
-* Run the tests and get ready for opening a PR
-* Load my MLM weights and test
-* Tokenizer
+* ~~Tokenizer?~~
+  * looks like autotokenizer points to robertatokenizer, so I think I'm going to leave it for now
+  * Tests don't require tokenizer
