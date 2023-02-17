@@ -810,14 +810,13 @@ class ProbSparseAttention(nn.Module):
         u = min(self.factor * np.ceil(np.log1p(L_Q)).astype("int").item(), L_Q)
 
         if L_K > 0:
-            index_sample = torch.randint(0, L_K, (U_part,))  # torch.Size([14])
+            index_sample = torch.randint(0, L_K, (U_part,))
 
             # real U = U_part(factor*ln(L_k))*L_q
-            K_sample = key_states[:, index_sample, :]  # torch.Size([52, 14, 4])
+            K_sample = key_states[:, index_sample, :]
         else:
             K_sample = key_states
         Q_K_sample = torch.bmm(query_states, K_sample.transpose(1, 2))
-        # torch.Size([52, 14, 4]) x torch.Size([52, 4, 14])
 
         # find the Top_k query with sparsity measurement
         if u > 0:
@@ -882,10 +881,14 @@ class ProbSparseAttention(nn.Module):
             attn_weights_reshaped = None
 
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = torch.bmm(attn_probs, value_states)
 
         # get initial context
-        context = value_states.cumsum(dim=-2)
-        attn_output = torch.bmm(attn_probs, value_states)
+        if self.is_decoder:
+            context = value_states.cumsum(dim=-2)
+        else:
+            V_sum = value_states.mean(dim=-2)
+            context = V_sum.unsqueeze(dim=1).expand(bsz * self.num_heads, L_Q, V_sum.size(-1)).clone()
 
         if M_top is not None:
             # update context: copy the attention output to the context at M_top index
