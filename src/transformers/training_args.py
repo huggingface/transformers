@@ -584,9 +584,6 @@ class TrainingArguments:
             The mode to use in `torch.compile`. If set to any value, `torch_compile` will be set to `True`.
 
             Possible choices are `"default"`, `"reduce-overhead"` and `"max-autotune"`.
-
-
-
     """
 
     framework = "pt"
