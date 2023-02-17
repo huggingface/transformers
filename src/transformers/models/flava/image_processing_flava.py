@@ -256,7 +256,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_do_normalize: bool = True,
         codebook_image_mean: Optional[Union[float, Iterable[float]]] = None,
         codebook_image_std: Optional[Union[float, Iterable[float]]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
@@ -340,7 +340,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to `(size["height"], size["width"])`.
@@ -367,7 +367,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
@@ -391,7 +391,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -412,7 +412,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.

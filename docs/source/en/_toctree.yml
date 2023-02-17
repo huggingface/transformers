@@ -83,6 +83,12 @@
       title: Object detection
     title: Computer Vision
   - sections:
+    - local: tasks/image_captioning
+      title: Image captioning
+    - local: tasks/document_question_answering
+      title: Document Question Answering
+    title: Multimodal
+  - sections:
     - local: performance
       title: Overview
     - local: perf_train_gpu_one
@@ -95,6 +101,8 @@
       title: Training on many CPUs
     - local: perf_train_tpu
       title: Training on TPUs
+    - local: perf_train_tpu_tf
+      title: Training on TPU with TensorFlow
     - local: perf_train_special
       title: Training on Specialized Hardware
     - local: perf_infer_cpu
@@ -146,10 +154,14 @@
     title: Glossary
   - local: task_summary
     title: What 🤗 Transformers can do
+  - local: tasks_explained
+    title: How 🤗 Transformers solve tasks
   - local: model_summary
-    title: Summary of the models
+    title: The Transformer model family
   - local: tokenizer_summary
     title: Summary of the tokenizers
+  - local: attention
+    title: Attention mechanisms
   - local: pad_truncation
     title: Padding and truncation
   - local: bertology
@@ -261,6 +273,8 @@
         title: Encoder Decoder Models
       - local: model_doc/ernie
         title: ERNIE
+      - local: model_doc/ernie_m
+        title: ErnieM
       - local: model_doc/esm
         title: ESM
       - local: model_doc/flan-t5
@@ -295,8 +309,6 @@
         title: Jukebox
       - local: model_doc/led
         title: LED
-      - local: model_doc/lilt
-        title: LiLT
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -379,6 +391,8 @@
         title: Transformer XL
       - local: model_doc/ul2
         title: UL2
+      - local: model_doc/xmod
+        title: X-MOD
       - local: model_doc/xglm
         title: XGLM
       - local: model_doc/xlm
@@ -389,6 +403,8 @@
         title: XLM-RoBERTa
       - local: model_doc/xlm-roberta-xl
         title: XLM-RoBERTa-XL
+      - local: model_doc/xlm-v
+        title: XLM-V
       - local: model_doc/xlnet
         title: XLNet
       - local: model_doc/yoso
@@ -479,6 +495,8 @@
       sections:
       - local: model_doc/audio-spectrogram-transformer
         title: Audio Spectrogram Transformer
+      - local: model_doc/clap
+        title: CLAP
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -491,6 +509,8 @@
         title: Speech2Text
       - local: model_doc/speech_to_text_2
         title: Speech2Text2
+      - local: model_doc/speecht5
+        title: SpeechT5
       - local: model_doc/unispeech
         title: UniSpeech
       - local: model_doc/unispeech-sat
@@ -516,6 +536,8 @@
         title: AltCLIP
       - local: model_doc/blip
         title: BLIP
+      - local: model_doc/blip-2
+        title: BLIP-2
       - local: model_doc/bridgetower
         title: BridgeTower
       - local: model_doc/chinese_clip
@@ -542,6 +564,8 @@
         title: LayoutLMV3
       - local: model_doc/layoutxlm
         title: LayoutXLM
+      - local: model_doc/lilt
+        title: LiLT
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/oneformer
@@ -556,6 +580,8 @@
         title: TAPAS
       - local: model_doc/trocr
         title: TrOCR
+      - local: model_doc/tvlt
+        title: TVLT
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vision-encoder-decoder
@@ -598,6 +624,8 @@
       title: Utilities for Generation
     - local: internal/image_processing_utils
       title: Utilities for Image Processors
+    - local: internal/audio_utils
+      title: Utilities for Audio processing
     - local: internal/file_utils
       title: General Utilities
     title: Internal Helpers

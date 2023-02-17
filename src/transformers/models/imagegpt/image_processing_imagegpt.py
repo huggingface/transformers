@@ -91,7 +91,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_normalize: bool = True,
         do_color_quantize: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 256, "width": 256}
@@ -109,7 +109,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to (size["height"], size["width"]).

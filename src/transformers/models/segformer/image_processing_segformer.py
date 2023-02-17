@@ -96,7 +96,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_reduce_labels: bool = False,
-        **kwargs
+        **kwargs,
     ) -> None:
         if "reduce_labels" in kwargs:
             warnings.warn(
@@ -146,7 +146,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to `(size["height"], size["width"])`.
@@ -173,7 +173,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -194,7 +194,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.

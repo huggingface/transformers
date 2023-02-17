@@ -1625,7 +1625,6 @@ class JukeboxMusicTokenConditioner(nn.Module):
     """
 
     def __init__(self, config, level):
-
         super().__init__()
         self.embed_tokens = nn.Embedding(config.music_vocab_size, config.hidden_size)
         config.embed_dim = config.music_vocab_size  # setting correct argument for the `JukeboxDecoder`

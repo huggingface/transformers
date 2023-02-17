@@ -56,7 +56,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "{{cookiecutter.checkpoint_identifier}}"
 _CONFIG_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Config"
-_TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 
 {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "{{cookiecutter.checkpoint_identifier}}",
@@ -793,7 +792,6 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -952,7 +950,6 @@ class {{cookiecutter.camelcase_modelname}}ForMaskedLM({{cookiecutter.camelcase_m
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1180,9 +1177,9 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
         return reordered_past
 
@@ -1224,7 +1221,6 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1317,7 +1313,6 @@ class {{cookiecutter.camelcase_modelname}}ForMultipleChoice({{cookiecutter.camel
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1408,7 +1403,6 @@ class {{cookiecutter.camelcase_modelname}}ForTokenClassification({{cookiecutter.
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1487,7 +1481,6 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1601,7 +1594,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "{{cookiecutter.checkpoint_identifier}}"
 _CONFIG_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Config"
-_TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 
 
 {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -2654,7 +2646,6 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2905,9 +2896,9 @@ class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration({{cookiecutte
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
@@ -2934,7 +2925,6 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -3051,7 +3041,6 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -3344,9 +3333,9 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 {% endif -%}

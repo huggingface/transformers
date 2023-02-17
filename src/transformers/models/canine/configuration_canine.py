@@ -112,7 +112,7 @@ class CanineConfig(PretrainedConfig):
         num_hash_functions=8,
         num_hash_buckets=16384,
         local_transformer_stride=128,  # Good TPU/XLA memory alignment.
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

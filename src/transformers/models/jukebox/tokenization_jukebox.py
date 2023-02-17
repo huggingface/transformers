@@ -23,8 +23,8 @@ from json.encoder import INFINITY
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-
 import regex
+
 from transformers.utils.generic import _is_jax, _is_numpy
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -126,7 +126,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         max_n_lyric_tokens=512,
         n_genres=5,
         unk_token="<|endoftext|>",
-        **kwargs
+        **kwargs,
     ):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(

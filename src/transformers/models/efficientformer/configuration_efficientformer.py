@@ -136,7 +136,7 @@ class EfficientFormerConfig(PretrainedConfig):
         hidden_act: str = "gelu",
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-12,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
 

@@ -18,11 +18,10 @@
 import copy
 from typing import Any, Callable, List, Optional, Tuple
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning
@@ -1681,7 +1680,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -2392,7 +2391,7 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
         attention_mask: Optional[jnp.DeviceArray] = None,
         decoder_attention_mask: Optional[jnp.DeviceArray] = None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # initializing the cache
         batch_size, seq_length = decoder_input_ids.shape

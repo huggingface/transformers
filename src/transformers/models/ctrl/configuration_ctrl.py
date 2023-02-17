@@ -97,7 +97,7 @@ class CTRLConfig(PretrainedConfig):
         layer_norm_epsilon=1e-6,
         initializer_range=0.02,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.n_positions = n_positions

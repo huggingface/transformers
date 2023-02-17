@@ -47,6 +47,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("camembert", "CamembertModel"),
         ("canine", "CanineModel"),
         ("chinese_clip", "ChineseCLIPModel"),
+        ("clap", "ClapModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
         ("codegen", "CodeGenModel"),
@@ -74,6 +75,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("efficientformer", "EfficientFormerModel"),
         ("electra", "ElectraModel"),
         ("ernie", "ErnieModel"),
+        ("ernie_m", "ErnieMModel"),
         ("esm", "EsmModel"),
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
@@ -148,6 +150,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
         ("speech_to_text", "Speech2TextModel"),
+        ("speecht5", "SpeechT5Model"),
         ("splinter", "SplinterModel"),
         ("squeezebert", "SqueezeBertModel"),
         ("swin", "SwinModel"),
@@ -161,6 +164,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("timesformer", "TimesformerModel"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
+        ("tvlt", "TvltModel"),
         ("unispeech", "UniSpeechModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
         ("van", "VanModel"),
@@ -183,6 +187,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaModel"),
         ("xlm-roberta-xl", "XLMRobertaXLModel"),
         ("xlnet", "XLNetModel"),
+        ("xmod", "XmodModel"),
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
     ]
@@ -232,6 +237,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("t5", "T5ForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
+        ("tvlt", "TvltForPreTraining"),
         ("unispeech", "UniSpeechForPreTraining"),
         ("unispeech-sat", "UniSpeechSatForPreTraining"),
         ("videomae", "VideoMAEForPreTraining"),
@@ -243,6 +249,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("xlnet", "XLNetLMHeadModel"),
+        ("xmod", "XmodForMaskedLM"),
     ]
 )
 
@@ -316,6 +323,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
         ("xlnet", "XLNetLMHeadModel"),
+        ("xmod", "XmodForMaskedLM"),
         ("yoso", "YosoForMaskedLM"),
     ]
 )
@@ -370,6 +378,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForCausalLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForCausalLM"),
         ("xlnet", "XLNetLMHeadModel"),
+        ("xmod", "XmodForCausalLM"),
     ]
 )
 
@@ -530,6 +539,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("xlm", "XLMWithLMHeadModel"),
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
+        ("xmod", "XmodForMaskedLM"),
         ("yoso", "YosoForMaskedLM"),
     ]
 )
@@ -591,6 +601,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
+        ("speecht5", "SpeechT5ForSpeechToText"),
         ("whisper", "WhisperForConditionalGeneration"),
     ]
 )
@@ -614,6 +625,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("distilbert", "DistilBertForSequenceClassification"),
         ("electra", "ElectraForSequenceClassification"),
         ("ernie", "ErnieForSequenceClassification"),
+        ("ernie_m", "ErnieMForSequenceClassification"),
         ("esm", "EsmForSequenceClassification"),
         ("flaubert", "FlaubertForSequenceClassification"),
         ("fnet", "FNetForSequenceClassification"),
@@ -656,6 +668,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForSequenceClassification"),
         ("xlm-roberta-xl", "XLMRobertaXLForSequenceClassification"),
         ("xlnet", "XLNetForSequenceClassification"),
+        ("xmod", "XmodForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
     ]
 )
@@ -678,6 +691,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("distilbert", "DistilBertForQuestionAnswering"),
         ("electra", "ElectraForQuestionAnswering"),
         ("ernie", "ErnieForQuestionAnswering"),
+        ("ernie_m", "ErnieMForQuestionAnswering"),
         ("flaubert", "FlaubertForQuestionAnsweringSimple"),
         ("fnet", "FNetForQuestionAnswering"),
         ("funnel", "FunnelForQuestionAnswering"),
@@ -712,6 +726,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForQuestionAnswering"),
         ("xlm-roberta-xl", "XLMRobertaXLForQuestionAnswering"),
         ("xlnet", "XLNetForQuestionAnsweringSimple"),
+        ("xmod", "XmodForQuestionAnswering"),
         ("yoso", "YosoForQuestionAnswering"),
     ]
 )
@@ -753,6 +768,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("distilbert", "DistilBertForTokenClassification"),
         ("electra", "ElectraForTokenClassification"),
         ("ernie", "ErnieForTokenClassification"),
+        ("ernie_m", "ErnieMForTokenClassification"),
         ("esm", "EsmForTokenClassification"),
         ("flaubert", "FlaubertForTokenClassification"),
         ("fnet", "FNetForTokenClassification"),
@@ -783,6 +799,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForTokenClassification"),
         ("xlm-roberta-xl", "XLMRobertaXLForTokenClassification"),
         ("xlnet", "XLNetForTokenClassification"),
+        ("xmod", "XmodForTokenClassification"),
         ("yoso", "YosoForTokenClassification"),
     ]
 )
@@ -801,6 +818,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("distilbert", "DistilBertForMultipleChoice"),
         ("electra", "ElectraForMultipleChoice"),
         ("ernie", "ErnieForMultipleChoice"),
+        ("ernie_m", "ErnieMForMultipleChoice"),
         ("flaubert", "FlaubertForMultipleChoice"),
         ("fnet", "FNetForMultipleChoice"),
         ("funnel", "FunnelForMultipleChoice"),
@@ -823,6 +841,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("xlm-roberta", "XLMRobertaForMultipleChoice"),
         ("xlm-roberta-xl", "XLMRobertaXLForMultipleChoice"),
         ("xlnet", "XLNetForMultipleChoice"),
+        ("xmod", "XmodForMultipleChoice"),
         ("yoso", "YosoForMultipleChoice"),
     ]
 )

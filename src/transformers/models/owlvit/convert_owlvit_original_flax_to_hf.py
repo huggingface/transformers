@@ -18,14 +18,14 @@ https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit"""
 import argparse
 import collections
 
-import torch
-import torch.nn as nn
-
 import jax
 import jax.numpy as jnp
+import torch
+import torch.nn as nn
 from clip.model import CLIP
 from flax.training import checkpoints
 from huggingface_hub import Repository
+
 from transformers import (
     CLIPTokenizer,
     OwlViTConfig,
@@ -314,7 +314,6 @@ def convert_clip_backbone(flax_params, torch_config):
     # Copy flax CLIP backbone params to PyTorch params
     for name, param in new_torch_params.items():
         if name in torch_clip_params.keys():
-
             new_param = torch.from_numpy(new_torch_params[name])
             torch_clip_params[name].copy_(new_param)
         else:

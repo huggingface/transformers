@@ -2442,7 +2442,7 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         output_num_channels: int,
         min_padding_size: Optional[int] = 2,
         subsampled_index_dims: Optional[Dict[str, PerceiverAbstractDecoder]] = None,
-        **decoder_kwargs
+        **decoder_kwargs,
     ) -> None:
         super().__init__()
         self.modalities = nn.ModuleDict(modalities)

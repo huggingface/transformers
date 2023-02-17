@@ -99,7 +99,7 @@ class CLIPSegTextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -117,7 +117,6 @@ class CLIPSegTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from CLIPSegConfig
@@ -200,7 +199,7 @@ class CLIPSegVisionConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -219,7 +218,6 @@ class CLIPSegVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from CLIPSegConfig
@@ -316,7 +314,7 @@ class CLIPSegConfig(PretrainedConfig):
         decoder_intermediate_size=2048,
         conditional_layer=0,
         use_complex_transposed_convolution=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

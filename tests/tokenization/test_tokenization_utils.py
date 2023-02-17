@@ -23,14 +23,12 @@ from typing import Callable, Optional
 
 import numpy as np
 
-# Ensure there are no circular imports when importing the parent class
-from transformers import PreTrainedTokenizerFast
-
 from transformers import (
     BatchEncoding,
     BertTokenizer,
     BertTokenizerFast,
     PreTrainedTokenizer,
+    PreTrainedTokenizerFast,
     TensorType,
     TokenSpan,
     is_tokenizers_available,

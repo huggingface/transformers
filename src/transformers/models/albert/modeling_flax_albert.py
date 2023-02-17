@@ -15,12 +15,11 @@
 
 from typing import Callable, Optional, Tuple
 
-import numpy as np
-
 import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
@@ -523,7 +522,7 @@ class FlaxAlbertPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -702,7 +701,6 @@ class FlaxAlbertForPreTrainingModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         # Model
         outputs = self.albert(
             input_ids,

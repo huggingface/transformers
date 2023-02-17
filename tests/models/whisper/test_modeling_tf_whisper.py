@@ -15,7 +15,6 @@
 """ Testing suite for the TensorFlow Whisper model. """
 
 import inspect
-import os
 import tempfile
 import traceback
 import unittest
@@ -629,7 +628,6 @@ class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
 
 
 def _load_datasamples(num_samples):
-
     ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     # automatic decoding with librispeech
     speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
@@ -638,7 +636,6 @@ def _load_datasamples(num_samples):
 
 
 def _test_large_logits_librispeech(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -687,7 +684,6 @@ def _test_large_logits_librispeech(in_queue, out_queue, timeout):
 
 
 def _test_large_generation(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -715,7 +711,6 @@ def _test_large_generation(in_queue, out_queue, timeout):
 
 
 def _test_large_generation_multilingual(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -761,7 +756,6 @@ def _test_large_generation_multilingual(in_queue, out_queue, timeout):
 
 
 def _test_large_batched_generation(in_queue, out_queue, timeout):
-
     error = None
     try:
         _ = in_queue.get(timeout=timeout)
@@ -896,10 +890,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_logits_librispeech(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_large_logits_librispeech, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_large_logits_librispeech, inputs=None)
 
     @slow
     def test_tiny_en_generation(self):
@@ -964,22 +955,15 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_generation(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(test_case=self, target_func=_test_large_generation, inputs=None, timeout=timeout)
+        run_test_in_subprocess(test_case=self, target_func=_test_large_generation, inputs=None)
 
     @slow
     def test_large_generation_multilingual(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_large_generation_multilingual, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_large_generation_multilingual, inputs=None)
 
     @slow
     def test_large_batched_generation(self):
-        timeout = os.environ.get("PYTEST_TIMEOUT", 600)
-        run_test_in_subprocess(
-            test_case=self, target_func=_test_large_batched_generation, inputs=None, timeout=timeout
-        )
+        run_test_in_subprocess(test_case=self, target_func=_test_large_batched_generation, inputs=None)
 
     @slow
     def test_tiny_en_batched_generation(self):

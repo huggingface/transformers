@@ -526,7 +526,6 @@ class LxmertXLayer(nn.Module):
         visual_attention_mask,
         output_attentions=False,
     ):
-
         lang_att_output, visual_att_output = self.cross_att(
             lang_input=lang_feats,
             lang_attention_mask=lang_attention_mask,
@@ -609,7 +608,6 @@ class LxmertEncoder(nn.Module):
         visual_attention_mask=None,
         output_attentions=None,
     ):
-
         vision_hidden_states = ()
         language_hidden_states = ()
         vision_attentions = () if output_attentions or self.config.output_attentions else None
@@ -916,7 +914,6 @@ class LxmertModel(LxmertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[LxmertModelOutput, Tuple[torch.FloatTensor]]:
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1123,7 +1120,6 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         self.answer_head.logit_fc[-1] = qa_logit_layer
 
     def _get_resized_qa_labels(self, cur_qa_logit_layer, num_labels):
-
         if num_labels is None:
             return cur_qa_logit_layer
 
@@ -1355,7 +1351,6 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         self.answer_head.logit_fc[-1] = qa_logit_layer
 
     def _get_resized_qa_labels(self, cur_qa_logit_layer, num_labels):
-
         if num_labels is None:
             return cur_qa_logit_layer
 

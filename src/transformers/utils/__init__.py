@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -98,6 +94,7 @@ from .import_utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     ccl_version,
+    direct_transformers_import,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -116,7 +113,6 @@ from .import_utils import (
     is_kenlm_available,
     is_keras_nlp_available,
     is_librosa_available,
-    is_more_itertools_available,
     is_natten_available,
     is_ninja_available,
     is_onnx_available,

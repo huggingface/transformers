@@ -52,7 +52,7 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
-        object_detector = ObjectDetectionPipeline(model=model, feature_extractor=processor)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=processor)
         return object_detector, ["./tests/fixtures/tests_samples/COCO/000000039769.png"]
 
     def run_pipeline_test(self, object_detector, examples):

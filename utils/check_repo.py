@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import importlib
 import inspect
 import os
 import re
@@ -24,7 +23,7 @@ from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.utils import ENV_VARS_TRUE_VALUES
+from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -53,8 +52,10 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "DetaEncoder",  # Building part of bigger (tested) model.
     "DetaDecoder",  # Building part of bigger (tested) model.
+    "ErnieMForInformationExtraction",
     "GraphormerEncoder",  # Building part of bigger (tested) model.
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "CLIPSegDecoder",  # Building part of bigger (tested) model.
@@ -133,6 +134,18 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "BlipTextLMHeadModel",  # No need to test it as it is tested by BlipTextVision models
     "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
+    "SpeechT5Decoder",  # Building part of bigger (tested) model.
+    "SpeechT5DecoderWithoutPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5DecoderWithSpeechPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5DecoderWithTextPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5Encoder",  # Building part of bigger (tested) model.
+    "SpeechT5EncoderWithoutPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5EncoderWithSpeechPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5EncoderWithTextPrenet",  # Building part of bigger (tested) model.
+    "SpeechT5SpeechDecoder",  # Building part of bigger (tested) model.
+    "SpeechT5SpeechEncoder",  # Building part of bigger (tested) model.
+    "SpeechT5TextDecoder",  # Building part of bigger (tested) model.
+    "SpeechT5TextEncoder",  # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -159,6 +172,14 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "ClapTextModel",
+    "ClapTextModelWithProjection",
+    "ClapAudioModel",
+    "ClapAudioModelWithProjection",
+    "Blip2ForConditionalGeneration",
+    "Blip2QFormerModel",
+    "Blip2VisionModel",
+    "ErnieMForInformationExtraction",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
@@ -269,6 +290,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPTextModel",
     "AltCLIPVisionModel",
     "AltRobertaModel",
+    "TvltForAudioVisualClassification",
+    "SpeechT5ForSpeechToSpeech",
+    "SpeechT5ForTextToSpeech",
+    "SpeechT5HifiGan",
 ]
 
 # Update this list for models that have multiple model types for the same
@@ -284,12 +309,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
-    submodule_search_locations=[PATH_TO_TRANSFORMERS],
-)
-transformers = spec.loader.load_module()
+transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
 def check_model_list():
@@ -378,6 +398,8 @@ def is_a_private_model(model):
         return True
     if model.endswith("Decoder"):
         return True
+    if model.endswith("Prenet"):
+        return True
     return False
 
 
@@ -428,7 +450,7 @@ def get_model_test_files():
             path = os.path.join(target_dir, file_or_dir)
             if os.path.isfile(path):
                 filename = os.path.split(path)[-1]
-                if "test_modeling" in filename and not os.path.splitext(filename)[0] in _ignore_files:
+                if "test_modeling" in filename and os.path.splitext(filename)[0] not in _ignore_files:
                     file = os.path.join(*path.split(os.sep)[1:])
                     test_files.append(file)
 

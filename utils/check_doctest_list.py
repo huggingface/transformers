@@ -22,7 +22,6 @@ REPO_PATH = "."
 
 
 if __name__ == "__main__":
-
     doctest_file_path = os.path.join(REPO_PATH, "utils/documentation_tests.txt")
     non_existent_paths = []
     with open(doctest_file_path) as fp:

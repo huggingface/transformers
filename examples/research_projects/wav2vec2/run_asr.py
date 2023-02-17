@@ -7,13 +7,13 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import datasets
+import librosa
 import numpy as np
 import torch
+from lang_trans import arabic
 from packaging import version
 from torch import nn
 
-import librosa
-from lang_trans import arabic
 from transformers import (
     HfArgumentParser,
     Trainer,

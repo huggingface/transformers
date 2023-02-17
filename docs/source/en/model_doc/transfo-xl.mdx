@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # Transformer XL
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=transfo-xl">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-transfo--xl-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/transfo-xl-wt103">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The Transformer-XL model was proposed in [Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context](https://arxiv.org/abs/1901.02860) by Zihang Dai, Zhilin Yang, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan
@@ -37,6 +46,9 @@ Tips:
 - Transformer-XL uses relative sinusoidal positional embeddings. Padding can be done on the left or on the right. The
   original implementation trains on SQuAD with padding on the left, therefore the padding defaults are set to left.
 - Transformer-XL is one of the few models that has no sequence length limit.
+- Same as a regular GPT model, but introduces a recurrence mechanism for two consecutive segments (similar to a regular RNNs with two consecutive inputs). In this context, a segment is a number of consecutive tokens (for instance 512) that may span across multiple documents, and segments are fed in order to the model.
+- Basically, the hidden states of the previous segment are concatenated to the current input to compute the attention scores. This allows the model to pay attention to information that was in the previous segment as well as the current one. By stacking multiple attention layers, the receptive field can be increased to multiple previous segments.
+- This changes the positional embeddings to positional relative embeddings (as the regular positional embeddings would give the same results in the current input and the current hidden state at a given position) and needs to make some adjustments in the way attention scores are computed.
 
 This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/kimiyoung/transformer-xl).
 

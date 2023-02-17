@@ -79,7 +79,6 @@ class ImageGPTImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 class ImageGPTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
-
     image_processing_class = ImageGPTImageProcessor if is_vision_available() else None
 
     def setUp(self):

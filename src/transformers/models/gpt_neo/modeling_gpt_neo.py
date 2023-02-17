@@ -219,7 +219,6 @@ class GPTNeoSelfAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
@@ -596,7 +595,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -784,7 +782,9 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
         )
 
     @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+    def _reorder_cache(
+        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
         [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -792,7 +792,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
         """
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
+            for layer_past in past_key_values
         )
 
 

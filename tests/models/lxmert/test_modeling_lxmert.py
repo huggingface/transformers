@@ -129,7 +129,6 @@ class LxmertModelTester:
         self.num_hidden_layers = {"vision": r_layers, "cross_encoder": x_layers, "language": l_layers}
 
     def prepare_config_and_inputs(self):
-
         output_attentions = self.output_attentions
         input_ids = ids_tensor([self.batch_size, self.seq_length], vocab_size=self.vocab_size)
         visual_feats = torch.rand(self.batch_size, self.num_visual_features, self.visual_feat_dim, device=torch_device)
@@ -412,7 +411,6 @@ class LxmertModelTester:
         ans,
         output_attentions,
     ):
-
         start_labels = config.num_qa_labels
         num_large_labels = config.num_qa_labels * 2
         num_small_labels = int(config.num_qa_labels * 2)
@@ -532,7 +530,6 @@ class LxmertModelTester:
 
 @require_torch
 class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (LxmertModel, LxmertForPreTraining, LxmertForQuestionAnswering) if is_torch_available() else ()
 
     fx_compatible = True
@@ -741,7 +738,6 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(attentions_vision.grad)
 
     def prepare_tf_inputs_from_pt_inputs(self, pt_inputs_dict):
-
         tf_inputs_dict = {}
         for key, value in pt_inputs_dict.items():
             # skip key that does not exist in tf

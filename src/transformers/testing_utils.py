@@ -35,6 +35,7 @@ from typing import Iterator, List, Optional, Union
 from unittest import mock
 
 import huggingface_hub
+
 from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
@@ -777,6 +778,7 @@ def get_tests_dir(append_path=None):
 # Helper functions for dealing with testing text outputs
 # The original code came from:
 # https://github.com/fastai/fastai/blob/master/tests/utils/text.py
+
 
 # When any function contains print() calls that get overwritten, like progress bars,
 # a special care needs to be applied, since under pytest -s captured output (capsys
@@ -1690,7 +1692,7 @@ class RequestCounter:
         return self.old_request(method=method, **kwargs)
 
 
-def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
+def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, description: Optional[str] = None):
     """
     To decorate flaky tests. They will be retried on failures.
 
@@ -1699,6 +1701,9 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
             The maximum number of attempts to retry the flaky test.
         wait_before_retry (`float`, *optional*):
             If provided, will wait that number of seconds before retrying the test.
+        description (`str`, *optional*):
+            A string to describe the situation (what / where / why is flaky, link to GH issue/PR comments, errors,
+            etc.)
     """
 
     def decorator(test_func_ref):
@@ -1723,7 +1728,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
     return decorator
 
 
-def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=600):
+def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
     """
     To run a test in a subprocess. In particular, this can avoid (GPU) memory issue.
 
@@ -1734,9 +1739,12 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=600):
             The function implementing the actual testing logic.
         inputs (`dict`, *optional*, defaults to `None`):
             The inputs that will be passed to `target_func` through an (input) queue.
-        timeout (`int`, *optional*, defaults to 600):
-            The timeout (in seconds) that will be passed to the input and output queues.
+        timeout (`int`, *optional*, defaults to `None`):
+            The timeout (in seconds) that will be passed to the input and output queues. If not specified, the env.
+            variable `PYTEST_TIMEOUT` will be checked. If still `None`, its value will be set to `600`.
     """
+    if timeout is None:
+        timeout = int(os.environ.get("PYTEST_TIMEOUT", 600))
 
     start_methohd = "spawn"
     ctx = multiprocessing.get_context(start_methohd)
