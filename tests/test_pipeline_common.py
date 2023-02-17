@@ -13,9 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import copy
-import importlib
 import inspect
 import json
 import os
@@ -23,6 +21,7 @@ import random
 from pathlib import Path
 
 from transformers import PreTrainedModel, TFPreTrainedModel
+from transformers.utils import direct_transformers_import
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipelineTests
@@ -58,12 +57,7 @@ PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent, "src/transform
 
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
-    submodule_search_locations=[PATH_TO_TRANSFORMERS],
-)
-transformers_module = spec.loader.load_module()
+transformers_module = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
 class PipelineTesterMixin:
