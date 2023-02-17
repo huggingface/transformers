@@ -208,10 +208,8 @@ class TFConvNextV2Layer(tf.keras.layers.Layer):
         x = self.layernorm(x)
         x = self.pwconv1(x)
         x = self.act(x)
+        x = self.grn(x)
         x = self.pwconv2(x)
-
-        if self.layer_scale_parameter is not None:
-            x = self.layer_scale_parameter * x
 
         x = input + self.drop_path(x, training=training)
         return x
