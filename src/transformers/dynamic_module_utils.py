@@ -18,6 +18,7 @@ import importlib
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -148,11 +149,12 @@ def get_class_in_module(class_name, module_path):
         module_dir = Path(HF_MODULES_CACHE) / os.path.dirname(module_path)
         module_file_name = module_path.split(os.path.sep)[-1] + ".py"
 
-        # copy to a temporary directory
+        # Copy to a temporary directory. We need to do this in another process to avoid strange and flaky error
+        # `ModuleNotFoundError: No module named 'transformers_modules.[module_dir_name].modeling'`
         shutil.copy(f"{module_dir}/{module_file_name}", tmp_dir)
-        cmd = f'import os; os.remove("{module_dir}/{module_file_name}")'
-        os.system(f"python3 -c '{cmd}'")
-        # os.remove(f"{module_dir}/{module_file_name}")
+        # On Windows, we need this character `r` before the path argument of `os.remove`
+        cmd = f'import os; os.remove(r"{module_dir}{os.path.sep}{module_file_name}")'
+        subprocess.run(["python", "-c", cmd])
 
         # copy back the file that we want to import
         shutil.copyfile(f"{tmp_dir}/{module_file_name}", f"{module_dir}/{module_file_name}")
@@ -228,7 +230,7 @@ def get_cached_module_file(
     # Download and cache module_file from the repo `pretrained_model_name_or_path` of grab it if it's a local file.
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
     if os.path.isdir(pretrained_model_name_or_path):
-        submodule = f"local_{pretrained_model_name_or_path.replace(os.path.sep, '_')}"
+        submodule = pretrained_model_name_or_path.split(os.path.sep)[-1]
     else:
         submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
 
