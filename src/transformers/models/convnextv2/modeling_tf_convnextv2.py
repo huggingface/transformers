@@ -187,7 +187,7 @@ class TFConvNextV2Layer(tf.keras.layers.Layer):
             name="pwconv1",
         )  # pointwise/1x1 convs, implemented with linear layers
         self.act = get_tf_activation(config.hidden_act)
-        self.grn = TFConvNextV2GRN(4 * dim)
+        self.grn = TFConvNextV2GRN(4 * dim, name="grn")
         self.pwconv2 = tf.keras.layers.Dense(
             units=dim,
             kernel_initializer=get_initializer(config.initializer_range),
