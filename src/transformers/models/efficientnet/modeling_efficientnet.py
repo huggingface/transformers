@@ -103,10 +103,10 @@ def correct_pad(kernel_size: Union[int, Tuple], adjust: bool = True):
     Utility function to get the tuple padding value for the depthwise convolution.
 
     Args:
-        kernel_size (Union[`int`, Tuple]):
+        kernel_size (`int` or `tuple`):
             Kernel size of the convolution layers.
         adjust (`bool`, *optional*, defaults to `True`):
-            Adjusts padding value to apply to two sides only.
+            Adjusts padding value to apply to right and bottom sides of the input.
     """
     if isinstance(kernel_size, int):
         kernel_size = (kernel_size, kernel_size)
@@ -143,7 +143,7 @@ class EfficientNetEmbeddings(nn.Module):
         return features
 
 
-class DepthwiseConv2d(nn.Conv2d):
+class EfficientNetDepthwiseConv2d(nn.Conv2d):
     def __init__(
         self,
         in_channels,
@@ -220,7 +220,7 @@ class EfficientNetDepthwiseLayer(nn.Module):
         padding = correct_pad(kernel_size, adjust=adjust_padding)
 
         self.depthwise_conv_pad = nn.ZeroPad2d(padding=padding)
-        self.depthwise_conv = DepthwiseConv2d(
+        self.depthwise_conv = EfficientNetDepthwiseConv2d(
             in_dim, kernel_size=kernel_size, stride=stride, padding=conv_pad, bias=False
         )
         self.depthwise_norm = nn.BatchNorm2d(
@@ -279,7 +279,7 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
         return hidden_states
 
 
-class EfficientNetFinalLayer(nn.Module):
+class EfficientNetFinalBlockLayer(nn.Module):
     r"""
     This corresponds to the final phase of each block in the original implementation.
     """
@@ -324,13 +324,19 @@ class EfficientNetBlock(nn.Module):
         out_dim (`int`):
             Number of output channels.
         stride (`int`):
-            Stride size.
+            Stride size to be used in convolution layers.
         expand_ratio (`int`):
-            Expand ratio.
+            Expand ratio to set the output dimensions for the expansion and squeeze-excite layers.
         kernel_size (`int`):
-            Kernel size.
+            Kernel size for the depthwise convolution layer.
         drop_rate (`float`):
-            Dropout rate to be used.
+            Dropout rate to be used in the final phase of each block.
+        id_skip (`bool`):
+            Whether to apply dropout and sum the final hidden states with the input embeddings during the final phase
+            of each block. Set to `True` for the first block of each stage.
+        adjust_padding (`bool`):
+            Whether to apply padding to only right and bottom side of the input kernel before the depthwise convolution
+            operation, set to `True` for inputs with odd input sizes.
     """
 
     def __init__(
@@ -365,7 +371,7 @@ class EfficientNetBlock(nn.Module):
         self.squeeze_excite = EfficientNetSqueezeExciteLayer(
             config=config, in_dim=in_dim, expand_dim=expand_in_dim, expand=self.expand
         )
-        self.projection = EfficientNetFinalLayer(
+        self.projection = EfficientNetFinalBlockLayer(
             config=config,
             in_dim=expand_in_dim if self.expand else in_dim,
             out_dim=out_dim,
@@ -517,10 +523,12 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
         self.encoder = EfficientNetEncoder(config)
 
         # Final pooling layer
-        if config.pooling == "avg":
+        if config.pooling_type == "mean":
             self.pooler = nn.AvgPool2d(config.hidden_dim, ceil_mode=True)
-        else:
+        elif config.pooling_type == "max":
             self.pooler = nn.MaxPool2d(config.hidden_dim, ceil_mode=True)
+        else:
+            raise ValueError(f"config.pooling must be one of ['mean', 'max'] got {config.pooling}")
 
         # Initialize weights and apply final processing
         self.post_init()

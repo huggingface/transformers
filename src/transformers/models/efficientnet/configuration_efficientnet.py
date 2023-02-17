@@ -52,29 +52,30 @@ class EfficientNetConfig(PretrainedConfig):
             Scaling coefficient for network depth at each stage.
         depth_divisor `int`, *optional*, defaults to 8):
             A unit of network width.
-        kernel_sizes (`List[int]`, optional, defaults to [3, 3, 5, 3, 5, 5, 3]):
+        kernel_sizes (`List[int]`, *optional*, defaults to `[3, 3, 5, 3, 5, 5, 3]`):
             List of kernel sizes to be used in each block.
-        in_channels (`List[int]`, optional, defaults to [32, 16, 24, 40, 80, 112, 192]):
+        in_channels (`List[int]`, *optional*, defaults to `[32, 16, 24, 40, 80, 112, 192]`):
             List of input channel sizes to be used in each block for convolutional layers.
-        out_channels (`List[int]`, optional, defaults to [16, 24, 40, 80, 112, 192, 320]):
+        out_channels (`List[int]`, *optional*, defaults to `[16, 24, 40, 80, 112, 192, 320]`):
             List of output channel sizes to be used in each block for convolutional layers.
-        depthwise_padding (`List[int]`, optional, defaults to []):
+        depthwise_padding (`List[int]`, *optional*, defaults to `[]`):
             List of block indices with square padding.
-        strides: (`List[int]`, optional, defaults to [1, 2, 2, 2, 1, 2, 1]):
+        strides: (`List[int]`, *optional*, defaults to `[1, 2, 2, 2, 1, 2, 1]`):
             List of stride sizes to be used in each block for convolutional layers.
-        num_block_repeats (`List[int]`, optional, defaults to [1, 2, 2, 3, 3, 4, 1]):
+        num_block_repeats (`List[int]`, *optional*, defaults to `[1, 2, 2, 3, 3, 4, 1]`):
             List of the number of times each block is to repeated.
-        expand_ratios (`List[int]`, optional, defaults to [1, 6, 6, 6, 6, 6, 6]):
+        expand_ratios (`List[int]`, *optional*, defaults to `[1, 6, 6, 6, 6, 6, 6]`):
             List of scaling coefficient of each block.
-        squeeze_expansion_ratio (`float`, optional, defaults to 0.25):
+        squeeze_expansion_ratio (`float`, *optional*, defaults to 0.25):
             Squeeze expansion ratio.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
             `"selu", `"gelu_new"`, `"silu"` and `"mish"` are supported.
         hiddem_dim (`int`, *optional*, defaults to 1280):
             The hidden dimension of the layer before the classification head.
-        pooling (`str` or `function`, *optional*, defaults to `"avg"`):
-            Type of final pooling to be applied before the dense classification head.
+        pooling_type (`str` or `function`, *optional*, defaults to `"mean"`):
+            Type of final pooling to be applied before the dense classification head. Available options are [`"mean"`,
+            `"max"`]
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         batch_norm_eps (`float`, *optional*, defaults to 1e-3):
@@ -118,7 +119,7 @@ class EfficientNetConfig(PretrainedConfig):
         squeeze_expansion_ratio: float = 0.25,
         hidden_act: str = "swish",
         hidden_dim: int = 2560,
-        pooling: str = "avg",
+        pooling_type: str = "mean",
         initializer_range: float = 0.02,
         batch_norm_eps: float = 0.001,
         batch_norm_momentum: float = 0.99,
@@ -143,7 +144,7 @@ class EfficientNetConfig(PretrainedConfig):
         self.squeeze_expansion_ratio = squeeze_expansion_ratio
         self.hidden_act = hidden_act
         self.hidden_dim = hidden_dim
-        self.pooling = pooling
+        self.pooling_type = pooling_type
         self.initializer_range = initializer_range
         self.batch_norm_eps = batch_norm_eps
         self.batch_norm_momentum = batch_norm_momentum

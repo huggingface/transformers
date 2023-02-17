@@ -158,9 +158,6 @@ class EfficientNetModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
-    def create_and_test_config_common_properties(self):
-        return
-
     @unittest.skip(reason="EfficientNet does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
