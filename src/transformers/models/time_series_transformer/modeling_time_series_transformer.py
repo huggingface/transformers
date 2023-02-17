@@ -1970,8 +1970,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        past_time_features: torch.Tensor,
         past_values: torch.Tensor,
+        past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
         static_categorical_features: Optional[torch.Tensor] = None,
         static_real_features: Optional[torch.Tensor] = None,
