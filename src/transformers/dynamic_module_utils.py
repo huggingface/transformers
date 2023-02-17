@@ -258,7 +258,7 @@ def get_cached_module_file(
     full_submodule = TRANSFORMERS_DYNAMIC_MODULE_NAME + os.path.sep + submodule
     create_dynamic_module(full_submodule)
     submodule_path = Path(HF_MODULES_CACHE) / full_submodule
-    if submodule == f"local_{pretrained_model_name_or_path.replace(os.path.sep, '_')}":
+    if submodule == pretrained_model_name_or_path.split(os.path.sep)[-1]:
         # We always copy local files (we could hash the file to see if there was a change, and give them the name of
         # that hash, to only copy when there is a modification but it seems overkill for now).
         # The only reason we do the copy is to avoid putting too many folders in sys.path.
