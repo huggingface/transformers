@@ -928,6 +928,8 @@ class MovingAverageGatedAttention(nn.Module):
             # 1 for tokens which are *not masked*
             # 0 for tokens which are *masked*
             # replace masked tokens with -inf to make softmax ignore them
+            # need to invert the padding mask to match what mega original did
+            padding_mask = 1 - padding_mask
             padding_mask_all = padding_mask.all(dim=-1, keepdim=True)
             padding_mask = torch.logical_and(padding_mask, ~padding_mask_all)
             qk = qk.masked_fill(padding_mask.unsqueeze(2).to(torch.bool), float('-inf'))
@@ -1253,7 +1255,6 @@ class MegaLayer(nn.Module):
                                        causal_mask=causal_mask,
                                        prev_key_values=past_key_value, 
                                        output_attentions=output_attentions, 
-                                       before_attn_fn=False, 
                                        use_cache=use_cache)
 
         new_hidden_states = mega_outputs[0]
