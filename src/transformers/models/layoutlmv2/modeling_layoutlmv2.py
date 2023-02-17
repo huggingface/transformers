@@ -604,7 +604,7 @@ class LayoutLMv2VisualBackbone(nn.Module):
         self_rank = torch.distributed.get_rank()
         node_size = torch.cuda.device_count()
         world_size = torch.distributed.get_world_size()
-        if not (world_size & node_size == 0):
+        if not (world_size % node_size == 0):
             raise RuntimeError("Make sure the number of processes can be divided by the number of nodes")
 
         node_global_ranks = [list(range(i * node_size, (i + 1) * node_size)) for i in range(world_size // node_size)]
