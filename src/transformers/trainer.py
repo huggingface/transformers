@@ -1511,6 +1511,7 @@ class Trainer:
                     auto_wrapper_callable=auto_wrapper_callable,
                     **fsdp_kwargs,
                 )
+
                 # Patch `xm.optimizer_step` should not reduce gradients in this case,
                 # as FSDP does not need gradient reduction over sharded parameters.
                 def patched_optimizer_step(optimizer, barrier=False, optimizer_args={}):
