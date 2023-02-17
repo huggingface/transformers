@@ -257,6 +257,69 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
 
+        self.rand_attn_tables = [[] for _ in range(config.max_position_embeddings // config.block_size - 1)]
+        self.generate_rand_attn_tables(
+            self.max_seqlen, self.max_seqlen, self.block_size, self.block_size, self.num_random_blocks, 1024
+        )
+        self.rand_attn_tables_prepared_arg = [
+            self.max_seqlen,
+            self.max_seqlen,
+            self.block_size,
+            self.block_size,
+            self.num_random_blocks,
+            1024,
+        ]
+
+    def generate_one_table(self, o_table, start_i, end_i, num_rand_blocks):
+        return list(permutations(o_table[start_i:end_i], num_rand_blocks))
+
+    def generate_rand_attn_tables(
+        self, from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx
+    ):
+        """
+        This function is used to generate the permutations table. The generate rules are similar with the function
+        self._bigbird_block_rand_mask. Function self._bigbird_block_rand_mask only gnerates one permutation for each
+        iteration, but this function will generate all possible permutations for each iteration by replacing
+        np.random.permutation with itertools.permutations. All the permutations are stored in self.rand_attn_tables.
+
+        Args:
+            from_seq_length: int. length of from sequence.
+            to_seq_length: int. length of to sequence.
+            from_block_size: int. size of block in from sequence.
+            to_block_size: int. size of block in to sequence.
+            num_rand_blocks: int. Number of random chunks per row.
+            last_idx: if -1 then num_rand_blocks blocks chosen anywhere in to sequence,
+            if positive then num_rand_blocks blocks chosen only up to last_idx.
+
+        """
+        all_tables = self.rand_attn_tables
+        middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
+        last = to_seq_length // to_block_size - 1
+        if last_idx > (2 * to_block_size):
+            last = (last_idx // to_block_size) - 1
+        for i in range(1, from_seq_length // from_block_size - 1):
+            start = i - 2
+            end = i
+            if i == 1:
+                all_tables[i - 1] = self.generate_one_table(middle_seq, 2, last, num_rand_blocks)
+            elif i == 2:
+                all_tables[i - 1] = self.generate_one_table(middle_seq, 3, last, num_rand_blocks)
+            elif i == from_seq_length // from_block_size - 3:
+                all_tables[i - 1] = self.generate_one_table(middle_seq, 0, last, num_rand_blocks)
+            elif i == from_seq_length // from_block_size - 2:
+                all_tables[i - 1] = self.generate_one_table(middle_seq, 0, last, num_rand_blocks)
+            else:
+                if start > last:
+                    start = last
+                    all_tables[i - 1] = self.generate_one_table(middle_seq, 0, start, num_rand_blocks)
+                elif (end + 1) == last:
+                    all_tables[i - 1] = self.generate_one_table(middle_seq, 0, start, num_rand_blocks)
+                else:
+                    new_middle_seq = np.concatenate((middle_seq[:start], middle_seq[end + 1 : last]))
+                    all_tables[i - 1] = self.generate_one_table(
+                        new_middle_seq, 0, len(new_middle_seq), num_rand_blocks
+                    )
+
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
@@ -387,12 +450,9 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         # generate random attention and corresponding masks
         np.random.seed(seed)
         if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
-            rand_attn = [
-                self._bigbird_block_rand_mask(
-                    self.max_seqlen, self.max_seqlen, from_block_size, to_block_size, n_rand_blocks, last_idx=1024
-                )[: (from_seq_len // from_block_size - 2)]
-                for _ in range(n_heads)
-            ]
+            rand_attn = self._bigbird_block_rand_mask_fast(
+                from_seq_len, self.max_seqlen, from_block_size, to_block_size, n_rand_blocks, 1024, n_heads
+            )
         else:
             if plan_from_length is None:
                 plan_from_length, plan_num_rand_blocks = self._get_rand_attn_plan(
@@ -872,6 +932,29 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             plan_num_rand_blocks.append(num_rand_blocks)
 
         return plan_from_length, plan_num_rand_blocks
+
+    def _bigbird_block_rand_mask_fast(self, from_seq_length, from_block_size, num_rand_blocks, n_heads):
+        """
+        A fast path to create adjacency list of random attention. The permutation list is pre-computed by
+        self.generate_rand_attn_tables and stored in self.rand_attn_tables. This function choose one of the adjacency
+        list from the pre-computed list.
+
+        Args:
+            from_seq_length: int. length of from sequence.
+            from_block_size: int. size of block in from sequence.
+            num_rand_blocks: int. Number of random chunks per row.
+
+        Returns:
+            adjacency list of size from_seq_length//from_block_size-2 by num_rand_blocks
+        """
+        rand_attn = [
+            np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32) for _ in range(n_heads)
+        ]
+        for i in range(1, from_seq_length // from_block_size - 1):
+            rand_i = np.random.randint(len(self.rand_attn_tables[i - 1]), size=n_heads)
+            for j, rand_index in enumerate(rand_i):
+                rand_attn[j][i - 1] = self.rand_attn_tables[i - 1][rand_index]
+        return rand_attn
 
     @staticmethod
     def _bigbird_block_rand_mask(

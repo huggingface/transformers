@@ -18,6 +18,7 @@
 import math
 import os
 from dataclasses import dataclass
+from itertools import permutations
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -25,7 +26,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from itertools import permutations
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -437,17 +437,30 @@ class BigBirdBlockSparseAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
 
-
-        self.rand_attn_tables = [ [] for _ in range( config.max_position_embeddings // config.block_size - 1 ) ]
-        self.generate_rand_attn_tables(self.max_seqlen, self.max_seqlen, self.block_size, self.block_size, self.num_random_blocks, 1024)
-        self.rand_attn_tables_prepared_arg = [self.max_seqlen, self.max_seqlen, self.block_size, self.block_size, self.num_random_blocks, 1024]
+        self.rand_attn_tables = [[] for _ in range(config.max_position_embeddings // config.block_size - 1)]
+        self.generate_rand_attn_tables(
+            self.max_seqlen, self.max_seqlen, self.block_size, self.block_size, self.num_random_blocks, 1024
+        )
+        self.rand_attn_tables_prepared_arg = [
+            self.max_seqlen,
+            self.max_seqlen,
+            self.block_size,
+            self.block_size,
+            self.num_random_blocks,
+            1024,
+        ]
 
     def generate_one_table(self, o_table, start_i, end_i, num_rand_blocks):
         return list(permutations(o_table[start_i:end_i], num_rand_blocks))
 
-    def generate_rand_attn_tables(self, from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx):
+    def generate_rand_attn_tables(
+        self, from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx
+    ):
         """
-        This function is used to generate the permutations table. The generate rules are similar with the function self._bigbird_block_rand_mask. Function self._bigbird_block_rand_mask only gnerates one permutation for each iteration, but this function will generate all possible permutations for each iteration by replacing np.random.permutation with itertools.permutations. All the permutations are stored in self.rand_attn_tables.
+        This function is used to generate the permutations table. The generate rules are similar with the function
+        self._bigbird_block_rand_mask. Function self._bigbird_block_rand_mask only gnerates one permutation for each
+        iteration, but this function will generate all possible permutations for each iteration by replacing
+        np.random.permutation with itertools.permutations. All the permutations are stored in self.rand_attn_tables.
 
         Args:
             from_seq_length: int. length of from sequence.
@@ -468,22 +481,24 @@ class BigBirdBlockSparseAttention(nn.Module):
             start = i - 2
             end = i
             if i == 1:
-                all_tables[i-1] = self.generate_one_table(middle_seq, 2, last, num_rand_blocks)
+                all_tables[i - 1] = self.generate_one_table(middle_seq, 2, last, num_rand_blocks)
             elif i == 2:
-                all_tables[i-1] = self.generate_one_table(middle_seq, 3, last, num_rand_blocks)
+                all_tables[i - 1] = self.generate_one_table(middle_seq, 3, last, num_rand_blocks)
             elif i == from_seq_length // from_block_size - 3:
-                all_tables[i-1] = self.generate_one_table(middle_seq, 0, last, num_rand_blocks)
+                all_tables[i - 1] = self.generate_one_table(middle_seq, 0, last, num_rand_blocks)
             elif i == from_seq_length // from_block_size - 2:
-                all_tables[i-1] = self.generate_one_table(middle_seq, 0, last, num_rand_blocks)
+                all_tables[i - 1] = self.generate_one_table(middle_seq, 0, last, num_rand_blocks)
             else:
                 if start > last:
                     start = last
-                    all_tables[i-1] = self.generate_one_table(middle_seq, 0, start, num_rand_blocks)
+                    all_tables[i - 1] = self.generate_one_table(middle_seq, 0, start, num_rand_blocks)
                 elif (end + 1) == last:
-                    all_tables[i-1] = self.generate_one_table(middle_seq, 0, start, num_rand_blocks)
+                    all_tables[i - 1] = self.generate_one_table(middle_seq, 0, start, num_rand_blocks)
                 else:
                     new_middle_seq = np.concatenate((middle_seq[:start], middle_seq[end + 1 : last]))
-                    all_tables[i-1] = self.generate_one_table(new_middle_seq, 0, len(new_middle_seq), num_rand_blocks)
+                    all_tables[i - 1] = self.generate_one_table(
+                        new_middle_seq, 0, len(new_middle_seq), num_rand_blocks
+                    )
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -615,7 +630,9 @@ class BigBirdBlockSparseAttention(nn.Module):
         # generate random attention and corresponding masks
         np.random.seed(seed)
         if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
-            rand_attn = self._bigbird_block_rand_mask_fast(from_seq_len, self.max_seqlen, from_block_size, to_block_size, n_rand_blocks, 1024, n_heads)
+            rand_attn = self._bigbird_block_rand_mask_fast(
+                from_seq_len, self.max_seqlen, from_block_size, to_block_size, n_rand_blocks, 1024, n_heads
+            )
         else:
             if plan_from_length is None:
                 plan_from_length, plan_num_rand_blocks = self._get_rand_attn_plan(
@@ -1096,11 +1113,11 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         return plan_from_length, plan_num_rand_blocks
 
-    def _bigbird_block_rand_mask_fast(self, 
-            from_seq_length, from_block_size, num_rand_blocks, n_heads
-        ): 
+    def _bigbird_block_rand_mask_fast(self, from_seq_length, from_block_size, num_rand_blocks, n_heads):
         """
-        A fast path to create adjacency list of random attention. The permutation list is pre-computed by self.generate_rand_attn_tables and stored in self.rand_attn_tables. This function choose one of the adjacency list from the pre-computed list.
+        A fast path to create adjacency list of random attention. The permutation list is pre-computed by
+        self.generate_rand_attn_tables and stored in self.rand_attn_tables. This function choose one of the adjacency
+        list from the pre-computed list.
 
         Args:
             from_seq_length: int. length of from sequence.
@@ -1110,11 +1127,13 @@ class BigBirdBlockSparseAttention(nn.Module):
         Returns:
             adjacency list of size from_seq_length//from_block_size-2 by num_rand_blocks
         """
-        rand_attn = [ np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32) for _ in range(n_heads)]
+        rand_attn = [
+            np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32) for _ in range(n_heads)
+        ]
         for i in range(1, from_seq_length // from_block_size - 1):
-            rand_i = np.random.randint(len(self.rand_attn_tables[i-1]), size=n_heads)
+            rand_i = np.random.randint(len(self.rand_attn_tables[i - 1]), size=n_heads)
             for j, rand_index in enumerate(rand_i):
-                rand_attn[j][i-1] = self.rand_attn_tables[i-1][rand_index]
+                rand_attn[j][i - 1] = self.rand_attn_tables[i - 1][rand_index]
         return rand_attn
 
     @staticmethod
