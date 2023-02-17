@@ -133,7 +133,9 @@ Encoder
 Decoder
 * Input IDs (self / target sequence; or embeddings)
 * Attention mask
-  * Hugging Face combines padding masks with causal LM masks
+  * Hugging Face combines padding masks with causal LM masks 
+    * this actually isn't the case, RoBERTa generates one automatically if decoding, combines with padding mask, and broadcasts to 3D
+    * the 3d mask doesn't work for Mega, but I essentially did the same thing and passed them separately to the Mega blocks
 * Incremental state (if doing incremental decoding)
 * Encoder hidden states (if doing cross-attention)
 
@@ -142,12 +144,21 @@ Decoder
   * Maybe leave in for MultiHeadEMA, ScaleNorm, and RMSNorm?
     * All of those are `nn.Parameter`, whereas `MegaPretrainedModel._init_weights` is working on embeddings, linear layers, and layernorm
   * Ultimately i think this is probably fine to have duplicated -- it seems that the defaults match what we're doing where they collide (and go a little farther on embeddings and other linear layers), and the option in the config would take precedence if a user changed it
-* Load my MLM weights and test
+* ~~Load my MLM weights and test~~ (done!!!)
 * Rewrite `convert_mega_original_pytorch_checkpoint_to_pytorch` to save the pretrained wikitext MLM
 * Rewrite tests in `tests/models/mega/test_modeling_mega`
 * Documentation: 
-  * Docstrings of individual classes
+  * ~~Docstrings of individual classes~~
   * Main docstring
+  * Anything else in the `mega.mdx` file
 * ~~Tokenizer?~~
   * looks like autotokenizer points to robertatokenizer, so I think I'm going to leave it for now
   * Tests don't require tokenizer
+* Test a Mega encoder-decoder model?
+  * Wouldn't have any pretrained weights, but could help catch bugs
+  * Alternatively, could just push ahead with what I have 
+* Train a simple text-to-text model?
+* Push model to hub
+  * Include tokenizer
+  * Test mask-filling widget
+* Open PR
