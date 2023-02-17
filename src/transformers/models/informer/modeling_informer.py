@@ -1433,7 +1433,8 @@ class InformerEncoder(InformerPreTrainedModel):
                         output_attentions=output_attentions,
                     )
                     if conv_layer is not None:
-                        hidden_states = conv_layer(hidden_states)
+                        output = conv_layer(layer_outputs[0])
+                        layer_outputs = (output,) + layer_outputs[1:]
 
                 hidden_states = layer_outputs[0]
 
