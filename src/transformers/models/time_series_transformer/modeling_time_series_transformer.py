@@ -1534,10 +1534,11 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         else:
             self.scaler = NOPScaler(dim=1, keepdim=True)
 
-        self.embedder = FeatureEmbedder(
-            cardinalities=config.cardinality,
-            embedding_dims=config.embedding_dimension,
-        )
+        if config.num_static_categorical_features > 0:
+            self.embedder = FeatureEmbedder(
+                cardinalities=config.cardinality,
+                embedding_dims=config.embedding_dimension,
+            )
 
         # transformer encoder-decoder and mask initializer
         self.encoder = TimeSeriesTransformerEncoder(config)
@@ -1589,8 +1590,8 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
-        static_categorical_features: torch.Tensor,
-        static_real_features: torch.Tensor,
+        static_categorical_features: Optional[torch.Tensor] = None,
+        static_real_features: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
@@ -1639,13 +1640,16 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             else self.config.context_length
         )
 
-        # embeddings
-        embedded_cat = self.embedder(static_categorical_features)
-
         # static features
         log_abs_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
         log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
-        static_feat = torch.cat((embedded_cat, static_real_features, log_abs_loc, log_scale), dim=1)
+        static_feat = torch.cat((log_abs_loc, log_scale), dim=1)
+
+        if static_real_features is not None:
+            static_feat = torch.cat((static_real_features, static_feat), dim=1)
+        if static_categorical_features is not None:
+            embedded_cat = self.embedder(static_categorical_features)
+            static_feat = torch.cat((embedded_cat, static_feat), dim=1)
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
 
         # all features
@@ -1673,8 +1677,8 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
-        static_categorical_features: torch.Tensor,
-        static_real_features: torch.Tensor,
+        static_categorical_features: Optional[torch.Tensor] = None,
+        static_real_features: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1836,8 +1840,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
-        static_categorical_features: torch.Tensor,
-        static_real_features: torch.Tensor,
+        static_categorical_features: Optional[torch.Tensor] = None,
+        static_real_features: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
         future_observed_mask: Optional[torch.Tensor] = None,
@@ -1966,12 +1970,12 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        static_categorical_features: torch.Tensor,
-        static_real_features: torch.Tensor,
         past_time_features: torch.Tensor,
         past_values: torch.Tensor,
         past_observed_mask: torch.Tensor,
-        future_time_features: Optional[torch.Tensor],
+        static_categorical_features: Optional[torch.Tensor] = None,
+        static_real_features: Optional[torch.Tensor] = None,
+        future_time_features: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> torch.Tensor:
