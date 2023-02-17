@@ -117,23 +117,13 @@ class TFConvNextV2GRN(tf.keras.layers.Layer):
     def build(self, input_shape: tf.TensorShape):
         # PT's `nn.Parameters` must be mapped to a TF layer weight to inherit the same name hierarchy (and vice-versa)
         self.gamma = self.add_weight(
-            shape=(
-                1,
-                1,
-                1,
-                self.dim,
-            ),
+            shape=(1, 1, 1, self.dim),
             initializer=tf.keras.initializers.Zeros(),
             trainable=True,
             name="gamma",
         )
         self.beta = self.add_weight(
-            shape=(
-                1,
-                1,
-                1,
-                self.dim,
-            ),
+            shape=(1, 1, 1, self.dim),
             initializer=tf.keras.initializers.Zeros(),
             trainable=True,
             name="beta",
