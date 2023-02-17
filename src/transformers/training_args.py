@@ -417,8 +417,8 @@ class TrainingArguments:
                     FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
                     passed).
                 - fsdp_transformer_layer_cls_to_wrap (`List[str]`, *optional*):
-                    List of transformer layer class names (case-sensitive) to wrap, e.g,
-                    `BertLayer`, `GPTJBlock`, `T5Block` .... (useful only when `fsdp` flag is passed).
+                    List of transformer layer class names (case-sensitive) to wrap, e.g, `BertLayer`, `GPTJBlock`,
+                    `T5Block` .... (useful only when `fsdp` flag is passed).
                 - fsdp_backward_prefetch (`str`, *optional*)
                     FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when
                     `fsdp` field is passed).
