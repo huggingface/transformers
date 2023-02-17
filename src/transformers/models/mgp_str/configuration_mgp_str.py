@@ -109,7 +109,7 @@ class MGPSTRConfig(PretrainedConfig):
         drop_path_rate=0.0,
         output_a3_attentions=False,
         initializer_range=0.02,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
