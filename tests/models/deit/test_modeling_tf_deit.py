@@ -179,6 +179,7 @@ class TFDeiTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFDeiTModel, "image-classification": (TFDeiTForImageClassification, TFDeiTForImageClassificationWithTeacher)} if is_tf_available() else {}
 
     test_pruning = False
     test_resize_embeddings = False

@@ -185,6 +185,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_timm_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": DetrModel, "image-segmentation": DetrForSegmentation, "object-detection": DetrForObjectDetection} if is_torch_available() else {}
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False

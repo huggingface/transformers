@@ -206,6 +206,7 @@ class TFEsmModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFEsmModel, "fill-mask": TFEsmForMaskedLM, "text-classification": TFEsmForSequenceClassification, "token-classification": TFEsmForTokenClassification, "zero-shot": TFEsmForSequenceClassification} if is_tf_available() else {}
     test_head_masking = False
     test_onnx = False
 

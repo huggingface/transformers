@@ -474,6 +474,7 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
+    pipieline_model_mapping = {"audio-classification": Wav2Vec2ForSequenceClassification, "automatic-speech-recognition": Wav2Vec2ForCTC, "feature-extraction": Wav2Vec2Model, "fill-mask": Wav2Vec2ForMaskedLM} if is_torch_available() else {}
     fx_compatible = True
     test_pruning = False
     test_headmasking = False

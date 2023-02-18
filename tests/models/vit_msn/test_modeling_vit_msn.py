@@ -152,6 +152,7 @@ class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (ViTMSNModel, ViTMSNForImageClassification) if is_torch_available() else ()
+    pipieline_model_mapping = {"feature-extraction": ViTMSNModel, "image-classification": ViTMSNForImageClassification} if is_torch_available() else {}
 
     test_pruning = False
     test_torchscript = False

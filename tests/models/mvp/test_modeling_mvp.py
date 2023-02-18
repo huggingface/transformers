@@ -413,6 +413,7 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else ()
     )
     all_generative_model_classes = (MvpForConditionalGeneration,) if is_torch_available() else ()
+    pipieline_model_mapping = {"conversational": MvpForConditionalGeneration, "feature-extraction": MvpModel, "fill-mask": MvpForConditionalGeneration, "question-answering": MvpForQuestionAnswering, "summarization": MvpForConditionalGeneration, "text2text-generation": MvpForConditionalGeneration, "text-classification": MvpForSequenceClassification, "text-generation": MvpForCausalLM, "zero-shot": MvpForSequenceClassification} if is_torch_available() else {}
     is_encoder_decoder = True
     fx_compatible = False
     test_pruning = False

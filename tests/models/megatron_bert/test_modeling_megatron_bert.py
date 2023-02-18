@@ -283,6 +283,7 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": MegatronBertModel, "fill-mask": MegatronBertForMaskedLM, "question-answering": MegatronBertForQuestionAnswering, "text-classification": MegatronBertForSequenceClassification, "text-generation": MegatronBertForCausalLM, "token-classification": MegatronBertForTokenClassification, "zero-shot": MegatronBertForSequenceClassification} if is_torch_available() else {}
     fx_compatible = True
     # test_resize_embeddings = False
     test_head_masking = False

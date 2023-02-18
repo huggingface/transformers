@@ -355,6 +355,7 @@ class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
+    pipieline_model_mapping = {"audio-classification": UniSpeechSatForSequenceClassification, "automatic-speech-recognition": UniSpeechSatForCTC, "feature-extraction": UniSpeechSatModel} if is_torch_available() else {}
     test_pruning = False
     test_headmasking = False
     test_torchscript = False

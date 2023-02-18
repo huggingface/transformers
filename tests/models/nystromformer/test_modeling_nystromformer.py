@@ -230,6 +230,7 @@ class NystromformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_torch_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": NystromformerModel, "fill-mask": NystromformerForMaskedLM, "question-answering": NystromformerForQuestionAnswering, "text-classification": NystromformerForSequenceClassification, "token-classification": NystromformerForTokenClassification, "zero-shot": NystromformerForSequenceClassification} if is_torch_available() else {}
     test_pruning = False
     test_headmasking = False
 

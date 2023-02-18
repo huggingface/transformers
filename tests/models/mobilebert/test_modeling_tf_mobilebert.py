@@ -57,6 +57,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFMobileBertModel, "fill-mask": TFMobileBertForMaskedLM, "question-answering": TFMobileBertForQuestionAnswering, "text-classification": TFMobileBertForSequenceClassification, "token-classification": TFMobileBertForTokenClassification, "zero-shot": TFMobileBertForSequenceClassification} if is_tf_available() else {}
     test_head_masking = False
     test_onnx = False
 

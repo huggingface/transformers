@@ -177,6 +177,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         if is_torch_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": Data2VecVisionModel, "image-classification": Data2VecVisionForImageClassification, "image-segmentation": Data2VecVisionForSemanticSegmentation} if is_torch_available() else {}
 
     test_pruning = False
     test_resize_embeddings = False

@@ -157,6 +157,7 @@ def prepare_fsmt_inputs_dict(
 class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FSMTModel, FSMTForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (FSMTForConditionalGeneration,) if is_torch_available() else ()
+    pipieline_model_mapping = {"conversational": FSMTForConditionalGeneration, "feature-extraction": FSMTModel, "summarization": FSMTForConditionalGeneration, "text2text-generation": FSMTForConditionalGeneration} if is_torch_available() else {}
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False

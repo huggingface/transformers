@@ -245,6 +245,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         else ()
     )
     all_generative_model_classes = (BigBirdPegasusForConditionalGeneration,) if is_torch_available() else ()
+    pipieline_model_mapping = {"conversational": BigBirdPegasusForConditionalGeneration, "feature-extraction": BigBirdPegasusModel, "question-answering": BigBirdPegasusForQuestionAnswering, "summarization": BigBirdPegasusForConditionalGeneration, "text2text-generation": BigBirdPegasusForConditionalGeneration, "text-classification": BigBirdPegasusForSequenceClassification, "text-generation": BigBirdPegasusForCausalLM, "zero-shot": BigBirdPegasusForSequenceClassification} if is_torch_available() else {}
     is_encoder_decoder = True
     test_missing_keys = False
     test_pruning = False

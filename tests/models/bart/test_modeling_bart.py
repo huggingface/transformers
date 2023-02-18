@@ -422,6 +422,7 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else ()
     )
     all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
+    pipieline_model_mapping = {"conversational": BartForConditionalGeneration, "feature-extraction": BartModel, "fill-mask": BartForConditionalGeneration, "question-answering": BartForQuestionAnswering, "summarization": BartForConditionalGeneration, "text2text-generation": BartForConditionalGeneration, "text-classification": BartForSequenceClassification, "text-generation": BartForCausalLM, "zero-shot": BartForSequenceClassification} if is_torch_available() else {}
     is_encoder_decoder = True
     fx_compatible = False  # Fix me Michael
     test_pruning = False

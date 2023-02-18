@@ -254,6 +254,7 @@ class TFRoFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFRoFormerModel, "fill-mask": TFRoFormerForMaskedLM, "question-answering": TFRoFormerForQuestionAnswering, "text-classification": TFRoFormerForSequenceClassification, "text-generation": TFRoFormerForCausalLM, "token-classification": TFRoFormerForTokenClassification, "zero-shot": TFRoFormerForSequenceClassification} if is_tf_available() else {}
 
     test_head_masking = False
     test_onnx = False

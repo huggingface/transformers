@@ -222,6 +222,7 @@ class TFDebertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFDebertaV2Model, "fill-mask": TFDebertaV2ForMaskedLM, "question-answering": TFDebertaV2ForQuestionAnswering, "text-classification": TFDebertaV2ForSequenceClassification, "token-classification": TFDebertaV2ForTokenClassification, "zero-shot": TFDebertaV2ForSequenceClassification} if is_tf_available() else {}
 
     test_head_masking = False
     test_onnx = False

@@ -585,6 +585,7 @@ class TFRemBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFRemBertModel, "fill-mask": TFRemBertForMaskedLM, "question-answering": TFRemBertForQuestionAnswering, "text-classification": TFRemBertForSequenceClassification, "text-generation": TFRemBertForCausalLM, "token-classification": TFRemBertForTokenClassification, "zero-shot": TFRemBertForSequenceClassification} if is_tf_available() else {}
 
     test_head_masking = False
     test_onnx = False

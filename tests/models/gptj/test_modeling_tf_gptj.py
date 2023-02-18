@@ -302,6 +302,7 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
     )
 
     all_generative_model_classes = (TFGPTJForCausalLM,) if is_tf_available() else ()
+    pipieline_model_mapping = {"feature-extraction": TFGPTJModel, "question-answering": TFGPTJForQuestionAnswering, "text-classification": TFGPTJForSequenceClassification, "text-generation": TFGPTJForCausalLM, "zero-shot": TFGPTJForSequenceClassification} if is_tf_available() else {}
     test_onnx = False
     test_pruning = False
     test_missing_keys = False

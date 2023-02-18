@@ -348,6 +348,7 @@ class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     all_generative_model_classes = (
         (TFXLNetLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+    pipieline_model_mapping = {"feature-extraction": TFXLNetModel, "question-answering": TFXLNetForQuestionAnsweringSimple, "text-classification": TFXLNetForSequenceClassification, "text-generation": TFXLNetLMHeadModel, "token-classification": TFXLNetForTokenClassification, "zero-shot": TFXLNetForSequenceClassification} if is_tf_available() else {}
     test_head_masking = False
     test_onnx = False
 

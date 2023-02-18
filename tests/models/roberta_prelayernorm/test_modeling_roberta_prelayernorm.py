@@ -381,6 +381,7 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         else ()
     )
     all_generative_model_classes = (RobertaPreLayerNormForCausalLM,) if is_torch_available() else ()
+    pipieline_model_mapping = {"feature-extraction": RobertaPreLayerNormModel, "fill-mask": RobertaPreLayerNormForMaskedLM, "question-answering": RobertaPreLayerNormForQuestionAnswering, "text-classification": RobertaPreLayerNormForSequenceClassification, "text-generation": RobertaPreLayerNormForCausalLM, "token-classification": RobertaPreLayerNormForTokenClassification, "zero-shot": RobertaPreLayerNormForSequenceClassification} if is_torch_available() else {}
     fx_compatible = False
 
     def setUp(self):

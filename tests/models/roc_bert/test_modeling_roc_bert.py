@@ -572,6 +572,7 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else ()
     )
     all_generative_model_classes = (RoCBertForCausalLM,) if is_torch_available() else ()
+    pipieline_model_mapping = {"feature-extraction": RoCBertModel, "fill-mask": RoCBertForMaskedLM, "question-answering": RoCBertForQuestionAnswering, "text-classification": RoCBertForSequenceClassification, "text-generation": RoCBertForCausalLM, "token-classification": RoCBertForTokenClassification, "zero-shot": RoCBertForSequenceClassification} if is_torch_available() else {}
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

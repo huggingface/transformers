@@ -209,6 +209,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else None
     )
+    pipieline_model_mapping = {"feature-extraction": DistilBertModel, "fill-mask": DistilBertForMaskedLM, "question-answering": DistilBertForQuestionAnswering, "text-classification": DistilBertForSequenceClassification, "token-classification": DistilBertForTokenClassification, "zero-shot": DistilBertForSequenceClassification} if is_torch_available() else {}
     fx_compatible = True
     test_pruning = True
     test_resize_embeddings = True

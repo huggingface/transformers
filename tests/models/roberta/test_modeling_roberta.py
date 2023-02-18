@@ -382,6 +382,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else ()
     )
     all_generative_model_classes = (RobertaForCausalLM,) if is_torch_available() else ()
+    pipieline_model_mapping = {"feature-extraction": RobertaModel, "fill-mask": RobertaForMaskedLM, "question-answering": RobertaForQuestionAnswering, "text-classification": RobertaForSequenceClassification, "text-generation": RobertaForCausalLM, "token-classification": RobertaForTokenClassification, "zero-shot": RobertaForSequenceClassification} if is_torch_available() else {}
     fx_compatible = True
 
     def setUp(self):

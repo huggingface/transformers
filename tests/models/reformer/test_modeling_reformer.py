@@ -691,6 +691,7 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, Generation
         else ()
     )
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
+    pipieline_model_mapping = {"feature-extraction": ReformerModel, "fill-mask": ReformerForMaskedLM, "question-answering": ReformerForQuestionAnswering, "text-classification": ReformerForSequenceClassification, "text-generation": ReformerModelWithLMHead, "zero-shot": ReformerForSequenceClassification} if is_torch_available() else {}
     test_pruning = False
     test_headmasking = False
     test_torchscript = False

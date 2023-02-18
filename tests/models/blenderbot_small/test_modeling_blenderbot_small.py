@@ -221,6 +221,7 @@ class BlenderbotSmallModelTester:
 class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotSmallModel, BlenderbotSmallForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (BlenderbotSmallForConditionalGeneration,) if is_torch_available() else ()
+    pipieline_model_mapping = {"conversational": BlenderbotSmallForConditionalGeneration, "feature-extraction": BlenderbotSmallModel, "summarization": BlenderbotSmallForConditionalGeneration, "text2text-generation": BlenderbotSmallForConditionalGeneration, "text-generation": BlenderbotSmallForCausalLM} if is_torch_available() else {}
     is_encoder_decoder = True
     fx_compatible = True
     test_pruning = False

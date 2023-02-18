@@ -276,6 +276,7 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else ()
     )
     all_generative_model_classes = (LEDForConditionalGeneration,) if is_torch_available() else ()
+    pipieline_model_mapping = {"conversational": LEDForConditionalGeneration, "feature-extraction": LEDModel, "question-answering": LEDForQuestionAnswering, "summarization": LEDForConditionalGeneration, "text2text-generation": LEDForConditionalGeneration, "text-classification": LEDForSequenceClassification, "zero-shot": LEDForSequenceClassification} if is_torch_available() else {}
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False

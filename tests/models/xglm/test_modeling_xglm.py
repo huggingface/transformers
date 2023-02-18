@@ -298,6 +298,7 @@ class XGLMModelTester:
 class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XGLMModel, XGLMForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (XGLMForCausalLM,) if is_torch_available() else ()
+    pipieline_model_mapping = {"feature-extraction": XGLMModel, "text-generation": XGLMForCausalLM} if is_torch_available() else {}
     fx_compatible = True
     test_missing_keys = False
     test_pruning = False

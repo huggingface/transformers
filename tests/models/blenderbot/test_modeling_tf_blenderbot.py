@@ -179,6 +179,7 @@ def prepare_blenderbot_inputs_dict(
 class TFBlenderbotModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFBlenderbotForConditionalGeneration, TFBlenderbotModel) if is_tf_available() else ()
     all_generative_model_classes = (TFBlenderbotForConditionalGeneration,) if is_tf_available() else ()
+    pipieline_model_mapping = {"conversational": TFBlenderbotForConditionalGeneration, "feature-extraction": TFBlenderbotModel, "summarization": TFBlenderbotForConditionalGeneration, "text2text-generation": TFBlenderbotForConditionalGeneration} if is_tf_available() else {}
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = False

@@ -199,6 +199,7 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     all_generative_model_classes = (
         (OpenAIGPTLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
+    pipieline_model_mapping = {"feature-extraction": OpenAIGPTModel, "text-classification": OpenAIGPTForSequenceClassification, "text-generation": OpenAIGPTLMHeadModel, "zero-shot": OpenAIGPTForSequenceClassification} if is_torch_available() else {}
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

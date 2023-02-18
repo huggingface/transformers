@@ -232,6 +232,7 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else None
     )
+    pipieline_model_mapping = {"document-question-answering": LayoutLMForQuestionAnswering, "feature-extraction": LayoutLMModel, "fill-mask": LayoutLMForMaskedLM, "text-classification": LayoutLMForSequenceClassification, "token-classification": LayoutLMForTokenClassification, "zero-shot": LayoutLMForSequenceClassification} if is_torch_available() else {}
     fx_compatible = True
 
     def setUp(self):

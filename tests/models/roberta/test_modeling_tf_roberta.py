@@ -561,6 +561,7 @@ class TFRobertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFRobertaModel, "fill-mask": TFRobertaForMaskedLM, "question-answering": TFRobertaForQuestionAnswering, "text-classification": TFRobertaForSequenceClassification, "text-generation": TFRobertaForCausalLM, "token-classification": TFRobertaForTokenClassification, "zero-shot": TFRobertaForSequenceClassification} if is_tf_available() else {}
     test_head_masking = False
     test_onnx = False
 

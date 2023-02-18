@@ -269,6 +269,7 @@ class MobileBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": MobileBertModel, "fill-mask": MobileBertForMaskedLM, "question-answering": MobileBertForQuestionAnswering, "text-classification": MobileBertForSequenceClassification, "token-classification": MobileBertForTokenClassification, "zero-shot": MobileBertForSequenceClassification} if is_torch_available() else {}
     fx_compatible = True
 
     # special case for ForPreTraining model

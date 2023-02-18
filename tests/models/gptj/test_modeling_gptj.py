@@ -368,6 +368,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else ()
     )
     all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
+    pipieline_model_mapping = {"feature-extraction": GPTJModel, "question-answering": GPTJForQuestionAnswering, "text-classification": GPTJForSequenceClassification, "text-generation": GPTJForCausalLM, "zero-shot": GPTJForSequenceClassification} if is_torch_available() else {}
     fx_compatible = True
     test_pruning = False
     test_missing_keys = False

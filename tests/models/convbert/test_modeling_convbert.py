@@ -259,6 +259,7 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": ConvBertModel, "fill-mask": ConvBertForMaskedLM, "question-answering": ConvBertForQuestionAnswering, "text-classification": ConvBertForSequenceClassification, "token-classification": ConvBertForTokenClassification, "zero-shot": ConvBertForSequenceClassification} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
 

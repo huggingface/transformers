@@ -444,6 +444,7 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else ()
     )
     all_generative_model_classes = (ErnieForCausalLM,) if is_torch_available() else ()
+    pipieline_model_mapping = {"feature-extraction": ErnieModel, "fill-mask": ErnieForMaskedLM, "question-answering": ErnieForQuestionAnswering, "text-classification": ErnieForSequenceClassification, "text-generation": ErnieForCausalLM, "token-classification": ErnieForTokenClassification, "zero-shot": ErnieForSequenceClassification} if is_torch_available() else {}
     fx_compatible = False
 
     # special case for ForPreTraining model

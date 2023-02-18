@@ -437,6 +437,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else ()
     )
     all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
+    pipieline_model_mapping = {"feature-extraction": GPT2Model, "text-classification": GPT2ForSequenceClassification, "text-generation": GPT2LMHeadModel, "token-classification": GPT2ForTokenClassification, "zero-shot": GPT2ForSequenceClassification} if is_torch_available() else {}
     all_parallelizable_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     fx_compatible = True
     test_missing_keys = False

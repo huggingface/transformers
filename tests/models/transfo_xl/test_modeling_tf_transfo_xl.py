@@ -161,6 +161,7 @@ class TFTransfoXLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
         (TFTransfoXLModel, TFTransfoXLLMHeadModel, TFTransfoXLForSequenceClassification) if is_tf_available() else ()
     )
     all_generative_model_classes = () if is_tf_available() else ()
+    pipieline_model_mapping = {"feature-extraction": TFTransfoXLModel, "text-classification": TFTransfoXLForSequenceClassification, "text-generation": TFTransfoXLLMHeadModel, "zero-shot": TFTransfoXLForSequenceClassification} if is_tf_available() else {}
     # TODO: add this test when TFTransfoXLLMHead has a linear output layer implemented
     test_resize_embeddings = False
     test_head_masking = False

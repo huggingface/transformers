@@ -313,6 +313,7 @@ class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": LongformerModel, "fill-mask": LongformerForMaskedLM, "question-answering": LongformerForQuestionAnswering, "text-classification": LongformerForSequenceClassification, "token-classification": LongformerForTokenClassification, "zero-shot": LongformerForSequenceClassification} if is_torch_available() else {}
 
     def setUp(self):
         self.model_tester = LongformerModelTester(self)

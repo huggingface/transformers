@@ -232,6 +232,7 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else ()
     )
     all_generative_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
+    pipieline_model_mapping = {"conversational": MBartForConditionalGeneration, "feature-extraction": MBartModel, "fill-mask": MBartForConditionalGeneration, "question-answering": MBartForQuestionAnswering, "summarization": MBartForConditionalGeneration, "text2text-generation": MBartForConditionalGeneration, "text-classification": MBartForSequenceClassification, "text-generation": MBartForCausalLM, "zero-shot": MBartForSequenceClassification} if is_torch_available() else {}
     is_encoder_decoder = True
     fx_compatible = False  # Fix me Michael
     test_pruning = False

@@ -373,6 +373,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         else ()
     )
     all_generative_model_classes = (XLMRobertaXLForCausalLM,) if is_torch_available() else ()
+    pipieline_model_mapping = {"feature-extraction": XLMRobertaXLModel, "fill-mask": XLMRobertaXLForMaskedLM, "question-answering": XLMRobertaXLForQuestionAnswering, "text-classification": XLMRobertaXLForSequenceClassification, "text-generation": XLMRobertaXLForCausalLM, "token-classification": XLMRobertaXLForTokenClassification, "zero-shot": XLMRobertaXLForSequenceClassification} if is_torch_available() else {}
 
     def setUp(self):
         self.model_tester = XLMRobertaXLModelTester(self)

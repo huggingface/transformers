@@ -284,6 +284,7 @@ class TFLongformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFLongformerModel, "fill-mask": TFLongformerForMaskedLM, "question-answering": TFLongformerForQuestionAnswering, "text-classification": TFLongformerForSequenceClassification, "token-classification": TFLongformerForTokenClassification, "zero-shot": TFLongformerForSequenceClassification} if is_tf_available() else {}
     test_head_masking = False
     test_onnx = False
 

@@ -183,6 +183,7 @@ class TFDistilBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
         if is_tf_available()
         else None
     )
+    pipieline_model_mapping = {"feature-extraction": TFDistilBertModel, "fill-mask": TFDistilBertForMaskedLM, "question-answering": TFDistilBertForQuestionAnswering, "text-classification": TFDistilBertForSequenceClassification, "token-classification": TFDistilBertForTokenClassification, "zero-shot": TFDistilBertForSequenceClassification} if is_tf_available() else {}
     test_head_masking = False
     test_onnx = False
 

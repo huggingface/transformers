@@ -254,6 +254,7 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": AlbertModel, "fill-mask": AlbertForMaskedLM, "question-answering": AlbertForQuestionAnswering, "text-classification": AlbertForSequenceClassification, "token-classification": AlbertForTokenClassification, "zero-shot": AlbertForSequenceClassification} if is_torch_available() else {}
     fx_compatible = True
 
     # special case for ForPreTraining model

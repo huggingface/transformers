@@ -237,6 +237,7 @@ class TFConvBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFConvBertModel, "fill-mask": TFConvBertForMaskedLM, "question-answering": TFConvBertForQuestionAnswering, "text-classification": TFConvBertForSequenceClassification, "token-classification": TFConvBertForTokenClassification, "zero-shot": TFConvBertForSequenceClassification} if is_tf_available() else {}
     test_pruning = False
     test_head_masking = False
     test_onnx = False

@@ -240,6 +240,7 @@ class DebertaV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_torch_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": DebertaV2Model, "fill-mask": DebertaV2ForMaskedLM, "question-answering": DebertaV2ForQuestionAnswering, "text-classification": DebertaV2ForSequenceClassification, "token-classification": DebertaV2ForTokenClassification, "zero-shot": DebertaV2ForSequenceClassification} if is_torch_available() else {}
 
     fx_compatible = True
     test_torchscript = False

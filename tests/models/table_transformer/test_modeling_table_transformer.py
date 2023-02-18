@@ -185,6 +185,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         if is_timm_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection} if is_torch_available() else {}
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False

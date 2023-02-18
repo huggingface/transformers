@@ -180,6 +180,7 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = ()
+    pipieline_model_mapping = {"feature-extraction": EsmModel, "fill-mask": EsmForMaskedLM, "text-classification": EsmForSequenceClassification, "token-classification": EsmForTokenClassification, "zero-shot": EsmForSequenceClassification} if is_torch_available() else {}
     test_sequence_classification_problem_types = True
 
     def setUp(self):

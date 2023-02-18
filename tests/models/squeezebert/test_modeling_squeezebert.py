@@ -228,6 +228,7 @@ class SqueezeBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if is_torch_available()
         else None
     )
+    pipieline_model_mapping = {"feature-extraction": SqueezeBertModel, "fill-mask": SqueezeBertForMaskedLM, "question-answering": SqueezeBertForQuestionAnswering, "text-classification": SqueezeBertForSequenceClassification, "token-classification": SqueezeBertForTokenClassification, "zero-shot": SqueezeBertForSequenceClassification} if is_torch_available() else {}
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False

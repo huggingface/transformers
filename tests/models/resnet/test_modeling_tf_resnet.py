@@ -124,6 +124,7 @@ class TFResNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     """
 
     all_model_classes = (TFResNetModel, TFResNetForImageClassification) if is_tf_available() else ()
+    pipieline_model_mapping = {"feature-extraction": TFResNetModel, "image-classification": TFResNetForImageClassification} if is_tf_available() else {}
 
     test_pruning = False
     test_resize_embeddings = False

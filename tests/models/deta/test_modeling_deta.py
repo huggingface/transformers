@@ -172,6 +172,7 @@ class DetaModelTester:
 @require_torchvision
 class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DetaModel, DetaForObjectDetection) if is_torchvision_available() else ()
+    pipieline_model_mapping = {"feature-extraction": DetaModel, "object-detection": DetaForObjectDetection} if is_torch_available() else {}
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False

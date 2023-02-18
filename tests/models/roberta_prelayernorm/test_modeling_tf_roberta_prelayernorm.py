@@ -563,6 +563,7 @@ class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, PipelineTesterMixin, un
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFRobertaPreLayerNormModel, "fill-mask": TFRobertaPreLayerNormForMaskedLM, "question-answering": TFRobertaPreLayerNormForQuestionAnswering, "text-classification": TFRobertaPreLayerNormForSequenceClassification, "text-generation": TFRobertaPreLayerNormForCausalLM, "token-classification": TFRobertaPreLayerNormForTokenClassification, "zero-shot": TFRobertaPreLayerNormForSequenceClassification} if is_tf_available() else {}
     test_head_masking = False
     test_onnx = False
 

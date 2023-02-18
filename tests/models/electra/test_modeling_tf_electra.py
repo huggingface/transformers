@@ -502,6 +502,7 @@ class TFElectraModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFElectraModel, "fill-mask": TFElectraForMaskedLM, "question-answering": TFElectraForQuestionAnswering, "text-classification": TFElectraForSequenceClassification, "token-classification": TFElectraForTokenClassification, "zero-shot": TFElectraForSequenceClassification} if is_tf_available() else {}
     test_head_masking = False
     test_onnx = False
 

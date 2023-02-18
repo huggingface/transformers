@@ -178,6 +178,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
         (TimeSeriesTransformerModel, TimeSeriesTransformerForPrediction) if is_torch_available() else ()
     )
     all_generative_model_classes = (TimeSeriesTransformerForPrediction,) if is_torch_available() else ()
+    pipieline_model_mapping = {"feature-extraction": TimeSeriesTransformerModel} if is_torch_available() else {}
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False

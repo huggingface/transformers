@@ -198,6 +198,7 @@ class TFMPNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_tf_available()
         else ()
     )
+    pipieline_model_mapping = {"feature-extraction": TFMPNetModel, "fill-mask": TFMPNetForMaskedLM, "question-answering": TFMPNetForQuestionAnswering, "text-classification": TFMPNetForSequenceClassification, "token-classification": TFMPNetForTokenClassification, "zero-shot": TFMPNetForSequenceClassification} if is_tf_available() else {}
     test_head_masking = False
     test_onnx = False
 
