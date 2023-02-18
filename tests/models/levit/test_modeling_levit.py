@@ -177,7 +177,14 @@ class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": LevitModel, "image-classification": (LevitForImageClassification, LevitForImageClassificationWithTeacher)} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": LevitModel,
+            "image-classification": (LevitForImageClassification, LevitForImageClassificationWithTeacher),
+        }
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_torchscript = False

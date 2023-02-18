@@ -219,7 +219,17 @@ class TFLayoutLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": TFLayoutLMModel, "fill-mask": TFLayoutLMForMaskedLM, "text-classification": TFLayoutLMForSequenceClassification, "token-classification": TFLayoutLMForTokenClassification, "zero-shot": TFLayoutLMForSequenceClassification} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": TFLayoutLMModel,
+            "fill-mask": TFLayoutLMForMaskedLM,
+            "text-classification": TFLayoutLMForSequenceClassification,
+            "token-classification": TFLayoutLMForTokenClassification,
+            "zero-shot": TFLayoutLMForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = True
     onnx_min_opset = 10

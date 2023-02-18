@@ -889,7 +889,17 @@ class ProphetNetStandaloneEncoderModelTester:
 class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ProphetNetModel, ProphetNetForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (ProphetNetForConditionalGeneration,) if is_torch_available() else ()
-    pipieline_model_mapping = {"conversational": ProphetNetForConditionalGeneration, "feature-extraction": ProphetNetModel, "summarization": ProphetNetForConditionalGeneration, "text2text-generation": ProphetNetForConditionalGeneration, "text-generation": ProphetNetForCausalLM} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "conversational": ProphetNetForConditionalGeneration,
+            "feature-extraction": ProphetNetModel,
+            "summarization": ProphetNetForConditionalGeneration,
+            "text2text-generation": ProphetNetForConditionalGeneration,
+            "text-generation": ProphetNetForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_resize_embeddings = False
     is_encoder_decoder = True

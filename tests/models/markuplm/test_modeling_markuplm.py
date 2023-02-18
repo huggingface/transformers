@@ -287,7 +287,17 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else None
     )
-    pipieline_model_mapping = {"feature-extraction": MarkupLMModel, "question-answering": MarkupLMForQuestionAnswering, "text-classification": MarkupLMForSequenceClassification, "token-classification": MarkupLMForTokenClassification, "zero-shot": MarkupLMForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": MarkupLMModel,
+            "question-answering": MarkupLMForQuestionAnswering,
+            "text-classification": MarkupLMForSequenceClassification,
+            "token-classification": MarkupLMForTokenClassification,
+            "zero-shot": MarkupLMForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = MarkupLMModelTester(self)

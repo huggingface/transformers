@@ -163,7 +163,11 @@ class SpeechT5ModelTester:
 @require_torch
 class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5Model,) if is_torch_available() else ()
-    pipieline_model_mapping = {"automatic-speech-recognition": SpeechT5ForSpeechToText, "feature-extraction": SpeechT5Model} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {"automatic-speech-recognition": SpeechT5ForSpeechToText, "feature-extraction": SpeechT5Model}
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False

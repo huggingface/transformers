@@ -281,7 +281,18 @@ class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": FNetModel, "fill-mask": FNetForMaskedLM, "question-answering": FNetForQuestionAnswering, "text-classification": FNetForSequenceClassification, "token-classification": FNetForTokenClassification, "zero-shot": FNetForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": FNetModel,
+            "fill-mask": FNetForMaskedLM,
+            "question-answering": FNetForQuestionAnswering,
+            "text-classification": FNetForSequenceClassification,
+            "token-classification": FNetForTokenClassification,
+            "zero-shot": FNetForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # Skip Tests
     test_pruning = False

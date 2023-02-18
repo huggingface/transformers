@@ -602,7 +602,18 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": LukeModel, "fill-mask": LukeForMaskedLM, "question-answering": LukeForQuestionAnswering, "text-classification": LukeForSequenceClassification, "token-classification": LukeForTokenClassification, "zero-shot": LukeForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": LukeModel,
+            "fill-mask": LukeForMaskedLM,
+            "question-answering": LukeForQuestionAnswering,
+            "text-classification": LukeForSequenceClassification,
+            "token-classification": LukeForTokenClassification,
+            "zero-shot": LukeForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = True

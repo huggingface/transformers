@@ -194,7 +194,15 @@ class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": MobileNetV2Model, "image-classification": MobileNetV2ForImageClassification, "image-segmentation": MobileNetV2ForSemanticSegmentation} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": MobileNetV2Model,
+            "image-classification": MobileNetV2ForImageClassification,
+            "image-segmentation": MobileNetV2ForSemanticSegmentation,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_resize_embeddings = False

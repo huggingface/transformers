@@ -302,7 +302,15 @@ class SEWModelTester:
 @require_torch
 class SEWModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SEWForCTC, SEWModel, SEWForSequenceClassification) if is_torch_available() else ()
-    pipieline_model_mapping = {"audio-classification": SEWForSequenceClassification, "automatic-speech-recognition": SEWForCTC, "feature-extraction": SEWModel} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "audio-classification": SEWForSequenceClassification,
+            "automatic-speech-recognition": SEWForCTC,
+            "feature-extraction": SEWModel,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
 

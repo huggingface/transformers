@@ -242,7 +242,18 @@ class TFAlbertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": TFAlbertModel, "fill-mask": TFAlbertForMaskedLM, "question-answering": TFAlbertForQuestionAnswering, "text-classification": TFAlbertForSequenceClassification, "token-classification": TFAlbertForTokenClassification, "zero-shot": TFAlbertForSequenceClassification} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": TFAlbertModel,
+            "fill-mask": TFAlbertForMaskedLM,
+            "question-answering": TFAlbertForQuestionAnswering,
+            "text-classification": TFAlbertForSequenceClassification,
+            "token-classification": TFAlbertForTokenClassification,
+            "zero-shot": TFAlbertForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
 

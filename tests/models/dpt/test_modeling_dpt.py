@@ -157,7 +157,15 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (DPTModel, DPTForDepthEstimation, DPTForSemanticSegmentation) if is_torch_available() else ()
-    pipieline_model_mapping = {"depth-estimation": DPTForDepthEstimation, "feature-extraction": DPTModel, "image-segmentation": DPTForSemanticSegmentation} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "depth-estimation": DPTForDepthEstimation,
+            "feature-extraction": DPTModel,
+            "image-segmentation": DPTForSemanticSegmentation,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_resize_embeddings = False

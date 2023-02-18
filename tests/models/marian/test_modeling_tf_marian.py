@@ -181,7 +181,16 @@ def prepare_marian_inputs_dict(
 class TFMarianModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFMarianMTModel, TFMarianModel) if is_tf_available() else ()
     all_generative_model_classes = (TFMarianMTModel,) if is_tf_available() else ()
-    pipieline_model_mapping = {"conversational": TFMarianMTModel, "feature-extraction": TFMarianModel, "summarization": TFMarianMTModel, "text2text-generation": TFMarianMTModel} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {
+            "conversational": TFMarianMTModel,
+            "feature-extraction": TFMarianModel,
+            "summarization": TFMarianMTModel,
+            "text2text-generation": TFMarianMTModel,
+        }
+        if is_tf_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = False

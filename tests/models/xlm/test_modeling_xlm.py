@@ -377,7 +377,19 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_generative_model_classes = (
         (XLMWithLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
-    pipieline_model_mapping = {"feature-extraction": XLMModel, "fill-mask": XLMWithLMHeadModel, "question-answering": XLMForQuestionAnsweringSimple, "text-classification": XLMForSequenceClassification, "text-generation": XLMWithLMHeadModel, "token-classification": XLMForTokenClassification, "zero-shot": XLMForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": XLMModel,
+            "fill-mask": XLMWithLMHeadModel,
+            "question-answering": XLMForQuestionAnsweringSimple,
+            "text-classification": XLMForSequenceClassification,
+            "text-generation": XLMWithLMHeadModel,
+            "token-classification": XLMForTokenClassification,
+            "zero-shot": XLMForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # XLM has 2 QA models -> need to manually set the correct labels for one of them here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

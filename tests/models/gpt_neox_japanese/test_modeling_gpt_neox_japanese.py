@@ -193,7 +193,11 @@ class GPTNeoXJapaneseModelTester:
 class GPTNeoXModelJapaneseTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GPTNeoXJapaneseModel, GPTNeoXJapaneseForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GPTNeoXJapaneseForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": GPTNeoXJapaneseModel, "text-generation": GPTNeoXJapaneseForCausalLM} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {"feature-extraction": GPTNeoXJapaneseModel, "text-generation": GPTNeoXJapaneseForCausalLM}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_missing_keys = False
     test_model_parallel = False

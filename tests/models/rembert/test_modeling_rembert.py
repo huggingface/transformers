@@ -376,7 +376,19 @@ class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else ()
     )
     all_generative_model_classes = (RemBertForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": RemBertModel, "fill-mask": RemBertForMaskedLM, "question-answering": RemBertForQuestionAnswering, "text-classification": RemBertForSequenceClassification, "text-generation": RemBertForCausalLM, "token-classification": RemBertForTokenClassification, "zero-shot": RemBertForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": RemBertModel,
+            "fill-mask": RemBertForMaskedLM,
+            "question-answering": RemBertForQuestionAnswering,
+            "text-classification": RemBertForSequenceClassification,
+            "text-generation": RemBertForCausalLM,
+            "token-classification": RemBertForTokenClassification,
+            "zero-shot": RemBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = RemBertModelTester(self)

@@ -370,7 +370,19 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else ()
     )
     all_generative_model_classes = (XmodForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": XmodModel, "fill-mask": XmodForMaskedLM, "question-answering": XmodForQuestionAnswering, "text-classification": XmodForSequenceClassification, "text-generation": XmodForCausalLM, "token-classification": XmodForTokenClassification, "zero-shot": XmodForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": XmodModel,
+            "fill-mask": XmodForMaskedLM,
+            "question-answering": XmodForQuestionAnswering,
+            "text-classification": XmodForSequenceClassification,
+            "text-generation": XmodForCausalLM,
+            "token-classification": XmodForTokenClassification,
+            "zero-shot": XmodForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = XmodModelTester(self)

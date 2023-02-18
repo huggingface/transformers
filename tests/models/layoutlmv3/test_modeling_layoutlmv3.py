@@ -285,7 +285,18 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"document-question-answering": LayoutLMv3ForQuestionAnswering, "feature-extraction": LayoutLMv3Model, "question-answering": LayoutLMv3ForQuestionAnswering, "text-classification": LayoutLMv3ForSequenceClassification, "token-classification": LayoutLMv3ForTokenClassification, "zero-shot": LayoutLMv3ForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "document-question-answering": LayoutLMv3ForQuestionAnswering,
+            "feature-extraction": LayoutLMv3Model,
+            "question-answering": LayoutLMv3ForQuestionAnswering,
+            "text-classification": LayoutLMv3ForSequenceClassification,
+            "token-classification": LayoutLMv3ForTokenClassification,
+            "zero-shot": LayoutLMv3ForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = LayoutLMv3ModelTester(self)

@@ -331,7 +331,18 @@ class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": NezhaModel, "fill-mask": NezhaForMaskedLM, "question-answering": NezhaForQuestionAnswering, "text-classification": NezhaForSequenceClassification, "token-classification": NezhaForTokenClassification, "zero-shot": NezhaForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": NezhaModel,
+            "fill-mask": NezhaForMaskedLM,
+            "question-answering": NezhaForQuestionAnswering,
+            "text-classification": NezhaForSequenceClassification,
+            "token-classification": NezhaForTokenClassification,
+            "zero-shot": NezhaForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
 
     # special case for ForPreTraining model

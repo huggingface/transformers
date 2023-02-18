@@ -230,7 +230,17 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": LiltModel, "question-answering": LiltForQuestionAnswering, "text-classification": LiltForSequenceClassification, "token-classification": LiltForTokenClassification, "zero-shot": LiltForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": LiltModel,
+            "question-answering": LiltForQuestionAnswering,
+            "text-classification": LiltForSequenceClassification,
+            "token-classification": LiltForTokenClassification,
+            "zero-shot": LiltForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
 

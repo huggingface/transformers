@@ -334,7 +334,18 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
 
     all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": BloomModel, "question-answering": BloomForQuestionAnswering, "text-classification": BloomForSequenceClassification, "text-generation": BloomForCausalLM, "token-classification": BloomForTokenClassification, "zero-shot": BloomForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": BloomModel,
+            "question-answering": BloomForQuestionAnswering,
+            "text-classification": BloomForSequenceClassification,
+            "text-generation": BloomForCausalLM,
+            "token-classification": BloomForTokenClassification,
+            "zero-shot": BloomForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
     test_missing_keys = False
     test_pruning = False

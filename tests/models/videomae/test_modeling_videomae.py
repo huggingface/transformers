@@ -172,7 +172,11 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     all_model_classes = (
         (VideoMAEModel, VideoMAEForPreTraining, VideoMAEForVideoClassification) if is_torch_available() else ()
     )
-    pipieline_model_mapping = {"feature-extraction": VideoMAEModel, "video-classification": VideoMAEForVideoClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {"feature-extraction": VideoMAEModel, "video-classification": VideoMAEForVideoClassification}
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_torchscript = False

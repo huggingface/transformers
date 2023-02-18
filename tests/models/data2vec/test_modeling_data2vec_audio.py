@@ -371,7 +371,15 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"audio-classification": Data2VecAudioForSequenceClassification, "automatic-speech-recognition": Data2VecAudioForCTC, "feature-extraction": Data2VecAudioModel} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "audio-classification": Data2VecAudioForSequenceClassification,
+            "automatic-speech-recognition": Data2VecAudioForCTC,
+            "feature-extraction": Data2VecAudioModel,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
 

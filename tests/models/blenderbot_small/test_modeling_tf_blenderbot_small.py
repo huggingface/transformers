@@ -181,7 +181,16 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
         (TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel) if is_tf_available() else ()
     )
     all_generative_model_classes = (TFBlenderbotSmallForConditionalGeneration,) if is_tf_available() else ()
-    pipieline_model_mapping = {"conversational": TFBlenderbotSmallForConditionalGeneration, "feature-extraction": TFBlenderbotSmallModel, "summarization": TFBlenderbotSmallForConditionalGeneration, "text2text-generation": TFBlenderbotSmallForConditionalGeneration} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {
+            "conversational": TFBlenderbotSmallForConditionalGeneration,
+            "feature-extraction": TFBlenderbotSmallModel,
+            "summarization": TFBlenderbotSmallForConditionalGeneration,
+            "text2text-generation": TFBlenderbotSmallForConditionalGeneration,
+        }
+        if is_tf_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = False

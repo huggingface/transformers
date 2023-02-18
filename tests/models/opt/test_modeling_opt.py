@@ -191,7 +191,17 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else ()
     )
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": OPTModel, "question-answering": OPTForQuestionAnswering, "text-classification": OPTForSequenceClassification, "text-generation": OPTForCausalLM, "zero-shot": OPTForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": OPTModel,
+            "question-answering": OPTForQuestionAnswering,
+            "text-classification": OPTForSequenceClassification,
+            "text-generation": OPTForCausalLM,
+            "zero-shot": OPTForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = False
     fx_compatible = True
     test_pruning = False

@@ -184,7 +184,11 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": TFData2VecVisionModel, "image-classification": TFData2VecVisionForImageClassification} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {"feature-extraction": TFData2VecVisionModel, "image-classification": TFData2VecVisionForImageClassification}
+        if is_tf_available()
+        else {}
+    )
 
     test_pruning = False
     test_onnx = False

@@ -194,7 +194,18 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
         (TFBartForConditionalGeneration, TFBartForSequenceClassification, TFBartModel) if is_tf_available() else ()
     )
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
-    pipieline_model_mapping = {"conversational": TFBartForConditionalGeneration, "feature-extraction": TFBartModel, "summarization": TFBartForConditionalGeneration, "text2text-generation": TFBartForConditionalGeneration, "text-classification": TFBartForSequenceClassification, "zero-shot": TFBartForSequenceClassification} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {
+            "conversational": TFBartForConditionalGeneration,
+            "feature-extraction": TFBartModel,
+            "summarization": TFBartForConditionalGeneration,
+            "text2text-generation": TFBartForConditionalGeneration,
+            "text-classification": TFBartForSequenceClassification,
+            "zero-shot": TFBartForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = True

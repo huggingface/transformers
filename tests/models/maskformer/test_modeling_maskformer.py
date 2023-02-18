@@ -175,7 +175,11 @@ class MaskFormerModelTester:
 @require_torch
 class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MaskFormerModel, MaskFormerForInstanceSegmentation) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": MaskFormerModel, "image-segmentation": MaskFormerForInstanceSegmentation} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {"feature-extraction": MaskFormerModel, "image-segmentation": MaskFormerForInstanceSegmentation}
+        if is_torch_available()
+        else {}
+    )
 
     is_encoder_decoder = False
     test_pruning = False

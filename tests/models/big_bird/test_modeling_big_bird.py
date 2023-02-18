@@ -454,7 +454,19 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else ()
     )
     all_generative_model_classes = (BigBirdForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": BigBirdModel, "fill-mask": BigBirdForMaskedLM, "question-answering": BigBirdForQuestionAnswering, "text-classification": BigBirdForSequenceClassification, "text-generation": BigBirdForCausalLM, "token-classification": BigBirdForTokenClassification, "zero-shot": BigBirdForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": BigBirdModel,
+            "fill-mask": BigBirdForMaskedLM,
+            "question-answering": BigBirdForQuestionAnswering,
+            "text-classification": BigBirdForSequenceClassification,
+            "text-generation": BigBirdForCausalLM,
+            "token-classification": BigBirdForTokenClassification,
+            "zero-shot": BigBirdForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

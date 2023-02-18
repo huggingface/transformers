@@ -552,7 +552,16 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
     )
     all_generative_model_classes = (SwitchTransformersForConditionalGeneration,) if is_torch_available() else ()
-    pipieline_model_mapping = {"conversational": SwitchTransformersForConditionalGeneration, "feature-extraction": SwitchTransformersModel, "summarization": SwitchTransformersForConditionalGeneration, "text2text-generation": SwitchTransformersForConditionalGeneration} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "conversational": SwitchTransformersForConditionalGeneration,
+            "feature-extraction": SwitchTransformersModel,
+            "summarization": SwitchTransformersForConditionalGeneration,
+            "text2text-generation": SwitchTransformersForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True

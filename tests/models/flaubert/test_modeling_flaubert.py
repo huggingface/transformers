@@ -377,7 +377,18 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": FlaubertModel, "fill-mask": FlaubertWithLMHeadModel, "question-answering": FlaubertForQuestionAnsweringSimple, "text-classification": FlaubertForSequenceClassification, "token-classification": FlaubertForTokenClassification, "zero-shot": FlaubertForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": FlaubertModel,
+            "fill-mask": FlaubertWithLMHeadModel,
+            "question-answering": FlaubertForQuestionAnsweringSimple,
+            "text-classification": FlaubertForSequenceClassification,
+            "token-classification": FlaubertForTokenClassification,
+            "zero-shot": FlaubertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # Flaubert has 2 QA models -> need to manually set the correct labels for one of them here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

@@ -366,7 +366,18 @@ class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": (FunnelBaseModel, FunnelModel), "fill-mask": FunnelForMaskedLM, "question-answering": FunnelForQuestionAnswering, "text-classification": FunnelForSequenceClassification, "token-classification": FunnelForTokenClassification, "zero-shot": FunnelForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": (FunnelBaseModel, FunnelModel),
+            "fill-mask": FunnelForMaskedLM,
+            "question-answering": FunnelForQuestionAnswering,
+            "text-classification": FunnelForSequenceClassification,
+            "token-classification": FunnelForTokenClassification,
+            "zero-shot": FunnelForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

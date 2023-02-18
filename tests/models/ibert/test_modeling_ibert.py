@@ -243,7 +243,18 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": IBertModel, "fill-mask": IBertForMaskedLM, "question-answering": IBertForQuestionAnswering, "text-classification": IBertForSequenceClassification, "token-classification": IBertForTokenClassification, "zero-shot": IBertForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": IBertModel,
+            "fill-mask": IBertForMaskedLM,
+            "question-answering": IBertForQuestionAnswering,
+            "text-classification": IBertForSequenceClassification,
+            "token-classification": IBertForTokenClassification,
+            "zero-shot": IBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = IBertModelTester(self)

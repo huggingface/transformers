@@ -430,7 +430,16 @@ class TFTapasModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": TFTapasModel, "fill-mask": TFTapasForMaskedLM, "text-classification": TFTapasForSequenceClassification, "zero-shot": TFTapasForSequenceClassification} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": TFTapasModel,
+            "fill-mask": TFTapasForMaskedLM,
+            "text-classification": TFTapasForSequenceClassification,
+            "zero-shot": TFTapasForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
 

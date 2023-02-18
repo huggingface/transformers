@@ -172,7 +172,16 @@ class TFCTRLModelTester(object):
 class TFCTRLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel, TFCTRLForSequenceClassification) if is_tf_available() else ()
     all_generative_model_classes = (TFCTRLLMHeadModel,) if is_tf_available() else ()
-    pipieline_model_mapping = {"feature-extraction": TFCTRLModel, "text-classification": TFCTRLForSequenceClassification, "text-generation": TFCTRLLMHeadModel, "zero-shot": TFCTRLForSequenceClassification} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": TFCTRLModel,
+            "text-classification": TFCTRLForSequenceClassification,
+            "text-generation": TFCTRLLMHeadModel,
+            "zero-shot": TFCTRLForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
 

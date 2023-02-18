@@ -204,7 +204,18 @@ class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": MPNetModel, "fill-mask": MPNetForMaskedLM, "question-answering": MPNetForQuestionAnswering, "text-classification": MPNetForSequenceClassification, "token-classification": MPNetForTokenClassification, "zero-shot": MPNetForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": MPNetModel,
+            "fill-mask": MPNetForMaskedLM,
+            "question-answering": MPNetForQuestionAnswering,
+            "text-classification": MPNetForSequenceClassification,
+            "token-classification": MPNetForTokenClassification,
+            "zero-shot": MPNetForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_resize_embeddings = True
 

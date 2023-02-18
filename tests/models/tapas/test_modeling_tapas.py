@@ -420,7 +420,17 @@ class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else None
     )
-    pipieline_model_mapping = {"feature-extraction": TapasModel, "fill-mask": TapasForMaskedLM, "table-question-answering": TapasForQuestionAnswering, "text-classification": TapasForSequenceClassification, "zero-shot": TapasForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": TapasModel,
+            "fill-mask": TapasForMaskedLM,
+            "table-question-answering": TapasForQuestionAnswering,
+            "text-classification": TapasForSequenceClassification,
+            "zero-shot": TapasForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False

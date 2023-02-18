@@ -231,7 +231,16 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else ()
     )
     all_generative_model_classes = (M2M100ForConditionalGeneration,) if is_torch_available() else ()
-    pipieline_model_mapping = {"conversational": M2M100ForConditionalGeneration, "feature-extraction": M2M100Model, "summarization": M2M100ForConditionalGeneration, "text2text-generation": M2M100ForConditionalGeneration} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "conversational": M2M100ForConditionalGeneration,
+            "feature-extraction": M2M100Model,
+            "summarization": M2M100ForConditionalGeneration,
+            "text2text-generation": M2M100ForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = True
     test_pruning = False

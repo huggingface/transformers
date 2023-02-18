@@ -218,7 +218,11 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering}
+        if is_torch_available()
+        else {}
+    )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)

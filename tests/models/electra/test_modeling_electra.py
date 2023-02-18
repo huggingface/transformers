@@ -390,7 +390,19 @@ class ElectraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": ElectraModel, "fill-mask": ElectraForMaskedLM, "question-answering": ElectraForQuestionAnswering, "text-classification": ElectraForSequenceClassification, "text-generation": ElectraForCausalLM, "token-classification": ElectraForTokenClassification, "zero-shot": ElectraForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": ElectraModel,
+            "fill-mask": ElectraForMaskedLM,
+            "question-answering": ElectraForQuestionAnswering,
+            "text-classification": ElectraForSequenceClassification,
+            "text-generation": ElectraForCausalLM,
+            "token-classification": ElectraForTokenClassification,
+            "zero-shot": ElectraForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
 
     # special case for ForPreTraining model

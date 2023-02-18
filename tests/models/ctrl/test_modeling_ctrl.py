@@ -196,7 +196,16 @@ class CTRLModelTester:
 class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CTRLModel, CTRLLMHeadModel, CTRLForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (CTRLLMHeadModel,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": CTRLModel, "text-classification": CTRLForSequenceClassification, "text-generation": CTRLLMHeadModel, "zero-shot": CTRLForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": CTRLModel,
+            "text-classification": CTRLForSequenceClassification,
+            "text-generation": CTRLLMHeadModel,
+            "zero-shot": CTRLForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = True
     test_resize_embeddings = False
     test_head_masking = False

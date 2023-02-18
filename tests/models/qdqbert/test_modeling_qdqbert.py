@@ -436,7 +436,19 @@ class QDQBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else ()
     )
     all_generative_model_classes = (QDQBertLMHeadModel,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": QDQBertModel, "fill-mask": QDQBertForMaskedLM, "question-answering": QDQBertForQuestionAnswering, "text-classification": QDQBertForSequenceClassification, "text-generation": QDQBertLMHeadModel, "token-classification": QDQBertForTokenClassification, "zero-shot": QDQBertForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": QDQBertModel,
+            "fill-mask": QDQBertForMaskedLM,
+            "question-answering": QDQBertForQuestionAnswering,
+            "text-classification": QDQBertForSequenceClassification,
+            "text-generation": QDQBertLMHeadModel,
+            "token-classification": QDQBertForTokenClassification,
+            "zero-shot": QDQBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = QDQBertModelTester(self)

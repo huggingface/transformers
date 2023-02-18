@@ -375,7 +375,19 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         else ()
     )
     all_generative_model_classes = (Data2VecTextForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": Data2VecTextModel, "fill-mask": Data2VecTextForMaskedLM, "question-answering": Data2VecTextForQuestionAnswering, "text-classification": Data2VecTextForSequenceClassification, "text-generation": Data2VecTextForCausalLM, "token-classification": Data2VecTextForTokenClassification, "zero-shot": Data2VecTextForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": Data2VecTextModel,
+            "fill-mask": Data2VecTextForMaskedLM,
+            "question-answering": Data2VecTextForQuestionAnswering,
+            "text-classification": Data2VecTextForSequenceClassification,
+            "text-generation": Data2VecTextForCausalLM,
+            "token-classification": Data2VecTextForTokenClassification,
+            "zero-shot": Data2VecTextForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = Data2VecTextModelTester(self)

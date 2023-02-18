@@ -293,7 +293,19 @@ class TFXLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_generative_model_classes = (
         (TFXLMWithLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
-    pipieline_model_mapping = {"feature-extraction": TFXLMModel, "fill-mask": TFXLMWithLMHeadModel, "question-answering": TFXLMForQuestionAnsweringSimple, "text-classification": TFXLMForSequenceClassification, "text-generation": TFXLMWithLMHeadModel, "token-classification": TFXLMForTokenClassification, "zero-shot": TFXLMForSequenceClassification} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": TFXLMModel,
+            "fill-mask": TFXLMWithLMHeadModel,
+            "question-answering": TFXLMForQuestionAnsweringSimple,
+            "text-classification": TFXLMForSequenceClassification,
+            "text-generation": TFXLMWithLMHeadModel,
+            "token-classification": TFXLMForTokenClassification,
+            "zero-shot": TFXLMForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
 

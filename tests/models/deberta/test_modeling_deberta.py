@@ -226,7 +226,18 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": DebertaModel, "fill-mask": DebertaForMaskedLM, "question-answering": DebertaForQuestionAnswering, "text-classification": DebertaForSequenceClassification, "token-classification": DebertaForTokenClassification, "zero-shot": DebertaForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": DebertaModel,
+            "fill-mask": DebertaForMaskedLM,
+            "question-answering": DebertaForQuestionAnswering,
+            "text-classification": DebertaForSequenceClassification,
+            "token-classification": DebertaForTokenClassification,
+            "zero-shot": DebertaForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     fx_compatible = True
     test_torchscript = False

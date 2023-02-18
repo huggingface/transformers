@@ -403,7 +403,15 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"audio-classification": Wav2Vec2ConformerForSequenceClassification, "automatic-speech-recognition": Wav2Vec2ConformerForCTC, "feature-extraction": Wav2Vec2ConformerModel} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "audio-classification": Wav2Vec2ConformerForSequenceClassification,
+            "automatic-speech-recognition": Wav2Vec2ConformerForCTC,
+            "feature-extraction": Wav2Vec2ConformerModel,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False

@@ -237,7 +237,17 @@ class ErnieMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = ()
-    pipieline_model_mapping = {"feature-extraction": ErnieMModel, "question-answering": ErnieMForQuestionAnswering, "text-classification": ErnieMForSequenceClassification, "token-classification": ErnieMForTokenClassification, "zero-shot": ErnieMForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": ErnieMModel,
+            "question-answering": ErnieMForQuestionAnswering,
+            "text-classification": ErnieMForSequenceClassification,
+            "token-classification": ErnieMForTokenClassification,
+            "zero-shot": ErnieMForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_torchscript = False
 
     def setUp(self):

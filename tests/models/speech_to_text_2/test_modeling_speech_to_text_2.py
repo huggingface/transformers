@@ -177,7 +177,9 @@ class Speech2Text2StandaloneDecoderModelTester:
 
 
 @require_torch
-class Speech2Text2StandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Speech2Text2StandaloneDecoderModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (Speech2Text2Decoder, Speech2Text2ForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (Speech2Text2ForCausalLM,) if is_torch_available() else ()
     pipieline_model_mapping = {"text-generation": Speech2Text2ForCausalLM} if is_torch_available() else {}

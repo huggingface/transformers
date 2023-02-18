@@ -136,7 +136,11 @@ class TFCvtModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     """
 
     all_model_classes = (TFCvtModel, TFCvtForImageClassification) if is_tf_available() else ()
-    pipieline_model_mapping = {"feature-extraction": TFCvtModel, "image-classification": TFCvtForImageClassification} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {"feature-extraction": TFCvtModel, "image-classification": TFCvtForImageClassification}
+        if is_tf_available()
+        else {}
+    )
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False

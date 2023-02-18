@@ -220,7 +220,17 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": CanineModel, "question-answering": CanineForQuestionAnswering, "text-classification": CanineForSequenceClassification, "token-classification": CanineForTokenClassification, "zero-shot": CanineForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": CanineModel,
+            "question-answering": CanineForQuestionAnswering,
+            "text-classification": CanineForSequenceClassification,
+            "token-classification": CanineForTokenClassification,
+            "zero-shot": CanineForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     test_mismatched_shapes = False
     test_resize_embeddings = False

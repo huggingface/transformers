@@ -504,7 +504,16 @@ class LongT5ModelTester:
 class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (LongT5Model, LongT5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (LongT5ForConditionalGeneration,) if is_torch_available() else ()
-    pipieline_model_mapping = {"conversational": LongT5ForConditionalGeneration, "feature-extraction": LongT5Model, "summarization": LongT5ForConditionalGeneration, "text2text-generation": LongT5ForConditionalGeneration} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "conversational": LongT5ForConditionalGeneration,
+            "feature-extraction": LongT5Model,
+            "summarization": LongT5ForConditionalGeneration,
+            "text2text-generation": LongT5ForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
     test_torchscript = True

@@ -304,7 +304,15 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"audio-classification": UniSpeechForSequenceClassification, "automatic-speech-recognition": UniSpeechForCTC, "feature-extraction": UniSpeechModel} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "audio-classification": UniSpeechForSequenceClassification,
+            "automatic-speech-recognition": UniSpeechForCTC,
+            "feature-extraction": UniSpeechModel,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
 

@@ -342,7 +342,18 @@ class TFFunnelModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": (TFFunnelBaseModel, TFFunnelModel), "fill-mask": TFFunnelForMaskedLM, "question-answering": TFFunnelForQuestionAnswering, "text-classification": TFFunnelForSequenceClassification, "token-classification": TFFunnelForTokenClassification, "zero-shot": TFFunnelForSequenceClassification} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": (TFFunnelBaseModel, TFFunnelModel),
+            "fill-mask": TFFunnelForMaskedLM,
+            "question-answering": TFFunnelForQuestionAnswering,
+            "text-classification": TFFunnelForSequenceClassification,
+            "token-classification": TFFunnelForTokenClassification,
+            "zero-shot": TFFunnelForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
 

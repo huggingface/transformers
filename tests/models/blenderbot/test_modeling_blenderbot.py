@@ -227,7 +227,17 @@ class BlenderbotModelTester:
 class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotModel, BlenderbotForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available() else ()
-    pipieline_model_mapping = {"conversational": BlenderbotForConditionalGeneration, "feature-extraction": BlenderbotModel, "summarization": BlenderbotForConditionalGeneration, "text2text-generation": BlenderbotForConditionalGeneration, "text-generation": BlenderbotForCausalLM} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "conversational": BlenderbotForConditionalGeneration,
+            "feature-extraction": BlenderbotModel,
+            "summarization": BlenderbotForConditionalGeneration,
+            "text2text-generation": BlenderbotForConditionalGeneration,
+            "text-generation": BlenderbotForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = True
     test_pruning = False

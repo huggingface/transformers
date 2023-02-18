@@ -376,7 +376,19 @@ class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else ()
     )
     all_generative_model_classes = (RoFormerForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": RoFormerModel, "fill-mask": RoFormerForMaskedLM, "question-answering": RoFormerForQuestionAnswering, "text-classification": RoFormerForSequenceClassification, "text-generation": RoFormerForCausalLM, "token-classification": RoFormerForTokenClassification, "zero-shot": RoFormerForSequenceClassification} if is_torch_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": RoFormerModel,
+            "fill-mask": RoFormerForMaskedLM,
+            "question-answering": RoFormerForQuestionAnswering,
+            "text-classification": RoFormerForSequenceClassification,
+            "text-generation": RoFormerForCausalLM,
+            "token-classification": RoFormerForTokenClassification,
+            "zero-shot": RoFormerForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = RoFormerModelTester(self)

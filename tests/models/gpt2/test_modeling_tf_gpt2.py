@@ -369,7 +369,16 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
         else ()
     )
     all_generative_model_classes = (TFGPT2LMHeadModel,) if is_tf_available() else ()
-    pipieline_model_mapping = {"feature-extraction": TFGPT2Model, "text-classification": TFGPT2ForSequenceClassification, "text-generation": TFGPT2LMHeadModel, "zero-shot": TFGPT2ForSequenceClassification} if is_tf_available() else {}
+    pipieline_model_mapping = (
+        {
+            "feature-extraction": TFGPT2Model,
+            "text-classification": TFGPT2ForSequenceClassification,
+            "text-generation": TFGPT2LMHeadModel,
+            "zero-shot": TFGPT2ForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = True
     onnx_min_opset = 10
