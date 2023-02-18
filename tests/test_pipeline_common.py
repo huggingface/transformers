@@ -20,6 +20,7 @@ import random
 from pathlib import Path
 
 from transformers import PreTrainedModel, TFPreTrainedModel
+from transformers.testing_utils import require_decord
 from transformers.utils import direct_transformers_import
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
@@ -317,6 +318,7 @@ class PipelineTesterMixin:
     def test_pipeline_translation(self):
         self.run_task_tests(task="translation")
 
+    @require_decord
     def test_pipeline_video_classification(self):
         self.run_task_tests(task="video-classification")
 
