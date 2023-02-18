@@ -23,6 +23,7 @@ from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_common import PipelineTesterMixin
 
 
 if is_torch_available():

@@ -25,6 +25,7 @@ from transformers.testing_utils import require_soundfile, require_torch, slow, t
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_common import PipelineTesterMixin
 
 
 if is_torch_available():

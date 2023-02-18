@@ -43,6 +43,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_common import PipelineTesterMixin
 
 
 if is_torch_available():

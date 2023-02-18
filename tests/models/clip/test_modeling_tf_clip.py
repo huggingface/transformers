@@ -29,6 +29,7 @@ from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_common import PipelineTesterMixin
 
 
 if is_tf_available():

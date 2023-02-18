@@ -26,6 +26,7 @@ from transformers.testing_utils import is_pt_flax_cross_test, require_soundfile,
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init
+from ...test_pipeline_common import PipelineTesterMixin
 
 
 if is_torch_available():

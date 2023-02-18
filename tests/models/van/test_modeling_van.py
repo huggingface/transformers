@@ -25,6 +25,7 @@ from transformers.utils import cached_property, is_scipy_available, is_torch_ava
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_common import PipelineTesterMixin
 
 
 if is_scipy_available():

@@ -23,6 +23,7 @@ from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
+from ...test_pipeline_common import PipelineTesterMixin
 
 
 if is_torch_available():
