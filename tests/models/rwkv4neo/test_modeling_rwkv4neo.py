@@ -31,12 +31,7 @@ if is_torch_available():
 
     from transformers import (
         Rwkv4NeoForCausalLM,
-        Rwkv4NeoForMaskedLM,
-        Rwkv4NeoForMultipleChoice,
-        Rwkv4NeoForQuestionAnswering,
-        Rwkv4NeoForSequenceClassification,
-        Rwkv4NeoForTokenClassification,
-        Rwkv4NeoModel,
+        Rwkv4NeoModel
     )
     from transformers.models.rwkv4neo.modeling_rwkv4neo import (
         RWKV4NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -175,9 +170,6 @@ class Rwkv4NeoModelTester:
             input_ids,
             token_type_ids,
             input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
             encoder_hidden_states,
             encoder_attention_mask,
     ):
@@ -207,11 +199,7 @@ class Rwkv4NeoModelTester:
             input_ids,
             token_type_ids,
             input_mask,
-            sequence_labels,
             token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
     ):
         model = Rwkv4NeoForCausalLM(config=config)
         model.to(torch_device)
@@ -219,24 +207,12 @@ class Rwkv4NeoModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = Rwkv4NeoForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
+  
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
         input_ids,
-        token_type_ids,
         input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
         encoder_hidden_states,
         encoder_attention_mask,
     ):
@@ -290,59 +266,6 @@ class Rwkv4NeoModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_for_question_answering(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = Rwkv4NeoForQuestionAnswering(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
-        )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
-
-    def create_and_check_for_sequence_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = Rwkv4NeoForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-    def create_and_check_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = Rwkv4NeoForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
-    def create_and_check_for_multiple_choice(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_choices = self.num_choices
-        model = Rwkv4NeoForMultipleChoice(config=config)
-        model.to(torch_device)
-        model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        result = model(
-            multiple_choice_inputs_ids,
-            attention_mask=multiple_choice_input_mask,
-            token_type_ids=multiple_choice_token_type_ids,
-            labels=choice_labels,
-        )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -350,10 +273,7 @@ class Rwkv4NeoModelTester:
             config,
             input_ids,
             token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
+            input_mask
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
         return config, inputs_dict
@@ -365,12 +285,7 @@ class Rwkv4NeoModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Rwkv4NeoModel,
-            Rwkv4NeoForMaskedLM,
             Rwkv4NeoForCausalLM,
-            Rwkv4NeoForMultipleChoice,
-            Rwkv4NeoForQuestionAnswering,
-            Rwkv4NeoForSequenceClassification,
-            Rwkv4NeoForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -455,27 +370,4 @@ class Rwkv4NeoModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in RWKV4NEO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = Rwkv4NeoModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-
-@require_torch
-class Rwkv4NeoModelIntegrationTest(unittest.TestCase):
-    @slow
-    def test_inference_masked_lm(self):
-        model = Rwkv4NeoForMaskedLM.from_pretrained("rwkv-4")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
-
-        # TODO Replace vocab size
-        vocab_size = 32000
-
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
-
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
-        )
-
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
 

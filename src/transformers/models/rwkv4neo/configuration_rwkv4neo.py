@@ -88,11 +88,52 @@ class Rwkv4NeoConfig(PretrainedConfig):
 """
     model_type = "rwkv4neo"
     
+    # "eos_token_id":0,
+    # "pad_token_id":1, 
+    # "d_model":5120, 
+    # "is_encoder_decoder":false, 
+    # "num_decoder_layers":40,
+    # "vocab_size": 50277,
+    # "n_positions":1024
 
+    # Training parameters
+    #return DeepSpeedCPUAdam(optim_groups, lr=self.args.lr_init, betas=self.args.betas, eps=self.args.adam_eps, bias_correction=True, adamw_mode=False, weight_decay=0, amsgrad=False)
+    #return FusedAdam(optim_groups, lr=self.args.lr_init, betas=self.args.betas, eps=self.args.adam_eps, bias_correction=True, adam_w_mode=False, weight_decay=0, amsgrad=False)
+
+    # Config Params in a nutshell if anyone needs for their own project for RWKV4a-Neo
+    # Training
+    # ```json 
+
+#     {
+#     "use_tiny_attention":False,
+#     "use_two_pos_embed":False,
+#     "DeepSpeedCPUAdam": {
+#         "optim_groups": "",
+#         "lr": "self.args.lr_init",
+#         "betas": "self.args.betas",
+#         "eps": "self.args.adam_eps",
+#         "bias_correction": true,
+#         "adamw_mode": false,
+#         "weight_decay": 0,
+#         "amsgrad": false
+#     },
+#     "FusedAdam": {
+#         "optim_groups": "",
+#         "lr": "self.args.lr_init",
+#         "betas": "self.args.betas",
+#         "eps": "self.args.adam_eps",
+#         "bias_correction": true,
+#         "adam_w_mode": false,
+#         "weight_decay": 0,
+#         "amsgrad": false
+#     }
+# }
+
+    # ```
     def __init__(
         self,
-        vocab_size=30522,
-        hidden_size=768,
+        vocab_size=50277,
+        hidden_size=768, # 1024 ? 
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
@@ -100,13 +141,13 @@ class Rwkv4NeoConfig(PretrainedConfig):
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
-        type_vocab_size=2,
+        type_vocab_size=None,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
         pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        bos_token_id=None,
+        eos_token_id=0,
         **kwargs
     ):
         self.vocab_size = vocab_size
@@ -122,6 +163,7 @@ class Rwkv4NeoConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

@@ -20,31 +20,31 @@ import os
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCrossEntropyLoss
+#from torch.nn import BCrossEntropyLoss So I can play with stuff
 from typing import Optional, Tuple, Union
 
-from ...activations import ACT2FN
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions
-)
-from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import (
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
-from ...utils import logging
-from .configuration_rwkv4neo import Rwkv4NeoConfig
+#from ...activations import ACT2FN So I can play with stuff
+# from ...utils import (
+#     add_code_sample_docstrings,
+#     add_start_docstrings,
+#     add_start_docstrings_to_model_forward,
+#     replace_return_docstrings,
+# )
+# from ...modeling_outputs import (
+#     BaseModelOutputWithPastAndCrossAttentions,
+#     CausalLMOutputWithCrossAttentions
+# )
+# from ...modeling_utils import PreTrainedModel
+# from ...pytorch_utils import (
+#     apply_chunking_to_forward,
+#     find_pruneable_heads_and_indices,
+#     prune_linear_layer,
+# )
+# from ...utils import logging
+#from .configuration_rwkv4neo import Rwkv4NeoConfig
 
 
-logger = logging.get_logger(__name__)
+# logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "rwkv-4"
 _CONFIG_FOR_DOC = "Rwkv4NeoConfig"
@@ -56,86 +56,86 @@ RWKV4NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def load_tf_weights_in_rwkv4neo(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
+# def load_tf_weights_in_rwkv4neo(model, config, tf_checkpoint_path):
+#     """Load tf checkpoints in a pytorch model."""
+#     try:
+#         import re
 
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
+#         import numpy as np
+#         import tensorflow as tf
+#     except ImportError:
+#         logger.error(
+#             "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
+#             "https://www.tensorflow.org/install/ for installation instructions."
+#         )
+#         raise
+#     tf_path = os.path.abspath(tf_checkpoint_path)
+#     logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
+#     # Load weights from TF model
+#     init_vars = tf.train.list_variables(tf_path)
+#     names = []
+#     arrays = []
+#     for name, shape in init_vars:
+#         logger.info(f"Loading TF weight {name} with shape {shape}")
+#         array = tf.train.load_variable(tf_path, name)
+#         names.append(name)
+#         arrays.append(array)
 
-    for name, array in zip(names, arrays):
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
+#     for name, array in zip(names, arrays):
+#         name = name.split("/")
+#         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
+#         # which are not required for using pretrained model
+#         if any(
+#             n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
+#             for n in name
+#         ):
+#             logger.info(f"Skipping {'/'.join(name)}")
+#             continue
+#         pointer = model
+#         for m_name in name:
+#             if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
+#                 scope_names = re.split(r"_(\d+)", m_name)
+#             else:
+#                 scope_names = [m_name]
+#             if scope_names[0] == "kernel" or scope_names[0] == "gamma":
+#                 pointer = getattr(pointer, "weight")
+#             elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
+#                 pointer = getattr(pointer, "bias")
+#             elif scope_names[0] == "output_weights":
+#                 pointer = getattr(pointer, "weight")
+#             elif scope_names[0] == "squad":
+#                 pointer = getattr(pointer, "classifier")
+#             else:
+#                 try:
+#                     pointer = getattr(pointer, scope_names[0])
+#                 except AttributeError:
+#                     logger.info(f"Skipping {'/'.join(name)}")
+#                     continue
+#             if len(scope_names) >= 2:
+#                 num = int(scope_names[1])
+#                 pointer = pointer[num]
+#         if m_name[-11:] == "_embeddings":
+#             pointer = getattr(pointer, "weight")
+#         elif m_name == "kernel":
+#             array = np.transpose(array)
+#         try:
+#             assert (
+#                 pointer.shape == array.shape
+#             ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+#         except AssertionError as e:
+#             e.args += (pointer.shape, array.shape)
+#             raise
+#         logger.info(f"Initialize PyTorch weight {name}")
+#         pointer.data = torch.from_numpy(array)
+#     return model
 
-
+# Multiply with input
 class Rwkv4NeoEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings."""
+    """Construct the embeddings from word."""
 
     def __init__(self, config):
         super().__init__()
-        # RWKV GPT mode doesn't use positional or token type embeddings because they can harm the context length varaibility 
+        # RWKV GPT mode doesn't use positional or token type embeddings because they can harm the context length varability 
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
        
     def forward(
@@ -145,6 +145,11 @@ class Rwkv4NeoEmbeddings(nn.Module):
 
 
 class Rwkv4NeoSelfAttention(nn.Module):
+    """
+        RWKV:
+        SA/ATT is actually a time mix
+        FF is channelmix
+    """
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -269,7 +274,7 @@ class Rwkv4NeoSelfAttention(nn.Module):
             outputs = outputs + (past_key_value,)
         return outputs
 
-
+# todo replace this  with SA
 class Rwkv4NeoSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -283,7 +288,7 @@ class Rwkv4NeoSelfOutput(nn.Module):
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
-
+# TODO: BREAK SA and SA out Into two ? 
 class Rwkv4NeoAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -331,7 +336,7 @@ class Rwkv4NeoAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
-
+# Take actication 
 class Rwkv4NeoIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1020,7 +1025,63 @@ class Rwkv4NeoForCausalLM(Rwkv4NeoPreTrainedModel):
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
         return reordered_past
 
-class WKV_Kernel(nn.Module):
+## Supporting Modules
+
+
+class WKV_GPT_Train(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, B, T, C, w, u, k, v):
+        ctx.B = B
+        ctx.T = T
+        ctx.C = C
+        #assert T <= T_MAX # use self to get the T_MAX
+        assert B * C % min(C, 32) == 0
+        if "32" in os.environ["RWKV_FLOAT_MODE"]:
+            w = -torch.exp(w.contiguous())
+            u = u.contiguous()
+            k = k.contiguous()
+            v = v.contiguous()
+        else:
+            w = -torch.exp(w.float().contiguous())
+            u = u.float().contiguous()
+            k = k.float().contiguous()
+            v = v.float().contiguous()
+        ctx.save_for_backward(w, u, k, v)
+        y = torch.empty((B, T, C), device=w.device, memory_format=torch.contiguous_format)
+        #wkv_cuda.forward(B, T, C, w, u, k, v, y)
+        if "32" in os.environ["RWKV_FLOAT_MODE"]:
+            return y
+        elif os.environ["RWKV_FLOAT_MODE"] == "fp16":
+            return y.half()
+        elif os.environ["RWKV_FLOAT_MODE"] == "bf16":
+            return y.bfloat16()
+        
+    @staticmethod
+    def backward(ctx, gy):
+        B = ctx.B
+        T = ctx.T
+        C = ctx.C
+        #assert T <= T_MAX
+        assert B * C % min(C, 32) == 0
+        w, u, k, v = ctx.saved_tensors
+        gw = torch.zeros((B, C), device=gy.device).contiguous()
+        gu = torch.zeros((B, C), device=gy.device).contiguous()
+        gk = torch.zeros((B, T, C), device=gy.device).contiguous()
+        gv = torch.zeros((B, T, C), device=gy.device).contiguous()
+        #if "32" in os.environ["RWKV_FLOAT_MODE"]:
+            #wkv_cuda.backward(B, T, C, w, u, k, v, gy.contiguous(), gw, gu, gk, gv)
+        #else:
+            #wkv_cuda.backward(B, T, C, w, u, k, v, gy.float().contiguous(), gw, gu, gk, gv)
+        gw = torch.sum(gw, dim=0)
+        gu = torch.sum(gu, dim=0)
+        if "32" in os.environ["RWKV_FLOAT_MODE"]:
+            return (None, None, None, gw, gu, gk, gv)
+        elif os.environ["RWKV_FLOAT_MODE"] == "fp16":
+            return (None, None, None, gw.half(), gu.half(), gk.half(), gv.half())
+        elif os.environ["RWKV_FLOAT_MODE"] == "bf16":
+            return (None, None, None, gw.bfloat16(), gu.bfloat16(), gk.bfloat16(), gv.bfloat16())
+        
+class WKV_GPT_Inference_Kernel(nn.Module):
     def __init__(self):
         super().__init__()
     def forward(self, B, T, C, w, u, k, v):
@@ -1071,3 +1132,10 @@ class WKV_Kernel(nn.Module):
         y = torch.cat((v[:1, :, :], y[1:, :, :]))
         y = y.swapaxes(1, 0)
         return y.type(w.dtype)
+    
+
+def main():
+    print("Hello")
+
+if __name__ == "__main__":
+    main()
