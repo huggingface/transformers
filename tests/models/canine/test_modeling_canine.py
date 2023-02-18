@@ -208,7 +208,7 @@ class CanineModelTester:
 
 
 @require_torch
-class CanineModelTest(ModelTesterMixin, unittest.TestCase):
+class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             CanineModel,

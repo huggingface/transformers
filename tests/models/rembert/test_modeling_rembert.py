@@ -361,7 +361,7 @@ class RemBertModelTester:
 
 
 @require_torch
-class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
+class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RemBertModel,

@@ -147,7 +147,7 @@ class TFOPTModelTester:
 
 
 @require_tf
-class TFOPTModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFOPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFOPTModel, TFOPTForCausalLM) if is_tf_available() else ()
     all_generative_model_classes = (TFOPTForCausalLM,) if is_tf_available() else ()
     is_encoder_decoder = False

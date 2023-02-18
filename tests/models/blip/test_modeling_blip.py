@@ -392,7 +392,7 @@ class BlipModelTester:
 
 
 @require_torch
-class BlipModelTest(ModelTesterMixin, unittest.TestCase):
+class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlipModel,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False

@@ -240,7 +240,7 @@ class AlbertModelTester:
 
 
 @require_torch
-class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
+class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             AlbertModel,

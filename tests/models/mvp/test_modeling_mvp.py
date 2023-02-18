@@ -406,7 +406,7 @@ class MvpHeadTests(unittest.TestCase):
 
 
 @require_torch
-class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (MvpModel, MvpForConditionalGeneration, MvpForSequenceClassification, MvpForQuestionAnswering)
         if is_torch_available()

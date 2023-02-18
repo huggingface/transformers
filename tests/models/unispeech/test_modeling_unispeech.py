@@ -298,7 +298,7 @@ class UniSpeechModelTester:
 
 
 @require_torch
-class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
+class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (UniSpeechForCTC, UniSpeechModel, UniSpeechForSequenceClassification, UniSpeechForPreTraining)
         if is_torch_available()

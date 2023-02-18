@@ -393,7 +393,7 @@ def prepare_img():
 
 
 @require_torch
-class AltCLIPModelTest(ModelTesterMixin, unittest.TestCase):
+class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
     fx_compatible = True
     test_head_masking = False

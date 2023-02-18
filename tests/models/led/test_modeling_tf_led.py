@@ -190,7 +190,7 @@ def prepare_led_inputs_dict(
 
 
 @require_tf
-class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFLEDModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFLEDForConditionalGeneration, TFLEDModel) if is_tf_available() else ()
     all_generative_model_classes = (TFLEDForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True

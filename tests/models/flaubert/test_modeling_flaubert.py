@@ -363,7 +363,7 @@ class FlaubertModelTester(object):
 
 
 @require_torch
-class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
+class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FlaubertModel,

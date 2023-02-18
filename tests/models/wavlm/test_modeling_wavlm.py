@@ -309,7 +309,7 @@ class WavLMModelTester:
 
 
 @require_torch
-class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
+class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (WavLMForCTC, WavLMModel, WavLMForAudioFrameClassification, WavLMForSequenceClassification, WavLMForXVector)
         if is_torch_available()

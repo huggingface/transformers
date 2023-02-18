@@ -195,7 +195,7 @@ class PegasusXModelTester:
 
 
 @require_torch
-class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusXModel, PegasusXForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (PegasusXForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True

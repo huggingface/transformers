@@ -163,7 +163,7 @@ class MaskFormerSwinModelTester:
 
 
 @require_torch
-class MaskFormerSwinModelTest(ModelTesterMixin, unittest.TestCase):
+class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MaskFormerSwinModel,

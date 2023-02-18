@@ -570,7 +570,7 @@ class TFGroupViTModelTester:
 
 
 @require_tf
-class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFGroupViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFGroupViTModel,) if is_tf_available() else ()
     test_head_masking = False
     test_pruning = False

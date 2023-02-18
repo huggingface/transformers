@@ -179,7 +179,7 @@ class DPRModelTester:
 
 
 @require_torch
-class DPRModelTest(ModelTesterMixin, unittest.TestCase):
+class DPRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DPRContextEncoder,

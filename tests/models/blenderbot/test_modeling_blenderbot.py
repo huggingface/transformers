@@ -224,7 +224,7 @@ class BlenderbotModelTester:
 
 
 @require_torch
-class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotModel, BlenderbotForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True

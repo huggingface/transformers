@@ -409,7 +409,7 @@ class TapasModelTester:
 
 
 @require_torch
-class TapasModelTest(ModelTesterMixin, unittest.TestCase):
+class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TapasModel,

@@ -360,7 +360,7 @@ class XLMModelTester:
 
 
 @require_torch
-class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             XLMModel,

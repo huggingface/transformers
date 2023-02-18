@@ -390,7 +390,7 @@ class Wav2Vec2ConformerModelTester:
 
 
 @require_torch
-class Wav2Vec2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
+class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Wav2Vec2ConformerForCTC,

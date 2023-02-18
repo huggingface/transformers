@@ -176,7 +176,7 @@ def prepare_blenderbot_small_inputs_dict(
 
 
 @require_tf
-class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel) if is_tf_available() else ()
     )

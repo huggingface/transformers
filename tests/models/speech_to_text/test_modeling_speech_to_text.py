@@ -268,7 +268,7 @@ class Speech2TextModelTester:
 
 
 @require_torch
-class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Speech2TextModel, Speech2TextForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Speech2TextForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True

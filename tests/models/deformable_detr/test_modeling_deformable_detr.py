@@ -186,7 +186,7 @@ class DeformableDetrModelTester:
 
 
 @require_timm
-class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_timm_available() else ()
     is_encoder_decoder = True
     test_torchscript = False

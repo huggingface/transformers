@@ -430,7 +430,7 @@ class GPT2ModelTester:
 
 
 @require_torch
-class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2ForSequenceClassification, GPT2ForTokenClassification)
         if is_torch_available()

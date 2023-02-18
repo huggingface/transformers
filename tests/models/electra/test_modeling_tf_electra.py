@@ -488,7 +488,7 @@ class TFElectraModelTester:
 
 
 @require_tf
-class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFElectraModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFElectraModel,

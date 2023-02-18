@@ -321,7 +321,7 @@ class SEWDModelTester:
 
 
 @require_torch
-class SEWDModelTest(ModelTesterMixin, unittest.TestCase):
+class SEWDModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SEWDForCTC, SEWDModel, SEWDForSequenceClassification) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False

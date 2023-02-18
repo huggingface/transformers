@@ -430,7 +430,7 @@ class BigBirdModelTester:
 
 
 @require_torch
-class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
+class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # head masking & pruning is currently not supported for big bird
     test_head_masking = False
     test_pruning = False

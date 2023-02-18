@@ -276,7 +276,7 @@ class MarkupLMModelTester:
 
 
 @require_torch
-class MarkupLMModelTest(ModelTesterMixin, unittest.TestCase):
+class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MarkupLMModel,

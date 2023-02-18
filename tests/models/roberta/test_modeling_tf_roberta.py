@@ -548,7 +548,7 @@ class TFRobertaModelTester:
 
 
 @require_tf
-class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFRobertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFRobertaModel,

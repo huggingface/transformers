@@ -219,7 +219,7 @@ class LiltModelTester:
 
 
 @require_torch
-class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LiltModel,

@@ -281,7 +281,7 @@ class YosoModelTester:
 
 
 @require_torch
-class YosoModelTest(ModelTesterMixin, unittest.TestCase):
+class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             YosoModel,

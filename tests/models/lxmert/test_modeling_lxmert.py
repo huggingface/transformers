@@ -530,7 +530,7 @@ class LxmertModelTester:
 
 
 @require_torch
-class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
+class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (LxmertModel, LxmertForPreTraining, LxmertForQuestionAnswering) if is_torch_available() else ()
 
     fx_compatible = True

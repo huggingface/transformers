@@ -221,7 +221,7 @@ class M2M100ModelTester:
 
 
 @require_torch
-class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             M2M100Model,

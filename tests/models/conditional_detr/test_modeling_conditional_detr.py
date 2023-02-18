@@ -180,7 +180,7 @@ class ConditionalDetrModelTester:
 
 
 @require_timm
-class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ConditionalDetrModel,

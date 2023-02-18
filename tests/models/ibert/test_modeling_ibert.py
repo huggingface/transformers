@@ -225,7 +225,7 @@ class IBertModelTester:
 
 
 @require_torch
-class IBertModelTest(ModelTesterMixin, unittest.TestCase):
+class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_head_masking = False

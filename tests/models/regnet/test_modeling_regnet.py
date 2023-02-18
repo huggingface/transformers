@@ -119,7 +119,7 @@ class RegNetModelTester:
 
 
 @require_torch
-class RegNetModelTest(ModelTesterMixin, unittest.TestCase):
+class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as RegNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

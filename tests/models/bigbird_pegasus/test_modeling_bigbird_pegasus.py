@@ -233,7 +233,7 @@ class BigBirdPegasusModelTester:
 
 
 @require_torch
-class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             BigBirdPegasusModel,

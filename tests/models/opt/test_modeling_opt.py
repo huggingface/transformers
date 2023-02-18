@@ -184,7 +184,7 @@ class OPTModelTester:
 
 
 @require_torch
-class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (OPTModel, OPTForCausalLM, OPTForSequenceClassification, OPTForQuestionAnswering)
         if is_torch_available()

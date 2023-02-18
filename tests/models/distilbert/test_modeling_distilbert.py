@@ -196,7 +196,7 @@ class DistilBertModelTester(object):
 
 
 @require_torch
-class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
+class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DistilBertModel,

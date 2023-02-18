@@ -556,7 +556,7 @@ class RoCBertModelTester:
 
 
 @require_torch
-class RoCBertModelTest(ModelTesterMixin, unittest.TestCase):
+class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RoCBertModel,

@@ -394,7 +394,7 @@ class OwlViTModelTester:
 
 
 @require_torch
-class OwlViTModelTest(ModelTesterMixin, unittest.TestCase):
+class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OwlViTModel,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False

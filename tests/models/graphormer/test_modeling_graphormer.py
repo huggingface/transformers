@@ -244,7 +244,7 @@ class GraphormerModelTester:
 
 
 @require_torch
-class GraphormerModelTest(ModelTesterMixin, unittest.TestCase):
+class GraphormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GraphormerForGraphClassification, GraphormerModel) if is_torch_available() else ()
     all_generative_model_classes = ()
     test_pruning = False

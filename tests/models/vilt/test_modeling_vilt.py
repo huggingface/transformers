@@ -219,7 +219,7 @@ class ViltModelTester:
 
 @require_torch
 @unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "Vilt is only available in torch v1.10+")
-class ViltModelTest(ModelTesterMixin, unittest.TestCase):
+class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ViltModel,

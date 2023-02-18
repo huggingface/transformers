@@ -266,7 +266,7 @@ class FNetModelTester:
 
 
 @require_torch
-class FNetModelTest(ModelTesterMixin, unittest.TestCase):
+class FNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FNetModel,

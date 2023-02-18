@@ -240,7 +240,7 @@ class TFRoFormerModelTester:
 
 
 @require_tf
-class TFRoFormerModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFRoFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFRoFormerModel,

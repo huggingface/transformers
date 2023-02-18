@@ -173,7 +173,7 @@ class TimeSeriesTransformerModelTester:
 
 
 @require_torch
-class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
+class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TimeSeriesTransformerModel, TimeSeriesTransformerForPrediction) if is_torch_available() else ()
     )

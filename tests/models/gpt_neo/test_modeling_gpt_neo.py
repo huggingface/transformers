@@ -372,7 +372,7 @@ class GPTNeoModelTester:
 
 
 @require_torch
-class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (GPTNeoModel, GPTNeoForCausalLM, GPTNeoForSequenceClassification) if is_torch_available() else ()
     )

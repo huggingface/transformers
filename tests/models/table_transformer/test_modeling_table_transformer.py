@@ -176,7 +176,7 @@ class TableTransformerModelTester:
 
 
 @require_timm
-class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TableTransformerModel,

@@ -300,7 +300,7 @@ class VisualBertModelTester:
 
 
 @require_torch
-class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
+class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             VisualBertModel,

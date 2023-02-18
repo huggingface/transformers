@@ -217,7 +217,7 @@ class NystromformerModelTester:
 
 
 @require_torch
-class NystromformerModelTest(ModelTesterMixin, unittest.TestCase):
+class NystromformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             NystromformerModel,

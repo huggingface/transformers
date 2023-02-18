@@ -225,7 +225,7 @@ class MBartModelTester:
 
 
 @require_torch
-class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (MBartModel, MBartForConditionalGeneration, MBartForSequenceClassification, MBartForQuestionAnswering)
         if is_torch_available()

@@ -215,7 +215,7 @@ class OneFormerModelTester:
 
 
 @require_torch
-class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
+class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OneFormerModel, OneFormerForUniversalSegmentation) if is_torch_available() else ()
 
     is_encoder_decoder = False

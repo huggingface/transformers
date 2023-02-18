@@ -361,7 +361,7 @@ class RoFormerModelTester:
 
 
 @require_torch
-class RoFormerModelTest(ModelTesterMixin, unittest.TestCase):
+class RoFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RoFormerModel,

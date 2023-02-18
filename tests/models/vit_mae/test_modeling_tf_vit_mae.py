@@ -156,7 +156,7 @@ class TFViTMAEModelTester:
 
 
 @require_tf
-class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFViTMAEModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ViTMAE does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

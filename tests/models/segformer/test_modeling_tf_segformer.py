@@ -151,7 +151,7 @@ class TFSegformerModelTester:
 
 
 @require_tf
-class TFSegformerModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFSegformerModel, TFSegformerForImageClassification, TFSegformerForSemanticSegmentation)
         if is_tf_available()

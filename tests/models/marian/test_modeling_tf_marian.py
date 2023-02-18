@@ -178,7 +178,7 @@ def prepare_marian_inputs_dict(
 
 
 @require_tf
-class TFMarianModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFMarianModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFMarianMTModel, TFMarianModel) if is_tf_available() else ()
     all_generative_model_classes = (TFMarianMTModel,) if is_tf_available() else ()
     is_encoder_decoder = True

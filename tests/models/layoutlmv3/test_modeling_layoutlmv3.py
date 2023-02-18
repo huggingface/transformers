@@ -270,7 +270,7 @@ class LayoutLMv3ModelTester:
 
 
 @require_torch
-class LayoutLMv3ModelTest(ModelTesterMixin, unittest.TestCase):
+class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_mismatched_shapes = False

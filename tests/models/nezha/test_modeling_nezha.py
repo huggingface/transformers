@@ -316,7 +316,7 @@ class NezhaModelTester:
 
 
 @require_torch
-class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             NezhaModel,

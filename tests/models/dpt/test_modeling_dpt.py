@@ -150,7 +150,7 @@ class DPTModelTester:
 
 
 @require_torch
-class DPTModelTest(ModelTesterMixin, unittest.TestCase):
+class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as DPT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

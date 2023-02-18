@@ -330,7 +330,7 @@ class TFFunnelModelTester:
 
 
 @require_tf
-class TFFunnelModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFFunnelModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFFunnelModel,

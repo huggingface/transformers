@@ -534,7 +534,7 @@ class ChineseCLIPModelTester:
 
 
 @require_torch
-class ChineseCLIPModelTest(ModelTesterMixin, unittest.TestCase):
+class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ChineseCLIPModel,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False

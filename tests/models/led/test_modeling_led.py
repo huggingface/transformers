@@ -269,7 +269,7 @@ class LEDModelTester:
 
 
 @require_torch
-class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (LEDModel, LEDForConditionalGeneration, LEDForSequenceClassification, LEDForQuestionAnswering)
         if is_torch_available()

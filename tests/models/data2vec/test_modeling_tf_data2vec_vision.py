@@ -173,7 +173,7 @@ class TFData2VecVisionModelTester:
 
 
 @require_tf
-class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Data2VecVision does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

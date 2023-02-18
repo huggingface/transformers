@@ -207,7 +207,7 @@ class TFLayoutLMModelTester:
 
 
 @require_tf
-class TFLayoutLMModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFLayoutLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFLayoutLMModel,

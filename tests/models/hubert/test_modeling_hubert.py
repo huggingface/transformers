@@ -305,7 +305,7 @@ class HubertModelTester:
 
 
 @require_torch
-class HubertModelTest(ModelTesterMixin, unittest.TestCase):
+class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False

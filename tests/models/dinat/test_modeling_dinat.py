@@ -193,7 +193,7 @@ class DinatModelTester:
 
 @require_natten
 @require_torch
-class DinatModelTest(ModelTesterMixin, unittest.TestCase):
+class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DinatModel,

@@ -132,7 +132,7 @@ class Blip2VisionModelTester:
 
 
 @require_torch
-class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
+class Blip2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as BLIP-2's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

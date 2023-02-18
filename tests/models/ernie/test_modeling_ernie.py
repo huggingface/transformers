@@ -427,7 +427,7 @@ class ErnieModelTester:
 
 
 @require_torch
-class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ErnieModel,

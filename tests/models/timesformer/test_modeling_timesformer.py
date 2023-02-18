@@ -153,7 +153,7 @@ class TimesformerModelTester:
 
 
 @require_torch
-class TimesformerModelTest(ModelTesterMixin, unittest.TestCase):
+class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as TimeSformer does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

@@ -219,7 +219,7 @@ class SwinModelTester:
 
 
 @require_torch
-class SwinModelTest(ModelTesterMixin, unittest.TestCase):
+class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             SwinModel,

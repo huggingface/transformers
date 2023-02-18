@@ -170,7 +170,7 @@ class TFDistilBertModelTester:
 
 
 @require_tf
-class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFDistilBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFDistilBertModel,

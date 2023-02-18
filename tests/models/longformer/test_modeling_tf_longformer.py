@@ -271,7 +271,7 @@ class TFLongformerModelTester:
 
 
 @require_tf
-class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFLongformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFLongformerModel,

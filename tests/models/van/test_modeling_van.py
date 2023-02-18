@@ -116,7 +116,7 @@ class VanModelTester:
 
 
 @require_torch
-class VanModelTest(ModelTesterMixin, unittest.TestCase):
+class VanModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Van does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

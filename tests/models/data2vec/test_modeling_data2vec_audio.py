@@ -359,7 +359,7 @@ class Data2VecAudioModelTester:
 
 
 @require_torch
-class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
+class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Data2VecAudioForCTC,

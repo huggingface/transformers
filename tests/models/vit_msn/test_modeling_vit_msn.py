@@ -145,7 +145,7 @@ class ViTMSNModelTester:
 
 
 @require_torch
-class ViTMSNModelTest(ModelTesterMixin, unittest.TestCase):
+class ViTMSNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ViTMSN does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

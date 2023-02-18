@@ -267,7 +267,7 @@ class MegatronBertModelTester:
 
 
 @require_torch
-class MegatronBertModelTest(ModelTesterMixin, unittest.TestCase):
+class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MegatronBertModel,

@@ -166,7 +166,7 @@ class LevitModelTester:
 
 
 @require_torch
-class LevitModelTest(ModelTesterMixin, unittest.TestCase):
+class LevitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Levit does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

@@ -236,7 +236,7 @@ class MarianModelTester:
 
 
 @require_torch
-class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MarianModel, MarianMTModel) if is_torch_available() else ()
     all_generative_model_classes = (MarianMTModel,) if is_torch_available() else ()
     is_encoder_decoder = True

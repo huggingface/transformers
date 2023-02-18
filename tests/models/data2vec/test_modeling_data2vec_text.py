@@ -360,7 +360,7 @@ class Data2VecTextModelTester:
 
 
 @require_torch
-class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Data2VecTextForCausalLM,

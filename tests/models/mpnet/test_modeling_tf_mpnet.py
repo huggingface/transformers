@@ -185,7 +185,7 @@ class TFMPNetModelTester:
 
 
 @require_tf
-class TFMPNetModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFMPNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFMPNetForMaskedLM,

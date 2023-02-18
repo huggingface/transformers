@@ -190,7 +190,7 @@ class NatModelTester:
 
 @require_natten
 @require_torch
-class NatModelTest(ModelTesterMixin, unittest.TestCase):
+class NatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             NatModel,

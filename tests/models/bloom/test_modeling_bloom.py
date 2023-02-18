@@ -320,7 +320,7 @@ class BloomModelTester:
 
 
 @require_torch
-class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             BloomModel,

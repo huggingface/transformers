@@ -148,7 +148,7 @@ class ViTHybridModelTester:
 
 
 @require_torch
-class ViTHybridModelTest(ModelTesterMixin, unittest.TestCase):
+class ViTHybridModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ViT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

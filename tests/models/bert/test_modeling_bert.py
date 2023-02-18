@@ -427,7 +427,7 @@ class BertModelTester:
 
 
 @require_torch
-class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             BertModel,

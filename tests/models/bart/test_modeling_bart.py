@@ -415,7 +415,7 @@ class BartHeadTests(unittest.TestCase):
 
 
 @require_torch
-class BartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering)
         if is_torch_available()

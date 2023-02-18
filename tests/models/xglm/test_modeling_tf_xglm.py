@@ -140,7 +140,7 @@ class TFXGLMModelTester:
 
 
 @require_tf
-class TFXGLMModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFXGLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFXGLMModel, TFXGLMForCausalLM) if is_tf_available() else ()
     all_generative_model_classes = (TFXGLMForCausalLM,) if is_tf_available() else ()
     test_onnx = False

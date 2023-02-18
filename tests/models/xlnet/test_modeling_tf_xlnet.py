@@ -332,7 +332,7 @@ class TFXLNetModelTester:
 
 
 @require_tf
-class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFXLNetModel,

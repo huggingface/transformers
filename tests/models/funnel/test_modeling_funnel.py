@@ -352,7 +352,7 @@ class FunnelModelTester:
 
 
 @require_torch
-class FunnelModelTest(ModelTesterMixin, unittest.TestCase):
+class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_pruning = False
     all_model_classes = (

@@ -186,7 +186,7 @@ class GPTNeoXModelTester:
 
 
 @require_torch
-class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
+class GPTNeoXModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GPTNeoXModel, GPTNeoXForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GPTNeoXForCausalLM,) if is_torch_available() else ()
     test_pruning = False

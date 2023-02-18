@@ -208,7 +208,7 @@ class TFDebertaModelTester:
 
 
 @require_tf
-class TFDebertaModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFDebertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFDebertaModel,

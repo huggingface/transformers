@@ -141,7 +141,7 @@ class ASTModelTester:
 
 
 @require_torch
-class ASTModelTest(ModelTesterMixin, unittest.TestCase):
+class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as AST does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

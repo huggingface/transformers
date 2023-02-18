@@ -246,7 +246,7 @@ class ConvBertModelTester:
 
 
 @require_torch
-class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
+class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ConvBertModel,

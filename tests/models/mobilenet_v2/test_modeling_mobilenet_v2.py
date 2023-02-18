@@ -183,7 +183,7 @@ class MobileNetV2ModelTester:
 
 
 @require_torch
-class MobileNetV2ModelTest(ModelTesterMixin, unittest.TestCase):
+class MobileNetV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as MobileNetV2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

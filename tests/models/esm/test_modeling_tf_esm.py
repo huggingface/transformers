@@ -195,7 +195,7 @@ class TFEsmModelTester:
 
 
 @require_tf
-class TFEsmModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFEsmModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFEsmModel,

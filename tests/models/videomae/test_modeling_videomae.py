@@ -163,7 +163,7 @@ class VideoMAEModelTester:
 
 
 @require_torch
-class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
+class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as VideoMAE does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

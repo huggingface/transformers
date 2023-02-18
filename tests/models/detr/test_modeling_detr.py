@@ -175,7 +175,7 @@ class DetrModelTester:
 
 
 @require_timm
-class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DetrModel,

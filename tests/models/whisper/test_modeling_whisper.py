@@ -272,7 +272,7 @@ class WhisperModelTester:
 
 
 @require_torch
-class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (WhisperForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True

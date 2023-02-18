@@ -547,7 +547,7 @@ class SwitchTransformersModelTester:
 
 
 @require_torch
-class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
     )

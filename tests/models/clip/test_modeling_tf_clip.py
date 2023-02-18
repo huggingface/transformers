@@ -516,7 +516,7 @@ class TFCLIPModelTester:
 
 
 @require_tf
-class TFCLIPModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFCLIPModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFCLIPModel,) if is_tf_available() else ()
     test_head_masking = False
     test_pruning = False

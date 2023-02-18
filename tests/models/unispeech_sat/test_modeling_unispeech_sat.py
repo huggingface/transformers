@@ -342,7 +342,7 @@ class UniSpeechSatModelTester:
 
 
 @require_torch
-class UniSpeechSatModelTest(ModelTesterMixin, unittest.TestCase):
+class UniSpeechSatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             UniSpeechSatForCTC,

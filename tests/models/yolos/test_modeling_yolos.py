@@ -161,7 +161,7 @@ class YolosModelTester:
 
 
 @require_torch
-class YolosModelTest(ModelTesterMixin, unittest.TestCase):
+class YolosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as YOLOS does not use input_ids, inputs_embeds,
     attention_mask and seq_length.

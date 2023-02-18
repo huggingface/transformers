@@ -173,7 +173,7 @@ class Mask2FormerModelTester:
 
 
 @require_torch
-class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
+class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Mask2FormerModel, Mask2FormerForUniversalSegmentation) if is_torch_available() else ()
 
     is_encoder_decoder = False

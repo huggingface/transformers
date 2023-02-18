@@ -177,7 +177,7 @@ class TFSwinModelTester:
 
 
 @require_tf
-class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFSwinModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFSwinModel,

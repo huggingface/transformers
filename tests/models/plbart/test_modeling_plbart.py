@@ -214,7 +214,7 @@ class PLBartModelTester:
 
 
 @require_torch
-class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (PLBartModel, PLBartForConditionalGeneration, PLBartForSequenceClassification) if is_torch_available() else ()
     )

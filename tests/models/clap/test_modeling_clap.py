@@ -478,7 +478,7 @@ class ClapModelTester:
 
 
 @require_torch
-class ClapModelTest(ModelTesterMixin, unittest.TestCase):
+class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ClapModel,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
