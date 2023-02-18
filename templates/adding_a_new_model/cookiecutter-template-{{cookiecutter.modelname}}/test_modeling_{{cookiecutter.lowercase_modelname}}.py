@@ -361,7 +361,7 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
 
 
 @require_torch
-class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, unittest.TestCase):
+class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
@@ -668,7 +668,7 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
 
 
 @require_torch
-class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         ({{cookiecutter.camelcase_modelname}}Model, {{cookiecutter.camelcase_modelname}}ForConditionalGeneration, {{cookiecutter.camelcase_modelname}}ForSequenceClassification, {{cookiecutter.camelcase_modelname}}ForQuestionAnswering)
         if is_torch_available()
@@ -1041,7 +1041,7 @@ class {{cookiecutter.camelcase_modelname}}StandaloneDecoderModelTester:
 
 
 @require_torch
-class {{cookiecutter.camelcase_modelname}}StandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class {{cookiecutter.camelcase_modelname}}StandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = ({{cookiecutter.camelcase_modelname}}Decoder, {{cookiecutter.camelcase_modelname}}ForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = ({{cookiecutter.camelcase_modelname}}ForCausalLM,) if is_torch_available() else ()
     test_pruning = False
