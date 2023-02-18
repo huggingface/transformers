@@ -190,7 +190,7 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         if is_timm_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": ConditionalDetrModel, "object-detection": ConditionalDetrForObjectDetection} if is_torch_available() else {}
+    pipieline_model_mapping = {"feature-extraction": ConditionalDetrModel, "object-detection": ConditionalDetrForObjectDetection} if is_timm_available() else {}
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
