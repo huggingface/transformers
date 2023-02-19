@@ -19,8 +19,14 @@ import os
 import random
 from pathlib import Path
 
-from transformers import PreTrainedModel, TFPreTrainedModel
-from transformers.testing_utils import require_decord
+from transformers.testing_utils import (
+    require_decord,
+    require_pytesseract,
+    require_timm,
+    require_torch,
+    require_torch_or_tf,
+    require_vision,
+)
 from transformers.utils import direct_transformers_import
 
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
@@ -120,7 +126,7 @@ class PipelineTesterMixin:
             )
 
         model_architectures = self.pipieline_model_mapping[task]
-        if issubclass(model_architectures, (PreTrainedModel, TFPreTrainedModel)):
+        if not isinstance(model_architectures, tuple):
             model_architectures = (model_architectures,)
         if not isinstance(model_architectures, tuple):
             raise ValueError(f"`model_architectures` must be a tuple. Got {type(model_architectures)} instead.")
@@ -207,18 +213,13 @@ class PipelineTesterMixin:
         processor = None
         if processor_name is not None:
             processor_class = getattr(transformers_module, processor_name)
-            # If the required packages (like `Pillow`) are not installed, this will fail.
-            try:
-                processor = processor_class.from_pretrained(repo_id)
-            except Exception:
-                self.skipTest(
-                    f"Test is skipped: Could not load the processor from `{repo_id}` with `{processor_name}`."
-                )
+            processor = processor_class.from_pretrained(repo_id)
 
         # TODO: Maybe not upload such problematic tiny models to Hub.
         if tokenizer is None and processor is None:
-            self.skipTest(f"Test is skipped: Could not load any tokenizer or processor from `{repo_id}`.")
+            self.skipTest(f"Test is skipped: Could not find or load any tokenizer / processor from `{repo_id}`.")
 
+        # TODO: We should check if a model file is on the Hub repo. instead.
         try:
             model = model_architecture.from_pretrained(repo_id)
         except Exception:
@@ -261,6 +262,7 @@ class PipelineTesterMixin:
 
         run_batch_test(pipeline, examples)
 
+    @require_torch
     def test_pipeline_audio_classification(self):
         self.run_task_tests(task="audio-classification")
 
@@ -270,9 +272,15 @@ class PipelineTesterMixin:
     def test_pipeline_conversational(self):
         self.run_task_tests(task="conversational")
 
+    @require_vision
+    @require_timm
+    @require_torch
     def test_pipeline_depth_estimation(self):
         self.run_task_tests(task="depth-estimation")
 
+    @require_pytesseract
+    @require_torch
+    @require_vision
     def test_pipeline_document_question_answering(self):
         self.run_task_tests(task="document-question-answering")
 
@@ -282,15 +290,24 @@ class PipelineTesterMixin:
     def test_pipeline_fill_mask(self):
         self.run_task_tests(task="fill-mask")
 
+    @require_torch_or_tf
+    @require_vision
     def test_pipeline_image_classification(self):
         self.run_task_tests(task="image-classification")
 
+    @require_vision
+    @require_timm
+    @require_torch
     def test_pipeline_image_segmentation(self):
         self.run_task_tests(task="image-segmentation")
 
+    @require_vision
     def test_pipeline_image_to_text(self):
         self.run_task_tests(task="image-to-text")
 
+    @require_vision
+    @require_timm
+    @require_torch
     def test_pipeline_object_detection(self):
         self.run_task_tests(task="object-detection")
 
@@ -309,6 +326,7 @@ class PipelineTesterMixin:
     def test_pipeline_text_classification(self):
         self.run_task_tests(task="text-classification")
 
+    @require_torch_or_tf
     def test_pipeline_text_generation(self):
         self.run_task_tests(task="text-generation")
 
@@ -318,19 +336,26 @@ class PipelineTesterMixin:
     def test_pipeline_translation(self):
         self.run_task_tests(task="translation")
 
+    @require_torch_or_tf
+    @require_vision
     @require_decord
     def test_pipeline_video_classification(self):
         self.run_task_tests(task="video-classification")
 
+    @require_torch
+    @require_vision
     def test_pipeline_visual_question_answering(self):
         self.run_task_tests(task="visual-question-answering")
 
     def test_pipeline_zero_shot(self):
         self.run_task_tests(task="zero-shot")
 
+    @require_vision
     def test_pipeline_zero_shot_image_classification(self):
         self.run_task_tests(task="zero-shot-image-classification")
 
+    @require_vision
+    @require_torch
     def test_pipeline_zero_shot_object_detection(self):
         self.run_task_tests(task="zero-shot-object-detection")
 
