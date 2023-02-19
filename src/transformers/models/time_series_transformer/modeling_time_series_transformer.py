@@ -1009,7 +1009,7 @@ TIME_SERIES_TRANSFORMER_START_DOCSTRING = r"""
 
 TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
             Past values of the time series, that serve as context in order to predict the future. The sequence size of
             this tensor must be larger than the `context_length` of the model, since the model will use the larger size
             to construct lag features, i.e. additional values from the past which are added in order to serve as "extra
@@ -1024,6 +1024,9 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             `static_categorical_features`, `static_real_features`, `past_time_features` and lags).
 
             Optionally, missing values need to be replaced with zeros and indicated via the `past_observed_mask`.
+
+            For multivariate time series, the `input_size` dimension is required and corresponds to the number of
+            variates in the time series per time step.
         past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`):
             Required time features, which the model internally will add to `past_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
@@ -1033,10 +1036,14 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
 
             These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where
             the position encodings are learned from scratch internally as parameters of the model, the Time Series
-            Transformer requires to provide additional time features.
+            Transformer requires to provide additional time features. The Time Series Transformer only learns
+            additional embeddings for `static_categorical_features`.
 
-            The Time Series Transformer only learns additional embeddings for `static_categorical_features`.
-        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Additional dynamic real covariates can be concatenated to this tensor, with the caveat that these features
+            must but known at prediction time.
+
+            The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`, *optional*):
             Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected in
             `[0, 1]`:
 
@@ -1056,7 +1063,7 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Static real features are features which have the same value for all time steps (static over time).
 
             A typical example of a static real feature is promotion information.
-        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)`, *optional*):
+        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)` or `(batch_size, prediction_length, input_size)`, *optional*):
             Future values of the time series, that serve as labels for the model. The `future_values` is what the
             Transformer needs during training to learn to output, given the `past_values`.
 
@@ -1066,19 +1073,27 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
 
             Optionally, during training any missing values need to be replaced with zeros and indicated via the
             `future_observed_mask`.
-        future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
-            Optional time features, which the model internally will add to `future_values`. These could be things like
-            "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
-            could also be so-called "age" features, which basically help the model know "at which point in life" a
-            time-series is. Age features have small values for distant past time steps and increase monotonically the
-            more we approach the current time step.
+
+            For multivariate time series, the `input_size` dimension is required and corresponds to the number of
+            variates in the time series per time step.
+        future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`):
+            Required time features for the prediction window, which the model internally will add to `future_values`.
+            These could be things like "month of year", "day of the month", etc. encoded as vectors (for instance as
+            Fourier features). These could also be so-called "age" features, which basically help the model know "at
+            which point in life" a time-series is. Age features have small values for distant past time steps and
+            increase monotonically the more we approach the current time step. Holiday features are also a good example
+            of time features.
 
             These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where
             the position encodings are learned from scratch internally as parameters of the model, the Time Series
-            Transformer requires to provide additional features.
+            Transformer requires to provide additional time features. The Time Series Transformer only learns
+            additional embeddings for `static_categorical_features`.
 
-            The Time Series Transformer only learns additional embeddings for `static_categorical_features`.
-        future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Additional dynamic real covariates can be concatenated to this tensor, with the caveat that these features
+            must but known at prediction time.
+
+            The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
+        future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`, *optional*):
             Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
             in `[0, 1]`:
 
