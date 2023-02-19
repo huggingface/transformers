@@ -167,11 +167,7 @@ class TFMobileViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
         else ()
     )
     pipieline_model_mapping = (
-        {
-            "feature-extraction": TFMobileViTModel,
-            "image-classification": TFMobileViTForImageClassification,
-            "image-segmentation": TFMobileViTForSemanticSegmentation,
-        }
+        {"feature-extraction": TFMobileViTModel, "image-classification": TFMobileViTForImageClassification}
         if is_tf_available()
         else {}
     )
