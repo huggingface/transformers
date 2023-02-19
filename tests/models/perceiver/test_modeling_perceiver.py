@@ -166,9 +166,11 @@ class PerceiverModelTester:
             audio = torch.randn(
                 (self.batch_size, self.num_frames * self.audio_samples_per_frame, 1), device=torch_device
             )
-            inputs = dict(
-                image=images, audio=audio, label=torch.zeros((self.batch_size, self.num_labels), device=torch_device)
-            )
+            inputs = {
+                "image": images,
+                "audio": audio,
+                "label": torch.zeros((self.batch_size, self.num_labels), device=torch_device),
+            }
         else:
             raise ValueError(f"Model class {model_class} not supported")
 
@@ -734,7 +736,7 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                 continue
 
             config, inputs, input_mask, _, _ = self.model_tester.prepare_config_and_inputs(model_class=model_class)
-            inputs_dict = dict(inputs=inputs, attention_mask=input_mask)
+            inputs_dict = {"inputs": inputs, "attention_mask": input_mask}
 
             for problem_type in problem_types:
                 with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):

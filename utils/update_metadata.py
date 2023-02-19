@@ -223,7 +223,7 @@ def update_metadata(token, commit_sha):
         table = update_pipeline_and_auto_class_table(table)
 
         # Sort the model classes to avoid some nondeterministic updates to create false update commits.
-        model_classes = sorted(list(table.keys()))
+        model_classes = sorted(table.keys())
         tags_table = pd.DataFrame(
             {
                 "model_class": model_classes,

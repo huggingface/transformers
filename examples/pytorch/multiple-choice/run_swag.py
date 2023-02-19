@@ -457,14 +457,14 @@ def main():
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
-    kwargs = dict(
-        finetuned_from=model_args.model_name_or_path,
-        tasks="multiple-choice",
-        dataset_tags="swag",
-        dataset_args="regular",
-        dataset="SWAG",
-        language="en",
-    )
+    kwargs = {
+        "finetuned_from": model_args.model_name_or_path,
+        "tasks": "multiple-choice",
+        "dataset_tags": "swag",
+        "dataset_args": "regular",
+        "dataset": "SWAG",
+        "language": "en",
+    }
 
     if training_args.push_to_hub:
         trainer.push_to_hub(**kwargs)

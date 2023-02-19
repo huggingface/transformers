@@ -395,7 +395,7 @@ class XmodOutput(nn.Module):
         else:
             self.adapter_layer_norm = None
         self.adapter_reuse_layer_norm = config.adapter_reuse_layer_norm
-        self.adapter_modules = nn.ModuleDict(dict())
+        self.adapter_modules = nn.ModuleDict({})
         for language in config.languages:
             self.adapter_modules[str(language)] = XmodAdapter(config)
 

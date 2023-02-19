@@ -385,7 +385,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
-    return readmes_match, "\n".join(map(lambda x: x[1], sorted_index)) + "\n"
+    return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
 
 
 def convert_readme_to_index(model_list):
