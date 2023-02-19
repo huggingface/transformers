@@ -62,29 +62,20 @@ def get_convnextv2_config(checkpoint_url):
         depths = [3, 3, 27, 3]
         hidden_sizes = [352, 704, 1408, 2816]
 
-    if "1k" in checkpoint_url:
-        num_labels = 1000
-        filename = "imagenet-1k-id2label.json"
-        expected_shape = (1, 1000)
-    else:
-        num_labels = 21841
-        filename = "imagenet-22k-id2label.json"
-        expected_shape = (1, 21841)
+    num_labels = 1000
+    filename = "imagenet-1k-id2label.json"
+    expected_shape = (1, 1000)
 
     repo_id = "huggingface/label-files"
     config.num_labels = num_labels
     id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
-    if "1k" not in checkpoint_url:
-        # this dataset contains 21843 labels but the model only has 21841
-        # we delete the classes as mentioned in https://github.com/google-research/big_transfer/issues/18
-        del id2label[9205]
-        del id2label[15027]
+
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
     config.hidden_sizes = hidden_sizes
     config.depths = depths
-
+    
     return config, expected_shape
 
 
