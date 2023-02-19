@@ -237,9 +237,14 @@ class MixedInt8T5Test(unittest.TestCase):
         both cases.
         """
         from transformers import T5ForConditionalGeneration
+        import bitsandbytes as bnb
 
         # test with `t5-small`
         model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+
+        # there was a bug with decoders - this test checks that it is fixed
+        self.assertTrue(isinstance(model.decoder.block[0].layer[0].SelfAttention.q, bnb.nn.Linear8bitLt))
+
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(0)
         _ = model.generate(**encoded_input)
 
