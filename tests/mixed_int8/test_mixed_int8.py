@@ -269,8 +269,9 @@ class MixedInt8T5Test(unittest.TestCase):
         `flan-t5-small` uses `T5DenseGatedActDense` whereas `t5-small` uses `T5DenseReluDense`. We need to test
         both cases.
         """
-        from transformers import T5ForConditionalGeneration
         import bitsandbytes as bnb
+
+        from transformers import T5ForConditionalGeneration
 
         # test with `t5-small`
         model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
