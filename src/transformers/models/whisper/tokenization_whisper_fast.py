@@ -18,7 +18,6 @@ import os
 from typing import List, Optional, Tuple
 
 import numpy as np
-
 from tokenizers import pre_tokenizers, processors
 
 from ...tokenization_utils_base import BatchEncoding
@@ -145,7 +144,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         language=None,
         task=None,
         predict_timestamps=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -271,7 +270,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         output_offsets: bool = False,
         time_precision=0.02,
         decode_with_timestamps: bool = False,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
