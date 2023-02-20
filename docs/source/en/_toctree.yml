@@ -442,6 +442,8 @@
         title: DPT
       - local: model_doc/efficientformer
         title: EfficientFormer
+      - local: model_doc/efficientnet
+        title: EfficientNet
       - local: model_doc/glpn
         title: GLPN
       - local: model_doc/imagegpt
