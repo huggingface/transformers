@@ -92,6 +92,7 @@ src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/gpt2/configuration_gpt2.py
 src/transformers/models/gpt2/modeling_gpt2.py
 src/transformers/models/gptj/modeling_gptj.py
+src/transformers/models/gptsan_japanese/modeling_gptsan_japanese.py
 src/transformers/models/gpt_neo/configuration_gpt_neo.py
 src/transformers/models/gpt_neox/configuration_gpt_neox.py
 src/transformers/models/gpt_neox_japanese/configuration_gpt_neox_japanese.py
