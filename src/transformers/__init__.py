@@ -123,6 +123,12 @@ _import_structure = {
     "models": [],
     # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
+    "models.align": [
+        "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ALIGNConfig",
+        "ALIGNTextConfig",
+        "ALIGNVisionConfig",
+    ],
     "models.altclip": [
         "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "AltCLIPConfig",
@@ -972,6 +978,17 @@ else:
             "AlbertModel",
             "AlbertPreTrainedModel",
             "load_tf_weights_in_albert",
+        ]
+    )
+    _import_structure["models.align"].extend(
+        [
+            "ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ALIGNModel",
+            "ALIGNPreTrainedModel",
+            "ALIGNTextModel",
+            "ALIGNTextModelWithProjection",
+            "ALIGNVisionModel",
+            "ALIGNVisionModelWithProjection",
         ]
     )
     _import_structure["models.altclip"].extend(
@@ -3674,6 +3691,12 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.align import (
+        ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ALIGNConfig,
+        ALIGNTextConfig,
+        ALIGNVisionConfig,
+    )
     from .models.altclip import (
         ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AltCLIPConfig,
@@ -4428,6 +4451,15 @@ if TYPE_CHECKING:
             AlbertModel,
             AlbertPreTrainedModel,
             load_tf_weights_in_albert,
+        )
+        from .models.align import (
+            ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ALIGNModel,
+            ALIGNPreTrainedModel,
+            ALIGNTextModel,
+            ALIGNTextModelWithProjection,
+            ALIGNVisionModel,
+            ALIGNVisionModelWithProjection,
         )
         from .models.altclip import (
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
