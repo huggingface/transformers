@@ -23,7 +23,6 @@ from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
-from ...test_pipeline_common import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -125,7 +124,7 @@ class BlipTextModelTester:
 
 
 @require_torch
-class BlipTextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BlipTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False

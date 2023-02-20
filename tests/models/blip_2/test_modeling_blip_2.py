@@ -34,7 +34,6 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
-from ...test_pipeline_common import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -132,7 +131,7 @@ class Blip2VisionModelTester:
 
 
 @require_torch
-class Blip2VisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as BLIP-2's vision encoder does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
