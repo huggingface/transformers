@@ -1588,6 +1588,10 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(mlm_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
+        if not return_dict:
+            output = tuple(mlm_logits)
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+
         return MaskedLMOutput(
             loss=masked_lm_loss,
             logits=mlm_logits,
@@ -1684,7 +1688,8 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
             itm_loss = CrossEntropyLoss(logits, labels)
 
         if not return_dict:
-            return tuple(logits)
+            output = tuple(logits)
+            return ((itm_loss,) + output) if itm_loss is not None else output
 
         return SequenceClassifierOutput(
             loss=itm_loss,
