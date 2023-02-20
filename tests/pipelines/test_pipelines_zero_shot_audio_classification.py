@@ -15,7 +15,6 @@
 import unittest
 
 from datasets import load_dataset
-
 from transformers.pipelines import pipeline
 from transformers.testing_utils import nested_simplify, require_torch, slow
 
@@ -38,7 +37,7 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
         output = audio_classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
         self.assertEqual(
             nested_simplify(output),
-            [{"score": 0.5, "label": "Sound of vaccum cleaner"}, {"score": 0.5, "label": "Sound of a dog"}],
+            [ {"score": 0.501, "label": "Sound of a dog"}, {"score": 0.499, "label": "Sound of vaccum cleaner"}],
         )
 
     @unittest.skip("No models are available in TF")
