@@ -163,6 +163,7 @@ else:
         "FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
         "FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
         "FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+        "FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
         "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
         "FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING",
         "FLAX_MODEL_MAPPING",
@@ -176,6 +177,7 @@ else:
         "FlaxAutoModelForQuestionAnswering",
         "FlaxAutoModelForSeq2SeqLM",
         "FlaxAutoModelForSequenceClassification",
+        "FlaxAutoModelForSpeechSeq2Seq",
         "FlaxAutoModelForTokenClassification",
         "FlaxAutoModelForVision2Seq",
     ]
@@ -320,6 +322,7 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
             FLAX_MODEL_MAPPING,
@@ -333,6 +336,7 @@ if TYPE_CHECKING:
             FlaxAutoModelForQuestionAnswering,
             FlaxAutoModelForSeq2SeqLM,
             FlaxAutoModelForSequenceClassification,
+            FlaxAutoModelForSpeechSeq2Seq,
             FlaxAutoModelForTokenClassification,
             FlaxAutoModelForVision2Seq,
         )
