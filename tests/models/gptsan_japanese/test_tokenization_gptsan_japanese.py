@@ -36,30 +36,9 @@ class GPTSanJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        vocab_tokens = [
-            "こん",
-            "こんに",
-            "にちは",
-            "ばんは",
-            "世界,㔺界",
-            "、",
-            "。",
-            "<BR>",
-            "<SP>",
-            "<TAB>",
-            "<URL>",
-            "<EMAIL>",
-            "<TEL>",
-            "<DATE>",
-            "<PRICE>",
-            "<BLOCK>",
-            "<KIGOU>",
-            "<U2000U2BFF>",
-            "<|emoji1|>",
-            "<unk>",
-            "<|bagoftoken|>",
-            "<|endoftext|>",
-        ]
+        # fmt: off
+        vocab_tokens = ["こん", "こんに", "にちは", "ばんは", "世界,㔺界", "、", "。", "<BR>", "<SP>", "<TAB>", "<URL>", "<EMAIL>", "<TEL>", "<DATE>", "<PRICE>", "<BLOCK>", "<KIGOU>", "<U2000U2BFF>", "<|emoji1|>", "<unk>", "<|bagoftoken|>", "<|endoftext|>"]
+        # fmt: on
         emoji_tokens = {"emoji": {"\ud83d\ude00": "<|emoji1|>"}, "emoji_inv": {"<|emoji1|>": "\ud83d\ude00"}}  # 😀
         self.special_tokens_map = {"unk_token": "<unk>"}
 
