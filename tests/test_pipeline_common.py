@@ -117,12 +117,12 @@ class PipelineTesterMixin:
         # TODO: remove this block before merge to `main`.
         if self.pipieline_model_mapping is None:
             self.skipTest(
-                f"Test is skipped: task `self.pipieline_model_mapping` is not defined for `{self.__class__.__name__}`."
+                f"Test is skipped (task `{task}`): `self.pipieline_model_mapping` is not defined for `{self.__class__.__name__}`."
             )
 
         if task not in self.pipieline_model_mapping:
             self.skipTest(
-                f"Test is skipped: task `{task}` is not in `self.pipieline_model_mapping` for `{self.__class__.__name__}`."
+                f"Test is skipped (task `{task}`): `{task}` is not in `self.pipieline_model_mapping` for `{self.__class__.__name__}`."
             )
 
         model_architectures = self.pipieline_model_mapping[task]
@@ -182,7 +182,7 @@ class PipelineTesterMixin:
                     processor_name,
                 ):
                     self.skipTest(
-                        f"Test is skipped: test is currently known to fail for: task `{task}` | model `{model_architecture.__name__}` | tokenizer `{tokenizer_name}` | processor `{processor_name}`."
+                        f"Test is skipped (task `{task}`): test is currently known to fail for: model `{model_architecture.__name__}` | tokenizer `{tokenizer_name}` | processor `{processor_name}`."
                     )
                 self.run_pipeline_test(task, repo_name, model_architecture, tokenizer_name, processor_name)
 
@@ -213,20 +213,30 @@ class PipelineTesterMixin:
         processor = None
         if processor_name is not None:
             processor_class = getattr(transformers_module, processor_name)
-            processor = processor_class.from_pretrained(repo_id)
+            # If the required packages (like `Pillow` or `torchaudio`) are not installed, this will fail.
+            try:
+                processor = processor_class.from_pretrained(repo_id)
+            except Exception:
+                self.skipTest(
+                    f"Test is skipped (task `{task}`): Could not load the processor from `{repo_id}` with `{processor_name}`."
+                )
 
         # TODO: Maybe not upload such problematic tiny models to Hub.
         if tokenizer is None and processor is None:
-            self.skipTest(f"Test is skipped: Could not find or load any tokenizer / processor from `{repo_id}`.")
+            self.skipTest(
+                f"Test is skipped (task `{task}`): Could not find or load any tokenizer / processor from `{repo_id}`."
+            )
 
         # TODO: We should check if a model file is on the Hub repo. instead.
         try:
             model = model_architecture.from_pretrained(repo_id)
         except Exception:
-            self.skipTest(f"Test is skipped: Could not load the model from `{repo_id}` with `{model_architecture}`.")
+            self.skipTest(
+                f"Test is skipped (task `{task}`): Could not find or load the model from `{repo_id}` with `{model_architecture}`."
+            )
 
         # validate
-        validate_test_components(self, model, tokenizer, processor)
+        validate_test_components(self, task, model, tokenizer, processor)
 
         if hasattr(model, "eval"):
             model = model.eval()
@@ -239,7 +249,7 @@ class PipelineTesterMixin:
         if pipeline is None:
             # The test can disable itself, but it should be very marginal
             # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
-            self.skipTest("Test is skipped: Could not get the pipeline for testing.")
+            self.skipTest(f"Test is skipped (task `{task}`): Could not get the pipeline for testing.")
 
         task_test.run_pipeline_test(pipeline, examples)
 
@@ -360,7 +370,7 @@ class PipelineTesterMixin:
         self.run_task_tests(task="zero-shot-object-detection")
 
 
-def validate_test_components(test_case, model, tokenizer, processor):
+def validate_test_components(test_case, task, model, tokenizer, processor):
     # TODO: Move this to tiny model creation script
     # head-specific (within a model type) necessary changes to the config
     # 1. for `BlenderbotForCausalLM`
@@ -382,7 +392,7 @@ def validate_test_components(test_case, model, tokenizer, processor):
         # TODO: Remove tiny models from the Hub which have problematic tokenizers (but still keep this block)
         if config_vocab_size is not None and len(tokenizer) > config_vocab_size:
             test_case.skipTest(
-                f"Test is skipped: tokenizer (`{tokenizer.__class__.__name__}`) has {len(tokenizer)} tokens which is "
+                f"Test is skipped (task `{task}`): tokenizer (`{tokenizer.__class__.__name__}`) has {len(tokenizer)} tokens which is "
                 f"greater than `config_vocab_size` ({config_vocab_size}). Something is wrong."
             )
 
