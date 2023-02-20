@@ -283,6 +283,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         r"position_ids",
         r"language_model.encoder.embed_tokens.weight",
         r"language_model.decoder.embed_tokens.weight",
+        r"language_model.lm_head.weight",
     ]
     _no_split_modules = ["Blip2Attention", "T5Block", "OPTDecoderLayer"]
     _keep_in_fp32_modules = ["wo"]
@@ -1203,8 +1204,23 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
+    def get_input_embeddings(self):
+        if self.config.use_decoder_only_language_model:
+            return self.language_model.model.decoder.embed_tokens
+        else:
+            return self.language_model.lm_head
+
+    def set_input_embeddings(self, value):
+        if self.config.use_decoder_only_language_model:
+            self.language_model.model.decoder.embed_tokens = value
+        else:
+            self.language_model.lm_head = value
+
+    def set_output_embeddings(self, new_embeddings):
+        self.language_model.lm_head = new_embeddings
+
+    def get_output_embeddings(self) -> nn.Module:
+        return self.language_model.lm_head
 
     @add_start_docstrings_to_model_forward(BLIP_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Blip2ForConditionalGenerationModelOutput, config_class=Blip2VisionConfig)
