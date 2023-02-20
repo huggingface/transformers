@@ -85,7 +85,6 @@ class ErnieMEmbeddings(nn.Module):
                 position_ids = position_ids + past_key_values_length
         # to mimic paddlenlp implementation
         position_ids += 2
-        position_ids = position_ids.to(next(self.position_embeddings.parameters()).device)
         position_embeddings = self.position_embeddings(position_ids)
         embeddings = inputs_embeds + position_embeddings
         embeddings = self.layer_norm(embeddings)
