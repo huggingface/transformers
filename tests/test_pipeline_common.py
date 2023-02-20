@@ -117,12 +117,14 @@ class PipelineTesterMixin:
         # TODO: remove this block before merge to `main`.
         if self.pipieline_model_mapping is None:
             self.skipTest(
-                f"Test is skipped (task `{task}`): `self.pipieline_model_mapping` is not defined for `{self.__class__.__name__}`."
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: "
+                f"`self.pipieline_model_mapping` is not defined for `{self.__class__.__name__}`."
             )
 
         if task not in self.pipieline_model_mapping:
             self.skipTest(
-                f"Test is skipped (task `{task}`): `{task}` is not in `self.pipieline_model_mapping` for `{self.__class__.__name__}`."
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: `{task}` is not in "
+                f"`self.pipieline_model_mapping` for `{self.__class__.__name__}`."
             )
 
         model_architectures = self.pipieline_model_mapping[task]
@@ -182,7 +184,9 @@ class PipelineTesterMixin:
                     processor_name,
                 ):
                     self.skipTest(
-                        f"Test is skipped (task `{task}`): test is currently known to fail for: model `{model_architecture.__name__}` | tokenizer `{tokenizer_name}` | processor `{processor_name}`."
+                        f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: test is "
+                        f"currently known to fail for: model `{model_architecture.__name__}` | tokenizer "
+                        f"`{tokenizer_name}` | processor `{processor_name}`."
                     )
                 self.run_pipeline_test(task, repo_name, model_architecture, tokenizer_name, processor_name)
 
@@ -218,13 +222,15 @@ class PipelineTesterMixin:
                 processor = processor_class.from_pretrained(repo_id)
             except Exception:
                 self.skipTest(
-                    f"Test is skipped (task `{task}`): Could not load the processor from `{repo_id}` with `{processor_name}`."
+                    f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not load the "
+                    f"processor from `{repo_id}` with `{processor_name}`."
                 )
 
         # TODO: Maybe not upload such problematic tiny models to Hub.
         if tokenizer is None and processor is None:
             self.skipTest(
-                f"Test is skipped (task `{task}`): Could not find or load any tokenizer / processor from `{repo_id}`."
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load "
+                f"any tokenizer / processor from `{repo_id}`."
             )
 
         # TODO: We should check if a model file is on the Hub repo. instead.
@@ -232,7 +238,8 @@ class PipelineTesterMixin:
             model = model_architecture.from_pretrained(repo_id)
         except Exception:
             self.skipTest(
-                f"Test is skipped (task `{task}`): Could not find or load the model from `{repo_id}` with `{model_architecture}`."
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load "
+                f"the model from `{repo_id}` with `{model_architecture}`."
             )
 
         # validate
@@ -249,7 +256,10 @@ class PipelineTesterMixin:
         if pipeline is None:
             # The test can disable itself, but it should be very marginal
             # Concerns: Wav2Vec2ForCTC without tokenizer test (FastTokenizer don't exist)
-            self.skipTest(f"Test is skipped (task `{task}`): Could not get the pipeline for testing.")
+            self.skipTest(
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not get the "
+                "pipeline for testing."
+            )
 
         task_test.run_pipeline_test(pipeline, examples)
 
@@ -392,8 +402,9 @@ def validate_test_components(test_case, task, model, tokenizer, processor):
         # TODO: Remove tiny models from the Hub which have problematic tokenizers (but still keep this block)
         if config_vocab_size is not None and len(tokenizer) > config_vocab_size:
             test_case.skipTest(
-                f"Test is skipped (task `{task}`): tokenizer (`{tokenizer.__class__.__name__}`) has {len(tokenizer)} tokens which is "
-                f"greater than `config_vocab_size` ({config_vocab_size}). Something is wrong."
+                f"{test_case.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: tokenizer "
+                f"(`{tokenizer.__class__.__name__}`) has {len(tokenizer)} tokens which is greater than "
+                f"`config_vocab_size` ({config_vocab_size}). Something is wrong."
             )
 
 
