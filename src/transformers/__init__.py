@@ -266,6 +266,7 @@ _import_structure = {
     ],
     "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
     "models.efficientformer": ["EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientFormerConfig"],
+    "models.efficientnet": ["EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientNetConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.ernie": [
@@ -831,6 +832,7 @@ else:
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientformer"].append("EfficientFormerImageProcessor")
+    _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
@@ -1461,6 +1463,14 @@ else:
             "EfficientFormerForImageClassificationWithTeacher",
             "EfficientFormerModel",
             "EfficientFormerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.efficientnet"].extend(
+        [
+            "EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EfficientNetForImageClassification",
+            "EfficientNetModel",
+            "EfficientNetPreTrainedModel",
         ]
     )
     _import_structure["models.electra"].extend(
@@ -3833,6 +3843,7 @@ if TYPE_CHECKING:
     )
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientFormerConfig
+    from .models.efficientnet import EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientNetConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
@@ -4331,6 +4342,7 @@ if TYPE_CHECKING:
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientformer import EfficientFormerImageProcessor
+        from .models.efficientnet import EfficientNetImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
@@ -4855,6 +4867,12 @@ if TYPE_CHECKING:
             EfficientFormerForImageClassificationWithTeacher,
             EfficientFormerModel,
             EfficientFormerPreTrainedModel,
+        )
+        from .models.efficientnet import (
+            EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            EfficientNetForImageClassification,
+            EfficientNetModel,
+            EfficientNetPreTrainedModel,
         )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
