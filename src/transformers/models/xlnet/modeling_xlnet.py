@@ -973,10 +973,10 @@ class XLNetModel(XLNetPreTrainedModel):
         qlen [0 0 0 0 0 0 0 1 1]     [1 1 0 0 0 0 0 1 1]
              [0 0 0 0 0 0 0 0 1]     [1 1 1 0 0 0 0 0 1]
            v [0 0 0 0 0 0 0 0 0]     [1 1 1 1 0 0 0 0 0]
-        
+
         Args:
             qlen: Sequence length
-            mlen: Mask length        
+            mlen: Mask length
         """
         attn_mask = torch.ones([qlen, qlen])
         mask_up = torch.triu(attn_mask, diagonal=1)
@@ -1030,8 +1030,10 @@ class XLNetModel(XLNetPreTrainedModel):
             # beg, end = klen - 1, -qlen
             beg, end = klen, -qlen
         elif self.attn_type == "uni":
-            # beg, end = klen - 1, -1
-            beg, end = klen, -1
+            raise FutureWarning(
+                f"`attn_type` {self.attn_type} is not supported anymore and will be removed in version 5 of transformers."
+                "If you want to use transformers XL use the [Transformer XL model](https://huggingface.co/docs/transformers/model_doc/transfo-xl) "
+            )
         else:
             raise ValueError(f"Unknown `attn_type` {self.attn_type}.")
 
