@@ -153,7 +153,7 @@ def generate_pixel_mask_noise(pixel_values, pixel_mask=None, mask_ratio=0.75):
     """Generate noise for audio masking."""
 
     batch_size, seq_len = pixel_values.shape[:2]
-    noise = torch.rand((batch_size, seq_len))  # noise in [0, 1]
+    noise = torch.rand((batch_size, seq_len), device=pixel_values.device)  # noise in [0, 1]
     len_keep = int(seq_len * (1 - mask_ratio))
     return noise, len_keep
 
