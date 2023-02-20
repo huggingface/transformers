@@ -148,7 +148,7 @@ class BeitConfig(BackboneConfigMixin, PretrainedConfig):
         image_size=224,
         patch_size=16,
         num_channels=3,
-        use_mask_token=True,
+        use_mask_token=False,
         use_absolute_position_embeddings=False,
         use_relative_position_bias=False,
         use_shared_relative_position_bias=False,
