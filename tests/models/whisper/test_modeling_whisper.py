@@ -1290,3 +1290,38 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    @slow
+    def test_tiny_specaugment_librispeech(self):
+        torch_device = "cpu"
+        set_seed(0)
+        # Apply SpecAugment
+        model = WhisperModel.from_pretrained("openai/whisper-tiny", apply_spec_augment=True)
+        # Set model to training mode to enable SpecAugment
+        model.train()
+        model.to(torch_device)
+        input_speech = self._load_datasamples(1)
+        feature_extractor = WhisperFeatureExtractor()
+        input_features = feature_extractor(input_speech, return_tensors="pt").input_features
+
+        with torch.no_grad():
+            logits = model(
+                input_features,
+                decoder_input_ids=torch.tensor([[50258, 50259, 50359]]),
+                output_hidden_states=False,
+                output_attentions=False,
+                return_dict=False,
+                use_cache=False,
+            )
+
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                0.9362, -4.7105, 5.0879, 3.9642, 1.0013, -6.0096, 4.7285, -3.1847,
+                -0.8648, 1.9631, 6.2653, 3.6936, 0.3575, -4.5818, 3.0564, 7.8712,
+                2.9951, 0.6848, 9.9497, -2.6638, 1.1571, -6.8546, -1.4333, -7.7584,
+                1.1200, 3.9030, 4.4655, -4.4919, -1.1703, 9.6241
+            ]
+        )
+        # fmt: on
+        self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
