@@ -49,7 +49,7 @@ class T5Config(PretrainedConfig):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
             Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model //
-            num_heads`.
+            num_heads`. TODO this needs to be updated
         d_ff (`int`, *optional*, defaults to 2048):
             Size of the intermediate feed forward layer in each `T5Block`.
         num_layers (`int`, *optional*, defaults to 6):
