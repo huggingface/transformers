@@ -31,15 +31,14 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     @require_torch
     def test_small_model_pt(self):
         audio_classifier = pipeline(
-            task="zero-shot-audio-classification",
-            model="hf-internal-testing/tiny-clap-htsat-unfused"
+            task="zero-shot-audio-classification", model="hf-internal-testing/tiny-clap-htsat-unfused"
         )
         dataset = load_dataset("ashraq/esc50")
         audio = dataset["train"]["audio"][-1]["array"]
         output = audio_classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
         self.assertEqual(
             nested_simplify(output),
-            [{'score': 0.5, 'label': 'Sound of vaccum cleaner'}, {'score': 0.5, 'label': 'Sound of a dog'}]
+            [{"score": 0.5, "label": "Sound of vaccum cleaner"}, {"score": 0.5, "label": "Sound of a dog"}],
         )
 
     @unittest.skip("No models are available in TF")
