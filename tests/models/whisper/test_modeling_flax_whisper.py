@@ -34,11 +34,11 @@ if is_datasets_available():
     from datasets import load_dataset
 
 if is_flax_available():
-    import numpy as np
-
     import jax
+    import numpy as np
     from flax.core.frozen_dict import unfreeze
     from flax.traverse_util import flatten_dict
+
     from transformers import (
         FLAX_MODEL_MAPPING,
         FlaxWhisperForConditionalGeneration,
