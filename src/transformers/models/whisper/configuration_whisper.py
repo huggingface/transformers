@@ -221,7 +221,7 @@ class WhisperConfig(PretrainedConfig):
         mask_feature_prob=0.0,
         mask_feature_length=10,
         mask_feature_min_masks=0,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.num_mel_bins = num_mel_bins
