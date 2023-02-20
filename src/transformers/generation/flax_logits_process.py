@@ -264,3 +264,191 @@ class FlaxMinLengthLogitsProcessor(FlaxLogitsProcessor):
         scores = jnp.where(apply_penalty, scores.at[:, self.eos_token_id].set(-float("inf")), scores)
 
         return scores
+
+
+class FlaxSuppressTokensAtBeginLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    [`FlaxLogitsProcessor`] supressing a list of tokens as soon as the `generate` function starts generating using
+    `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` are not sampled at the
+    begining of the generation.
+
+    Args:
+        begin_suppress_tokens (`List[int]`):
+            Tokens to not sample.
+        begin_index (`int`):
+            Index where the tokens are suppressed.
+    """
+
+    def __init__(self, begin_suppress_tokens, begin_index):
+        self.begin_suppress_tokens = list(begin_suppress_tokens)
+        self.begin_index = begin_index
+
+    def __call__(self, input_ids, scores, cur_len: int):
+        apply_penalty = 1 - jnp.bool_(cur_len - self.begin_index)
+
+        scores = jnp.where(apply_penalty, scores.at[:, self.begin_suppress_tokens].set(-float("inf")), scores)
+
+        return scores
+
+
+class FlaxSuppressTokensLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    [`FlaxLogitsProcessor`] suppressing a list of tokens at each decoding step. The processor will set their log probs
+    to be `-inf` so they are not sampled.
+
+    Args:
+        suppress_tokens (`list`):
+            Tokens to not sample.
+    """
+
+    def __init__(self, suppress_tokens: list):
+        self.suppress_tokens = list(suppress_tokens)
+
+    def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
+        scores = scores.at[..., self.suppress_tokens].set(-float("inf"))
+
+        return scores
+
+
+class FlaxForceTokensLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    [`FlaxLogitsProcessor`] that takes a list of pairs of integers which indicates a mapping from generation indices to
+    token indices that will be forced before sampling. The processor will set their log probs to 0 and all other tokens
+    to `-inf` so that they are sampled at their corresponding index.
+
+    Args:
+        force_token_map (`list`):
+            Map giving token ids and indices where they will be forced to be sampled.
+    """
+
+    def __init__(self, force_token_map):
+        force_token_map = dict(force_token_map)
+        # Converts the dictionary of format {index: token} containing the tokens to be forced to an array, where the
+        # index of the array corresponds to the index of the token to be forced, for XLA compatibility.
+        # Indexes without forced tokens will have a negative value.
+        force_token_array = jnp.ones((max(force_token_map.keys()) + 1), dtype=jnp.int32) * -1
+        for index, token in force_token_map.items():
+            force_token_array = force_token_array.at[index].set(token)
+        self.force_token_array = jnp.int32(force_token_array)
+
+    def __call__(self, input_ids: jnp.ndarray, scores: jnp.ndarray, cur_len: int) -> jnp.ndarray:
+        def _force_token(generation_idx):
+            batch_size = scores.shape[0]
+            current_token = self.force_token_array[generation_idx]
+
+            new_scores = jnp.ones_like(scores, dtype=scores.dtype) * -float("inf")
+            updates = jnp.zeros((batch_size, 1), dtype=scores.dtype)
+            new_scores = lax.dynamic_update_slice(new_scores, updates, (0, current_token))
+            return new_scores
+
+        scores = lax.cond(
+            cur_len >= self.force_token_array.shape[0],
+            # If the current length is geq than the length of force_token_array, the processor does nothing.
+            lambda: scores,
+            # Otherwise, it may force a certain token.
+            lambda: lax.cond(
+                self.force_token_array[cur_len] >= 0,
+                # Only valid (positive) tokens are forced
+                lambda: _force_token(cur_len),
+                # Otherwise, the processor does nothing.
+                lambda: scores,
+            ),
+        )
+        return scores
+
+
+class FlaxWhisperTimeStampLogitsProcessor(FlaxLogitsProcessor):
+    r"""
+    Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
+    probs to `inf` so that they are sampled at their corresponding index.
+
+    Args:
+        generate_config (`GenerateConfig`):
+            The generate config used to generate the output. The following parameters are required:
+                eos_token_id (`int`, *optional*, defaults to 50257):
+                    The id of the *end-of-sequence* token.
+                no_timestamps_token_id (`int`, *optional*, defaults to 50363):
+                    The id of the `"<|notimestamps|>"` token.
+                max_initial_timestamp_index (`int`, *optional*, defaults to 1):
+                    Used to set the maximum value of the initial timestamp. This is used to prevent the model from
+                    predicting timestamps that are too far in the future.
+    """
+
+    def __init__(self, generate_config, model_config, decoder_input_length):
+        self.eos_token_id = generate_config.eos_token_id
+        self.no_timestamps_token_id = generate_config.no_timestamps_token_id
+        self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+
+        self.begin_index = decoder_input_length + 1
+
+        if generate_config.is_multilingual:
+            # room for language token and task token
+            self.begin_index += 2
+        if hasattr(generate_config, "max_initial_timestamp_index"):
+            self.max_initial_timestamp_index = generate_config.max_initial_timestamp_index
+        else:
+            self.max_initial_timestamp_index = model_config.vocab_size
+        if self.max_initial_timestamp_index is None:
+            self.max_initial_timestamp_index = model_config.vocab_size
+
+    def __call__(self, input_ids, scores, cur_len):
+        # suppress <|notimestamps|> which is handled by without_timestamps
+        scores = scores.at[:, self.no_timestamps_token_id].set(-float("inf"))
+
+        def handle_pairs(input_ids_k, scores_k):
+            last_was_timestamp = jnp.where((cur_len - self.begin_index) >= 1, True, False)
+            last_was_timestamp = jnp.where(
+                input_ids_k[cur_len - 1] >= self.timestamp_begin,
+                True and last_was_timestamp,
+                False,
+            )
+
+            penultimate_was_timestamp = jnp.where((cur_len - self.begin_index) < 2, True, False)
+            penultimate_was_timestamp = jnp.where(
+                input_ids_k[cur_len - 2] >= self.timestamp_begin,
+                True,
+                penultimate_was_timestamp,
+            )
+
+            return jnp.where(
+                last_was_timestamp,
+                jnp.where(
+                    penultimate_was_timestamp > 0,
+                    scores_k.at[self.timestamp_begin :].set(-float("inf")),
+                    scores_k.at[: self.eos_token_id].set(-float("inf")),
+                ),
+                scores_k,
+            )
+
+        scores = jax.vmap(handle_pairs)(input_ids, scores)
+
+        apply_max_initial_timestamp = jnp.where(cur_len == self.begin_index, True, False)
+        apply_max_initial_timestamp = jnp.where(
+            self.max_initial_timestamp_index is not None,
+            True and apply_max_initial_timestamp,
+            False,
+        )
+
+        last_allowed = self.timestamp_begin + self.max_initial_timestamp_index
+
+        scores = jnp.where(
+            apply_max_initial_timestamp,
+            scores.at[:, last_allowed + 1 :].set(-float("inf")),
+            scores,
+        )
+
+        # if sum of probability over timestamps is above any other token, sample timestamp
+        logprobs = jax.nn.log_softmax(scores, axis=-1)
+
+        def handle_cumulative_probs(logprobs_k, scores_k):
+            timestamp_logprob = jax.nn.logsumexp(logprobs_k[self.timestamp_begin :], axis=-1)
+            max_text_token_logprob = jnp.max(logprobs_k[: self.timestamp_begin])
+            return jnp.where(
+                timestamp_logprob > max_text_token_logprob,
+                scores_k.at[: self.timestamp_begin].set(-float("inf")),
+                scores_k,
+            )
+
+        scores = jax.vmap(handle_cumulative_probs)(logprobs, scores)
+
+        return scores
