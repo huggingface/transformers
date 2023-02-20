@@ -66,6 +66,7 @@ from . import (
     dpr,
     dpt,
     efficientformer,
+    efficientnet,
     electra,
     encoder_decoder,
     ernie,

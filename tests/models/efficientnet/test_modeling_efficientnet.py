@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ConvNext model. """
+""" Testing suite for the PyTorch EfficientNet model. """
 
 
 import inspect
 import unittest
 
-from transformers import ConvNextConfig
+from transformers import EfficientNetConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -29,50 +29,49 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import ConvNextBackbone, ConvNextForImageClassification, ConvNextModel
-    from transformers.models.convnext.modeling_convnext import CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import EfficientNetForImageClassification, EfficientNetModel
+    from transformers.models.efficientnet.modeling_efficientnet import EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
-class ConvNextModelTester:
+class EfficientNetModelTester:
     def __init__(
         self,
         parent,
         batch_size=13,
         image_size=32,
         num_channels=3,
-        num_stages=4,
-        hidden_sizes=[10, 20, 30, 40],
-        depths=[2, 2, 3, 2],
+        kernel_sizes=[3, 3, 5],
+        in_channels=[32, 16, 24],
+        out_channels=[16, 24, 40],
+        strides=[1, 1, 2],
+        num_block_repeats=[1, 1, 2],
+        expand_ratios=[1, 6, 6],
         is_training=True,
         use_labels=True,
         intermediate_size=37,
         hidden_act="gelu",
         num_labels=10,
-        initializer_range=0.02,
-        out_features=["stage2", "stage3", "stage4"],
-        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
-        self.num_stages = num_stages
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
+        self.kernel_sizes = kernel_sizes
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.strides = strides
+        self.num_block_repeats = num_block_repeats
+        self.expand_ratios = expand_ratios
         self.is_training = is_training
-        self.use_labels = use_labels
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.num_labels = num_labels
-        self.initializer_range = initializer_range
-        self.out_features = out_features
-        self.scope = scope
+        self.use_labels = use_labels
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -85,64 +84,35 @@ class ConvNextModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return ConvNextConfig(
+        return EfficientNetConfig(
             num_channels=self.num_channels,
-            hidden_sizes=self.hidden_sizes,
-            depths=self.depths,
-            num_stages=self.num_stages,
+            kernel_sizes=self.kernel_sizes,
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            strides=self.strides,
+            num_block_repeats=self.num_block_repeats,
+            expand_ratios=self.expand_ratios,
             hidden_act=self.hidden_act,
-            is_decoder=False,
-            initializer_range=self.initializer_range,
-            out_features=self.out_features,
             num_labels=self.num_labels,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = ConvNextModel(config=config)
+        model = EfficientNetModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        # expected last hidden states: B, C, H // 32, W // 32
+        # expected last hidden states: B, C, H // 4, W // 4
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+            (self.batch_size, config.hidden_dim, self.image_size // 4, self.image_size // 4),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        model = ConvNextForImageClassification(config)
+        model = EfficientNetForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-    def create_and_check_backbone(self, config, pixel_values, labels):
-        model = ConvNextBackbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        # verify hidden states
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
-
-        # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
-        self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
-
-        # verify backbone works with out_features=None
-        config.out_features = None
-        model = ConvNextBackbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        # verify feature maps
-        self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
-
-        # verify channels
-        self.parent.assertEqual(len(model.channels), 1)
-        self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -152,31 +122,25 @@ class ConvNextModelTester:
 
 
 @require_torch
-class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
+class EfficientNetModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ConvNext does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as EfficientNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (
-            ConvNextModel,
-            ConvNextForImageClassification,
-            ConvNextBackbone,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (EfficientNetModel, EfficientNetForImageClassification) if is_torch_available() else ()
 
-    fx_compatible = True
+    fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = ConvNextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ConvNextConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = EfficientNetModelTester(self)
+        self.config_tester = ConfigTester(
+            self, config_class=EfficientNetConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.create_and_test_config_common_properties()
@@ -190,15 +154,15 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
-    @unittest.skip(reason="ConvNext does not use inputs_embeds")
+    @unittest.skip(reason="EfficientNet does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="ConvNext does not support input and output embeddings")
+    @unittest.skip(reason="EfficientNet does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="ConvNext does not use feedforward chunking")
+    @unittest.skip(reason="EfficientNet does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
@@ -228,14 +192,13 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            num_blocks = sum(config.num_block_repeats) * 4
+            self.assertEqual(len(hidden_states), num_blocks)
 
-            expected_num_stages = self.model_tester.num_stages
-            self.assertEqual(len(hidden_states), expected_num_stages + 1)
-
-            # ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
+            # EfficientNet's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
+                [self.model_tester.image_size // 2, self.model_tester.image_size // 2],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -256,8 +219,8 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ConvNextModel.from_pretrained(model_name)
+        for model_name in EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = EfficientNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -269,18 +232,18 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class ConvNextModelIntegrationTest(unittest.TestCase):
+class EfficientNetModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained("google/efficientnet-b7") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224").to(torch_device)
+        model = EfficientNetForImageClassification.from_pretrained("google/efficientnet-b7").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -290,6 +253,5 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0260, -0.4739, 0.1911]).to(torch_device)
-
+        expected_slice = torch.tensor([0.0001, 0.0002, 0.0002]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

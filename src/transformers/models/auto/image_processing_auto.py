@@ -57,6 +57,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("donut-swin", "DonutImageProcessor"),
         ("dpt", "DPTImageProcessor"),
         ("efficientformer", "EfficientFormerImageProcessor"),
+        ("efficientnet", "EfficientNetImageProcessor"),
         ("flava", "FlavaImageProcessor"),
         ("git", "CLIPImageProcessor"),
         ("glpn", "GLPNImageProcessor"),
