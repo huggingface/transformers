@@ -12,6 +12,15 @@ specific language governing permissions and limitations under the License.
 
 # T5
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=t5">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-t5-blueviolet">
+</a>
+<a href="https://huggingface.co/spaces/docs-demos/t5-base">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The T5 model was presented in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/pdf/1910.10683.pdf) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
@@ -35,6 +44,8 @@ Tips:
 each task is converted into a text-to-text format. T5 works well on a variety of tasks out-of-the-box by prepending a
 different prefix to the input corresponding to each task, e.g., for translation: *translate English to German: ...*,
 for summarization: *summarize: ...*.
+- The pretraining includes both supervised and self-supervised training. Supervised training is conducted on downstream tasks provided by the GLUE and SuperGLUE benchmarks (converting them into text-to-text tasks as explained above).
+- Self-supervised training uses corrupted tokens, by randomly removing 15% of the tokens and replacing them with individual sentinel tokens (if several consecutive tokens are marked for removal, the whole group is replaced with a single sentinel token). The input of the encoder is the corrupted sentence, the input of the decoder is the original sentence and the target is then the dropped out tokens delimited by their sentinel tokens.
 
 - T5 uses relative scalar embeddings. Encoder input padding can be done on the left and on the right.
 

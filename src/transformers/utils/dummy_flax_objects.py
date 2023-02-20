@@ -162,6 +162,9 @@ FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = None
 FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 
 
+FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = None
+
+
 FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
@@ -235,6 +238,13 @@ class FlaxAutoModelForSeq2SeqLM(metaclass=DummyObject):
 
 
 class FlaxAutoModelForSequenceClassification(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxAutoModelForSpeechSeq2Seq(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
@@ -1124,6 +1134,27 @@ class FlaxWav2Vec2Model(metaclass=DummyObject):
 
 
 class FlaxWav2Vec2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxWhisperForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxWhisperModel(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxWhisperPreTrainedModel(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
