@@ -128,6 +128,9 @@ class ImageProcessingMixin(PushToHubMixin):
                 functions returns a `Tuple(image_processor, unused_kwargs)` where *unused_kwargs* is a dictionary
                 consisting of the key/value pairs whose keys are not image processor attributes: i.e., the part of
                 `kwargs` which has not been used to update `image_processor` and is otherwise ignored.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are image processor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
@@ -232,6 +235,7 @@ class ImageProcessingMixin(PushToHubMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", "")
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -245,7 +249,7 @@ class ImageProcessingMixin(PushToHubMixin):
             local_files_only = True
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-        is_local = os.path.isdir(pretrained_model_name_or_path)
+        is_local = os.path.isdir(os.path.join(subfolder, pretrained_model_name_or_path))
         if os.path.isdir(pretrained_model_name_or_path):
             image_processor_file = os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
         if os.path.isfile(pretrained_model_name_or_path):
@@ -269,6 +273,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     use_auth_token=use_auth_token,
                     user_agent=user_agent,
                     revision=revision,
+                    subfolder=subfolder
                 )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
