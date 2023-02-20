@@ -3036,12 +3036,12 @@ class SpeechT5HifiGan(PreTrainedModel):
 
         Args:
             spectrogram (`torch.FloatTensor`):
-                Tensor containing the log-mel spectrograms. Can be batched (of shape
-                `(batch_size, sequence_length, config.model_in_dim)`) or un-batched
-                (of shape `(sequence_length, config.model_in_dim)`).
+                Tensor containing the log-mel spectrograms. Can be batched and of shape
+                `(batch_size, sequence_length, config.model_in_dim)`, or un-batched
+                and of shape `(sequence_length, config.model_in_dim)`.
 
         Returns:
-            `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectorgram is batched,
+            `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched,
             will be of shape `(batch_size, num_frames,)`. If un-batched, will be of shape `(num_frames,)`.
         """
         if self.config.normalize_before:
