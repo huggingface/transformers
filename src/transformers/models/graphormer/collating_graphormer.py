@@ -24,7 +24,6 @@ def convert_to_single_emb(x, offset: int = 512):
 
 
 def preprocess_item(item, keep_features=True):
-    requires_backends(preprocess_item, ["Cython"])
     if not is_cython_available():
         raise ImportError("Graphormer preprocessing needs Cython (pyximport)")
 
