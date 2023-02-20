@@ -32,7 +32,7 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     def test_small_model_pt(self):
         audio_classifier = pipeline(
             task="zero-shot-audio-classification",
-            model="hf-testing-internal/clap-htsat-unfused",
+            model="hf-internal-testing/tiny-clap-htsat-unfused",
         )
         dataset = load_dataset("ashraq/esc50")
         audio = dataset["train"]["audio"][-1]["array"]
