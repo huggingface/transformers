@@ -30,7 +30,6 @@ _import_structure = {
     "configuration_convnextv2": [
         "CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ConvNextV2Config",
-        "ConvNextV2OnnxConfig",
     ]
 }
 
@@ -64,7 +63,6 @@ if TYPE_CHECKING:
     from .configuration_convnextv2 import (
         CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ConvNextV2Config,
-        ConvNextV2OnnxConfig,
     )
 
     try:

@@ -184,9 +184,11 @@ class ConvNextV2Layer(nn.Module):
 
     def __init__(self, config, dim, drop_path=0):
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
+        # depthwise conv
+        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)
         self.layernorm = ConvNextV2LayerNorm(dim, eps=1e-6)
-        self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
+        # pointwise/1x1 convs, implemented with linear layers
+        self.pwconv1 = nn.Linear(dim, 4 * dim)
         self.act = ACT2FN[config.hidden_act]
         self.grn = ConvNextV2GRN(4 * dim)
         self.pwconv2 = nn.Linear(4 * dim, dim)
@@ -195,13 +197,15 @@ class ConvNextV2Layer(nn.Module):
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
         input = hidden_states
         x = self.dwconv(hidden_states)
-        x = x.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
+        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+        x = x.permute(0, 2, 3, 1)
         x = self.layernorm(x)
         x = self.pwconv1(x)
         x = self.act(x)
         x = self.grn(x)
         x = self.pwconv2(x)
-        x = x.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
+        # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
+        x = x.permute(0, 3, 1, 2)
 
         x = input + self.drop_path(x)
         return x
@@ -331,8 +335,8 @@ CONVNEXTV2_START_DOCSTRING = r"""
 CONVNEXTV2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`ConvNextImageProcessor`]. See
+            [`ConvNextImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.

@@ -14,13 +14,9 @@
 # limitations under the License.
 """ ConvNeXTV2 model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
 
-from packaging import version
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -48,9 +44,9 @@ class ConvNextV2Config(PretrainedConfig):
             Patch size to use in the patch embedding layer.
         num_stages (`int`, optional, defaults to 4):
             The number of stages in the model.
-        hidden_sizes (`List[int]`, *optional*, defaults to [96, 192, 384, 768]):
+        hidden_sizes (`List[int]`, *optional*, defaults to `[96, 192, 384, 768]`):
             Dimensionality (hidden size) at each stage.
-        depths (`List[int]`, *optional*, defaults to [3, 3, 9, 3]):
+        depths (`List[int]`, *optional*, defaults to `[3, 3, 9, 3]`):
             Depth (number of blocks) for each stage.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in each block. If string, `"gelu"`, `"relu"`,
@@ -117,19 +113,3 @@ class ConvNextV2Config(PretrainedConfig):
                         f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
                     )
         self.out_features = out_features
-
-
-class ConvNextV2OnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-5

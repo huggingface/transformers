@@ -75,7 +75,7 @@ def get_convnextv2_config(checkpoint_url):
     config.label2id = {v: k for k, v in id2label.items()}
     config.hidden_sizes = hidden_sizes
     config.depths = depths
-    
+
     return config, expected_shape
 
 

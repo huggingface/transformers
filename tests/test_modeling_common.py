@@ -596,7 +596,6 @@ class ModelTesterMixin:
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
-
             model = model_class(config)
             model.to(torch_device)
             model.gradient_checkpointing_enable()
