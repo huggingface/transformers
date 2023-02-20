@@ -18,7 +18,6 @@ import os
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
-
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -269,9 +268,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         language=None,
         task=None,
         predict_timestamps=False,
-        **kwargs
+        **kwargs,
     ):
-
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
@@ -562,7 +560,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         output_offsets: bool = False,
         time_precision=0.02,
         decode_with_timestamps: bool = False,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special

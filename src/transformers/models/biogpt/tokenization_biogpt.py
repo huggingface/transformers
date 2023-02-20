@@ -110,7 +110,7 @@ class BioGptTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         sep_token="</s>",
         pad_token="<pad>",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             bos_token=bos_token,

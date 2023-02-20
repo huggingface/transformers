@@ -26,7 +26,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = LxmertTokenizer
     rust_tokenizer_class = LxmertTokenizerFast
     test_rust_tokenizer = True

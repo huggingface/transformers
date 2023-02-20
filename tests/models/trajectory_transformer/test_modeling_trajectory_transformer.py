@@ -95,7 +95,6 @@ class TrajectoryTransformerModelTester:
 
 @require_torch
 class TrajectoryTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (TrajectoryTransformerModel,) if is_torch_available() else ()
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids

@@ -161,7 +161,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         num_parallel_samples: int = 100,
         init_std: float = 0.02,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         # time series specific configuration
         self.prediction_length = prediction_length

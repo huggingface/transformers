@@ -296,7 +296,6 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
     """
 
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: int):
-
         if not isinstance(bad_words_ids, List) or len(bad_words_ids) == 0:
             raise ValueError(f"`bad_words_ids` has to be a non-empty list, but is {bad_words_ids}.")
         if any(not isinstance(bad_word_ids, list) for bad_word_ids in bad_words_ids):
@@ -421,7 +420,6 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
         return banned_tokens
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-
         # TODO (joao): enable XLA on this logits processor. See discussion and attempts in
         # https://github.com/huggingface/transformers/pull/16974
         if not tf.executing_eagerly():

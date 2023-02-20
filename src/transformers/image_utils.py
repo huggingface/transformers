@@ -17,9 +17,8 @@ import os
 from typing import TYPE_CHECKING, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
-from packaging import version
-
 import requests
+from packaging import version
 
 from .utils import (
     ExplicitEnum,
@@ -36,6 +35,8 @@ from .utils.constants import (  # noqa: F401
     IMAGENET_DEFAULT_STD,
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
 )
 
 

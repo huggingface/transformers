@@ -182,7 +182,7 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    For more information about tests, check out the
    [Testing](https://huggingface.co/docs/transformers/testing) guide.
 
-   🤗 Transformers relies on `black` and `isort` to format its source code
+   🤗 Transformers relies on `black` and `ruff` to format its source code
    consistently. After you make changes, apply automatic style corrections and code verifications
    that can't be automated in one go with:
 
@@ -199,7 +199,7 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
    $ make style
    ```
 
-   🤗 Transformers also uses `flake8` and a few custom scripts to check for coding mistakes. Quality
+   🤗 Transformers also uses `ruff` and a few custom scripts to check for coding mistakes. Quality
    controls are run by the CI, but you can run the same checks with:
 
    ```bash
@@ -337,7 +337,12 @@ $ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_
 $ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
-Like the slow tests, custom tokenizer tests are skipped but you can set the `RUN_CUSTOM_TOKENIZERS` environment variable to `yes` to run them.
+Like the slow tests, there are other environment variables available which not enabled by default during testing:
+- `RUN_CUSTOM_TOKENIZERS`: Enables tests for custom tokenizers.
+- `RUN_PT_FLAX_CROSS_TESTS`: Enables tests for PyTorch + Flax integration.
+- `RUN_PT_TF_CROSS_TESTS`: Enables tests for TensorFlow + PyTorch integration.
+
+More environment variables and additional information can be found in the [testing_utils.py](src/transformers/testing_utils.py).
 
 🤗 Transformers uses `pytest` as a test runner only. It doesn't use any
 `pytest`-specific features in the test suite itself.

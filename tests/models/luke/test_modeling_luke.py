@@ -586,7 +586,6 @@ class LukeModelTester:
 
 @require_torch
 class LukeModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             LukeModel,

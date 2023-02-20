@@ -1423,7 +1423,7 @@ class SpeechT5ForSpeechToSpeechIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(1)
         input_values = processor(audio=input_speech, return_tensors="pt").input_values.to(torch_device)
 
-        speaker_embeddings = torch.zeros((1, 512))
+        speaker_embeddings = torch.zeros((1, 512), device=torch_device)
         generated_speech = model.generate_speech(input_values, speaker_embeddings=speaker_embeddings)
 
         self.assertEqual(generated_speech.shape[1], model.config.num_mel_bins)

@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,6 +29,7 @@ _import_structure = {
         "SpeechT5Config",
         "SpeechT5HifiGanConfig",
     ],
+    "processing_speecht5": ["SpeechT5Processor"],
 }
 
 try:
@@ -50,14 +47,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_speecht5"] = ["SpeechT5FeatureExtractor"]
-
-try:
-    if not (is_speech_available() and is_sentencepiece_available()):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["processing_speecht5"] = ["SpeechT5Processor"]
 
 try:
     if not is_torch_available():
@@ -82,6 +71,7 @@ if TYPE_CHECKING:
         SpeechT5Config,
         SpeechT5HifiGanConfig,
     )
+    from .processing_speecht5 import SpeechT5Processor
 
     try:
         if not is_sentencepiece_available():
@@ -98,14 +88,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_speecht5 import SpeechT5FeatureExtractor
-
-    try:
-        if not (is_speech_available() and is_sentencepiece_available()):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .processing_speecht5 import SpeechT5Processor
 
     try:
         if not is_torch_available():

@@ -73,7 +73,6 @@ class SwitchTransformersModelTester:
         expert_capacity=100,
         router_jitter_noise=0.0,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -548,7 +547,6 @@ class SwitchTransformersModelTester:
 
 @require_torch
 class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
     )
@@ -621,7 +619,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             config.forced_eos_token_id = None
 
             model = model_class.from_pretrained("google/switch-base-8").to(torch_device).eval()
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
+            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=2)
 
             num_return_sequences = 2
             if model.config.is_encoder_decoder:
@@ -670,7 +668,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             config.eos_token_id = None
             config.forced_eos_token_id = None
 
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
+            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=2)
 
             model = model_class.from_pretrained("google/switch-base-8").to(torch_device).eval()
 
@@ -828,7 +826,6 @@ class SwitchTransformersEncoderOnlyModelTester:
         pad_token_id=0,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length

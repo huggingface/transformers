@@ -17,6 +17,7 @@ import inspect
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import GitConfig, GitProcessor, GitVisionConfig, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -360,7 +361,6 @@ class GitModelTester:
 
 @require_torch
 class GitModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (GitModel, GitForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GitForCausalLM,) if is_torch_available() else ()
     fx_compatible = False

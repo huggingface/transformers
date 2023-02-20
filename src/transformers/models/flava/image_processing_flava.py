@@ -27,6 +27,8 @@ from transformers.utils.generic import TensorType
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
+    OPENAI_CLIP_MEAN,
+    OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -45,8 +47,8 @@ logger = logging.get_logger(__name__)
 
 
 # These values are taken from CLIP
-FLAVA_IMAGE_MEAN = [0.48145466, 0.4578275, 0.40821073]
-FLAVA_IMAGE_STD = [0.26862954, 0.26130258, 0.27577711]
+FLAVA_IMAGE_MEAN = OPENAI_CLIP_MEAN
+FLAVA_IMAGE_STD = OPENAI_CLIP_STD
 FLAVA_CODEBOOK_MEAN = [0.0, 0.0, 0.0]
 FLAVA_CODEBOOK_STD = [1.0, 1.0, 1.0]
 LOGIT_LAPLACE_EPS: float = 0.1
@@ -254,7 +256,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         codebook_do_normalize: bool = True,
         codebook_image_mean: Optional[Union[float, Iterable[float]]] = None,
         codebook_image_std: Optional[Union[float, Iterable[float]]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
@@ -338,7 +340,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to `(size["height"], size["width"])`.
@@ -365,7 +367,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
@@ -389,7 +391,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -410,7 +412,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.

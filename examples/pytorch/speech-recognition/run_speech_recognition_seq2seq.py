@@ -26,10 +26,10 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 import datasets
+import evaluate
 import torch
 from datasets import DatasetDict, load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,

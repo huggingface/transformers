@@ -33,6 +33,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+
     from transformers.models.bart.modeling_flax_bart import (
         FlaxBartForConditionalGeneration,
         FlaxBartForQuestionAnswering,

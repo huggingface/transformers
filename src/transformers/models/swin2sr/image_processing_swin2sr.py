@@ -50,7 +50,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         rescale_factor: Union[int, float] = 1 / 255,
         do_pad: bool = True,
         pad_size: int = 8,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
 
