@@ -416,6 +416,9 @@ class TrainingArguments:
                 - fsdp_min_num_params (`int`, *optional*, defaults to `0`):
                     FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
                     passed).
+                - fsdp_transformer_layer_cls_to_wrap (`List[str]`, *optional*):
+                    List of transformer layer class names (case-sensitive) to wrap, e.g, `BertLayer`, `GPTJBlock`,
+                    `T5Block` .... (useful only when `fsdp` flag is passed).
                 - fsdp_backward_prefetch (`str`, *optional*)
                     FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when
                     `fsdp` field is passed).
@@ -436,6 +439,19 @@ class TrainingArguments:
                     FSDP's limit_all_gathers (useful only when `fsdp` field is passed).
                      If `"True"`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight
                      all-gathers.
+                - xla (`bool`, *optional*, defaults to `False`):
+                    Whether to use PyTorch/XLA Fully Sharded Data Parallel Training. This is an experimental feature
+                    and its API may evolve in the future.
+                - xla_fsdp_settings (`dict`, *optional*)
+                    The value is a dictionary which stores the XLA FSDP wrapping parameters.
+
+                    For a complete list of options, please see [here](
+                    https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py).
+                - xla_fsdp_grad_ckpt (`bool`, *optional*, defaults to `False`):
+                    Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
+                    used when the xla flag is set to true, and an auto wrapping policy is specified through
+                    fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
+
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
@@ -898,7 +914,7 @@ class TrainingArguments:
         default=0,
         metadata={
             "help": (
-                "This parameter is deprecatetd. FSDP's minimum number of parameters for Default Auto Wrapping. (useful"
+                "This parameter is deprecated. FSDP's minimum number of parameters for Default Auto Wrapping. (useful"
                 " only when `fsdp` field is passed)."
             )
         },
@@ -916,8 +932,8 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
-                "(useful only when `fsdp` flag is passed)."
+                "This parameter is deprecated. Transformer layer class name (case-sensitive) to wrap, e.g,"
+                " `BertLayer`, `GPTJBlock`, `T5Block` .... (useful only when `fsdp` flag is passed)."
             )
         },
     )
@@ -1324,23 +1340,53 @@ class TrainingArguments:
             warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
 
         self.fsdp_config["fsdp_min_num_params"] = max(
-            getattr(self.fsdp_config, "fsdp_min_num_params", 0), self.fsdp_min_num_params
+            self.fsdp_config.get("fsdp_min_num_params", 0), self.fsdp_min_num_params
         )
+
+        # if fsdp_config["fsdp_transformer_layer_cls_to_wrap"] is specified as a string, convert it to a list with a single object
+        if isinstance(self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None), str):
+            self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = [
+                self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]
+            ]
+
+        if self.fsdp_transformer_layer_cls_to_wrap is not None:
+            warnings.warn(
+                "using `--fsdp_transformer_layer_cls_to_wrap` is deprecated. Use fsdp_config instead ", FutureWarning
+            )
+            self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"] = self.fsdp_config.get(
+                "fsdp_transformer_layer_cls_to_wrap", []
+            ) + [self.fsdp_transformer_layer_cls_to_wrap]
 
         if len(self.fsdp) == 0 and self.fsdp_config["fsdp_min_num_params"] > 0:
             warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
 
-        if len(self.fsdp) == 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+        if len(self.fsdp) == 0 and self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
             warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
 
         if (
             len(self.fsdp) > 0
             and self.fsdp_config["fsdp_min_num_params"] > 0
-            and self.fsdp_transformer_layer_cls_to_wrap is not None
+            and self.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None
         ):
             raise ValueError(
                 "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
             )
+        self.fsdp_config["xla"] = self.fsdp_config.get("xla", False)
+        self.fsdp_config["xla_fsdp_grad_ckpt"] = self.fsdp_config.get("xla_fsdp_grad_ckpt", False)
+        if self.fsdp_config["xla"]:
+            if len(self.fsdp) > 0:
+                # store XLA fsdp configuration parameters into a dictionary
+                self.xla_fsdp_config = self.fsdp_config.get("xla_fsdp_settings", {})
+                # apply appropriate string to torch.dtype conversions for parameters
+                if "compute_dtype" in self.xla_fsdp_config:
+                    self.xla_fsdp_config["compute_dtype"] = getattr(torch, self.xla_fsdp_config["compute_dtype"])
+                if "buffer_dtype" in self.xla_fsdp_config:
+                    self.xla_fsdp_config["buffer_dtype"] = getattr(torch, self.xla_fsdp_config["buffer_dtype"])
+            else:
+                warnings.warn("XLA FSDP can be used only when `--fsdp` is specified.")
+        else:
+            if self.fsdp_config["xla_fsdp_grad_ckpt"]:
+                warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
         if self.tpu_metrics_debug:
             warnings.warn(
