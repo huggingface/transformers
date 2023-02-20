@@ -914,6 +914,8 @@ def check_repo_quality():
     check_all_objects_are_documented()
     print("Checking all models are in at least one auto class.")
     check_all_models_are_auto_configured()
+    print("Checking all names in auto name mappings are defined.")
+    check_all_auto_object_names_being_defined()
 
 
 if __name__ == "__main__":
