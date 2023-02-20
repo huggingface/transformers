@@ -114,13 +114,6 @@ class PipelineTesterMixin:
             task (`str`):
                 A task name. This should be a key in the mapping `pipeline_test_mapping`.
         """
-        # TODO: remove this block before merge to `main`.
-        if self.pipieline_model_mapping is None:
-            self.skipTest(
-                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: "
-                f"`self.pipieline_model_mapping` is not defined for `{self.__class__.__name__}`."
-            )
-
         if task not in self.pipieline_model_mapping:
             self.skipTest(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: `{task}` is not in "
