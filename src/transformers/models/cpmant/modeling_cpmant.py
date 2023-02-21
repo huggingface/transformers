@@ -192,8 +192,8 @@ class CPMAntAttention(nn.Module):
             past_key_values (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
         """
         batch_size = hidden_q.size(0)
         len_q = hidden_q.size(1)
@@ -275,8 +275,8 @@ class CPMAntSelfAttentionBlock(nn.Module):
             past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
         """
         outputs = self.layernorm_before_attention(hidden_states)
         outputs = self.self_attention(outputs, outputs, attention_mask, position_bias, past_key_values, use_cache)
@@ -391,8 +391,8 @@ class CPMAntTransformerBlock(nn.Module):
             past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
         """
         current_key_value = None
         hidden_states = self.self_att(
@@ -439,8 +439,8 @@ class CPMAntEncoder(nn.Module):
             past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
         """
         if not use_cache:
             for layer in self.layers:
@@ -751,8 +751,8 @@ class CPMAntModel(CPMAntPreTrainedModel):
             span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 A contiguous sequence of tokens within the input text.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -847,8 +847,8 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
             span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 A contiguous sequence of tokens within the input text.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
