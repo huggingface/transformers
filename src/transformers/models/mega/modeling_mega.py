@@ -1207,7 +1207,6 @@ class MegaEmbeddings(nn.Module):
             embeddings = inputs_embeds
         return embeddings
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Mega
 class MegaLayer(nn.Module):
     def __init__(self, config: MegaConfig):
         super().__init__()
@@ -1302,7 +1301,6 @@ class MegaLayer(nn.Module):
         
         return outs
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
 class MegaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()

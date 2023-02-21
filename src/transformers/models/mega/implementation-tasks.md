@@ -151,6 +151,12 @@ Decoder
   * Renamed the parameters in the Mega modules and original checkpoint from `beta -> b_param` and `gamma -> g_param`
 * ~~Rewrite `convert_mega_original_pytorch_checkpoint_to_pytorch` to save the pretrained wikitext MLM~~
 * Rewrite tests in `tests/models/mega/test_modeling_mega`
+  * To keep:
+    * shape testing (all classes)
+    * value/slice testing: MLM (updated) and no head (updated)
+  * To delete:
+    * Slice testing for classification head (done)
+    * LM head ignore keys (done)
 * Documentation: 
   * ~~Docstrings of individual classes~~
   * Main docstring
