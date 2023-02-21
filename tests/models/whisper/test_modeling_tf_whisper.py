@@ -79,7 +79,7 @@ class TFWhisperModelTester:
         seq_length=60,
         is_training=True,
         use_labels=False,
-        vocab_size=99,
+        vocab_size=200,
         hidden_size=16,
         num_hidden_layers=2,
         num_attention_heads=4,
