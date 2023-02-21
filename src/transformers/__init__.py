@@ -27,6 +27,7 @@ from . import dependency_versions_check
 from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_bitsandbytes_available,
     is_flax_available,
     is_keras_nlp_available,
     is_sentencepiece_available,
@@ -47,6 +48,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
+    "audio_utils": [],
     "benchmark": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
@@ -206,6 +208,13 @@ _import_structure = {
         "ChineseCLIPTextConfig",
         "ChineseCLIPVisionConfig",
     ],
+    "models.clap": [
+        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ClapAudioConfig",
+        "ClapConfig",
+        "ClapProcessor",
+        "ClapTextConfig",
+    ],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
@@ -257,6 +266,7 @@ _import_structure = {
     ],
     "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
     "models.efficientformer": ["EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientFormerConfig"],
+    "models.efficientnet": ["EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientNetConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.ernie": [
@@ -285,6 +295,11 @@ _import_structure = {
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "models.gptsan_japanese": [
+        "GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GPTSanJapaneseConfig",
+        "GPTSanJapaneseTokenizer",
+    ],
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -588,6 +603,7 @@ _import_structure = {
         "add_end_docstrings",
         "add_start_docstrings",
         "is_apex_available",
+        "is_bitsandbytes_available",
         "is_datasets_available",
         "is_decord_available",
         "is_faiss_available",
@@ -614,6 +630,7 @@ _import_structure = {
         "logging",
     ],
     "utils.bitsandbytes": [],
+    "utils.quantization_config": ["BitsAndBytesConfig"],
 }
 
 # sentencepiece-backed objects
@@ -722,6 +739,7 @@ else:
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
+    _import_structure["models.whisper"].append("WhisperTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
@@ -815,6 +833,7 @@ else:
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientformer"].append("EfficientFormerImageProcessor")
+    _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
@@ -1231,6 +1250,18 @@ else:
             "ChineseCLIPVisionModel",
         ]
     )
+    _import_structure["models.clap"].extend(
+        [
+            "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ClapAudioModel",
+            "ClapAudioModelWithProjection",
+            "ClapFeatureExtractor",
+            "ClapModel",
+            "ClapPreTrainedModel",
+            "ClapTextModel",
+            "ClapTextModelWithProjection",
+        ]
+    )
     _import_structure["models.clip"].extend(
         [
             "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1435,6 +1466,14 @@ else:
             "EfficientFormerPreTrainedModel",
         ]
     )
+    _import_structure["models.efficientnet"].extend(
+        [
+            "EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EfficientNetForImageClassification",
+            "EfficientNetModel",
+            "EfficientNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.electra"].extend(
         [
             "ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1611,6 +1650,14 @@ else:
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.gptsan_japanese"].extend(
+        [
+            "GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTSanJapaneseForConditionalGeneration",
+            "GPTSanJapaneseModel",
+            "GPTSanJapanesePreTrainedModel",
         ]
     )
     _import_structure["models.graphormer"].extend(
@@ -3359,6 +3406,7 @@ else:
             "FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
             "FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING",
             "FLAX_MODEL_MAPPING",
@@ -3372,6 +3420,7 @@ else:
             "FlaxAutoModelForQuestionAnswering",
             "FlaxAutoModelForSeq2SeqLM",
             "FlaxAutoModelForSequenceClassification",
+            "FlaxAutoModelForSpeechSeq2Seq",
             "FlaxAutoModelForTokenClassification",
             "FlaxAutoModelForVision2Seq",
         ]
@@ -3555,6 +3604,13 @@ else:
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
     )
+    _import_structure["models.whisper"].extend(
+        [
+            "FlaxWhisperForConditionalGeneration",
+            "FlaxWhisperModel",
+            "FlaxWhisperPreTrainedModel",
+        ]
+    )
     _import_structure["models.xglm"].extend(
         [
             "FlaxXGLMForCausalLM",
@@ -3730,6 +3786,13 @@ if TYPE_CHECKING:
         ChineseCLIPTextConfig,
         ChineseCLIPVisionConfig,
     )
+    from .models.clap import (
+        CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ClapAudioConfig,
+        ClapConfig,
+        ClapProcessor,
+        ClapTextConfig,
+    )
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
@@ -3781,6 +3844,7 @@ if TYPE_CHECKING:
     )
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientFormerConfig
+    from .models.efficientnet import EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientNetConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
@@ -3805,6 +3869,11 @@ if TYPE_CHECKING:
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .models.gptsan_japanese import (
+        GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GPTSanJapaneseConfig,
+        GPTSanJapaneseTokenizer,
+    )
     from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4087,6 +4156,7 @@ if TYPE_CHECKING:
         add_end_docstrings,
         add_start_docstrings,
         is_apex_available,
+        is_bitsandbytes_available,
         is_datasets_available,
         is_decord_available,
         is_faiss_available,
@@ -4112,6 +4182,9 @@ if TYPE_CHECKING:
         is_vision_available,
         logging,
     )
+
+    # bitsandbytes config
+    from .utils.quantization_config import BitsAndBytesConfig
 
     try:
         if not is_sentencepiece_available():
@@ -4206,6 +4279,7 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.whisper import WhisperTokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
@@ -4270,6 +4344,7 @@ if TYPE_CHECKING:
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientformer import EfficientFormerImageProcessor
+        from .models.efficientnet import EfficientNetImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
@@ -4623,6 +4698,16 @@ if TYPE_CHECKING:
             ChineseCLIPTextModel,
             ChineseCLIPVisionModel,
         )
+        from .models.clap import (
+            CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClapAudioModel,
+            ClapAudioModelWithProjection,
+            ClapFeatureExtractor,
+            ClapModel,
+            ClapPreTrainedModel,
+            ClapTextModel,
+            ClapTextModelWithProjection,
+        )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             CLIPModel,
@@ -4785,6 +4870,12 @@ if TYPE_CHECKING:
             EfficientFormerModel,
             EfficientFormerPreTrainedModel,
         )
+        from .models.efficientnet import (
+            EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            EfficientNetForImageClassification,
+            EfficientNetModel,
+            EfficientNetPreTrainedModel,
+        )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
             ElectraForCausalLM,
@@ -4932,6 +5023,12 @@ if TYPE_CHECKING:
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
+        )
+        from .models.gptsan_japanese import (
+            GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTSanJapaneseForConditionalGeneration,
+            GPTSanJapaneseModel,
+            GPTSanJapanesePreTrainedModel,
         )
         from .models.graphormer import (
             GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6337,6 +6434,7 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
             FLAX_MODEL_MAPPING,
@@ -6350,6 +6448,7 @@ if TYPE_CHECKING:
             FlaxAutoModelForQuestionAnswering,
             FlaxAutoModelForSeq2SeqLM,
             FlaxAutoModelForSequenceClassification,
+            FlaxAutoModelForSpeechSeq2Seq,
             FlaxAutoModelForTokenClassification,
             FlaxAutoModelForVision2Seq,
         )
@@ -6485,6 +6584,7 @@ if TYPE_CHECKING:
             FlaxWav2Vec2Model,
             FlaxWav2Vec2PreTrainedModel,
         )
+        from .models.whisper import FlaxWhisperForConditionalGeneration, FlaxWhisperModel, FlaxWhisperPreTrainedModel
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
             FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6497,6 +6597,7 @@ if TYPE_CHECKING:
             FlaxXLMRobertaModel,
             FlaxXLMRobertaPreTrainedModel,
         )
+
 
 else:
     import sys
