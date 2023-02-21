@@ -30,7 +30,7 @@ from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import EfficientNetImageProcessor, ALIGNProcessor
+    from transformers import ALIGNProcessor, EfficientNetImageProcessor
 
 
 @require_vision
@@ -102,13 +102,13 @@ class ALIGNProcessorTest(unittest.TestCase):
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
         self.assertEqual(tokenizer_slow.get_vocab(), tokenizer_fast.get_vocab())
-        self.assertIsInstance(processor_slow.tokenizer, ALIGNTokenizer)
-        self.assertIsInstance(processor_fast.tokenizer, ALIGNTokenizerFast)
+        self.assertIsInstance(processor_slow.tokenizer, BertTokenizer)
+        self.assertIsInstance(processor_fast.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor_slow.image_processor, ALIGNImageProcessor)
-        self.assertIsInstance(processor_fast.image_processor, ALIGNImageProcessor)
+        self.assertIsInstance(processor_slow.image_processor, EfficientNetImageProcessor)
+        self.assertIsInstance(processor_fast.image_processor, EfficientNetImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
         processor = ALIGNProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
@@ -122,10 +122,10 @@ class ALIGNProcessorTest(unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, ALIGNTokenizerFast)
+        self.assertIsInstance(processor.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, ALIGNImageProcessor)
+        self.assertIsInstance(processor.image_processor, EfficientNetImageProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()

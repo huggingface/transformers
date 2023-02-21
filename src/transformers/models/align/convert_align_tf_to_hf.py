@@ -14,22 +14,26 @@
 # limitations under the License.
 """Convert ALIGN checkpoints from the original repository."""
 
-import json
-import os
-import requests
 import argparse
+import os
 
-import torch
-import numpy as np
-from PIL import Image
-import tensorflow as tf
 import align
+import numpy as np
+import requests
+import tensorflow as tf
+import torch
+from PIL import Image
 from tokenizer import Tokenizer
 
-from transformers import ALIGNModel
-from transformers import BertConfig, BertTokenizer
-from transformers import EfficientNetConfig, EfficientNetImageProcessor
-
+from transformers import (
+    ALIGNConfig,
+    ALIGNModel,
+    ALIGNProcessor,
+    BertConfig,
+    BertTokenizer,
+    EfficientNetConfig,
+    EfficientNetImageProcessor,
+)
 from transformers.utils import logging
 
 
@@ -46,11 +50,14 @@ def preprocess(image):
 def get_align_config(model_name):
     vision_config = EfficientNetConfig.from_pretrained("google/efficientnet-b7")
     vision_config.image_size = 289
-    vision_config.id2label = {"0": "LABEL_0", "1": "LABEL_1"},
+    vision_config.hidden_dim = 640
+    vision_config.id2label = ({"0": "LABEL_0", "1": "LABEL_1"},)
     vision_config.label2id = {"LABEL_0": 0, "LABEL_1": 1}
 
     text_config = BertConfig()
-    config = ALIGNConfig.from_text_vision_configs(text_config=text_config, vision_config=vision_config)
+    config = ALIGNConfig.from_text_vision_configs(
+        text_config=text_config, vision_config=vision_config, projection_dim=640
+    )
     return config
 
 
@@ -63,15 +70,12 @@ def prepare_img():
 
 def get_processor():
     image_processor = EfficientNetImageProcessor(
-        do_center_crop=True,
-        rescale_offset=True,
-        do_normalize=False,
-        include_top=False
+        do_center_crop=True, rescale_offset=True, do_normalize=False, include_top=False
     )
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     tokenizer.model_max_length = 64
     processor = ALIGNProcessor(image_processor=image_processor, tokenizer=tokenizer)
-    return preprocessor
+    return processor
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
@@ -167,8 +171,9 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     Copy/paste/tweak model's weights to our ALIGN structure.
     """
     # Load original model
-    tok = Tokenizer(64)
-    original_model = align.ALIGN('efficientnet-b7', 'bert-base', 640, seq_length, tok.get_vocab_size())
+    seq_length = 64
+    tok = Tokenizer(seq_length)
+    original_model = align.ALIGN("efficientnet-b7", "bert-base", 640, seq_length, tok.get_vocab_size())
     original_model.compile()
     original_model.load_weights(checkpoint_path)
 
@@ -180,7 +185,7 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     tf_param_names = [k for k in tf_params.keys()]
 
     # Load HuggingFace model
-    config = get_align_config(model_name)
+    config = get_align_config()
     hf_model = ALIGNModel(config).eval()
     hf_params = hf_model.state_dict()
 
@@ -189,7 +194,7 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     key_mapping = rename_keys(tf_param_names)
     replace_params(hf_params, tf_params, key_mapping)
 
-    # Initialize preprocessor and preprocess input image
+    # Initialize processor
     processor = get_processor()
     inputs = processor(images=prepare_img(), texts="A picture of a cat", return_tensors="pt")
 
@@ -208,8 +213,8 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     image = preprocess(np.array([input_arr]))
     text = tok(tf.constant(["A picture of a cat"]))
 
-    image_features = model.image_encoder(image, training=False)
-    text_features = model.text_encoder(text, training=False)
+    image_features = original_model.image_encoder(image, training=False)
+    text_features = original_model.text_encoder(text, training=False)
 
     # Check whether original and HF model outputs match  -> np.allclose
     assert np.allclose(image_features, hf_image_features, atol=1e-3), "The predicted image features are not the same."
@@ -222,12 +227,12 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
             os.mkdir(pytorch_dump_folder_path)
         # Save converted model and feature extractor
         hf_model.save_pretrained(pytorch_dump_folder_path)
-        preprocessor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         # Push model and feature extractor to hub
-        print(f"Pushing converted ALIGN to the hub...")
-        preprocessor.push_to_hub("align-base")
+        print("Pushing converted ALIGN to the hub...")
+        processor.push_to_hub("align-base")
         hf_model.push_to_hub("align-base")
 
 

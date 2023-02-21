@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch ALIGN model."""
 
-
+import math
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
@@ -23,7 +23,12 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputNoAttention, BaseModelOutputWithPoolingAndNoAttention
+from ...bert import BertModel
+from ...modeling_outputs import (
+    BaseModelOutputWithNoAttention,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutputWithPoolingAndNoAttention,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -224,9 +229,9 @@ class ALIGNOutput(ModelOutput):
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
             [`ALIGNVisionModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
+        text_model_output(`BaseModelOutputWithPoolingAndCrossAttentions`):
             The output of the [`ALIGNTextModel`].
-        vision_model_output(`BaseModelOutputWithPooling`):
+        vision_model_output(`BaseModelOutputWithPoolingAndNoAttention`):
             The output of the [`ALIGNVisionModel`].
     """
 
@@ -235,8 +240,8 @@ class ALIGNOutput(ModelOutput):
     logits_per_text: torch.FloatTensor = None
     text_embeds: torch.FloatTensor = None
     image_embeds: torch.FloatTensor = None
-    text_model_output: BaseModelOutputWithPooling = None
-    vision_model_output: BaseModelOutputWithPooling = None
+    text_model_output: BaseModelOutputWithPoolingAndCrossAttentions = None
+    vision_model_output: BaseModelOutputWithPoolingAndNoAttention = None
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
@@ -257,7 +262,7 @@ def align_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
-def round_filters(config: EfficientNetConfig, num_channels: int):
+def round_filters(config: ALIGNVisionConfig, num_channels: int):
     r"""
     Round number of filters based on depth multiplier.
     """
@@ -531,9 +536,7 @@ class ALIGNVisionBlock(nn.Module):
         expand_in_dim = in_dim * expand_ratio
 
         if self.expand:
-            self.expansion = ALIGNExpansionLayer(
-                config=config, in_dim=in_dim, out_dim=expand_in_dim, stride=stride
-            )
+            self.expansion = ALIGNExpansionLayer(config=config, in_dim=in_dim, out_dim=expand_in_dim, stride=stride)
 
         self.depthwise_conv = ALIGNDepthwiseLayer(
             config=config,
@@ -569,7 +572,7 @@ class ALIGNVisionBlock(nn.Module):
 
 class ALIGNVisionEncoder(nn.Module):
     r"""
-    Forward propogates the embeddings through each EfficientNet block.
+    Forward propogates the embeddings through each vision encoder (EfficientNet) block.
 
     Args:
         config ([`ALIGNVisionConfig`]):
@@ -619,14 +622,6 @@ class ALIGNVisionEncoder(nn.Module):
 
         self.blocks = nn.ModuleList(blocks)
 
-        # Final pooling layer
-        if config.pooling_type == "mean":
-            self.pooler = nn.AvgPool2d(config.hidden_dim, ceil_mode=True)
-        elif config.pooling_type == "max":
-            self.pooler = nn.MaxPool2d(config.hidden_dim, ceil_mode=True)
-        else:
-            raise ValueError(f"config.pooling must be one of ['mean', 'max'] got {config.pooling}")
-
     def forward(
         self,
         hidden_states: torch.FloatTensor,
@@ -640,14 +635,11 @@ class ALIGNVisionEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-        pooled_output = self.pooler(hidden_states)
-
         if not return_dict:
-            return tuple(v for v in [hidden_states, pooled_output, all_hidden_states] if v is not None)
+            return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithPoolingAndNoAttention(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=hidden_states,
-            pooler_output=pooled_output,
             hidden_states=all_hidden_states,
         )
 
@@ -666,30 +658,9 @@ class ALIGNPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
-        if isinstance(module, ALIGNTextEmbeddings):
-            module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, ALIGNVisionEmbeddings):
+        if isinstance(module, ALIGNVisionEmbeddings):
             factor = self.config.initializer_factor
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, ALIGNAttention):
-            factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, ALIGNMLP):
-            factor = self.config.initializer_factor
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
-            fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
+            nn.init.normal_(module.convolution.weight, std=module.config.initializer_range * factor)
         elif isinstance(module, ALIGNModel):
             nn.init.normal_(
                 module.text_projection.weight,
@@ -706,10 +677,6 @@ class ALIGNPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ALIGNEncoder):
-            module.gradient_checkpointing = value
-
 
 @add_start_docstrings(
     """The text model from ALIGN without any head or projection on top.""",
@@ -718,22 +685,21 @@ class ALIGNPreTrainedModel(PreTrainedModel):
 class ALIGNTextModel(ALIGNPreTrainedModel):
     config_class = ALIGNTextConfig
 
-    _no_split_modules = ["ALIGNEncoderLayer"]
-
     def __init__(self, config: ALIGNTextConfig):
         super().__init__(config)
-        self.text_model = ALIGNTextTransformer(config)
+        self.text_model = BertModel(config)
+
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.embeddings.token_embedding
+        return self.text_model.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.text_model.embeddings.token_embedding = value
+        self.text_model.embeddings.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(ALIGN_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ALIGNTextConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=ALIGNTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -742,7 +708,7 @@ class ALIGNTextModel(ALIGNPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+    ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         Returns:
 
@@ -772,64 +738,6 @@ class ALIGNTextModel(ALIGNPreTrainedModel):
         )
 
 
-class ALIGNVisionTransformer(nn.Module):
-    def __init__(self, config: ALIGNVisionConfig):
-        super().__init__()
-        self.config = config
-        embed_dim = config.hidden_size
-
-        self.embeddings = ALIGNVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = ALIGNEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
-    @add_start_docstrings_to_model_forward(ALIGN_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=ALIGNVisionConfig)
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
-
-        encoder_outputs = self.encoder(
-            inputs_embeds=hidden_states,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        last_hidden_state = encoder_outputs[0]
-        pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = self.post_layernorm(pooled_output)
-
-        if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
 @add_start_docstrings(
     """The vision model from ALIGN without any head or projection on top.""",
     ALIGN_START_DOCSTRING,
@@ -840,22 +748,32 @@ class ALIGNVisionModel(ALIGNPreTrainedModel):
 
     def __init__(self, config: ALIGNVisionConfig):
         super().__init__(config)
-        self.vision_model = ALIGNVisionEncoder(config)
+        self.config = config
+        self.embeddings = ALIGNVisionEmbeddings(config)
+        self.encoder = ALIGNVisionEncoder(config)
+
+        # Final pooling layer
+        if config.pooling_type == "mean":
+            self.pooler = nn.AvgPool2d(config.hidden_dim, ceil_mode=True)
+        elif config.pooling_type == "max":
+            self.pooler = nn.MaxPool2d(config.hidden_dim, ceil_mode=True)
+        else:
+            raise ValueError(f"config.pooling must be one of ['mean', 'max'] got {config.pooling}")
+
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
+        return self.vision_model.embeddings.convolution
 
     @add_start_docstrings_to_model_forward(ALIGN_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithNoAttention, config_class=ALIGNVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndNoAttention, config_class=ALIGNVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
+    ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
         r"""
         Returns:
 
@@ -878,12 +796,34 @@ class ALIGNVisionModel(ALIGNPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        return self.vision_model(
-            pixel_values=pixel_values,
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        embedding_output = self.embeddings(pixel_values)
+
+        encoder_outputs = self.encoder(
+            embedding_output,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+        )
+        # Apply pooling
+        last_hidden_state = encoder_outputs[0]
+        pooled_output = self.pooler(last_hidden_state)
+        # Reshape (batch_size, projection_dim, 1 , 1) -> (batch_size, projection_dim)
+        pooled_output = pooled_output.reshape(pooled_output.shape[:2])
+
+        if not return_dict:
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPoolingAndNoAttention(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -911,12 +851,10 @@ class ALIGNModel(ALIGNPreTrainedModel):
 
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.hidden_size
-        self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = ALIGNTextTransformer(text_config)
-        self.vision_model = ALIGNVisionTransformer(vision_config)
+        self.text_model = ALIGNTextModel(text_config)
+        self.vision_model = ALIGNVisionModel(vision_config)
 
-        self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
 
@@ -965,8 +903,8 @@ class ALIGNModel(ALIGNPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        last_hidden_state = text_outputs[0][:, 0, :]
+        text_features = self.text_projection(last_hidden_state)
 
         return text_features
 

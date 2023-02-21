@@ -159,7 +159,7 @@ class ALIGNVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ALIGNVisionModel, ) if is_torch_available() else ()
+    all_model_classes = (ALIGNVisionModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
@@ -318,7 +318,7 @@ class ALIGNTextModelTester:
 
 @require_torch
 class ALIGNTextModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (ALIGNTextModel, ) if is_torch_available() else ()
+    all_model_classes = (ALIGNTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
