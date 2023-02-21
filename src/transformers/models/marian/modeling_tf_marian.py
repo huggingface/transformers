@@ -888,7 +888,7 @@ class TFMarianDecoder(tf.keras.layers.Layer):
         head_mask: Optional[tf.Tensor] = None,
         cross_attn_head_mask: Optional[tf.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        use_cache: Optional[bool] = True,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
