@@ -56,6 +56,7 @@ else:
     _import_structure["modeling_udop"] = [
         "UDOPDualForConditionalGeneration",
         "UDOPUnimodelForConditionalGeneration",
+        "CellEmbeddings"
     ]
 
 if TYPE_CHECKING:
