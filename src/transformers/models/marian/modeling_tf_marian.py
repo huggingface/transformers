@@ -1132,7 +1132,7 @@ class TFMarianMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs
+        **kwargs,
     ):
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             use_cache = False
@@ -1237,7 +1237,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-        **kwargs
+        **kwargs,
     ):
         outputs = self.model(
             input_ids=input_ids,
@@ -1359,7 +1359,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         encoder_outputs: Optional[TFBaseModelOutput] = None,
         past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
-        decoder_inputs_embeds: Optional[tf.Tensor] =None,
+        decoder_inputs_embeds: Optional[tf.Tensor] = None,
         use_cache: Optional[bool] = True,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
