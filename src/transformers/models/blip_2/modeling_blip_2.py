@@ -1205,22 +1205,34 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        if self.config.use_decoder_only_language_model:
-            return self.language_model.model.decoder.embed_tokens
-        else:
-            return self.language_model.lm_head
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        if self.config.use_decoder_only_language_model:
-            self.language_model.model.decoder.embed_tokens = value
-        else:
-            self.language_model.lm_head = value
+        self.language_model.set_input_embeddings(value)
 
     def set_output_embeddings(self, new_embeddings):
-        self.language_model.lm_head = new_embeddings
+        self.language_model.set_output_embeddings(new_embeddings)
 
     def get_output_embeddings(self) -> nn.Module:
-        return self.language_model.lm_head
+        return self.language_model.get_output_embeddings()
+
+    def get_encoder(self):
+        return self.language_model.get_encoder()
+
+    def get_decoder(self):
+        return self.language_model.get_decoder()
+
+    def _tie_weights(self):
+        if not self.config.use_decoder_only_language_model:
+            self.language_model.encoder.embed_tokens = self.language_model.shared
+            self.language_model.decoder.embed_tokens = self.language_model.shared
+
+    def _preprocess_accelerate(self):
+        r"""
+        Some pre-processing hacks to make the model `accelerate` compatible.
+        """
+        if hasattr(self.language_model, "_hf_hook"):
+            self.language_model._hf_hook.io_same_device = True # For `generate` compatibility
 
     @add_start_docstrings_to_model_forward(BLIP_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Blip2ForConditionalGenerationModelOutput, config_class=Blip2VisionConfig)
@@ -1295,6 +1307,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         >>> print(generated_text)
         two
         ```"""
+        # preprocess for `accelerate`
+        self._preprocess_accelerate()
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # step 1: forward the images through the vision encoder,
@@ -1327,7 +1342,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
         )
         inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-        inputs_embeds = torch.cat([language_model_inputs, inputs_embeds], dim=1)
+        inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
 
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
@@ -1403,6 +1418,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         Returns:
             captions (list): A list of strings of length batch_size * num_captions.
         """
+        # preprocess for `accelerate`
+        self._preprocess_accelerate()
+
         batch_size = pixel_values.shape[0]
         image_embeds = self.vision_model(pixel_values, return_dict=True).last_hidden_state
         image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
@@ -1431,8 +1449,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         attention_mask = torch.cat([language_attention_mask, attention_mask], dim=1)
 
         # concatenate query embeddings with prompt embeddings
-        inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-        inputs_embeds = torch.cat([language_model_inputs, inputs_embeds], dim=1)
+        inputs_embeds = self.get_input_embeddings()(input_ids)
+        inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
 
         outputs = self.language_model.generate(
             inputs_embeds=inputs_embeds,
