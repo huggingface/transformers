@@ -231,8 +231,8 @@ class TrainingArguments:
             Number of steps used for a linear warmup from 0 to `learning_rate`. Overrides any effect of `warmup_ratio`.
         log_level (`str`, *optional*, defaults to `passive`):
             Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug',
-            'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the
-            application set the level.
+            'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and keeps the
+            current log level for the Transformers library (which will be `"warning"` by default).
         log_level_replica (`str`, *optional*, defaults to `"warning"`):
             Logger log level to use on replicas. Same choices as `log_level`"
         log_on_each_node (`bool`, *optional*, defaults to `True`):
