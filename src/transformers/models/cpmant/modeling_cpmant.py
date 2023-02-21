@@ -513,7 +513,9 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
             querylen = query_pos.size(1)
 
             assert key_pos.size(0) == query_pos.size(0), "key_pos.size(0) != query_pos.size(0)"
-            assert keylen == key_segment.size(1) and querylen == query_segment.size(1), "keylen != key_segment.size(1) or querylen != query_segment.size(1)"
+            assert keylen == key_segment.size(1) and querylen == query_segment.size(
+                1
+            ), "keylen != key_segment.size(1) or querylen != query_segment.size(1)"
 
             key_pos = key_pos.view(batch, -1, keylen)
             query_pos = query_pos.view(batch, querylen, -1)
