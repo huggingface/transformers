@@ -224,6 +224,9 @@ class ImageProcessingMixin(PushToHubMixin):
         Parameters:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
 
         Returns:
             `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the image processor object.
@@ -249,7 +252,7 @@ class ImageProcessingMixin(PushToHubMixin):
             local_files_only = True
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-        is_local = os.path.isdir(os.path.join(subfolder, pretrained_model_name_or_path))
+        is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
             image_processor_file = os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
         if os.path.isfile(pretrained_model_name_or_path):
