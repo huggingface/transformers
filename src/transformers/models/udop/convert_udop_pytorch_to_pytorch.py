@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 
 import argparse
 
-from transformers.models.UDOP import UDOPDualForConditionalGeneration, UdopUnimodelForConditionalGeneration
+from transformers.models.udop import UDOPDualForConditionalGeneration, UdopUnimodelForConditionalGeneration
 
 
 def convert_udop_checkpoint(pytorch_model_path, udop_type, pytorch_dump_path):
@@ -31,14 +31,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--pytorch_model_path", default=None, type=str, required=True, help="Path to UDOP pytorch checkpoint."
+        "--pytorch_model_path", default=None, type=str, required=True, help="Path to udop pytorch checkpoint."
     )
     parser.add_argument(
         "--udop_type",
         default=None,
         type=str,
         required=True,
-        help="The json file for YOSO model config.",
+        help="The json file for UDOP model config.",
     )
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google T5 Authors and HuggingFace Inc. team.
+# Copyright 2023 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -72,16 +72,16 @@ class UDOPModelTester:
     ):
 
         self.parent = parent
+        self.vocab_size = vocab_size
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
         self.decoder_seq_length = decoder_seq_length
         self.key_length = key_length
         # For common tests
-        self.seq_length = self.decoder_seq_length
+
         self.is_training = is_training
         self.use_attention_mask = use_attention_mask
         self.use_labels = use_labels
-        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -92,8 +92,9 @@ class UDOPModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.decoder_start_token_id = decoder_start_token_id
-        self.scope = None
+        self.scope = scope
         self.decoder_layers = decoder_layers
+        self.seq_length = self.decoder_seq_length
 
     def get_large_model_config(self):
         return UDOPUnimodelForConditionalGeneration.from_pretrained("t5-base")
@@ -190,75 +191,6 @@ class UDOPModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
         )
 
-    # def check_prepare_lm_labels_via_shift_left(
-    #     self,
-    #     config,
-    #     input_ids,
-    #     decoder_input_ids,
-    #     attention_mask,
-    #     decoder_attention_mask,
-    #     lm_labels,
-    # ):
-    #     model = UDOPUnimodelForConditionalGeneration(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #
-    #     # make sure that lm_labels are correctly padded from the right
-    #     lm_labels.masked_fill_((lm_labels == self.decoder_start_token_id), self.eos_token_id)
-    #
-    #     # add casaul pad token mask
-    #     triangular_mask = torch.tril(lm_labels.new_ones(lm_labels.shape)).logical_not()
-    #     lm_labels.masked_fill_(triangular_mask, self.pad_token_id)
-    #     decoder_input_ids = model._shift_right(lm_labels)
-    #
-    #     for i, (decoder_input_ids_slice, lm_labels_slice) in enumerate(zip(decoder_input_ids, lm_labels)):
-    #         # first item
-    #         self.parent.assertEqual(decoder_input_ids_slice[0].item(), self.decoder_start_token_id)
-    #         if i < decoder_input_ids_slice.shape[-1]:
-    #             if i < decoder_input_ids.shape[-1] - 1:
-    #                 # items before diagonal
-    #                 self.parent.assertListEqual(
-    #                     decoder_input_ids_slice[1 : i + 1].tolist(), lm_labels_slice[:i].tolist()
-    #                 )
-    #             # pad items after diagonal
-    #             if i < decoder_input_ids.shape[-1] - 2:
-    #                 self.parent.assertListEqual(
-    #                     decoder_input_ids_slice[i + 2 :].tolist(), lm_labels_slice[i + 1 : -1].tolist()
-    #                 )
-    #         else:
-    #             # all items after square
-    #             self.parent.assertListEqual(decoder_input_ids_slice[1:].tolist(), lm_labels_slice[:-1].tolist())
-
-    # def create_and_check_model(
-    #     self,
-    #     config,
-    #     input_ids,
-    #     decoder_input_ids,
-    #     attention_mask,
-    #     decoder_attention_mask,
-    #     lm_labels,
-    # ):
-    #     model = UDOPUnimodelForConditionalGeneration(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(
-    #         input_ids=input_ids,
-    #         decoder_input_ids=decoder_input_ids,
-    #         attention_mask=attention_mask,
-    #         decoder_attention_mask=decoder_attention_mask,
-    #     )
-    #     result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-    #     decoder_output = result.last_hidden_state
-    #     decoder_past = result.past_key_values
-    #     encoder_output = result.encoder_last_hidden_state
-    #
-    #     self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
-    #     self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
-    #     # There should be `num_layers` key value embeddings stored in decoder_past
-    #     self.parent.assertEqual(len(decoder_past), config.num_layers)
-    #     # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-    #     self.parent.assertEqual(len(decoder_past[0]), 4)
-
     def create_and_check_with_lm_head(
         self,
         config,
@@ -278,132 +210,6 @@ class UDOPModelTester:
         self.parent.assertEqual(len(outputs), 4)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
         self.parent.assertEqual(outputs["loss"].size(), ())
-
-    # def create_and_check_decoder_model_past(
-    #     self,
-    #     config,
-    #     input_ids,
-    #     decoder_input_ids,
-    #     attention_mask,
-    #     decoder_attention_mask,
-    #     lm_labels,
-    # ):
-    #     model = UDOPUnimodelForConditionalGeneration(config=config).get_decoder().to(torch_device).eval()
-    #     # first forward pass
-    #     outputs = model(input_ids, use_cache=True)
-    #     outputs_use_cache_conf = model(input_ids)
-    #     outputs_no_past = model(input_ids, use_cache=False)
-    #
-    #     self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
-    #     self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
-    #
-    #     output, past_key_values = outputs.to_tuple()
-    #
-    #     # create hypothetical next token and extent to next_input_ids
-    #     next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-    #
-    #     # append to next input_ids and
-    #     next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-    #
-    #     output_from_no_past = model(next_input_ids)["last_hidden_state"]
-    #     output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
-    #
-    #     # select random slice
-    #     random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-    #     output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
-    #     output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
-    #
-    #     # test that outputs are equal for slice
-    #     self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
-    # def create_and_check_decoder_model_attention_mask_past(
-    #     self,
-    #     config,
-    #     input_ids,
-    #     decoder_input_ids,
-    #     attention_mask,
-    #     decoder_attention_mask,
-    #     lm_labels,
-    # ):
-    #     model = UDOPUnimodelForConditionalGeneration(config=config).get_decoder()
-    #     model.to(torch_device)
-    #     model.eval()
-    #
-    #     # create attention mask
-    #     attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-    #
-    #     half_seq_length = input_ids.shape[-1] // 2
-    #     attn_mask[:, half_seq_length:] = 0
-    #
-    #     # first forward pass
-    #     output, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
-    #
-    #     # create hypothetical next token and extent to next_input_ids
-    #     next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-    #
-    #     # change a random masked slice from input_ids
-    #     random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-    #     random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
-    #     input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
-    #
-    #     # append to next input_ids and attn_mask
-    #     next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-    #     attn_mask = torch.cat(
-    #         [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
-    #         dim=1,
-    #     )
-    #
-    #     # get two different outputs
-    #     output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-    #     output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
-    #         "last_hidden_state"
-    #     ]
-    #
-    #     # select random slice
-    #     random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-    #     output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
-    #     output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
-    #
-    #     # test that outputs are equal for slice
-    #     self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
-    # def create_and_check_decoder_model_past_large_inputs(
-    #     self,
-    #     config,
-    #     input_ids,
-    #     decoder_input_ids,
-    #     attention_mask,
-    #     decoder_attention_mask,
-    #     lm_labels,
-    # ):
-    #     model = UDOPUnimodelForConditionalGeneration(config=config).get_decoder().to(torch_device).eval()
-    #     # first forward pass
-    #     outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
-    #
-    #     output, past_key_values = outputs.to_tuple()
-    #
-    #     # create hypothetical multiple next token and extent to next_input_ids
-    #     next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-    #     next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-    #
-    #     # append to next input_ids and
-    #     next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-    #     next_attention_mask = torch.cat([attention_mask, next_mask], dim=-1)
-    #
-    #     output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-    #     output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-    #         "last_hidden_state"
-    #     ]
-    #
-    #     # select random slice
-    #     random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-    #     output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-    #     output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-    #
-    #     self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-    #
-    #     # test that outputs are equal for slice
-    #     self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_generate_with_past_key_values(
         self,
@@ -725,41 +531,41 @@ class T5ModelFp16Tests(unittest.TestCase):
         """
         # Load without using `accelerate`
         model = UDOPUnimodelForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.float16)
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.float32)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wi.weight.dtype == torch.float16)
 
         # Load without in bf16
         model = UDOPUnimodelForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.bfloat16)
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.bfloat16)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
         model = UDOPUnimodelForConditionalGeneration.from_pretrained(
             "t5-small", torch_dtype=torch.bfloat16, device_map="auto"
         )
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.bfloat16)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
         model = UDOPUnimodelForConditionalGeneration.from_pretrained(
             "t5-small", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
         )
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.bfloat16)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wi.weight.dtype == torch.bfloat16)
 
         # Load without using `accelerate`
         model = UDOPUnimodelForConditionalGeneration.from_pretrained(
             "t5-small", torch_dtype=torch.float16, low_cpu_mem_usage=True
         )
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.float32)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wi.weight.dtype == torch.float16)
 
         # Load using `accelerate`
         model = UDOPUnimodelForConditionalGeneration.from_pretrained(
             "t5-small", torch_dtype=torch.float16, device_map="auto"
         )
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
-        self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.float32)
+        self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wi.weight.dtype == torch.float16)
 
 
 @require_torch

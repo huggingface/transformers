@@ -1,3 +1,18 @@
+# coding=utf-8
+# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import collections.abc
 import copy
 import logging
@@ -34,12 +49,12 @@ from .configuration_udop import UdopConfig
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_FOR_DOC = "UDOPConfig"
-_TOKENIZER_FOR_DOC = "UDOPTokenizer"
-# _CHECKPOINT_FOR_DOC = "t5-small"
-UDOPDual_START_DOCSTRING = r"""
+_CONFIG_FOR_DOC = "UdopConfig"
+_TOKENIZER_FOR_DOC = "UdopTokenizer"
+# _CHECKPOINT_FOR_DOC = "UDOP-small"
+UDOPDUAL_START_DOCSTRING = r"""
 
-    The T5 model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
+    The UDOP model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
     Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
     Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
     text-to-text denoising generative setting.
@@ -53,23 +68,23 @@ UDOPDual_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`T5Config`]): Model configuration class with all the parameters of the model.
+        config ([`UDOPConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-UDOPDual_INPUTS_DOCSTRING = r"""
+UDOPDUAL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
-            should be able to pad the inputs on both the right and the left.
+            Indices of input sequence tokens in the vocabulary. UDOP is a model with relative position embeddings so
+            you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`UDOPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
+            To know more on how to prepare `input_ids` for pretraining take a look a [UDOP Training](./UDOP#training).
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -80,16 +95,16 @@ UDOPDual_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`UDOPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            UDOP uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
             is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
 
-            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [T5
-            Training](./t5#training).
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [UDOP
+            Training](./UDOP#training).
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
@@ -151,16 +166,16 @@ UDOPDual_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-UDOPDual_ENCODER_INPUTS_DOCSTRING = r"""
+UDOPDUAL_ENCODER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
-            should be able to pad the inputs on both the right and the left.
+            Indices of input sequence tokens in the vocabulary. UDOP is a model with relative position embeddings so
+            you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`UDOPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
+            To know more on how to prepare `input_ids` for pretraining take a look a [UDOP Training](./UDOP#training).
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -205,20 +220,20 @@ PARALLELIZE_DOCSTRING = r"""
         device_map (`Dict[int, list]`, optional, defaults to None):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the t5 models have the
+            have fewer attention modules mapped to it than other devices. For reference, the UDOP models have the
             following number of attention modules:
 
-                - t5-small: 6
-                - t5-base: 12
-                - t5-large: 24
-                - t5-3b: 24
-                - t5-11b: 24
+                - UDOP-small: 6
+                - UDOP-base: 12
+                - UDOP-large: 24
+                - UDOP-3b: 24
+                - UDOP-11b: 24
 
     Example:
 
     ```python
-    # Here is an example of a device map on a machine with 4 GPUs using t5-3b, which has a total of 24 attention modules:
-    model = T5ForConditionalGeneration.from_pretrained("t5-3b")
+    # Here is an example of a device map on a machine with 4 GPUs using UDOP-3b, which has a total of 24 attention modules:
+    model = UDOPForConditionalGeneration.from_pretrained("UDOP-3b")
     device_map = {
         0: [0, 1, 2],
         1: [3, 4, 5, 6, 7, 8, 9],
@@ -234,8 +249,8 @@ DEPARALLELIZE_DOCSTRING = r"""
     Example:
 
     ```python
-    # On a 4 GPU machine with t5-3b:
-    model = T5ForConditionalGeneration.from_pretrained("t5-3b")
+    # On a 4 GPU machine with UDOP-3b:
+    model = UDOPForConditionalGeneration.from_pretrained("UDOP-3b")
     device_map = {
         0: [0, 1, 2],
         1: [3, 4, 5, 6, 7, 8, 9],
@@ -247,18 +262,6 @@ DEPARALLELIZE_DOCSTRING = r"""
     ```
 """
 AUGMENTATION_RANGE = (0.80, 1.25)
-
-
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-# --------------------------------------------------------
-# References:
-# timm: https://github.com/rwightman/pytorch-image-models/tree/master/timm
-# DeiT: https://github.com/facebookresearch/deit
-# --------------------------------------------------------
 
 
 def _ntuple(n):
@@ -526,8 +529,6 @@ class MaskedAutoencoderViT(nn.Module):
 
         self.embed_dim = embed_dim
         self.decoder_embed_dim = decoder_embed_dim
-        # --------------------------------------------------------------------------
-        # MAE encoder specifics
         self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
         num_patches = self.patch_embed.num_patches
 
@@ -876,7 +877,7 @@ class RelativePositionBiasBase(nn.Module, ABC):
         expand=False,
     ):
 
-        super(RelativePositionBiasBase, self).__init__()
+        super().__init__()
         self.prefix_bucket = prefix_bucket
         self.augmentation = augmentation
         self.level = level
@@ -952,8 +953,8 @@ class RelativePositionBiasBase(nn.Module, ABC):
 class RelativePositionBias1D(RelativePositionBiasBase):
     def __init__(self, scaling_factor=1, max_distance=128, **kwargs):
         """
-        Reimplementation of T5 relative position bias. Distance between given tokens is their distance in the sequence.
-        Parameters are the same as in base class
+        Reimplementation of UDOP relative position bias. Distance between given tokens is their distance in the
+        sequence. Parameters are the same as in base class
         """
         super().__init__(scaling_factor=scaling_factor, max_distance=max_distance, **kwargs)
 
@@ -1156,16 +1157,16 @@ class UDOPDualLayerFF(nn.Module):
     def __init__(self, config: UdopConfig):
         super().__init__()
         if config.is_gated_act:
-            self.DenseReluDense = UDOPDenseGatedActDense(config)
+            self.dense_relu_dense = UDOPDenseGatedActDense(config)
         else:
-            self.DenseReluDense = UDOPDenseActDense(config)
+            self.dense_relu_dense = UDOPDenseActDense(config)
 
         self.layer_norm = UDOPLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
         forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states = self.DenseReluDense(forwarded_states)
+        forwarded_states = self.dense_relu_dense(forwarded_states)
         hidden_states = hidden_states + self.dropout(forwarded_states)
         return hidden_states
 
@@ -1407,7 +1408,7 @@ class UDOPAttention(nn.Module):
 class UDOPDualLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.SelfAttention = UDOPAttention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.self_attention = UDOPAttention(config, has_relative_attention_bias=has_relative_attention_bias)
         self.layer_norm = UDOPLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -1422,7 +1423,7 @@ class UDOPDualLayerSelfAttention(nn.Module):
         output_attentions=False,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
-        attention_output = self.SelfAttention(
+        attention_output = self.self_attention(
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
@@ -1588,7 +1589,7 @@ class UDOPBlock(nn.Module):
 class UDOPLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        Construct a layernorm module in the UDOP style. No bias and no subtraction of mean.
+        Construct a layernorm module in the udop style. No bias and no subtraction of mean.
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -1596,7 +1597,7 @@ class UDOPLayerNorm(nn.Module):
 
     def forward(self, hidden_states):
 
-        # UDOP uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
+        # udop uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
@@ -1714,7 +1715,7 @@ class UDOPPreTrainedModel(PreTrainedModel):
 
 class CellEmbeddings(UDOPPreTrainedModel):
     def __init__(self, config):
-        super(CellEmbeddings, self).__init__(config)
+        super().__init__(config)
         self.ccat = config.ccat
         self.max_2d_position_embeddings = config.max_2d_position_embeddings
         if self.ccat:
@@ -1947,8 +1948,6 @@ class UDOPDualStack(UDOPPreTrainedModel):
             if use_cache:
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
-            # import pdb; pdb.set_trace()
-
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)  # We keep only self-attention weights for now
                 if self.is_decoder:
@@ -1999,7 +1998,7 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
         super(UDOPDualForConditionalGeneration, self).__init__(config)
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
-        # get max length of decoder part, for T5 decoder lenght depends
+        # get max length of decoder part, for UDOP decoder lenght depends
         # on the task and it can be modified by passing `_max_decoder_length` to the model/config
         self._max_decoder_length = config.max_decoder_length if hasattr(config, "max_decoder_length") else 256
         self.config.decoder_start_token_id = self.config.pad_token_id
@@ -2026,7 +2025,7 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
         for bias in self.relative_bias.biases:
             if isinstance(bias, RelativePositionBias1D):
                 self._tie_or_clone_weights(
-                    bias.relative_attention_bias, self.encoder.block[0].layer[0].SelfAttention.relative_attention_bias
+                    bias.relative_attention_bias, self.encoder.block[0].layer[0].self_attention.relative_attention_bias
                 )
 
         self.post_init()
@@ -2260,7 +2259,7 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
 
 class UDOPUniStack(UDOPPreTrainedModel):
     """
-    Almost exact copy of transformers T5Stack with the modification of passing `position_bias` in the forward method
+    Almost exact copy of transformers UDOPStack with the modification of passing `position_bias` in the forward method
     """
 
     def __init__(self, config, embed_tokens=None):
@@ -2297,7 +2296,7 @@ class UDOPUniStack(UDOPPreTrainedModel):
         for bias in self.relative_bias.biases:
             if isinstance(bias, RelativePositionBias1D):
                 self._tie_or_clone_weights(
-                    bias.relative_attention_bias, self.block[0].layer[0].SelfAttention.relative_attention_bias
+                    bias.relative_attention_bias, self.block[0].layer[0].self_attention.relative_attention_bias
                 )
 
         self.init_weights()
@@ -2526,14 +2525,14 @@ class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
         r"encoder.relative_bias.biases.0.relative_attention_bias.weight",
     ]
     """
-    Copied from original T5ForConditionalGeneration class with signature extended with 2D data. :param config: a
-    `T5Config` instance
+    Copied from original UDOPForConditionalGeneration class with signature extended with 2D data. :param config: a
+    `UDOPConfig` instance
     """
 
     def __init__(self, config):
-        super(UDOPUnimodelForConditionalGeneration, self).__init__(config)
+        super().__init__(config)
 
-        # get max length of decoder part, for T5 decoder lenght depends
+        # get max length of decoder part, for UDOP decoder lenght depends
         # on the task and it can be modified by passing `_max_decoder_length` to the model/config
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -2561,8 +2560,6 @@ class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
         self.model_parallel = False
         self.device_map = None
         self.model_dim = config.d_model
-        # --------------------------------------------------------------------------
-        # MAE encoder specifics
 
         mae_model_tmp = mae_model(
             config.mae_version,

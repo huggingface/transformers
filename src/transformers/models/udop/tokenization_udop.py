@@ -1,3 +1,18 @@
+# coding=utf-8
+# Copyright 2018 UDOP Authors and HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+""" Tokenization class for model UDOP."""
 import os
 import re
 from shutil import copyfile
@@ -10,7 +25,7 @@ from transformers.convert_slow_tokenizer import SpmConverter
 from transformers.utils import logging
 
 
-# The special tokens of T5Tokenizer is hard-coded with <extra_id_{}>
+# The special tokens of UDOPTokenizer is hard-coded with <extra_id_{}>
 # Created another class UDOPTokenizer extending it to add special visual tokens like <loc_{}>
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
@@ -18,7 +33,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 class UdopTokenizer(PreTrainedTokenizer):
     """
-    Construct a T5 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
+    Construct a UDOP tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.

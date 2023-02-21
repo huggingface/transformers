@@ -4255,7 +4255,7 @@ if TYPE_CHECKING:
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
-        from .models.UDOP import UdopTokenizer
+        from .models.udop import UdopTokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -5681,8 +5681,8 @@ if TYPE_CHECKING:
             TvltPreTrainedModel,
         )
         from .models.udop import (
-            UDOPUnimodelForConditionalGeneration,
             UDOPDualForConditionalGeneration,
+            UDOPUnimodelForConditionalGeneration,
         )
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,

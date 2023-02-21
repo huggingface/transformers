@@ -1939,7 +1939,7 @@ class MT5EncoderModel(MT5PreTrainedModel):
         class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
-            self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
+            self.encoder.block[layer].layer[0].self_attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(MT5_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)

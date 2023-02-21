@@ -155,9 +155,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SpeechT5SpeechEncoder",  # Building part of bigger (tested) model.
     "SpeechT5TextDecoder",  # Building part of bigger (tested) model.
     "SpeechT5TextEncoder",  # Building part of bigger (tested) model.
-    "UDOPDualForConditionalGeneration",
-    "UDOPDualStack",
-    "UDOPUniStack",
+    "UDOPDualStack",  # Building part of bigger (tested) model.
+    "UDOPUniStack",  # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
