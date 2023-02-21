@@ -1360,7 +1360,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         decoder_inputs_embeds: Optional[tf.Tensor] = None,
-        use_cache: Optional[bool] = True,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
