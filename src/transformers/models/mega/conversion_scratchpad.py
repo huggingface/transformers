@@ -139,8 +139,32 @@ hf_config = MegaConfig(
 
 hf_mlm = MegaForMaskedLM(hf_config).eval()
 
+# the originl checkpoint just uses nn.Embedding for the word embeddings
+# we use a wrapper module for embeddings to add support for positional embeddings
 hf_mlm.mega.embedding_layer.word_embeddings.weight = original_mlm.mega.embedding_layer.weight
-print("HF Mega encoder:", hf_mlm.mega.encoders.load_state_dict(original_mlm.mega.encoders.state_dict()))
+
+# modify the state dictionary of the original checkpoint to account for naming issues in the Hugging Face 
+# ecosystem -- any names containing "beta" or "gamma" aren't safe to use and are renamed upon _load_pretrained
+original_state_dict = original_mlm.mega.encoders.state_dict()
+updated_keys = {}
+for module_name in original_state_dict.keys():
+    new_module_name = None
+    if "beta" in module_name:
+        new_module_name = module_name.replace("beta", "b_param")
+    elif "gamma" in module_name:
+        new_module_name = module_name.replace("gamma", "g_param")
+
+    if new_module_name:
+        updated_keys[module_name] = new_module_name
+
+if len(updated_keys) != 0:
+    print(f"Renaming these keys: {updated_keys.keys()}")
+else:
+    print("No need to rename state dict entries")
+for old, new in updated_keys.items():
+    original_state_dict[new] = original_state_dict.pop(old)
+
+print("HF Mega encoder:", hf_mlm.mega.encoders.load_state_dict(original_state_dict))
 print("HF Mega MLM layer:", hf_mlm.mlm_head.load_state_dict(torch.load(os.path.join(ORIGINAL_WEIGHTS_DIR, 'mlm_head_weights.pt'), map_location='cpu')))
 
 input_ids = torch.randint(0, hf_config.vocab_size, size=(4, 256))

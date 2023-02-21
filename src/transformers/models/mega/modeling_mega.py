@@ -135,8 +135,9 @@ class MultiHeadEMA(nn.Module):
         kernel_dim = 2 * embed_dim if self.bidirectional else embed_dim
         self.delta = nn.Parameter(torch.Tensor(kernel_dim, ndim, 1))
         self.alpha = nn.Parameter(torch.Tensor(kernel_dim, ndim, 1))
-        self.beta = nn.Parameter(torch.Tensor(kernel_dim, ndim, 1))
-        self.gamma = nn.Parameter(torch.Tensor(kernel_dim, ndim))
+        # renamed gamma and beta to g_param and b_param respectively to avoid HF renaming things
+        self.b_param = nn.Parameter(torch.Tensor(kernel_dim, ndim, 1))
+        self.g_param = nn.Parameter(torch.Tensor(kernel_dim, ndim))
         self.omega = nn.Parameter(torch.Tensor(embed_dim))
         self._kernel = None
         self._coeffs = None
@@ -153,9 +154,9 @@ class MultiHeadEMA(nn.Module):
             if self.ndim > 1:
                 idx = torch.tensor(list(range(1, self.ndim, 2)))
                 val.index_fill_(0, idx, -1.0)
-            self.beta.normal_(mean=0.0, std=0.02).add_(val)
+            self.b_param.normal_(mean=0.0, std=0.02).add_(val)
             # gamma & omega
-            nn.init.normal_(self.gamma, mean=0.0, std=1.0)
+            nn.init.normal_(self.g_param, mean=0.0, std=1.0)
             nn.init.normal_(self.omega, mean=0.0, std=1.0)
 
     def _calc_coeffs(self):
@@ -172,9 +173,9 @@ class MultiHeadEMA(nn.Module):
         p, q = self._calc_coeffs()
         # D x N x L
         vander = torch.arange(length).to(p).view(1, 1, length) * torch.log(q)
-        kernel = (p * self.beta) * torch.exp(vander)
+        kernel = (p * self.b_param) * torch.exp(vander)
         # D x L
-        return torch.einsum('dnl,dn->dl', kernel, self.gamma * self.scale)
+        return torch.einsum('dnl,dn->dl', kernel, self.g_param * self.scale)
 
     def coeffs(self):
         if self.training:
@@ -204,7 +205,7 @@ class MultiHeadEMA(nn.Module):
         vander = torch.exp(vander)
         if hx is not None:
             # D x N x L * D x N x 1 -> D x N x L
-            k = vander[:, :, 1:] * (self.gamma * self.scale).unsqueeze(-1)
+            k = vander[:, :, 1:] * (self.g_param * self.scale).unsqueeze(-1)
             ox = torch.einsum('bdn,dnl->bdl', hx, k)
             # D x N * B x D x N -> B x D x N
             hh = vander[:, :, -1] * hx
@@ -214,8 +215,8 @@ class MultiHeadEMA(nn.Module):
 
         # D x N x L
         vander = vander[:, :, :-1]
-        kernel = (p * self.beta) * vander
-        k = torch.einsum('dnl,dn->dl', kernel, self.gamma * self.scale)
+        kernel = (p * self.b_param) * vander
+        k = torch.einsum('dnl,dn->dl', kernel, self.g_param * self.scale)
 
         k_f = torch.fft.rfft(k.float(), n=2 * length)
         x_f = torch.fft.rfft(x.float(), n=2 * length)
@@ -234,11 +235,11 @@ class MultiHeadEMA(nn.Module):
     def one_step(self, x, hx=None):
         p, q = self.coeffs()
         # (D x N) x (B x D x 1) -> B x D x N
-        h = (p * self.beta).squeeze(-1) * x
+        h = (p * self.b_param).squeeze(-1) * x
         if hx is not None:
             h = h + q.squeeze(-1) * hx
         # B x D
-        out = torch.einsum('bdn,dn->bd', h, self.gamma * self.scale)
+        out = torch.einsum('bdn,dn->bd', h, self.g_param * self.scale)
         # 1 x B x D, B x D x N
         return out.unsqueeze(0), h
 
@@ -591,14 +592,14 @@ class RotaryRelativePositionalBias(nn.Module):
         self.max_positions = max_positions
         self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(max_positions, embed_dim)
         self.alpha = nn.Parameter(torch.Tensor(1, embed_dim))
-        self.beta = nn.Parameter(torch.Tensor(1, embed_dim))
+        self.b_param = nn.Parameter(torch.Tensor(1, embed_dim))
         self.register_buffer("_float_tensor", torch.FloatTensor(1))
         self.reset_parameters()
 
     def reset_parameters(self):
         std = 0.02
         nn.init.normal_(self.alpha, mean=0.0, std=std)
-        nn.init.normal_(self.beta, mean=0.0, std=std)
+        nn.init.normal_(self.b_param, mean=0.0, std=std)
 
     @staticmethod
     def get_sinusoid_embeddings(max_positions: int, embedding_dim: int):
@@ -623,7 +624,7 @@ class RotaryRelativePositionalBias(nn.Module):
 
     def forward(self, seq_len):
         a = self.rotary(self.alpha.expand(seq_len, self.embed_dim))
-        b = self.rotary(self.beta.expand(seq_len, self.embed_dim))
+        b = self.rotary(self.b_param.expand(seq_len, self.embed_dim))
         t = torch.einsum('mk,nk->mn', a, b)
         return t
 
@@ -820,8 +821,9 @@ class MovingAverageGatedAttention(nn.Module):
         self.mx_proj = nn.Linear(self.config.hidden_size, self.config.shared_representation_size + self.config.intermediate_size + 2 * self.config.hidden_size)
         self.h_proj = nn.Linear(self.config.intermediate_size, self.config.hidden_size)
 
-        self.gamma = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
-        self.beta = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
+        # renamed gamma and beta to g_param and b_param respectively due to HF renaming weights
+        self.g_param = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
+        self.b_param = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
 
         max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size 
         if self.config.relative_positional_bias == 'simple':
@@ -849,8 +851,8 @@ class MovingAverageGatedAttention(nn.Module):
         nn.init.normal_(self.h_proj.weight, mean=mean, std=std)
         nn.init.constant_(self.h_proj.bias, 0.0)
         
-        nn.init.normal_(self.gamma, mean=mean, std=std)
-        nn.init.constant_(self.beta, 0.0)
+        nn.init.normal_(self.g_param, mean=mean, std=std)
+        nn.init.constant_(self.b_param, 0.0)
     
     def element_attention(self, q, k, padding_mask, causal_mask):
         '''
@@ -1014,7 +1016,7 @@ class MovingAverageGatedAttention(nn.Module):
         z, r = torch.split(F.silu(zr), [self.config.shared_representation_size, self.config.intermediate_size], dim=-1)
 
         # L x B x S -> L x B x 1 x S -> L x B x 2 X S 
-        z = z.unsqueeze(2) * self.gamma + self.beta
+        z = z.unsqueeze(2) * self.g_param + self.b_param
         
         # L x B x 2 x S -> L x B x S 
         q, k = torch.unbind(z, dim=2)
