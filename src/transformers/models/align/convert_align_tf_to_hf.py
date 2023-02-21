@@ -14,15 +14,17 @@
 # limitations under the License.
 """Convert ALIGN checkpoints from the original repository."""
 
-import argparse
 import json
 import os
-
-import numpy as np
-import PIL
 import requests
+import argparse
+
 import torch
+import numpy as np
 from PIL import Image
+import tensorflow as tf
+import align
+from tokenizer import Tokenizer
 
 from transformers import ALIGNModel
 from transformers import BertConfig, BertTokenizer
@@ -35,8 +37,18 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
+def preprocess(image):
+    image = tf.image.resize(image, (346, 346))
+    image = tf.image.crop_to_bounding_box(image, (346 - 289) // 2, (346 - 289) // 2, 289, 289)
+    return image
+
+
 def get_align_config(model_name):
-    vision_config = EfficientNetConfig()
+    vision_config = EfficientNetConfig.from_pretrained("google/efficientnet-b7")
+    vision_config.image_size = 289
+    vision_config.id2label = {"0": "LABEL_0", "1": "LABEL_1"},
+    vision_config.label2id = {"LABEL_0": 0, "LABEL_1": 1}
+
     text_config = BertConfig()
     config = ALIGNConfig.from_text_vision_configs(text_config=text_config, vision_config=vision_config)
     return config
@@ -126,8 +138,6 @@ def rename_keys(original_param_names):
         if item[0] in original_param_names:
             key_mapping[item[0]] = "efficientnet." + item[1]
 
-    key_mapping["predictions/kernel:0"] = "classifier.weight"
-    key_mapping["predictions/bias:0"] = "classifier.bias"
     return key_mapping
 
 
@@ -157,15 +167,10 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     Copy/paste/tweak model's weights to our ALIGN structure.
     """
     # Load original model
-    original_model = model_classes[model_name](
-        include_top=True,
-        weights="imagenet",
-        input_tensor=None,
-        input_shape=None,
-        pooling=None,
-        classes=1000,
-        classifier_activation="softmax",
-    )
+    tok = Tokenizer(64)
+    original_model = align.ALIGN('efficientnet-b7', 'bert-base', 640, seq_length, tok.get_vocab_size())
+    original_model.compile()
+    original_model.load_weights(checkpoint_path)
 
     tf_params = original_model.trainable_variables
     tf_non_train_params = original_model.non_trainable_variables
@@ -175,8 +180,8 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     tf_param_names = [k for k in tf_params.keys()]
 
     # Load HuggingFace model
-    config = get_efficientnet_config(model_name)
-    hf_model = EfficientNetForImageClassification(config).eval()
+    config = get_align_config(model_name)
+    hf_model = ALIGNModel(config).eval()
     hf_params = hf_model.state_dict()
 
     # Create src-to-dst parameter name mapping dictionary
@@ -192,18 +197,23 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     hf_model.eval()
     with torch.no_grad():
         outputs = hf_model(**inputs)
-    hf_logits = outputs.logits.detach().numpy()
+
+    hf_image_features = outputs.image_embeds.detach().numpy()
+    hf_text_features = outputs.text_embeds.detach().numpy()
 
     # Original model inference
     original_model.trainable = False
-    image_size = CONFIG_MAP[model_name]["image_size"]
-    img = prepare_img().resize((image_size, image_size), resample=PIL.Image.NEAREST)
-    x = image.img_to_array(img)
-    x = np.expand_dims(x, axis=0)
-    original_logits = original_model.predict(x)
+    image = prepare_img()
+    input_arr = tf.keras.preprocessing.image.img_to_array(image)
+    image = preprocess(np.array([input_arr]))
+    text = tok(tf.constant(["A picture of a cat"]))
+
+    image_features = model.image_encoder(image, training=False)
+    text_features = model.text_encoder(text, training=False)
 
     # Check whether original and HF model outputs match  -> np.allclose
-    assert np.allclose(original_logits, hf_logits, atol=1e-3), "The predicted logits are not the same."
+    assert np.allclose(image_features, hf_image_features, atol=1e-3), "The predicted image features are not the same."
+    assert np.allclose(text_features, hf_text_features, atol=1e-3), "The predicted text features are not the same."
     print("Model outputs match!")
 
     if save_model:
@@ -226,7 +236,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_path",
-        default="../align/pretrained/final-model",
+        default="./weights/model-weights",
         type=str,
         help="Path to the pretrained TF ALIGN checkpoint.",
     )
