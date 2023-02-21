@@ -276,7 +276,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     use_auth_token=use_auth_token,
                     user_agent=user_agent,
                     revision=revision,
-                    subfolder=subfolder
+                    subfolder=subfolder,
                 )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
