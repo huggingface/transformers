@@ -1717,6 +1717,34 @@ class ConvNextPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class CPMAntForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CPMAntModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class CPMAntPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_cpmant(*args, **kwargs):
+    requires_backends(load_tf_weights_in_cpmant, ["torch"])
+
+
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

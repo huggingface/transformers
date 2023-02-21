@@ -48,6 +48,7 @@ from . import (
     convbert,
     convnext,
     cpm,
+    cpmant,
     ctrl,
     cvt,
     data2vec,
