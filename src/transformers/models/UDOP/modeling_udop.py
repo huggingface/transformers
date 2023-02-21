@@ -1,3 +1,4 @@
+import collections.abc
 import copy
 import logging
 import math
@@ -5,14 +6,19 @@ import random
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from functools import partial
+from itertools import repeat
 from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
+import torch
 from torch import Tensor
+from torch import nn as nn
+from torch.nn import CrossEntropyLoss
 
 from transformers import PreTrainedModel, add_start_docstrings
 from transformers.activations import ACT2FN
-from transformers.modeling_outputs import BaseModelOutput, Seq2SeqModelOutput
+from transformers.modeling_outputs import BaseModelOutput, Seq2SeqLMOutput, Seq2SeqModelOutput
 from transformers.pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from transformers.utils import (
     DUMMY_INPUTS,
@@ -24,12 +30,7 @@ from transformers.utils import (
 from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
 
 from .configuration_udop import UdopConfig
-from functools import partial
 
-import torch
-from itertools import repeat
-import collections.abc
-from torch import nn as nn
 
 logger = logging.getLogger(__name__)
 
@@ -275,11 +276,10 @@ to_2tuple = _ntuple(2)
 def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
+    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
+    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
+    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
 
     """
     if drop_prob == 0.0 or not training:
@@ -340,7 +340,7 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
 
 
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: float = 0.0, scale_by_keep: bool = True):
         super(DropPath, self).__init__()
@@ -1057,46 +1057,6 @@ def create_relative_bias(config: UdopConfig) -> Sequence[RelativePositionBiasBas
     return bias_list
 
 
-class CellEmbeddings(nn.Module):
-    def __init__(self, max_2d_position_embeddings=501, hidden_size=1024, ccat=False):
-        super(CellEmbeddings, self).__init__()
-        self.ccat = ccat
-        self.max_2d_position_embeddings = max_2d_position_embeddings
-        if ccat:
-            self.x_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size // 4)
-            self.y_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size // 4)
-        else:
-            self.x_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size)
-            self.y_position_embeddings = nn.Embedding(max_2d_position_embeddings, hidden_size)
-
-    def forward(self, bbox):
-        bbox = torch.clip(bbox, 0.0, 1.0)
-        bbox = (bbox * (self.max_2d_position_embeddings - 1)).long()
-        left_position_embeddings = self.x_position_embeddings(bbox[:, :, 0])
-        upper_position_embeddings = self.y_position_embeddings(bbox[:, :, 1])
-        right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
-        lower_position_embeddings = self.y_position_embeddings(bbox[:, :, 3])
-        if self.ccat:
-            embeddings = torch.cat(
-                [
-                    left_position_embeddings,
-                    upper_position_embeddings,
-                    right_position_embeddings,
-                    lower_position_embeddings,
-                ],
-                dim=-1,
-            )
-        else:
-            embeddings = (
-                left_position_embeddings
-                + upper_position_embeddings
-                + right_position_embeddings
-                + lower_position_embeddings
-            )
-
-        return embeddings
-
-
 @dataclass
 class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
     """
@@ -1682,7 +1642,7 @@ class UDOPPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(factor * 1.0)
         elif isinstance(
             module,
-            (UDOPModel, UDOPDualForConditionalGeneration, UDOPEncoderModel, UDOPUnimodelForConditionalGeneration),
+            (UDOPDualForConditionalGeneration, UDOPUnimodelForConditionalGeneration),
         ):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
@@ -1752,6 +1712,48 @@ class UDOPPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
+class CellEmbeddings(UDOPPreTrainedModel):
+    def __init__(self, config):
+        super(CellEmbeddings, self).__init__(config)
+        self.ccat = config.ccat
+        self.max_2d_position_embeddings = config.max_2d_position_embeddings
+        if self.ccat:
+            self.x_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size // 4)
+            self.y_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size // 4)
+        else:
+            self.x_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size)
+            self.y_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size)
+
+        self.post_init()
+
+    def forward(self, bbox):
+        bbox = torch.clip(bbox, 0.0, 1.0)
+        bbox = (bbox * (self.max_2d_position_embeddings - 1)).long()
+        left_position_embeddings = self.x_position_embeddings(bbox[:, :, 0])
+        upper_position_embeddings = self.y_position_embeddings(bbox[:, :, 1])
+        right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
+        lower_position_embeddings = self.y_position_embeddings(bbox[:, :, 3])
+        if self.ccat:
+            embeddings = torch.cat(
+                [
+                    left_position_embeddings,
+                    upper_position_embeddings,
+                    right_position_embeddings,
+                    lower_position_embeddings,
+                ],
+                dim=-1,
+            )
+        else:
+            embeddings = (
+                left_position_embeddings
+                + upper_position_embeddings
+                + right_position_embeddings
+                + lower_position_embeddings
+            )
+
+        return embeddings
+
+
 class UDOPDualStack(UDOPPreTrainedModel):
     """
     Almost exact copy of transformers UDOPDualStack with the modification of passing `position_bias` in the forward
@@ -1781,7 +1783,7 @@ class UDOPDualStack(UDOPPreTrainedModel):
         self.dropout = nn.Dropout(config.dropout_rate)
 
         if not self.is_decoder:
-            self.cell2dembedding = CellEmbeddings(config.max_2d_position_embeddings, config.hidden_size)
+            self.cell2dembedding = CellEmbeddings(config)
 
         self.init_weights()
 
@@ -1983,297 +1985,278 @@ class UDOPDualStack(UDOPPreTrainedModel):
         )
 
 
-class UDOPModel(UDOPPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-    ]
-    _keys_to_ignore_on_load_unexpected = [
-        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
-    ]
-
-    def __init__(self, config: UdopConfig):
-        super().__init__(config)
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
-
-        encoder_config = copy.deepcopy(config)
-        encoder_config.is_decoder = False
-        encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
-        self.encoder = UDOPDualStack(encoder_config, self.shared)
-
-        decoder_config = copy.deepcopy(config)
-        decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
-        decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = UDOPDualStack(decoder_config, self.shared)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.encoder.block))
-        self.encoder.parallelize(self.device_map)
-        self.decoder.parallelize(self.device_map)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.encoder.deparallelize()
-        self.decoder.deparallelize()
-        self.encoder = self.encoder.to("cpu")
-        self.decoder = self.decoder.to("cpu")
-        self.model_parallel = False
-        self.device_map = None
-        torch.cuda.empty_cache()
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
-        self.encoder.set_input_embeddings(new_embeddings)
-        self.decoder.set_input_embeddings(new_embeddings)
-
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
-    @add_start_docstrings_to_model_forward(UDOPDual_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
-        r"""
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import T5Tokenizer, T5Model
-
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
-        >>> model = T5Model.from_pretrained("t5-small")
-
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
-        >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-
-        >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for T5Model.
-        >>> # This is not needed for torch's T5ForConditionalGeneration as it does this internally using labels arg.
-        >>> decoder_input_ids = model._shift_right(decoder_input_ids)
-
-        >>> # forward pass
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-        >>> last_hidden_states = outputs.last_hidden_state
-        ```"""
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
-        if head_mask is not None and decoder_head_mask is None:
-            if self.config.num_layers == self.config.num_decoder_layers:
-                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
-                decoder_head_mask = head_mask
-
-        # Encode if needed (training, first prediction pass)
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                inputs_embeds=inputs_embeds,
-                head_mask=head_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-
-        hidden_states = encoder_outputs[0]
-
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.decoder.first_device)
-            hidden_states = hidden_states.to(self.decoder.first_device)
-            if decoder_input_ids is not None:
-                decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(self.decoder.first_device)
-            if decoder_attention_mask is not None:
-                decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
-
-        # Decode
-        decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
-            encoder_hidden_states=hidden_states,
-            encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
-
-        return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
+# class UDOPModel(UDOPPreTrainedModel):
+#     _keys_to_ignore_on_load_missing = [
+#         r"encoder.embed_tokens.weight",
+#         r"decoder.embed_tokens.weight",
+#     ]
+#     _keys_to_ignore_on_load_unexpected = [
+#         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
+#     ]
+#
+#     def __init__(self, config: UdopConfig):
+#         super().__init__(config)
+#         self.shared = nn.Embedding(config.vocab_size, config.d_model)
+#
+#         encoder_config = copy.deepcopy(config)
+#         encoder_config.is_decoder = False
+#         encoder_config.use_cache = False
+#         encoder_config.is_encoder_decoder = False
+#         self.encoder = UDOPDualStack(encoder_config, self.shared)
+#
+#         decoder_config = copy.deepcopy(config)
+#         decoder_config.is_decoder = True
+#         decoder_config.is_encoder_decoder = False
+#         decoder_config.num_layers = config.num_decoder_layers
+#         self.decoder = UDOPDualStack(decoder_config, self.shared)
+#
+#         # Initialize weights and apply final processing
+#         self.post_init()
+#
+#         # Model parallel
+#         self.model_parallel = False
+#         self.device_map = None
+#
+#     @add_start_docstrings(PARALLELIZE_DOCSTRING)
+#     def parallelize(self, device_map=None):
+#         self.device_map = (
+#             get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
+#             if device_map is None
+#             else device_map
+#         )
+#         assert_device_map(self.device_map, len(self.encoder.block))
+#         self.encoder.parallelize(self.device_map)
+#         self.decoder.parallelize(self.device_map)
+#         self.model_parallel = True
+#
+#     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
+#     def deparallelize(self):
+#         self.encoder.deparallelize()
+#         self.decoder.deparallelize()
+#         self.encoder = self.encoder.to("cpu")
+#         self.decoder = self.decoder.to("cpu")
+#         self.model_parallel = False
+#         self.device_map = None
+#         torch.cuda.empty_cache()
+#
+#     def get_input_embeddings(self):
+#         return self.shared
+#
+#     def set_input_embeddings(self, new_embeddings):
+#         self.shared = new_embeddings
+#         self.encoder.set_input_embeddings(new_embeddings)
+#         self.decoder.set_input_embeddings(new_embeddings)
+#
+#     def get_encoder(self):
+#         return self.encoder
+#
+#     def get_decoder(self):
+#         return self.decoder
+#
+#     def _prune_heads(self, heads_to_prune):
+#         """
+# Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base # class
+PreTrainedModel #"""
+#         for layer, heads in heads_to_prune.items():
+#             self.encoder.layer[layer].attention.prune_heads(heads)
+#
+#     @add_start_docstrings_to_model_forward(UDOPDual_INPUTS_DOCSTRING)
+#     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+#     def forward(
+#         self,
+#         input_ids: Optional[torch.LongTensor] = None,
+#         attention_mask: Optional[torch.FloatTensor] = None,
+#         decoder_input_ids: Optional[torch.LongTensor] = None,
+#         decoder_attention_mask: Optional[torch.BoolTensor] = None,
+#         head_mask: Optional[torch.FloatTensor] = None,
+#         decoder_head_mask: Optional[torch.FloatTensor] = None,
+#         cross_attn_head_mask: Optional[torch.Tensor] = None,
+#         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+#         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+#         inputs_embeds: Optional[torch.Tensor] = None,
+#         decoder_inputs_embeds: Optional[torch.Tensor] = None,
+#         use_cache: Optional[bool] = None,
+#         output_attentions: Optional[bool] = None,
+#         output_hidden_states: Optional[bool] = None,
+#         return_dict: Optional[bool] = None,
+#     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
+#         r"""
+# Returns: # # Example: # # ```python # >>> from transformers import T5Tokenizer, T5Model # # >>> tokenizer =
+# T5Tokenizer.from_pretrained("t5-small") # >>> model = T5Model.from_pretrained("t5-small") # # >>> input_ids =
+# tokenizer( # ... "Studies have been shown that owning a dog is good for you", return_tensors="pt" # ... ).input_ids #
+# Batch size 1 # >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids # Batch size 1 # #
+# >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for T5Model. # >>> # This is not needed
+# for torch's T5ForConditionalGeneration as it does this internally using labels arg. # >>> decoder_input_ids =
+# model._shift_right(decoder_input_ids) # # >>> # forward pass # >>> outputs = model(input_ids=input_ids,
+# decoder_input_ids=decoder_input_ids) # >>> last_hidden_states = outputs.last_hidden_state # ```"""
+#         use_cache = use_cache if use_cache is not None else self.config.use_cache
+#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+#
+#         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+#         if head_mask is not None and decoder_head_mask is None:
+#             if self.config.num_layers == self.config.num_decoder_layers:
+#                 warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
+#                 decoder_head_mask = head_mask
+#
+#         # Encode if needed (training, first prediction pass)
+#         if encoder_outputs is None:
+#             encoder_outputs = self.encoder(
+#                 input_ids=input_ids,
+#                 attention_mask=attention_mask,
+#                 inputs_embeds=inputs_embeds,
+#                 head_mask=head_mask,
+#                 output_attentions=output_attentions,
+#                 output_hidden_states=output_hidden_states,
+#                 return_dict=return_dict,
+#             )
+#         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+#             encoder_outputs = BaseModelOutput(
+#                 last_hidden_state=encoder_outputs[0],
+#                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+#                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+#             )
+#
+#         hidden_states = encoder_outputs[0]
+#
+#         # Set device for model parallelism
+#         if self.model_parallel:
+#             torch.cuda.set_device(self.decoder.first_device)
+#             hidden_states = hidden_states.to(self.decoder.first_device)
+#             if decoder_input_ids is not None:
+#                 decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
+#             if attention_mask is not None:
+#                 attention_mask = attention_mask.to(self.decoder.first_device)
+#             if decoder_attention_mask is not None:
+#                 decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
+#
+#         # Decode
+#         decoder_outputs = self.decoder(
+#             input_ids=decoder_input_ids,
+#             attention_mask=decoder_attention_mask,
+#             inputs_embeds=decoder_inputs_embeds,
+#             past_key_values=past_key_values,
+#             encoder_hidden_states=hidden_states,
+#             encoder_attention_mask=attention_mask,
+#             head_mask=decoder_head_mask,
+#             cross_attn_head_mask=cross_attn_head_mask,
+#             use_cache=use_cache,
+#             output_attentions=output_attentions,
+#             output_hidden_states=output_hidden_states,
+#             return_dict=return_dict,
+#         )
+#
+#         if not return_dict:
+#             return decoder_outputs + encoder_outputs
+#
+#         return Seq2SeqModelOutput(
+#             last_hidden_state=decoder_outputs.last_hidden_state,
+#             past_key_values=decoder_outputs.past_key_values,
+#             decoder_hidden_states=decoder_outputs.hidden_states,
+#             decoder_attentions=decoder_outputs.attentions,
+#             cross_attentions=decoder_outputs.cross_attentions,
+#             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+#             encoder_hidden_states=encoder_outputs.hidden_states,
+#             encoder_attentions=encoder_outputs.attentions,
+#         )
 
 
-class UDOPEncoderModel(UDOPPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
-
-    def __init__(self, config: UdopConfig):
-        super().__init__(config)
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
-
-        encoder_config = copy.deepcopy(config)
-        encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
-        self.encoder = UDOPDualStack(encoder_config, self.shared)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.encoder.block))
-        self.encoder.parallelize(self.device_map)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.encoder.deparallelize()
-        self.encoder = self.encoder.to("cpu")
-        self.model_parallel = False
-        self.device_map = None
-        torch.cuda.empty_cache()
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
-        self.encoder.set_input_embeddings(new_embeddings)
-
-    def get_encoder(self):
-        return self.encoder
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
-
-    @add_start_docstrings_to_model_forward(UDOPDual_ENCODER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
-        r"""
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import T5Tokenizer, T5EncoderModel
-
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
-        >>> model = UDOPEncoderModel.from_pretrained("t5-small")
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids)
-        >>> last_hidden_states = outputs.last_hidden_state
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        encoder_outputs = self.encoder(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        return encoder_outputs
+# class UDOPEncoderModel(UDOPPreTrainedModel):
+#     _keys_to_ignore_on_load_missing = [r"encoder.embed_tokens.weight"]
+#
+#     def __init__(self, config: UdopConfig):
+#         super().__init__(config)
+#         self.shared = nn.Embedding(config.vocab_size, config.d_model)
+#
+#         encoder_config = copy.deepcopy(config)
+#         encoder_config.use_cache = False
+#         encoder_config.is_encoder_decoder = False
+#         self.encoder = UDOPDualStack(encoder_config, self.shared)
+#
+#         # Initialize weights and apply final processing
+#         self.post_init()
+#
+#         # Model parallel
+#         self.model_parallel = False
+#         self.device_map = None
+#
+#     @add_start_docstrings(PARALLELIZE_DOCSTRING)
+#     def parallelize(self, device_map=None):
+#         self.device_map = (
+#             get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
+#             if device_map is None
+#             else device_map
+#         )
+#         assert_device_map(self.device_map, len(self.encoder.block))
+#         self.encoder.parallelize(self.device_map)
+#         self.model_parallel = True
+#
+#     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
+#     def deparallelize(self):
+#         self.encoder.deparallelize()
+#         self.encoder = self.encoder.to("cpu")
+#         self.model_parallel = False
+#         self.device_map = None
+#         torch.cuda.empty_cache()
+#
+#     def get_input_embeddings(self):
+#         return self.shared
+#
+#     def set_input_embeddings(self, new_embeddings):
+#         self.shared = new_embeddings
+#         self.encoder.set_input_embeddings(new_embeddings)
+#
+#     def get_encoder(self):
+#         return self.encoder
+#
+#     def _prune_heads(self, heads_to_prune):
+#         """
+# Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base # class
+PreTrainedModel #"""
+#         for layer, heads in heads_to_prune.items():
+#             self.encoder.block[layer].layer[0].SelfAttention.prune_heads(heads)
+#
+#     @add_start_docstrings_to_model_forward(UDOPDual_ENCODER_INPUTS_DOCSTRING)
+#     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+#     def forward(
+#         self,
+#         input_ids: Optional[torch.LongTensor] = None,
+#         attention_mask: Optional[torch.FloatTensor] = None,
+#         head_mask: Optional[torch.FloatTensor] = None,
+#         inputs_embeds: Optional[torch.FloatTensor] = None,
+#         output_attentions: Optional[bool] = None,
+#         output_hidden_states: Optional[bool] = None,
+#         return_dict: Optional[bool] = None,
+#     ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
+#         r"""
+# Returns: # # Example: # # ```python # >>> from transformers import T5Tokenizer, T5EncoderModel # # >>> tokenizer =
+# T5Tokenizer.from_pretrained("t5-small") # >>> model = UDOPEncoderModel.from_pretrained("t5-small") # >>> input_ids =
+# tokenizer( # ... "Studies have been shown that owning a dog is good for you", return_tensors="pt" # ... ).input_ids #
+# Batch size 1 # >>> outputs = model(input_ids=input_ids) # >>> last_hidden_states = outputs.last_hidden_state # ```"""
+#         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+#
+#         encoder_outputs = self.encoder(
+#             input_ids=input_ids,
+#             attention_mask=attention_mask,
+#             inputs_embeds=inputs_embeds,
+#             head_mask=head_mask,
+#             output_attentions=output_attentions,
+#             output_hidden_states=output_hidden_states,
+#             return_dict=return_dict,
+#         )
+#
+#         return encoder_outputs
 
 
 class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        r"encoder.cell2dembedding.x_position_embeddings",
+        r"decoder.cell2dembedding.y_position_embeddings",
+        r"decoder.embed_tokens.weight",
+        r"encoder.embed_tokens.weight",
+        r"decoder.relative_bias.biases.0.relative_attention_bias.weight",
+        r"encoder.relative_bias.biases.0.relative_attention_bias.weight",
+    ]
+
     def __init__(self, config):
         super(UDOPDualForConditionalGeneration, self).__init__(config)
 
@@ -2282,6 +2265,7 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
         # on the task and it can be modified by passing `_max_decoder_length` to the model/config
         self._max_decoder_length = config.max_decoder_length if hasattr(config, "max_decoder_length") else 256
         self.config.decoder_start_token_id = self.config.pad_token_id
+        self.model_dim = self.config.d_model
 
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
@@ -2321,6 +2305,15 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
         relative_bias_list = create_relative_bias(config)
         return RelativePositionBiasAggregated(relative_bias_list)
 
+    def set_input_embeddings(self, value):
+        self.shared = value
+
+    def get_output_embeddings(self):
+        return self.shared
+
+    def get_input_embeddings(self):
+        return self.shared
+
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -2335,6 +2328,9 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
         attention_mask: Tensor = None,
         decoder_input_ids: Optional[Tensor] = None,
         decoder_attention_mask: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
+        decoder_head_mask: Optional[Tensor] = None,
+        cross_attn_head_mask: Optional[Tensor] = None,
         encoder_outputs: Optional[Tensor] = None,
         past_key_values: Optional[Tensor] = None,
         image: Optional[Tensor] = None,
@@ -2345,20 +2341,17 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
         seg_data: Dict[str, Any] = None,
         labels: Optional[Tensor] = None,
         masked_lm_labels: Optional[Tensor] = None,
-        head_mask: Optional[Tensor] = None,
         char_ids: Optional[Tensor] = None,
         char_seg_data: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
-        decoder_head_mask: Optional[Tensor] = None,
-        cross_attn_head_mask: Optional[Tensor] = None,
         use_cache=True,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         input_dict: Dict[str, Any] = None,
         **kwargs,
-    ) -> Tuple[Tensor, ...]:
+    ) -> Tuple[Tensor, Seq2SeqLMOutput]:
 
         if seg_data is not None:
             seg_data = torch.clip(seg_data, 0.0, 1.0)
@@ -2367,6 +2360,12 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
             for task in input_dict:
                 return_task_outputs.append(self.forward(**input_dict[task]))
             return return_task_outputs
+        if attention_mask is None:
+            batch_size, seq_length = input_ids.size()
+            mask_seq_length = (
+                past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
+            )
+            attention_mask = torch.ones(batch_size, mask_seq_length).to(input_ids.device)
         if encoder_outputs is None:
             # compute positional bias (can be aggregation of 1D and 2D biases)
             encoder_position_bias = self.relative_bias(attention_mask=attention_mask, seg_data=seg_data)
@@ -2416,24 +2415,106 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
             1,
         )
 
-        outputs = super().forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+        if head_mask is not None and decoder_head_mask is None:
+            if self.config.num_layers == self.config.num_decoder_layers:
+                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
+                decoder_head_mask = head_mask
+
+        # Encode if needed (training, first prediction pass)
+        if encoder_outputs is None:
+            # Convert encoder inputs in embeddings if needed
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
+        hidden_states = encoder_outputs[0]
+
+        if self.model_parallel:
+            torch.cuda.set_device(self.decoder.first_device)
+
+        if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
+            # get decoder inputs from shifting lm labels to the right
+            decoder_input_ids = self._shift_right(labels)
+
+        # Set device for model parallelism
+        if self.model_parallel:
+            torch.cuda.set_device(self.decoder.first_device)
+            hidden_states = hidden_states.to(self.decoder.first_device)
+            if decoder_input_ids is not None:
+                decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(self.decoder.first_device)
+            if decoder_attention_mask is not None:
+                decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
+
+        # Decode
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
             past_key_values=past_key_values,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            labels=labels,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        return outputs  # type: ignore
+        sequence_output = decoder_outputs[0]
+
+        # Set device for model parallelism
+        if self.model_parallel:
+            torch.cuda.set_device(self.encoder.first_device)
+            self.lm_head = self.lm_head.to(self.encoder.first_device)
+            sequence_output = sequence_output.to(self.lm_head.weight.device)
+
+        if self.config.tie_word_embeddings:
+            # Rescale output before projecting on vocab
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
+            sequence_output = sequence_output * (self.model_dim**-0.5)
+
+        lm_logits = self.lm_head(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss(ignore_index=-100)
+            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
+            # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
+
+        if not return_dict:
+            output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
+            return ((loss,) + output) if loss is not None else output
+
+        return Seq2SeqLMOutput(
+            loss=loss,
+            logits=lm_logits,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
 
     def get_encoder(self):
         return self
@@ -2469,7 +2550,7 @@ class UDOPUniStack(UDOPPreTrainedModel):
         self.dropout = nn.Dropout(config.dropout_rate)
 
         if not self.is_decoder:
-            self.cell2dembedding = CellEmbeddings(config.max_2d_position_embeddings, config.hidden_size)
+            self.cell2dembedding = CellEmbeddings(config)
 
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
@@ -2681,8 +2762,9 @@ class UDOPUniStack(UDOPPreTrainedModel):
                     all_hidden_states,
                     all_attentions,
                     all_cross_attentions,
+                    attention_mask,
+                    seg_data,
                 ]
-                if v is not None
             )
 
         return BaseModelOutputWithVisionEmbeds(
@@ -2697,6 +2779,14 @@ class UDOPUniStack(UDOPPreTrainedModel):
 
 
 class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        r"encoder.cell2dembedding.x_position_embeddings.weight",
+        r"decoder.cell2dembedding.y_position_embeddings.weight",
+        r"decoder.embed_tokens.weight",
+        r"encoder.embed_tokens.weight",
+        r"decoder.relative_bias.biases.0.relative_attention_bias.weight",
+        r"encoder.relative_bias.biases.0.relative_attention_bias.weight",
+    ]
     """
     Copied from original T5ForConditionalGeneration class with signature extended with 2D data. :param config: a
     `T5Config` instance
@@ -2732,7 +2822,7 @@ class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
-
+        self.model_dim = config.d_model
         # --------------------------------------------------------------------------
         # MAE encoder specifics
 
@@ -2758,12 +2848,24 @@ class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
             d_model = self.config.d_model
             module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
+    def get_output_embeddings(self):
+        return self.shared
+
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
+
     def forward(
         self,
         input_ids: Tensor = None,
         attention_mask: Tensor = None,
         decoder_input_ids: Optional[Tensor] = None,
         decoder_attention_mask: Optional[Tensor] = None,
+        head_mask: Optional[Tensor] = None,
+        decoder_head_mask: Optional[Tensor] = None,
+        cross_attn_head_mask: Optional[Tensor] = None,
         encoder_outputs: Optional[Tensor] = None,
         past_key_values: Optional[Tensor] = None,
         image: Optional[Tensor] = None,
@@ -2773,13 +2875,12 @@ class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
         visual_seg_data: Dict[str, Any] = None,
         masked_lm_labels: Optional[Tensor] = None,
         labels: Optional[Tensor] = None,
-        head_mask: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         use_cache=True,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
         input_dict: Dict[str, Any] = None,
         **kwargs,
     ) -> Tuple[Tensor, ...]:
@@ -2790,6 +2891,7 @@ class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
                 return_task_outputs.append(self.forward(**input_dict[task]))
             return return_task_outputs
 
+        num_patches = None
         if encoder_outputs is None:
             inputs_patches = None
             if image is not None:
@@ -2814,7 +2916,7 @@ class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
                 visual_seg_data=visual_seg_data,
                 inputs_patches=inputs_patches,
                 num_patches=num_patches,
-                special_vis_token=self.special_vis_token,
+                special_vis_token=None,
                 ids_keep=ids_keep,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
@@ -2837,21 +2939,122 @@ class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
         if decoder_input_ids is None and masked_lm_labels is None:
             return encoder_outputs
 
-        outputs = super().forward(
-            input_ids=input_ids,
-            attention_mask=encoder_outputs.attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
+        # outputs = super().forward(
+        #     input_ids=input_ids,
+        #     attention_mask=encoder_outputs.attention_mask,
+        #     decoder_input_ids=decoder_input_ids,
+        #     decoder_attention_mask=decoder_attention_mask,
+        #     encoder_outputs=encoder_outputs,
+        #     past_key_values=past_key_values,
+        #     head_mask=head_mask,
+        #     inputs_embeds=inputs_embeds,
+        #     decoder_inputs_embeds=decoder_inputs_embeds,
+        #     labels=labels,
+        #     use_cache=use_cache,
+        #     output_attentions=output_attentions,
+        #     output_hidden_states=output_hidden_states,
+        #     return_dict=return_dict,
+        # )
+        attention_mask = encoder_outputs.attention_mask if return_dict else encoder_outputs[5]
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+        if head_mask is not None and decoder_head_mask is None:
+            if self.config.num_layers == self.config.num_decoder_layers:
+                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
+                decoder_head_mask = head_mask
+
+        # Encode if needed (training, first prediction pass)
+        if encoder_outputs is None:
+            # Convert encoder inputs in embeddings if needed
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
+        hidden_states = encoder_outputs[0]
+
+        if self.model_parallel:
+            torch.cuda.set_device(self.decoder.first_device)
+
+        if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
+            # get decoder inputs from shifting lm labels to the right
+            decoder_input_ids = self._shift_right(labels)
+
+        # Set device for model parallelism
+        if self.model_parallel:
+            torch.cuda.set_device(self.decoder.first_device)
+            hidden_states = hidden_states.to(self.decoder.first_device)
+            if decoder_input_ids is not None:
+                decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(self.decoder.first_device)
+            if decoder_attention_mask is not None:
+                decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
+
+        # Decode
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
             past_key_values=past_key_values,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            labels=labels,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+        )
+
+        sequence_output = decoder_outputs[0]
+
+        # Set device for model parallelism
+        if self.model_parallel:
+            torch.cuda.set_device(self.encoder.first_device)
+            self.lm_head = self.lm_head.to(self.encoder.first_device)
+            sequence_output = sequence_output.to(self.lm_head.weight.device)
+
+        if self.config.tie_word_embeddings:
+            # Rescale output before projecting on vocab
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
+            sequence_output = sequence_output * (self.model_dim**-0.5)
+
+        lm_logits = self.lm_head(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss(ignore_index=-100)
+            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
+            # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
+
+        if not return_dict:
+            output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
+            return ((loss,) + output) if loss is not None else output
+
+        outputs = Seq2SeqLMOutput(
+            loss=loss,
+            logits=lm_logits,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
         )
 
         return outputs  # type: ignore

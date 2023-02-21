@@ -138,6 +138,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "swin",
     "t5",
     "trocr",
+    "udop",
     "vit",
     "xglm",
     "wav2vec2",

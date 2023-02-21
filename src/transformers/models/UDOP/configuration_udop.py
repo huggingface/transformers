@@ -37,7 +37,8 @@ class UdopConfig(PretrainedConfig):
         max_bbox_length=1001,
         mae_version="mae_vit_large_patch16",
         mae_checkpoint="mae-models/mae_pretrain_vit_large_full.pth",
-        image_size: int = 224,
+        image_size=224,
+        ccat=False,
         relative_bias_args: Optional[Sequence[Dict[str, Any]]] = [
             {"type": "1d"},
             {"type": "horizontal"},
@@ -74,7 +75,7 @@ class UdopConfig(PretrainedConfig):
         self.is_encoder_decoder = is_encoder_decoder
         self.pad_token_id = (pad_token_id,)
         self.eos_token_id = eos_token_id
-
+        self.ccat = ccat
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"

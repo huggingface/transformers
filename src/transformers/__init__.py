@@ -2433,11 +2433,6 @@ else:
     _import_structure["models.udop"].extend(
         [
             "UDOPDualForConditionalGeneration",
-            "UDOPDualStack",
-            "UDOPEncoderModel",
-            "UDOPModel",
-            "UDOPPreTrainedModel",
-            "UDOPUniStack",
             "UDOPUnimodelForConditionalGeneration",
         ]
     )
