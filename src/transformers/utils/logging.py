@@ -213,11 +213,16 @@ def add_handler(handler: logging.Handler) -> None:
 
 
 def remove_handler(handler: logging.Handler) -> None:
-    """removes given handler from the HuggingFace Transformers's root logger."""
+    """Removes given handler from the HuggingFace Transformer's root logger."""
 
     _configure_library_root_logger()
 
-    assert handler is not None and handler not in _get_library_root_logger().handlers
+    if handler is None:
+        raise ValueError("Handler is None")
+
+    if handler not in _get_library_root_logger().handlers:
+        raise ValueError("Handler is not in the list of handlers")
+
     _get_library_root_logger().removeHandler(handler)
 
 
