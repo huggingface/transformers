@@ -260,6 +260,7 @@ class KerasMetricCallback(Callback):
         # in the logs argument. Ordinarily, this is so the callback can read them, but in this case we write a bunch of
         # new keys in there, which will then get read by the History callback and treated like any other metric value.
         # I promise that I have it in writing from Chollet that this is okay.
+        print("DEBUG LINE: Here are the logs I'm seeing: ", logs)
         logs.update(metric_output)
 
 
