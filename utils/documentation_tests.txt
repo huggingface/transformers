@@ -40,6 +40,8 @@ src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/camembert/configuration_camembert.py
 src/transformers/models/canine/configuration_canine.py
 src/transformers/models/canine/modeling_canine.py
+src/transformers/models/clap/configuration_clap.py
+src/transformers/models/clap/modeling_clap.py
 src/transformers/models/clip/configuration_clip.py
 src/transformers/models/clipseg/modeling_clipseg.py
 src/transformers/models/codegen/configuration_codegen.py
@@ -80,6 +82,8 @@ src/transformers/models/electra/configuration_electra.py
 src/transformers/models/electra/modeling_electra.py
 src/transformers/models/electra/modeling_tf_electra.py
 src/transformers/models/ernie/configuration_ernie.py
+src/transformers/models/ernie_m/configuration_ernie_m.py
+src/transformers/models/ernie_m/modeling_ernie_m.py
 src/transformers/models/flava/configuration_flava.py
 src/transformers/models/fnet/configuration_fnet.py
 src/transformers/models/fsmt/configuration_fsmt.py
@@ -88,6 +92,7 @@ src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/gpt2/configuration_gpt2.py
 src/transformers/models/gpt2/modeling_gpt2.py
 src/transformers/models/gptj/modeling_gptj.py
+src/transformers/models/gptsan_japanese/modeling_gptsan_japanese.py
 src/transformers/models/gpt_neo/configuration_gpt_neo.py
 src/transformers/models/gpt_neox/configuration_gpt_neox.py
 src/transformers/models/gpt_neox_japanese/configuration_gpt_neox_japanese.py
