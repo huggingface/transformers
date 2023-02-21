@@ -209,6 +209,7 @@ class CPMAntLayerNorm(nn.Module):
         init_var: float = 1.0,
     ):
         super().__init__()
+
         self.eps = config.eps
         self.dim_norm = config.dim_model
         self.weight = torch.nn.parameter.Parameter(torch.full((config.dim_model,), init_var))
