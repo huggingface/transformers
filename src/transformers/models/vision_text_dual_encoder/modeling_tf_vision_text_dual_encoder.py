@@ -574,13 +574,23 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
 
             if vision_config.model_type == "clip_vision_model":
                 kwargs_vision["config"] = vision_config
-                vision_model = TFCLIPVisionModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
+                vision_class = TFCLIPVisionModel
             elif vision_config.model_type == "clip":
                 kwargs_vision["config"] = vision_config.vision_config
-                vision_model = TFCLIPVisionModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
+                vision_class = TFCLIPVisionModel
             else:
                 kwargs_vision["config"] = vision_config
-                vision_model = TFAutoModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
+                vision_class = TFAutoModel
+            vision_model = vision_class.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
+
+            # Necessary to make `save_pretrained -> from_pretrained` work correctly for the converted PT -> TF model.
+            # See https://github.com/huggingface/transformers/pull/14016#issuecomment-944046313
+            if kwargs_vision.get("from_pt", None):
+                del kwargs_vision["from_pt"]
+                with tempfile.TemporaryDirectory() as tmp_dirname:
+                    vision_model.save_pretrained(tmp_dirname)
+                    del vision_model
+                    vision_model = vision_class.from_pretrained(tmp_dirname, *model_args, **kwargs_vision)
 
         text_model = kwargs_text.pop("model", None)
         if text_model is None:
@@ -597,6 +607,15 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
 
             text_model = TFAutoModel.from_pretrained(text_model_name_or_path, *model_args, **kwargs_text)
 
+            # Necessary to make `save_pretrained -> from_pretrained` work correctly for the converted PT -> TF model.
+            # See https://github.com/huggingface/transformers/pull/14016#issuecomment-944046313
+            if kwargs_text.get("from_pt", None):
+                del kwargs_text["from_pt"]
+                with tempfile.TemporaryDirectory() as tmp_dirname:
+                    text_model.save_pretrained(tmp_dirname)
+                    del text_model
+                    text_model = TFAutoModel.from_pretrained(tmp_dirname, *model_args, **kwargs_text)
+
         # instantiate config with corresponding kwargs
         config = VisionTextDualEncoderConfig.from_vision_text_configs(vision_model.config, text_model.config, **kwargs)
 
@@ -610,6 +629,11 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
             " 'logit_scale']` are newly initialized. You should probably TRAIN this model on a down-stream task to be"
             " able to use it for predictions and inference."
         )
+
+        if vision_model.name != "vision_model":
+            raise ValueError("vision model must be created with the name `vision_model`.")
+        if text_model.name != "text_model":
+            raise ValueError("text model must be created with the name `text_model`.")
 
         return model
 
