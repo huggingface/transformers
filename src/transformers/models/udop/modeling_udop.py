@@ -35,11 +35,7 @@ from transformers import PreTrainedModel
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from transformers.pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from transformers.utils import (
-    DUMMY_INPUTS,
-    DUMMY_MASK,
-    is_torch_fx_proxy,
-)
+from transformers.utils import DUMMY_INPUTS, DUMMY_MASK, is_torch_fx_proxy
 
 from .configuration_udop import UdopConfig
 
