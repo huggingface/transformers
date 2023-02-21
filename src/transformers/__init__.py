@@ -2432,6 +2432,7 @@ else:
     )
     _import_structure["models.udop"].extend(
         [
+            "CellEmbeddings",
             "UDOPDualForConditionalGeneration",
             "UDOPUnimodelForConditionalGeneration",
         ]
