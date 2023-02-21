@@ -117,83 +117,6 @@ def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
     return model
 
 
-<<<<<<< HEAD
-# Adapted from Bert
-def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch"""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            if pointer.shape != array.shape:
-                raise AssertionError("Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
-
-
-=======
->>>>>>> b2fa569ca (pass use_cache)
 def rms_layernorm(hidden: torch.Tensor, weight: torch.Tensor, eps: float):
     old_dtype = hidden.dtype
     variance = hidden.to(torch.float32).pow(2).mean(dim=-1, keepdim=True)
@@ -212,17 +135,11 @@ class CPMAntLayerNorm(nn.Module):
         init_var: float = 1.0,
     ):
         super().__init__()
+
         self.eps = config.eps
         self.dim_norm = config.dim_model
         self.weight = torch.nn.parameter.Parameter(torch.full((config.dim_model,), init_var))
 
-<<<<<<< HEAD
-        self.eps = config.eps
-        self.dim_norm = config.dim_model
-        self.weight = torch.nn.parameter.Parameter(torch.full((config.dim_model,), init_var))
-
-=======
->>>>>>> b2fa569ca (pass use_cache)
     def forward(self, hidden_states: torch.Tensor):
         """
         Args:
@@ -274,12 +191,9 @@ class CPMAntAttention(nn.Module):
                 Provide positional information to self-attention block.
             past_key_values (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Cached past key and value projection states.
-<<<<<<< HEAD
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
                 `past_key_values`).
-=======
->>>>>>> b2fa569ca (pass use_cache)
         """
         batch_size = hidden_q.size(0)
         len_q = hidden_q.size(1)
@@ -298,11 +212,7 @@ class CPMAntAttention(nn.Module):
             value = torch.cat([past_key_values[1], value], dim=-2)
             len_k = key.size(-2)
 
-<<<<<<< HEAD
         # (batch_size, num_heads, len_q, dim_head) @ (batch_size, num_heads, dim_head, len_k) -> (batch_size, num_heads, len_q, len_k)
-=======
-        # (batch_size, num_head, len_q, dim_head) @ (batch_size, num_head, dim_head, len_k) -> (batch_size, num_head, len_q, len_k)
->>>>>>> b2fa569ca (pass use_cache)
         score = torch.matmul(query, key.transpose(-1, -2)) / math.sqrt(self.dim_head)
         score = score + position_bias
 
@@ -322,11 +232,7 @@ class CPMAntAttention(nn.Module):
         if self.dropout is not None:
             score = self.dropout(score)
 
-<<<<<<< HEAD
         # (batch_size, num_heads, len_q, len_k) @ (batch_size, num_heads, len_k, dim_head) -> (batch_size, num_heads, len_q, dim_head)
-=======
-        # (batch_size, num_head, len_q, len_k) @ (batch_size, num_head, len_k, dim_head) -> (batch_size, num_head, len_q, dim_head)
->>>>>>> b2fa569ca (pass use_cache)
         score = torch.matmul(score, value)
 
         score = score.view(batch_size, self.num_heads, len_q, self.dim_head).permute(0, 2, 1, 3)
@@ -368,12 +274,9 @@ class CPMAntSelfAttentionBlock(nn.Module):
                 Provide positional information to self-attention block.
             past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
                 Cached past key and value projection states.
-<<<<<<< HEAD
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
                 `past_key_values`).
-=======
->>>>>>> b2fa569ca (pass use_cache)
         """
         outputs = self.layernorm_before_attention(hidden_states)
         outputs = self.self_attention(outputs, outputs, attention_mask, position_bias, past_key_values, use_cache)
@@ -455,13 +358,8 @@ class CPMAntFFNBlock(nn.Module):
             hidden_states (`torch.Tensor` of shape `(batch, len_seq, dim_model)`):
                 Hidden states before feed forward layer.
         """
-<<<<<<< HEAD
         ln_outputs = self.layernorm_before_ffn(hidden_states)
         outputs = self.ffn(ln_outputs)
-=======
-        outputs = self.layernorm_before_ffn(hidden_states)
-        outputs = self.ffn(outputs)
->>>>>>> b2fa569ca (pass use_cache)
         if self.dropout is not None:
             outputs = self.dropout(outputs)
         hidden_states = hidden_states + outputs
@@ -492,12 +390,9 @@ class CPMAntTransformerBlock(nn.Module):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
             past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
                 Cached past key and value projection states
-<<<<<<< HEAD
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
                 `past_key_values`).
-=======
->>>>>>> b2fa569ca (pass use_cache)
         """
         current_key_value = None
         hidden_states = self.self_att(
@@ -543,12 +438,9 @@ class CPMAntEncoder(nn.Module):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
             past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
                 Cached past key and value projection states
-<<<<<<< HEAD
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
                 `past_key_values`).
-=======
->>>>>>> b2fa569ca (pass use_cache)
         """
         if not use_cache:
             for layer in self.layers:
@@ -571,11 +463,7 @@ class CPMAntEncoder(nn.Module):
         return hidden_states, current_key_values
 
 
-<<<<<<< HEAD
 # Copied from BertIntermediate
-=======
-# Copied from Bert
->>>>>>> b2fa569ca (pass use_cache)
 class CPMAntIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -683,11 +571,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         return relative_buckets
 
 
-<<<<<<< HEAD
 # Copied from BertOutput
-=======
-# Copied from Bert
->>>>>>> b2fa569ca (pass use_cache)
 class CPMAntOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -738,7 +622,7 @@ CPMANT_START_DOCSTRING = r"""
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
-    Parameters:
+    Parameters
         config ([`~CPMAntConfig`]): Model configuration class with all the parameters of the
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -754,7 +638,7 @@ CPMANT_INPUTS_DOCSTRING = r"""
 
             [What are input IDs?](../glossary#input-ids)
         length (`torch.Tensor` of shape `(batch)`, *optional*):
-            The length of input tokens.
+            The: length of input tokens.
         context (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
             The Boolean value determines whether the model makes a prediction for that position
         position (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
@@ -866,12 +750,9 @@ class CPMAntModel(CPMAntPreTrainedModel):
                 A sequence of tokens that is processed together as a unit.
             span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 A contiguous sequence of tokens within the input text.
-<<<<<<< HEAD
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
                 `past_key_values`).
-=======
->>>>>>> b2fa569ca (pass use_cache)
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -965,12 +846,9 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
                 A sequence of tokens that is processed together as a unit.
             span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 A contiguous sequence of tokens within the input text.
-<<<<<<< HEAD
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
                 `past_key_values`).
-=======
->>>>>>> b2fa569ca (pass use_cache)
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
