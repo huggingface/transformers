@@ -1228,7 +1228,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
         head_mask: Optional[tf.Tensor] = None,
         decoder_head_mask: Optional[tf.Tensor] = None,
         cross_attn_head_mask: Optional[tf.Tensor] = None,
-        encoder_outputs: Optional[tf.FloatTensor] = None,
+        encoder_outputs: Optional[tf.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         decoder_inputs_embeds: Optional[tf.Tensor] = None,
