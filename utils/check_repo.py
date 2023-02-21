@@ -68,6 +68,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "DeformableDetrEncoder",  # Building part of bigger (tested) model.
     "DeformableDetrDecoder",  # Building part of bigger (tested) model.
     "OPTDecoder",  # Building part of bigger (tested) model.
+    "FlaxWhisperDecoder",  # Building part of bigger (tested) model.
+    "FlaxWhisperEncoder",  # Building part of bigger (tested) model.
     "WhisperDecoder",  # Building part of bigger (tested) model.
     "WhisperEncoder",  # Building part of bigger (tested) model.
     "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
@@ -200,6 +202,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CLIPSegVisionModel",
     "CLIPSegTextModel",
     "EsmForProteinFolding",
+    "GPTSanJapaneseModel",
     "TimeSeriesTransformerForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",

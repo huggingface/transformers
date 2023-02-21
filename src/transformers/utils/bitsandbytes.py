@@ -171,4 +171,13 @@ def get_keys_to_not_convert(model):
     intersection = set(list_last_module) - set(tied_keys)
     list_untouched = tied_keys + list(intersection)
 
-    return [module_name.split(".")[0] for module_name in list_untouched]
+    # remove ".weight" from the keys
+    names_to_remove = [".weight", ".bias"]
+    filtered_module_names = []
+    for name in list_untouched:
+        for name_to_remove in names_to_remove:
+            if name_to_remove in name:
+                name = name.replace(name_to_remove, "")
+        filtered_module_names.append(name)
+
+    return filtered_module_names
