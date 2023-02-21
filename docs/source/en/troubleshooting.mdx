@@ -178,28 +178,21 @@ tensor([[ 0.0082, -0.2307],
 ## ValueError: Unrecognized configuration class <XYZ> for this kind of AutoModel
 
 Generally, we recommend using the AutoModel class to load pretrained instances of models. This class
-can automatically infer and load the correct architecture from a given checkpoint based on the configuration.
-However, there are a few exceptions to this. In rare cases, some models' architectures don't map to any of the
-AutoModelForXXX classes due to the specifics of their API. When trying to load such an exotic model with the AutoModel
-class, you'll get this `ValueError`.
-
-For example:
-
-```py
->>> from transformers import AutoProcessor, AutoModel
-
->>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
->>> model = AutoModel.from_pretrained("Salesforce/blip2-opt-2.7b")
-ValueError: Unrecognized configuration class <class 'transformers.models.blip_2.configuration_blip_2.Blip2Config'> for this kind of AutoModel: AutoModel.
-Model type should be one of AlbertConfig, AltCLIPConfig, ASTConfig, BartConfig, BeitConfig, BertConfig, BertGenerationConfig, BigBirdConfig...
-```
-
-In this case, you can use `AutoProcessor` to load BLIP-2's processor, but to load a pretrained BLIP-2 model itself, you have to
-use `Blip2ForConditionalGeneration` explicitly:
+can automatically infer and load the correct architecture from a given checkpoint based on the configuration. If you see
+this `ValueError` when loading a model from a checkpoint, this means that the Auto class couldn't find a mapping from
+the configuration in the given checkpoint to a kind of model you are trying to load. Most commonly this happens when a
+checkpoint doesn't support given task.
+For instance, you'll see this error in the following example because there is no GPT2 for question answering:
 
 ```py
->>> from transformers import AutoProcessor, Blip2ForConditionalGeneration
+>>> from transformers import AutoProcessor, AutoModelForQuestionAnswering
 
->>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
->>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b")
+>>> processor = AutoProcessor.from_pretrained("gpt2-medium")
+>>> model = AutoModelForQuestionAnswering.from_pretrained("gpt2-medium")
+ValueError: Unrecognized configuration class <class 'transformers.models.gpt2.configuration_gpt2.GPT2Config'> for this kind of AutoModel: AutoModelForQuestionAnswering.
+Model type should be one of AlbertConfig, BartConfig, BertConfig, BigBirdConfig, BigBirdPegasusConfig, BloomConfig, ...
 ```
+
+In rare cases, this can also happen when using some exotic models with architectures that don't map to any of the
+AutoModelForXXX classes due to the specifics of their API. For example, you can use `AutoProcessor` to load BLIP-2's processor,
+but to load a pretrained BLIP-2 model itself, you have to use `Blip2ForConditionalGeneration` explicitly.
