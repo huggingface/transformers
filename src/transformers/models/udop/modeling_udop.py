@@ -203,57 +203,6 @@ If you do not want to use any `decoder_head_mask` now, please set `decoder_head_
 num_heads)`.
 """
 
-PARALLELIZE_DOCSTRING = r"""
-    This is an experimental feature and is a subject to change at a moment's notice.
-
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
-    it will evenly distribute blocks across all devices.
-
-    Args:
-        device_map (`Dict[int, list]`, optional, defaults to None):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
-            automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the UDOP models have the
-            following number of attention modules:
-
-                - UDOP-small: 6
-                - UDOP-base: 12
-                - UDOP-large: 24
-                - UDOP-3b: 24
-                - UDOP-11b: 24
-
-    Example:
-
-    ```python
-    # Here is an example of a device map on a machine with 4 GPUs using UDOP-3b, which has a total of 24 attention modules:
-    model = UDOPForConditionalGeneration.from_pretrained("UDOP-3b")
-    device_map = {
-        0: [0, 1, 2],
-        1: [3, 4, 5, 6, 7, 8, 9],
-        2: [10, 11, 12, 13, 14, 15, 16],
-        3: [17, 18, 19, 20, 21, 22, 23],
-    }
-    model.parallelize(device_map)
-    ```
-"""
-DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to cpu from a model parallel state.
-
-    Example:
-
-    ```python
-    # On a 4 GPU machine with UDOP-3b:
-    model = UDOPForConditionalGeneration.from_pretrained("UDOP-3b")
-    device_map = {
-        0: [0, 1, 2],
-        1: [3, 4, 5, 6, 7, 8, 9],
-        2: [10, 11, 12, 13, 14, 15, 16],
-        3: [17, 18, 19, 20, 21, 22, 23],
-    }
-    model.parallelize(device_map)  # Splits the model across several devices
-    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-    ```
-"""
 AUGMENTATION_RANGE = (0.80, 1.25)
 
 
@@ -1108,7 +1057,7 @@ class Residual(nn.Module):
         return x + residual
 
 
-class UDOPDenseActDense(nn.Module):
+class UdopDenseActDense(nn.Module):
     def __init__(self, config: UdopConfig):
         super().__init__()
         self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
@@ -1124,7 +1073,7 @@ class UDOPDenseActDense(nn.Module):
         return hidden_states
 
 
-class UDOPDenseGatedActDense(nn.Module):
+class UdopDenseGatedActDense(nn.Module):
     def __init__(self, config: UdopConfig):
         super().__init__()
         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
@@ -1146,15 +1095,15 @@ class UDOPDenseGatedActDense(nn.Module):
         return hidden_states
 
 
-class UDOPDualLayerFF(nn.Module):
+class UdopDualLayerFF(nn.Module):
     def __init__(self, config: UdopConfig):
         super().__init__()
         if config.is_gated_act:
-            self.dense_relu_dense = UDOPDenseGatedActDense(config)
+            self.dense_relu_dense = UdopDenseGatedActDense(config)
         else:
-            self.dense_relu_dense = UDOPDenseActDense(config)
+            self.dense_relu_dense = UdopDenseActDense(config)
 
-        self.layer_norm = UDOPLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
@@ -1164,7 +1113,7 @@ class UDOPDualLayerFF(nn.Module):
         return hidden_states
 
 
-class UDOPAttention(nn.Module):
+class UdopAttention(nn.Module):
     def __init__(self, config: UdopConfig, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -1398,11 +1347,11 @@ class UDOPAttention(nn.Module):
         return outputs
 
 
-class UDOPDualLayerSelfAttention(nn.Module):
+class UdopDualLayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.self_attention = UDOPAttention(config, has_relative_attention_bias=has_relative_attention_bias)
-        self.layer_norm = UDOPLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.self_attention = UdopAttention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -1430,11 +1379,11 @@ class UDOPDualLayerSelfAttention(nn.Module):
         return outputs
 
 
-class UDOPDualLayerCrossAttention(nn.Module):
+class UdopDualLayerCrossAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.EncDecAttention = UDOPAttention(config, has_relative_attention_bias=False)
-        self.layer_norm = UDOPLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.EncDecAttention = UdopAttention(config, has_relative_attention_bias=False)
+        self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -1466,16 +1415,18 @@ class UDOPDualLayerCrossAttention(nn.Module):
         return outputs
 
 
-class UDOPBlock(nn.Module):
+class UdopBlock(nn.Module):
+    """Copied from T5Block"""
+
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
-        self.layer.append(UDOPDualLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
+        self.layer.append(UdopDualLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
         if self.is_decoder:
-            self.layer.append(UDOPDualLayerCrossAttention(config))
+            self.layer.append(UdopDualLayerCrossAttention(config))
 
-        self.layer.append(UDOPDualLayerFF(config))
+        self.layer.append(UdopDualLayerFF(config))
 
     def forward(
         self,
@@ -1579,7 +1530,9 @@ class UDOPBlock(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
 
 
-class UDOPLayerNorm(nn.Module):
+class UdopLayerNorm(nn.Module):
+    """Copied from T5LayerNorm"""
+
     def __init__(self, hidden_size, eps=1e-6):
         """
         Construct a layernorm module in the udop style. No bias and no subtraction of mean.
@@ -1605,7 +1558,7 @@ class UDOPLayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-class UDOPPreTrainedModel(PreTrainedModel):
+class UdopPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -1632,18 +1585,18 @@ class UDOPPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, UDOPLayerNorm):
+        if isinstance(module, UdopLayerNorm):
             module.weight.data.fill_(factor * 1.0)
         elif isinstance(
             module,
-            (UDOPDualForConditionalGeneration, UDOPUnimodelForConditionalGeneration),
+            (UdopDualForConditionalGeneration, UdopUnimodelForConditionalGeneration),
         ):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
                 module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, UDOPDenseActDense):
+        elif isinstance(module, UdopDenseActDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
             # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
@@ -1653,7 +1606,7 @@ class UDOPPreTrainedModel(PreTrainedModel):
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
-        elif isinstance(module, UDOPDenseGatedActDense):
+        elif isinstance(module, UdopDenseGatedActDense):
             module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
                 module.wi_0.bias.data.zero_()
@@ -1663,7 +1616,7 @@ class UDOPPreTrainedModel(PreTrainedModel):
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
-        elif isinstance(module, UDOPAttention):
+        elif isinstance(module, UdopAttention):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
@@ -1677,7 +1630,7 @@ class UDOPPreTrainedModel(PreTrainedModel):
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (UDOPAttention, UDOPDualStack, UDOPUniStack)):
+        if isinstance(module, (UdopAttention, UdopDualStack, UdopUniStack)):
             module.gradient_checkpointing = value
 
     def _shift_right(self, input_ids):
@@ -1706,7 +1659,7 @@ class UDOPPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-class CellEmbeddings(UDOPPreTrainedModel):
+class UdopCellEmbeddings(UdopPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.ccat = config.ccat
@@ -1748,7 +1701,7 @@ class CellEmbeddings(UDOPPreTrainedModel):
         return embeddings
 
 
-class UDOPDualStack(UDOPPreTrainedModel):
+class UdopDualStack(UdopPreTrainedModel):
     """
     Almost exact copy of transformers UDOPDualStack with the modification of passing `position_bias` in the forward
     method
@@ -1770,14 +1723,14 @@ class UDOPDualStack(UDOPPreTrainedModel):
             )
 
         self.block = nn.ModuleList(
-            [UDOPBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
+            [UdopBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
         )
-        self.final_layer_norm = UDOPLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
         self.dropout = nn.Dropout(config.dropout_rate)
 
         if not self.is_decoder:
-            self.cell2dembedding = CellEmbeddings(config)
+            self.cell2dembedding = UdopCellEmbeddings(config)
 
         self.init_weights()
 
@@ -1791,7 +1744,7 @@ class UDOPDualStack(UDOPPreTrainedModel):
             )
         else:
             self.vision_fc = nn.Linear(config.d_model, config.d_model)
-            self.vision_norm = UDOPLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+            self.vision_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -1815,18 +1768,15 @@ class UDOPDualStack(UDOPPreTrainedModel):
         image=None,
         ids_keep=None,
         use_cache=None,
-        output_attentions=None,
+        output_attentions=True,
         output_hidden_states=None,
         return_dict=None,
-        position_bias=None,  # modified line,
-        seg_data=None,  # modified line
+        position_bias=None,
+        seg_data=None,
         cross_attn_head_mask=None,
         token_type_ids=None,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = (
-            True  # False #True #output_attentions if output_attentions is not None else self.config.output_attentions
-        )
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1870,10 +1820,8 @@ class UDOPDualStack(UDOPPreTrainedModel):
         batch_size, seq_length = input_shape
         # required mask seq length can be calculated via length of past
         mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
-        if use_cache is True:
-            assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(
-                self
-            )
+        if use_cache is True and not self.is_decoder:
+            ValueError(f":obj:`use_cache` can only be set to `True` if {self} is used as a decoder")
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
@@ -1882,11 +1830,9 @@ class UDOPDualStack(UDOPPreTrainedModel):
                 batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
             )
 
-        # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:
             past_key_values = [None] * len(self.block)
 
-        # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
 
         if self.is_decoder and encoder_attention_mask is not None:
@@ -1977,7 +1923,7 @@ class UDOPDualStack(UDOPPreTrainedModel):
         )
 
 
-class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
+class UdopDualForConditionalGeneration(UdopPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder.cell2dembedding.x_position_embeddings",
         r"decoder.cell2dembedding.y_position_embeddings",
@@ -2001,13 +1947,13 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = UDOPDualStack(encoder_config, self.shared)
+        self.encoder = UdopDualStack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = UDOPDualStack(decoder_config, self.shared)
+        self.decoder = UdopDualStack(decoder_config, self.shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
         # get weights from encoder position bias
@@ -2129,21 +2075,9 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
             encoder_outputs.last_hidden_state = hidden_states
             encoder_outputs.vision_embeds = None
 
-        # ugly hack for model to work as an encoder
-        if decoder_input_ids is None and labels is None:
-            return encoder_outputs
-
-        attention_mask = torch.cat(
-            [
-                attention_mask,
-                torch.ones_like(
-                    encoder_outputs.last_hidden_state[
-                        :, : encoder_outputs.last_hidden_state.size(1) - attention_mask.size(1), 0
-                    ]
-                ),
-            ],
-            1,
-        )
+        right_slice = encoder_outputs.last_hidden_state.size(1) - attention_mask.size(1)
+        right_mask = torch.ones_like(encoder_outputs.last_hidden_state[:, :right_slice, 0])
+        attention_mask = torch.cat([attention_mask, right_mask], 1)
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2250,7 +2184,7 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
         return self
 
 
-class UDOPUniStack(UDOPPreTrainedModel):
+class UdopUniStack(UdopPreTrainedModel):
     """
     Almost exact copy of transformers UDOPStack with the modification of passing `position_bias` in the forward method
     """
@@ -2273,14 +2207,14 @@ class UDOPUniStack(UDOPPreTrainedModel):
             )
 
         self.block = nn.ModuleList(
-            [UDOPBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
+            [UdopBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
         )
-        self.final_layer_norm = UDOPLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
         self.dropout = nn.Dropout(config.dropout_rate)
 
         if not self.is_decoder:
-            self.cell2dembedding = CellEmbeddings(config)
+            self.cell2dembedding = UdopCellEmbeddings(config)
 
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
@@ -2340,9 +2274,6 @@ class UDOPUniStack(UDOPPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # ======================================================
-        # input embeddings processing
-
         if input_ids is not None and inputs_embeds is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(
@@ -2390,16 +2321,10 @@ class UDOPUniStack(UDOPPreTrainedModel):
 
         batch_size, seq_length = input_shape
 
-        # ======================================================
-        # input masking/pos embed processing
-
-        # required mask seq length can be calculated via length of past
         mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
 
-        if use_cache is True:
-            assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(
-                self
-            )
+        if use_cache and not self.is_decoder:
+            raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
 
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
@@ -2434,9 +2359,6 @@ class UDOPUniStack(UDOPPreTrainedModel):
             position_bias = self.relative_bias(attention_mask=attention_mask, seg_data=seg_data)
             position_bias = position_bias + extended_attention_mask
         encoder_decoder_position_bias = None
-
-        # ======================================================
-        # model inferencing
 
         hidden_states = inputs_embeds
 
@@ -2508,7 +2430,7 @@ class UDOPUniStack(UDOPPreTrainedModel):
         )
 
 
-class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
+class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder.cell2dembedding.x_position_embeddings.weight",
         r"decoder.cell2dembedding.y_position_embeddings.weight",
@@ -2537,13 +2459,13 @@ class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = UDOPUniStack(encoder_config, self.shared)
+        self.encoder = UdopUniStack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = UDOPUniStack(decoder_config, self.shared)
+        self.decoder = UdopUniStack(decoder_config, self.shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
         # Initialize weights and apply final processing
@@ -2654,35 +2576,12 @@ class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
                 return_dict=return_dict,
             )
 
-        if encoder_outputs is None:
-            return None
-
         if masked_lm_labels is not None and labels is None:
             labels = masked_lm_labels
 
         if decoder_input_ids is None and labels is not None:
             decoder_input_ids = self._shift_right(labels)
 
-        # ugly hack for model to work as an encoder
-        if decoder_input_ids is None and masked_lm_labels is None:
-            return encoder_outputs
-
-        # outputs = super().forward(
-        #     input_ids=input_ids,
-        #     attention_mask=encoder_outputs.attention_mask,
-        #     decoder_input_ids=decoder_input_ids,
-        #     decoder_attention_mask=decoder_attention_mask,
-        #     encoder_outputs=encoder_outputs,
-        #     past_key_values=past_key_values,
-        #     head_mask=head_mask,
-        #     inputs_embeds=inputs_embeds,
-        #     decoder_inputs_embeds=decoder_inputs_embeds,
-        #     labels=labels,
-        #     use_cache=use_cache,
-        #     output_attentions=output_attentions,
-        #     output_hidden_states=output_hidden_states,
-        #     return_dict=return_dict,
-        # )
         attention_mask = encoder_outputs.attention_mask if return_dict else encoder_outputs[5]
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2785,7 +2684,7 @@ class UDOPUnimodelForConditionalGeneration(UDOPPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-        return outputs  # type: ignore
+        return outputs
 
     def get_encoder(self):
         return self

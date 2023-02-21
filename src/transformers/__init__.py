@@ -2432,7 +2432,6 @@ else:
     )
     _import_structure["models.udop"].extend(
         [
-            "CellEmbeddings",
             "UDOPDualForConditionalGeneration",
             "UDOPUnimodelForConditionalGeneration",
         ]
@@ -5682,8 +5681,8 @@ if TYPE_CHECKING:
             TvltPreTrainedModel,
         )
         from .models.udop import (
-            UDOPDualForConditionalGeneration,
-            UDOPUnimodelForConditionalGeneration,
+            UdopDualForConditionalGeneration,
+            UdopUnimodelForConditionalGeneration,
         )
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,

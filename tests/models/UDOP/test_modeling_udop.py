@@ -38,9 +38,9 @@ if is_torch_available():
 
     from transformers import (
         AutoTokenizer,
-        UDOPDualForConditionalGeneration,
+        UdopDualForConditionalGeneration,
         UdopTokenizer,
-        UDOPUnimodelForConditionalGeneration,
+        UdopUnimodelForConditionalGeneration,
     )
 
 
@@ -97,7 +97,7 @@ class UDOPModelTester:
         self.seq_length = self.decoder_seq_length
 
     def get_large_model_config(self):
-        return UDOPUnimodelForConditionalGeneration.from_pretrained("t5-base")
+        return UdopUnimodelForConditionalGeneration.from_pretrained("t5-base")
 
     def get_visual_bbox(self, image_size=224):
         image_feature_pool_shape = [image_size // 16, image_size // 16]
@@ -200,7 +200,7 @@ class UDOPModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        model = UDOPUnimodelForConditionalGeneration(config=config).to(torch_device).eval()
+        model = UdopUnimodelForConditionalGeneration(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -220,7 +220,7 @@ class UDOPModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        model = UDOPUnimodelForConditionalGeneration(config=config).to(torch_device).eval()
+        model = UdopUnimodelForConditionalGeneration(config=config).to(torch_device).eval()
         torch.manual_seed(0)
         output_without_past_cache = model.generate(
             input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
@@ -251,7 +251,7 @@ class UDOPModelTester:
         decoder_attention_mask,
         lm_labels,
     ):
-        for model_class in [UDOPUnimodelForConditionalGeneration]:
+        for model_class in [UdopUnimodelForConditionalGeneration]:
             torch.manual_seed(0)
             model = model_class(config=config).to(torch_device).eval()
             # load state dict copies weights but does not tie them
@@ -325,7 +325,7 @@ class UDOPModelTester:
         prev_vocab_size = config.vocab_size
 
         config.tie_word_embeddings = False
-        model = UDOPUnimodelForConditionalGeneration(config=config).to(torch_device).eval()
+        model = UdopUnimodelForConditionalGeneration(config=config).to(torch_device).eval()
         model.resize_token_embeddings(prev_vocab_size - 10)
 
         self.parent.assertEqual(model.get_input_embeddings().weight.shape[0], prev_vocab_size - 10)
@@ -363,13 +363,13 @@ class UDOPModelTester:
 class T5ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (UDOPUnimodelForConditionalGeneration, UDOPDualForConditionalGeneration) if is_torch_available() else ()
+        (UdopUnimodelForConditionalGeneration, UdopDualForConditionalGeneration) if is_torch_available() else ()
     )
     all_generative_model_classes = (
-        (UDOPUnimodelForConditionalGeneration, UDOPDualForConditionalGeneration) if is_torch_available() else ()
+        (UdopUnimodelForConditionalGeneration, UdopDualForConditionalGeneration) if is_torch_available() else ()
     )
     all_parallelizable_model_classes = (
-        (UDOPUnimodelForConditionalGeneration, UDOPDualForConditionalGeneration) if is_torch_available() else ()
+        (UdopUnimodelForConditionalGeneration, UdopDualForConditionalGeneration) if is_torch_available() else ()
     )
     fx_compatible = True
     test_pruning = False
@@ -393,7 +393,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        model = UDOPUnimodelForConditionalGeneration(config_and_inputs[0]).to(torch_device)
+        model = UdopUnimodelForConditionalGeneration(config_and_inputs[0]).to(torch_device)
         with tempfile.TemporaryDirectory() as tmpdirname:
             torch.onnx.export(
                 model,
@@ -524,38 +524,38 @@ class T5ModelFp16Tests(unittest.TestCase):
         A test to check whether the argument `keep_in_fp32_modules` correctly does its job
         """
         # Load without using `accelerate`
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.float16)
+        model = UdopUnimodelForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.float16)
         self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wi.weight.dtype == torch.float16)
 
         # Load without in bf16
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.bfloat16)
+        model = UdopUnimodelForConditionalGeneration.from_pretrained("t5-small", torch_dtype=torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained(
+        model = UdopUnimodelForConditionalGeneration.from_pretrained(
             "t5-small", torch_dtype=torch.bfloat16, device_map="auto"
         )
         self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained(
+        model = UdopUnimodelForConditionalGeneration.from_pretrained(
             "t5-small", torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
         )
         self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wi.weight.dtype == torch.bfloat16)
 
         # Load without using `accelerate`
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained(
+        model = UdopUnimodelForConditionalGeneration.from_pretrained(
             "t5-small", torch_dtype=torch.float16, low_cpu_mem_usage=True
         )
         self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wi.weight.dtype == torch.float16)
 
         # Load using `accelerate`
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained(
+        model = UdopUnimodelForConditionalGeneration.from_pretrained(
             "t5-small", torch_dtype=torch.float16, device_map="auto"
         )
         self.assertTrue(model.decoder.block[0].layer[2].dense_relu_dense.wo.weight.dtype == torch.float32)
@@ -568,7 +568,7 @@ class T5ModelFp16Tests(unittest.TestCase):
 class T5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return UDOPUnimodelForConditionalGeneration.from_pretrained("t5-base").to(torch_device)
+        return UdopUnimodelForConditionalGeneration.from_pretrained("t5-base").to(torch_device)
 
     @cached_property
     def tokenizer(self):
@@ -576,7 +576,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_small_generation(self):
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
+        model = UdopUnimodelForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
         model.config.max_length = 8
         model.config.num_beams = 1
         model.config.do_sample = False
@@ -603,7 +603,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
+        model = UdopUnimodelForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
         tokenizer = UdopTokenizer.from_pretrained("t5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
@@ -629,7 +629,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained("google/t5-v1_1-small").to(torch_device)
+        model = UdopUnimodelForConditionalGeneration.from_pretrained("google/t5-v1_1-small").to(torch_device)
         tokenizer = UdopTokenizer.from_pretrained("google/t5-v1_1-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
@@ -653,7 +653,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = UDOPUnimodelForConditionalGeneration.from_pretrained("google/byt5-small").to(torch_device)
+        model = UdopUnimodelForConditionalGeneration.from_pretrained("google/byt5-small").to(torch_device)
         tokenizer = UdopTokenizer.from_pretrained("google/byt5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
@@ -994,7 +994,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         )
         article = "summarize: " + article.strip()
         t5_tokenizer = AutoTokenizer.from_pretrained("flax-community/t5-base-cnn-dm")
-        t5_model = UDOPUnimodelForConditionalGeneration.from_pretrained("flax-community/t5-base-cnn-dm").to(
+        t5_model = UdopUnimodelForConditionalGeneration.from_pretrained("flax-community/t5-base-cnn-dm").to(
             torch_device
         )
         input_ids = t5_tokenizer(
@@ -1025,7 +1025,7 @@ class TestAsymmetricT5(unittest.TestCase):
             decoder_attention_mask,
             lm_labels,
         ) = inputs
-        model = UDOPUnimodelForConditionalGeneration(config=config).to(torch_device).eval()
+        model = UdopUnimodelForConditionalGeneration(config=config).to(torch_device).eval()
         outputs = model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,

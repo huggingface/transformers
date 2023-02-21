@@ -155,8 +155,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SpeechT5SpeechEncoder",  # Building part of bigger (tested) model.
     "SpeechT5TextDecoder",  # Building part of bigger (tested) model.
     "SpeechT5TextEncoder",  # Building part of bigger (tested) model.
-    "UDOPDualStack",  # Building part of bigger (tested) model.
-    "UDOPUniStack",  # Building part of bigger (tested) model.
+    "UdopDualStack",  # Building part of bigger (tested) model.
+    "UdopUniStack",  # Building part of bigger (tested) model.
     "CellEmbeddings",  # Building part of bigger (tested) model.
 ]
 
