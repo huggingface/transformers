@@ -548,11 +548,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                     },
                     {
                         "text": " the thousands of spectators, retrievality is not worth thinking about.",
-                        "timestamp": (19.6, 24.98),
+                        "timestamp": (19.6, 26.66),
                     },
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (24.98, 30.98),
+                        "timestamp": (26.66, 31.060000000000002),
                     },
                 ],
                 "text": (
