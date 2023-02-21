@@ -77,7 +77,7 @@ class ErnieMEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
         if position_ids is None:
             input_shape = inputs_embeds.size()[:-1]
-            ones = torch.ones(input_shape, dtype=torch.int64, device=input_ids.device)
+            ones = torch.ones(input_shape, dtype=torch.int64, device=inputs_embeds.device)
             seq_length = torch.cumsum(ones, dim=1)
             position_ids = seq_length - ones
 
