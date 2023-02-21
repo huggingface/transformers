@@ -31,18 +31,15 @@ from torch import Tensor
 from torch import nn as nn
 from torch.nn import CrossEntropyLoss
 
-from transformers import PreTrainedModel, add_start_docstrings
+from transformers import PreTrainedModel
 from transformers.activations import ACT2FN
-from transformers.modeling_outputs import BaseModelOutput, Seq2SeqLMOutput, Seq2SeqModelOutput
+from transformers.modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from transformers.pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from transformers.utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
-    add_start_docstrings_to_model_forward,
     is_torch_fx_proxy,
-    replace_return_docstrings,
 )
-from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
 
 from .configuration_udop import UdopConfig
 
