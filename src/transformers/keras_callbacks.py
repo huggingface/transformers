@@ -234,7 +234,9 @@ class KerasMetricCallback(Callback):
                     if self.output_cols is not None:
                         predictions = {key: predictions[key] for key in self.output_cols}
                     else:
-                        predictions = {key: val for key, val in predictions.items() if key not in ignore_keys + ["loss"]}
+                        predictions = {
+                            key: val for key, val in predictions.items() if key not in ignore_keys + ["loss"]
+                        }
             prediction_list.append(predictions)
             if not self.use_keras_label:
                 labels = {key: batch[key].numpy() for key in self.label_cols}
