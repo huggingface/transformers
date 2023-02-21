@@ -231,7 +231,7 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         else ()
     )
     all_generative_model_classes = (M2M100ForConditionalGeneration,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "conversational": M2M100ForConditionalGeneration,
             "feature-extraction": M2M100Model,

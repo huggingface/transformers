@@ -381,7 +381,7 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         else ()
     )
     all_generative_model_classes = (RobertaPreLayerNormForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": RobertaPreLayerNormModel,
             "fill-mask": RobertaPreLayerNormForMaskedLM,

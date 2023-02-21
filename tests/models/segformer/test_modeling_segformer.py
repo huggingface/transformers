@@ -170,7 +170,7 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": SegformerModel,
             "image-classification": SegformerForImageClassification,

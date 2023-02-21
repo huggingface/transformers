@@ -158,7 +158,7 @@ class Swin2SRModelTester:
 @require_torch
 class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": Swin2SRModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": Swin2SRModel} if is_torch_available() else {}
 
     fx_compatible = False
     test_pruning = False

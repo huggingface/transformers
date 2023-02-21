@@ -209,7 +209,7 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else None
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": DistilBertModel,
             "fill-mask": DistilBertForMaskedLM,

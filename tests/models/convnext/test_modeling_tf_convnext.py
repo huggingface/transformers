@@ -125,7 +125,7 @@ class TFConvNextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
     """
 
     all_model_classes = (TFConvNextModel, TFConvNextForImageClassification) if is_tf_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": TFConvNextModel, "image-classification": TFConvNextForImageClassification}
         if is_tf_available()
         else {}

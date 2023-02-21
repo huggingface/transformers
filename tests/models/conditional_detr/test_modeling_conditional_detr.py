@@ -190,7 +190,7 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         if is_timm_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": ConditionalDetrModel, "object-detection": ConditionalDetrForObjectDetection}
         if is_timm_available()
         else {}

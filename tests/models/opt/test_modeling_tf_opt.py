@@ -150,7 +150,7 @@ class TFOPTModelTester:
 class TFOPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFOPTModel, TFOPTForCausalLM) if is_tf_available() else ()
     all_generative_model_classes = (TFOPTForCausalLM,) if is_tf_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": TFOPTModel, "text-generation": TFOPTForCausalLM} if is_tf_available() else {}
     )
     is_encoder_decoder = False

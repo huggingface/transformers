@@ -232,7 +232,7 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else ()
     )
     all_generative_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "conversational": MBartForConditionalGeneration,
             "feature-extraction": MBartModel,

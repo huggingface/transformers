@@ -313,7 +313,7 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": VisualBertModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": VisualBertModel} if is_torch_available() else {}
     test_torchscript = False
     test_pruning = False
 

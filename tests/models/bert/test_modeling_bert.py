@@ -444,7 +444,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else ()
     )
     all_generative_model_classes = (BertLMHeadModel,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": BertModel,
             "fill-mask": BertForMaskedLM,

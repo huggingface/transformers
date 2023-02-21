@@ -375,7 +375,7 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         else ()
     )
     all_generative_model_classes = (Data2VecTextForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": Data2VecTextModel,
             "fill-mask": Data2VecTextForMaskedLM,

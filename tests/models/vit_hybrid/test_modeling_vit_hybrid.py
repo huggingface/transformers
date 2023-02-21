@@ -155,7 +155,7 @@ class ViTHybridModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     """
 
     all_model_classes = (ViTHybridModel, ViTHybridForImageClassification) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": ViTHybridModel, "image-classification": ViTHybridForImageClassification}
         if is_torch_available()
         else {}

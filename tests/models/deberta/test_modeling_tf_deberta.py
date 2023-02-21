@@ -220,7 +220,7 @@ class TFDebertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": TFDebertaModel,
             "fill-mask": TFDebertaForMaskedLM,

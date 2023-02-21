@@ -177,7 +177,7 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": Data2VecVisionModel,
             "image-classification": Data2VecVisionForImageClassification,

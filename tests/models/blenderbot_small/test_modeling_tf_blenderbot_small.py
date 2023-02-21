@@ -181,7 +181,7 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
         (TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel) if is_tf_available() else ()
     )
     all_generative_model_classes = (TFBlenderbotSmallForConditionalGeneration,) if is_tf_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "conversational": TFBlenderbotSmallForConditionalGeneration,
             "feature-extraction": TFBlenderbotSmallModel,

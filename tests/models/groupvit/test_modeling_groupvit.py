@@ -524,7 +524,7 @@ class GroupViTModelTester:
 @require_torch
 class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTModel,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": GroupViTModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": GroupViTModel} if is_torch_available() else {}
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False

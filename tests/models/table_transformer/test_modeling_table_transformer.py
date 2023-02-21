@@ -185,7 +185,7 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
         if is_timm_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
         if is_timm_available()
         else {}

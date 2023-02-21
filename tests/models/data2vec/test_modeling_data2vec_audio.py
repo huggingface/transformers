@@ -371,7 +371,7 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "audio-classification": Data2VecAudioForSequenceClassification,
             "automatic-speech-recognition": Data2VecAudioForCTC,

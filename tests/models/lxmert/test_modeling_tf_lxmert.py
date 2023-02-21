@@ -366,7 +366,7 @@ class TFLxmertModelTester(object):
 @require_tf
 class TFLxmertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFLxmertModel, TFLxmertForPreTraining) if is_tf_available() else ()
-    pipieline_model_mapping = {"feature-extraction": TFLxmertModel} if is_tf_available() else {}
+    pipeline_model_mapping = {"feature-extraction": TFLxmertModel} if is_tf_available() else {}
     test_head_masking = False
     test_onnx = False
 

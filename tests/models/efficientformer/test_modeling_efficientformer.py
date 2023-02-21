@@ -173,7 +173,7 @@ class EfficientFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": EfficientFormerModel,
             "image-classification": (

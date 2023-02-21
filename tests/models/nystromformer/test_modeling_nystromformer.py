@@ -230,7 +230,7 @@ class NystromformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": NystromformerModel,
             "fill-mask": NystromformerForMaskedLM,

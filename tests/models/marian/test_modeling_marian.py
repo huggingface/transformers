@@ -239,7 +239,7 @@ class MarianModelTester:
 class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MarianModel, MarianMTModel) if is_torch_available() else ()
     all_generative_model_classes = (MarianMTModel,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "conversational": MarianMTModel,
             "feature-extraction": MarianModel,

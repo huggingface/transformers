@@ -436,7 +436,7 @@ class QDQBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else ()
     )
     all_generative_model_classes = (QDQBertLMHeadModel,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": QDQBertModel,
             "fill-mask": QDQBertForMaskedLM,

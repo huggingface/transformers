@@ -191,7 +191,7 @@ class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     all_model_classes = (
         (BridgeTowerModel, BridgeTowerForImageAndTextRetrieval, BridgeTowerForMaskedLM) if is_torch_available() else ()
     )
-    pipieline_model_mapping = {"feature-extraction": BridgeTowerModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": BridgeTowerModel} if is_torch_available() else {}
 
     is_training = False
     test_headmasking = False

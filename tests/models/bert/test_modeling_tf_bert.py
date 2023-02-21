@@ -607,7 +607,7 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": TFBertModel,
             "fill-mask": TFBertForMaskedLM,

@@ -299,7 +299,7 @@ class YosoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     all_generative_model_classes = ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": YosoModel,
             "fill-mask": YosoForMaskedLM,

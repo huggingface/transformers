@@ -284,7 +284,7 @@ class TFLongformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": TFLongformerModel,
             "fill-mask": TFLongformerForMaskedLM,

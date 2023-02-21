@@ -179,7 +179,7 @@ def prepare_pegasus_inputs_dict(
 class TFPegasusModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFPegasusForConditionalGeneration, TFPegasusModel) if is_tf_available() else ()
     all_generative_model_classes = (TFPegasusForConditionalGeneration,) if is_tf_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "conversational": TFPegasusForConditionalGeneration,
             "feature-extraction": TFPegasusModel,

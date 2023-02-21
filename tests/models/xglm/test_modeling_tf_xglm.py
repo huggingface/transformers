@@ -143,7 +143,7 @@ class TFXGLMModelTester:
 class TFXGLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFXGLMModel, TFXGLMForCausalLM) if is_tf_available() else ()
     all_generative_model_classes = (TFXGLMForCausalLM,) if is_tf_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": TFXGLMModel, "text-generation": TFXGLMForCausalLM} if is_tf_available() else {}
     )
     test_onnx = False

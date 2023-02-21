@@ -194,7 +194,7 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
         (TFBartForConditionalGeneration, TFBartForSequenceClassification, TFBartModel) if is_tf_available() else ()
     )
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "conversational": TFBartForConditionalGeneration,
             "feature-extraction": TFBartModel,

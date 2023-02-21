@@ -189,7 +189,7 @@ class DPRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": DPRQuestionEncoder} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": DPRQuestionEncoder} if is_torch_available() else {}
 
     test_resize_embeddings = False
     test_missing_keys = False  # why?

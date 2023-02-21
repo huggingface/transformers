@@ -191,7 +191,7 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         else ()
     )
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": OPTModel,
             "question-answering": OPTForQuestionAnswering,

@@ -275,7 +275,7 @@ class WhisperModelTester:
 class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (WhisperForConditionalGeneration,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"automatic-speech-recognition": WhisperForConditionalGeneration, "feature-extraction": WhisperModel}
         if is_torch_available()
         else {}

@@ -213,7 +213,7 @@ class TFSpeech2TextModelTester:
 class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFSpeech2TextModel, TFSpeech2TextForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFSpeech2TextForConditionalGeneration,) if is_tf_available() else ()
-    pipieline_model_mapping = {"feature-extraction": TFSpeech2TextModel} if is_tf_available() else {}
+    pipeline_model_mapping = {"feature-extraction": TFSpeech2TextModel} if is_tf_available() else {}
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False

@@ -104,7 +104,7 @@ transformers_module = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 class PipelineTesterMixin:
     model_tester = None
-    pipieline_model_mapping = None
+    pipeline_model_mapping = None
     supported_frameworks = ["pt", "tf"]
 
     def run_task_tests(self, task):
@@ -114,13 +114,13 @@ class PipelineTesterMixin:
             task (`str`):
                 A task name. This should be a key in the mapping `pipeline_test_mapping`.
         """
-        if task not in self.pipieline_model_mapping:
+        if task not in self.pipeline_model_mapping:
             self.skipTest(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: `{task}` is not in "
-                f"`self.pipieline_model_mapping` for `{self.__class__.__name__}`."
+                f"`self.pipeline_model_mapping` for `{self.__class__.__name__}`."
             )
 
-        model_architectures = self.pipieline_model_mapping[task]
+        model_architectures = self.pipeline_model_mapping[task]
         if not isinstance(model_architectures, tuple):
             model_architectures = (model_architectures,)
         if not isinstance(model_architectures, tuple):

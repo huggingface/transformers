@@ -237,7 +237,7 @@ class PegasusModelTester:
 class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusModel, PegasusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (PegasusForConditionalGeneration,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "conversational": PegasusForConditionalGeneration,
             "feature-extraction": PegasusModel,

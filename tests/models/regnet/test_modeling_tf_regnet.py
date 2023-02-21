@@ -119,7 +119,7 @@ class TFRegNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     """
 
     all_model_classes = (TFRegNetModel, TFRegNetForImageClassification) if is_tf_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": TFRegNetModel, "image-classification": TFRegNetForImageClassification}
         if is_tf_available()
         else {}

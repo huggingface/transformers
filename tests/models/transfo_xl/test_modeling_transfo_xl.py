@@ -257,7 +257,7 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         (TransfoXLModel, TransfoXLLMHeadModel, TransfoXLForSequenceClassification) if is_torch_available() else ()
     )
     all_generative_model_classes = (TransfoXLLMHeadModel,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": TransfoXLModel,
             "text-classification": TransfoXLForSequenceClassification,

@@ -189,7 +189,7 @@ class GPTNeoXModelTester:
 class GPTNeoXModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GPTNeoXModel, GPTNeoXForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GPTNeoXForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": GPTNeoXModel, "text-generation": GPTNeoXForCausalLM} if is_torch_available() else {}
     )
     test_pruning = False

@@ -221,7 +221,7 @@ class TFHubertModelTester:
 @require_tf
 class TFHubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFHubertModel, TFHubertForCTC) if is_tf_available() else ()
-    pipieline_model_mapping = {"feature-extraction": TFHubertModel} if is_tf_available() else {}
+    pipeline_model_mapping = {"feature-extraction": TFHubertModel} if is_tf_available() else {}
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False

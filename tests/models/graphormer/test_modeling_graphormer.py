@@ -247,7 +247,7 @@ class GraphormerModelTester:
 class GraphormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GraphormerForGraphClassification, GraphormerModel) if is_torch_available() else ()
     all_generative_model_classes = ()
-    pipieline_model_mapping = {"feature-extraction": GraphormerModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": GraphormerModel} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
     test_resize_embeddings = False

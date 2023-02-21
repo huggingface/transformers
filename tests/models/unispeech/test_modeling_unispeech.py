@@ -304,7 +304,7 @@ class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "audio-classification": UniSpeechForSequenceClassification,
             "automatic-speech-recognition": UniSpeechForCTC,

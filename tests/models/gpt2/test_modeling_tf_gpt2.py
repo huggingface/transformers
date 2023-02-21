@@ -369,7 +369,7 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
         else ()
     )
     all_generative_model_classes = (TFGPT2LMHeadModel,) if is_tf_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": TFGPT2Model,
             "text-classification": TFGPT2ForSequenceClassification,

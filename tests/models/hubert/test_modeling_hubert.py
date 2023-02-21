@@ -307,7 +307,7 @@ class HubertModelTester:
 @require_torch
 class HubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (HubertForCTC, HubertForSequenceClassification, HubertModel) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "audio-classification": HubertForSequenceClassification,
             "automatic-speech-recognition": HubertForCTC,

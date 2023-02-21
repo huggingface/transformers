@@ -166,7 +166,7 @@ class TFMobileViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": TFMobileViTModel, "image-classification": TFMobileViTForImageClassification}
         if is_tf_available()
         else {}

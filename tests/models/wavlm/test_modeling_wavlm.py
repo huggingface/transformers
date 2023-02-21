@@ -315,7 +315,7 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "audio-classification": WavLMForSequenceClassification,
             "automatic-speech-recognition": WavLMForCTC,

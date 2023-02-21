@@ -291,7 +291,7 @@ class TFFlaubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
     all_generative_model_classes = (
         (TFFlaubertWithLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": TFFlaubertModel,
             "fill-mask": TFFlaubertWithLMHeadModel,

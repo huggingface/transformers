@@ -323,7 +323,7 @@ class SEWDModelTester:
 @require_torch
 class SEWDModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SEWDForCTC, SEWDModel, SEWDForSequenceClassification) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "audio-classification": SEWDForSequenceClassification,
             "automatic-speech-recognition": SEWDForCTC,

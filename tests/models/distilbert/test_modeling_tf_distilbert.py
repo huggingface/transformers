@@ -183,7 +183,7 @@ class TFDistilBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
         if is_tf_available()
         else None
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": TFDistilBertModel,
             "fill-mask": TFDistilBertForMaskedLM,

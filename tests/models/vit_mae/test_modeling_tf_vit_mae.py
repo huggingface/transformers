@@ -163,7 +163,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     """
 
     all_model_classes = (TFViTMAEModel, TFViTMAEForPreTraining) if is_tf_available() else ()
-    pipieline_model_mapping = {"feature-extraction": TFViTMAEModel} if is_tf_available() else {}
+    pipeline_model_mapping = {"feature-extraction": TFViTMAEModel} if is_tf_available() else {}
 
     test_pruning = False
     test_onnx = False

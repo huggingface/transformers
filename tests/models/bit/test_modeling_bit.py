@@ -158,7 +158,7 @@ class BitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (BitModel, BitForImageClassification, BitBackbone) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": BitModel, "image-classification": BitForImageClassification}
         if is_torch_available()
         else {}

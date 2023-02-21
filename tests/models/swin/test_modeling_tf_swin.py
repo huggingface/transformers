@@ -187,7 +187,7 @@ class TFSwinModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": TFSwinModel, "image-classification": TFSwinForImageClassification}
         if is_tf_available()
         else {}

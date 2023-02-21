@@ -182,7 +182,7 @@ class TFDPRModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = {"feature-extraction": TFDPRQuestionEncoder} if is_tf_available() else {}
+    pipeline_model_mapping = {"feature-extraction": TFDPRQuestionEncoder} if is_tf_available() else {}
 
     test_resize_embeddings = False
     test_missing_keys = False

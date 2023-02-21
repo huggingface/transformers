@@ -532,7 +532,7 @@ class LxmertModelTester:
 @require_torch
 class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (LxmertModel, LxmertForPreTraining, LxmertForQuestionAnswering) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": LxmertModel, "question-answering": LxmertForQuestionAnswering}
         if is_torch_available()
         else {}

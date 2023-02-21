@@ -151,7 +151,7 @@ class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (CvtModel, CvtForImageClassification) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": CvtModel, "image-classification": CvtForImageClassification}
         if is_torch_available()
         else {}

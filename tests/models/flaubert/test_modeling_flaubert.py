@@ -377,7 +377,7 @@ class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": FlaubertModel,
             "fill-mask": FlaubertWithLMHeadModel,

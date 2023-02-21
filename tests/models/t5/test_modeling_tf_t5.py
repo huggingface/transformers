@@ -244,7 +244,7 @@ class TFT5ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "conversational": TFT5ForConditionalGeneration,
             "feature-extraction": TFT5Model,

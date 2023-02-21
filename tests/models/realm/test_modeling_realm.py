@@ -317,7 +317,7 @@ class RealmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = ()
-    pipieline_model_mapping = {} if is_torch_available() else {}
+    pipeline_model_mapping = {} if is_torch_available() else {}
 
     # disable these tests because there is no base_model in Realm
     test_save_load_fast_init_from_base = False

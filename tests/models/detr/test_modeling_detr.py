@@ -185,7 +185,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_timm_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": DetrModel,
             "image-segmentation": DetrForSegmentation,

@@ -123,7 +123,7 @@ class VanModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (VanModel, VanForImageClassification) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": VanModel, "image-classification": VanForImageClassification}
         if is_torch_available()
         else {}

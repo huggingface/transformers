@@ -124,7 +124,7 @@ class PoolFormerModelTester:
 @require_torch
 class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PoolFormerModel, PoolFormerForImageClassification) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": PoolFormerModel, "image-classification": PoolFormerForImageClassification}
         if is_torch_available()
         else {}

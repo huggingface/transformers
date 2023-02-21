@@ -382,7 +382,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else ()
     )
     all_generative_model_classes = (RobertaForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": RobertaModel,
             "fill-mask": RobertaForMaskedLM,

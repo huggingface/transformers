@@ -157,7 +157,7 @@ class TFSegformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": TFSegformerModel, "image-classification": TFSegformerForImageClassification}
         if is_tf_available()
         else {}

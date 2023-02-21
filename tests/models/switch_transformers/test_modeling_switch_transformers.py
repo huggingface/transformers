@@ -552,7 +552,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
     )
     all_generative_model_classes = (SwitchTransformersForConditionalGeneration,) if is_torch_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "conversational": SwitchTransformersForConditionalGeneration,
             "feature-extraction": SwitchTransformersModel,

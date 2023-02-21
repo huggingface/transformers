@@ -188,7 +188,7 @@ class DeformableDetrModelTester:
 @require_timm
 class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_timm_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {"feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
         if is_timm_available()
         else {}

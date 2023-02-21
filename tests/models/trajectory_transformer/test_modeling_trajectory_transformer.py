@@ -97,7 +97,7 @@ class TrajectoryTransformerModelTester:
 @require_torch
 class TrajectoryTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TrajectoryTransformerModel,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": TrajectoryTransformerModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": TrajectoryTransformerModel} if is_torch_available() else {}
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids
     test_generate_without_input_ids = False

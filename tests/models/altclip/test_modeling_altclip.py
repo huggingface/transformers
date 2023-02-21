@@ -395,7 +395,7 @@ def prepare_img():
 @require_torch
 class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AltCLIPModel,) if is_torch_available() else ()
-    pipieline_model_mapping = {"feature-extraction": AltCLIPModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": AltCLIPModel} if is_torch_available() else {}
     fx_compatible = True
     test_head_masking = False
     test_pruning = False

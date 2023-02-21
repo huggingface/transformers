@@ -198,7 +198,7 @@ class TFMPNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": TFMPNetModel,
             "fill-mask": TFMPNetForMaskedLM,

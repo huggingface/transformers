@@ -161,7 +161,7 @@ class TFTransfoXLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Tes
         (TFTransfoXLModel, TFTransfoXLLMHeadModel, TFTransfoXLForSequenceClassification) if is_tf_available() else ()
     )
     all_generative_model_classes = () if is_tf_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": TFTransfoXLModel,
             "text-classification": TFTransfoXLForSequenceClassification,

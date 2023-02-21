@@ -232,7 +232,7 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else None
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "document-question-answering": LayoutLMForQuestionAnswering,
             "feature-extraction": LayoutLMModel,

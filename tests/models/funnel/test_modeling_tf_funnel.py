@@ -342,7 +342,7 @@ class TFFunnelModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         if is_tf_available()
         else ()
     )
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "feature-extraction": (TFFunnelBaseModel, TFFunnelModel),
             "fill-mask": TFFunnelForMaskedLM,

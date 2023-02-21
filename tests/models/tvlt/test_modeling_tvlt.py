@@ -327,7 +327,7 @@ class TvltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TvltModel, TvltForPreTraining, TvltForAudioVisualClassification) if is_torch_available() else ()
     )
-    pipieline_model_mapping = {"feature-extraction": TvltModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"feature-extraction": TvltModel} if is_torch_available() else {}
 
     fx_compatible = False
     test_pruning = False

@@ -184,7 +184,7 @@ def prepare_mbart_inputs_dict(
 class TFMBartModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFMBartForConditionalGeneration, TFMBartModel) if is_tf_available() else ()
     all_generative_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
-    pipieline_model_mapping = (
+    pipeline_model_mapping = (
         {
             "conversational": TFMBartForConditionalGeneration,
             "feature-extraction": TFMBartModel,

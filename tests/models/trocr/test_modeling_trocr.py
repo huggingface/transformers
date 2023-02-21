@@ -162,7 +162,7 @@ class TrOCRStandaloneDecoderModelTester:
 class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TrOCRDecoder, TrOCRForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (TrOCRForCausalLM,) if is_torch_available() else ()
-    pipieline_model_mapping = {"text-generation": TrOCRForCausalLM} if is_torch_available() else {}
+    pipeline_model_mapping = {"text-generation": TrOCRForCausalLM} if is_torch_available() else {}
     fx_compatible = True
     test_pruning = False
 
