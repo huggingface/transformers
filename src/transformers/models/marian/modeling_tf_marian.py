@@ -1236,7 +1236,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
         **kwargs,
     ):
         outputs = self.model(
