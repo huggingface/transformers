@@ -1424,7 +1424,9 @@ class InformerEncoder(InformerPreTrainedModel):
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
                     )
-                    # TODO support for checkpointing conv_layers
+                    if conv_layer is not None:
+                        output = torch.utils.checkpoint.checkpoint(conv_layer, layer_outputs[0])
+                        layer_outputs = (output,) + layer_outputs[1:]
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
