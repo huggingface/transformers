@@ -126,6 +126,7 @@ _import_structure = {
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ALIGNConfig",
+        "ALIGNProcessor",
         "ALIGNTextConfig",
         "ALIGNVisionConfig",
     ],
@@ -994,9 +995,7 @@ else:
             "ALIGNModel",
             "ALIGNPreTrainedModel",
             "ALIGNTextModel",
-            "ALIGNTextModelWithProjection",
             "ALIGNVisionModel",
-            "ALIGNVisionModelWithProjection",
         ]
     )
     _import_structure["models.altclip"].extend(
@@ -3727,6 +3726,7 @@ if TYPE_CHECKING:
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ALIGNConfig,
+        ALIGNProcessor,
         ALIGNTextConfig,
         ALIGNVisionConfig,
     )
@@ -4498,9 +4498,7 @@ if TYPE_CHECKING:
             ALIGNModel,
             ALIGNPreTrainedModel,
             ALIGNTextModel,
-            ALIGNTextModelWithProjection,
             ALIGNVisionModel,
-            ALIGNVisionModelWithProjection,
         )
         from .models.altclip import (
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,

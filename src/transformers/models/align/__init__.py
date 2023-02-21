@@ -24,7 +24,6 @@ _import_structure = {
     "configuration_align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ALIGNConfig",
-        "ALIGNOnnxConfig",
         "ALIGNTextConfig",
         "ALIGNVisionConfig",
     ],
@@ -42,16 +41,13 @@ else:
         "ALIGNModel",
         "ALIGNPreTrainedModel",
         "ALIGNTextModel",
-        "ALIGNTextModelWithProjection",
         "ALIGNVisionModel",
-        "ALIGNVisionModelWithProjection",
     ]
 
 if TYPE_CHECKING:
     from .configuration_align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ALIGNConfig,
-        ALIGNOnnxConfig,
         ALIGNTextConfig,
         ALIGNVisionConfig,
     )
@@ -68,9 +64,7 @@ if TYPE_CHECKING:
             ALIGNModel,
             ALIGNPreTrainedModel,
             ALIGNTextModel,
-            ALIGNTextModelWithProjection,
             ALIGNVisionModel,
-            ALIGNVisionModelWithProjection,
         )
 
 else:

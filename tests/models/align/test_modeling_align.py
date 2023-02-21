@@ -52,9 +52,7 @@ if is_torch_available():
     from transformers import (
         ALIGNModel,
         ALIGNTextModel,
-        ALIGNTextModelWithProjection,
         ALIGNVisionModel,
-        ALIGNVisionModelWithProjection,
     )
     from transformers.models.align.modeling_align import ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -147,19 +145,6 @@ class ALIGNVisionModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_model_with_projection(self, config, pixel_values):
-        model = ALIGNVisionModelWithProjection(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
@@ -174,7 +159,7 @@ class ALIGNVisionModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ALIGNVisionModel, ALIGNVisionModelWithProjection) if is_torch_available() else ()
+    all_model_classes = (ALIGNVisionModel, ) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
@@ -241,13 +226,6 @@ class ALIGNVisionModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ALIGNVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    @slow
-    def test_model_with_projection_from_pretrained(self):
-        for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ALIGNVisionModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "visual_projection"))
 
 
 class ALIGNTextModelTester:
@@ -331,16 +309,6 @@ class ALIGNTextModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_model_with_projection(self, config, input_ids, input_mask):
-        model = ALIGNTextModelWithProjection(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(input_ids, attention_mask=input_mask)
-            result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.text_embeds.shape, (self.batch_size, self.projection_dim))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, input_mask = config_and_inputs
@@ -350,7 +318,7 @@ class ALIGNTextModelTester:
 
 @require_torch
 class ALIGNTextModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (ALIGNTextModel, ALIGNTextModelWithProjection) if is_torch_available() else ()
+    all_model_classes = (ALIGNTextModel, ) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
@@ -393,13 +361,6 @@ class ALIGNTextModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ALIGNTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    @slow
-    def test_model_with_projection_from_pretrained(self):
-        for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ALIGNTextModelWithProjection.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-            self.assertTrue(hasattr(model, "text_projection"))
 
 
 class ALIGNModelTester:

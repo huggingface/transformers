@@ -380,21 +380,7 @@ class ALIGNTextModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class ALIGNTextModelWithProjection(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class ALIGNVisionModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class ALIGNVisionModelWithProjection(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

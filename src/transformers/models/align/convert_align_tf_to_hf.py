@@ -22,9 +22,7 @@ import numpy as np
 import PIL
 import requests
 import torch
-from huggingface_hub import hf_hub_download
 from PIL import Image
-from tensorflow.keras.preprocessing import image
 
 from transformers import ALIGNModel
 from transformers import BertConfig, BertTokenizer
@@ -38,22 +36,9 @@ logger = logging.get_logger(__name__)
 
 
 def get_align_config(model_name):
-    config = EfficientNetConfig()
-    config.hidden_dim = CONFIG_MAP[model_name]["hidden_dim"]
-    config.width_coefficient = CONFIG_MAP[model_name]["width_coef"]
-    config.depth_coefficient = CONFIG_MAP[model_name]["depth_coef"]
-    config.image_size = CONFIG_MAP[model_name]["image_size"]
-    config.dropout_rate = CONFIG_MAP[model_name]["dropout_rate"]
-    config.depthwise_padding = CONFIG_MAP[model_name]["dw_padding"]
-
-    repo_id = "huggingface/label-files"
-    filename = "imagenet-1k-id2label.json"
-    config.num_labels = 1000
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-    id2label = {int(k): v for k, v in id2label.items()}
-
-    config.id2label = id2label
-    config.label2id = {v: k for k, v in id2label.items()}
+    vision_config = EfficientNetConfig()
+    text_config = BertConfig()
+    config = ALIGNConfig.from_text_vision_configs(text_config=text_config, vision_config=vision_config)
     return config
 
 
@@ -66,13 +51,14 @@ def prepare_img():
 
 def get_processor():
     image_processor = EfficientNetImageProcessor(
-        image_mean=[0.485, 0.456, 0.406],
-        image_std=[0.47853944, 0.4732864, 0.47434163],
         do_center_crop=True,
         rescale_offset=True,
+        do_normalize=False,
         include_top=False
     )
-    tokenizer = BertTokenizer()
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    tokenizer.model_max_length = 64
+    processor = ALIGNProcessor(image_processor=image_processor, tokenizer=tokenizer)
     return preprocessor
 
 
@@ -166,7 +152,7 @@ def replace_params(hf_params, tf_params, key_mapping):
 
 
 @torch.no_grad()
-def convert_align_checkpoint(model_name, pytorch_dump_folder_path, save_model, push_to_hub):
+def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_model, push_to_hub):
     """
     Copy/paste/tweak model's weights to our ALIGN structure.
     """
@@ -199,8 +185,8 @@ def convert_align_checkpoint(model_name, pytorch_dump_folder_path, save_model, p
     replace_params(hf_params, tf_params, key_mapping)
 
     # Initialize preprocessor and preprocess input image
-    preprocessor = convert_image_processor(model_name)
-    inputs = preprocessor(images=prepare_img(), return_tensors="pt")
+    processor = get_processor()
+    inputs = processor(images=prepare_img(), texts="A picture of a cat", return_tensors="pt")
 
     # HF model inference
     hf_model.eval()
@@ -230,20 +216,19 @@ def convert_align_checkpoint(model_name, pytorch_dump_folder_path, save_model, p
 
     if push_to_hub:
         # Push model and feature extractor to hub
-        print(f"Pushing converted {model_name} to the hub...")
-        model_name = f"efficientnet-{model_name}"
-        preprocessor.push_to_hub(model_name)
-        hf_model.push_to_hub(model_name)
+        print(f"Pushing converted ALIGN to the hub...")
+        preprocessor.push_to_hub("align-base")
+        hf_model.push_to_hub("align-base")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--model_name",
-        default="b0",
+        "--checkpoint_path",
+        default="../align/pretrained/final-model",
         type=str,
-        help="Version name of the EfficientNet backbone you want to convert, select from [b0, b1, b2, b3, b4, b5, b6, b7].",
+        help="Path to the pretrained TF ALIGN checkpoint.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
@@ -255,4 +240,4 @@ if __name__ == "__main__":
     parser.add_argument("--push_to_hub", action="store_true", help="Push model and feature extractor to the hub")
 
     args = parser.parse_args()
-    convert_align_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub)
+    convert_align_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub)

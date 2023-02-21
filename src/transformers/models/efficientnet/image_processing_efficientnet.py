@@ -334,7 +334,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor, offset=rescale_offset) for image in images]
-
+        print(images[0])
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 
