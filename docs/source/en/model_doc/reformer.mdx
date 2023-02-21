@@ -83,8 +83,8 @@ factorized embedding vectors: \\(x^1_{k, l} + x^2_{l, k}\\), where as the `confi
 \\(j\\) is factorized into \\(k \text{ and } l\\). This design ensures that each position embedding vector
 \\(x_j\\) is unique.
 
-Using the above example again, axial position encoding with \\(d^1 = 2^5, d^2 = 2^5, n_s^1 = 2^9, n_s^2 = 2^{10}\\)
-can drastically reduced the number of parameters to \\(2^{14} + 2^{15} \approx 49000\\) parameters.
+Using the above example again, axial position encoding with \\(d^1 = 2^9, d^2 = 2^9, n_s^1 = 2^9, n_s^2 = 2^{10}\\)
+can drastically reduced the number of parameters from 500 000 000 to \\(2^{18} + 2^{19} \approx 780 000\\) parameters, this means 85% less memory usage.
 
 In practice, the parameter `config.axial_pos_embds_dim` is set to a tuple \\((d^1, d^2)\\) which sum has to be
 equal to `config.hidden_size` and `config.axial_pos_shape` is set to a tuple \\((n_s^1, n_s^2)\\) which
