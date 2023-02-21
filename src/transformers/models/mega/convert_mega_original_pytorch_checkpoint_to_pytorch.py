@@ -12,167 +12,237 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Mega checkpoint."""
 
+"""
+Convert Mega pretrained checkpoint. Built to convert the Masked LM checkpoint
+located at https://huggingface.co/mnaylor/mega-wikitext-103
 
+Requirements:
+  - clone the Mega repo and install fairseq from there
+    1. git clone https://github.com/facebookresearch/mega.git
+    2. cd mega && pip install -e
+  - clone the pretrained weights for the original implementation from 
+    the hugging face repo
+    * use this location as the path for pretrained weights
+"""
 import argparse
-import pathlib
 
-import fairseq
-import torch
-from fairseq.models.mega import MegaModel as FairseqMegaModel
-from fairseq.modules import TransformerSentenceEncoderLayer
-from packaging import version
+# import new hugging face classes
+from .configuration_mega import MegaConfig
+from .modeling_mega import MegaForMaskedLM
 
-from transformers import MegaConfig, MegaForMaskedLM, MegaForSequenceClassification
-from transformers.models.bert.modeling_bert import (
-    BertIntermediate,
-    BertLayer,
-    BertOutput,
-    BertSelfAttention,
-    BertSelfOutput,
-)
-from transformers.utils import logging
+# import PyTorch and auto tokenizer class
+import torch 
+from torch import nn 
+from transformers import AutoTokenizer
 
+# utilities to import the model weights and config file
+import os
+import pickle as pkl
 
-if version.parse(fairseq.__version__) < version.parse("0.9.0"):
-    raise Exception("requires fairseq >= 0.9.0")
+# import the EncoderLayer class used to pretrain
+# !! NOTE !! this requires the version of fairseq that is built when you install the Mega source 
+try:
+    from fairseq.modules.mega_layer import MegaEncoderLayer
+except:
+    raise ImportError("You need to install the version of fairseq from the Mega repo!")
 
+# define the wrapper classes used to train the MLM  (see colab notebook below)
+# https://colab.research.google.com/drive/1qfUO6o5HRdxBblWlw058HVyvaEPhPpH8?usp=sharing
+# MegaLM outputs hidden states
+class MegaLM(nn.Module):
+  'The base class for our Mega encoder - given input IDs, embed text and return encoder output'
+  def __init__(self, mega_args, depth, vocab_size):
+    super().__init__()
+    self.mega_args = mega_args
+    self.embedding_layer = nn.Embedding(vocab_size, self.mega_args.encoder_embed_dim)
+    self.encoders = nn.ModuleList(
+      [MegaEncoderLayer(self.mega_args) for _ in range(depth)
+    ])
+    self.depth = depth
+        
+  def forward(self, input_ids, attention_mask, batch_first=True, ignore_mask_value=0):
+    '''
+    Code for a forward pass - expects input_ids and attention_mask to come
+    from a Hugging Face tokenizer as PyTorch tensors, and returns a tensor
+    of size (batch, n_classes) containing classification logits
+    
+    Other options:
+      - batch_first: boolean indicating whether the batch dimension is first 
+        in input_ids (default: True, which aligns with the HF tokenizer behavior)
+      - ignore_mask_value: the value in attention_mask that identifies tokens 
+        that should be ignored (default: 0, which aligns with HF tokenizer)
+    '''
 
-logging.set_verbosity_info()
-logger = logging.get_logger(__name__)
+    # Mega expects embeddings to be (time, batch, embedding size), but 
+    # Hugging Face returns tokens as (batch, time)
+    if batch_first:
+        input_ids = input_ids.T
 
-SAMPLE_TEXT = "Hello world! cécé herlolip"
+    # to make things more confusing, Mega expects the attention mask to
+    # be (batch, time), but with values of 0 (normal token) and 1 (ignore token)
+    # which is the opposite of what HF returns
+    if ignore_mask_value == 0:
+        attention_mask = 1 - attention_mask
 
+    # get token embeddings from IDs
+    embeds = self.embedding_layer(input_ids)
 
-def convert_mega_checkpoint_to_pytorch(
-    mega_checkpoint_path: str, pytorch_dump_folder_path: str, classification_head: bool
-):
+    # pass through the Mega layers
+    # input is (time, batch, encoder dim) and output is the same
+    for encoder in self.encoders:
+        embeds = encoder(embeds, attention_mask)
+        
+    # return according to the shape specified
+    if batch_first:
+        # (T, B, H) --> (B, T, H)
+        return torch.transpose(embeds, 0, 1)
+    else:
+        return embeds
+
+# renamed from MegaForMaskedLM to avoid confusion with new module
+class OriginalMegaForMaskedLM(nn.Module):
+  'A wrapper class for doing masked language modeling with Mega'
+  def __init__(self, mega_args, depth, vocab_size):
+    super().__init__()
+    self.mega = MegaLM(mega_args, depth, vocab_size)
+    self.mlm_head = nn.Linear(mega_args.encoder_embed_dim, vocab_size)
+    self.dropout = nn.Dropout(p=0.1)
+
+  def forward(self, input_ids, attention_mask, batch_first=True, ignore_mask_value=0):
     """
-    Copy/paste/tweak mega's weights to our BERT structure.
+    Perform a forward pass through the Mega encoder and the masked LM head. Returns
+    logits for each vocabulary entry.
+
+    If `batch_first` (default to align with Hugging Face tokenizer behavior), 
+    output will have the shape (Batch size, Sequence length, Vocab size);
+    otherwise (S, B, V)
     """
-    mega = FairseqMegaModel.from_pretrained(mega_checkpoint_path)
-    mega.eval()  # disable dropout
-    mega_sent_encoder = mega.model.encoder.sentence_encoder
-    config = MegaConfig(
-        vocab_size=mega_sent_encoder.embed_tokens.num_embeddings,
-        hidden_size=mega.args.encoder_embed_dim,
-        num_hidden_layers=mega.args.encoder_layers,
-        num_attention_heads=mega.args.encoder_attention_heads,
-        intermediate_size=mega.args.encoder_ffn_embed_dim,
-        max_position_embeddings=514,
-        type_vocab_size=1,
-        layer_norm_eps=1e-5,  # PyTorch default used in fairseq
+    encoder_output = self.mega(input_ids, attention_mask, batch_first, ignore_mask_value)
+    return self.mlm_head(self.dropout(encoder_output))
+
+# code to convert the checkpoint located in the user-specified location
+def convert_checkpoint_to_huggingface(pretrained_checkpoint_path, output_path, includes_tokenizer):
+    with open(os.path.join(pretrained_checkpoint_path, 'model_args.pkl'), 'rb') as f:
+        mega_original_args = pkl.load(f)
+
+    # load the original encoder
+    original_mlm = OriginalMegaForMaskedLM(**mega_original_args).eval()
+
+    # load its weights
+    print("Original Mega encoder:", original_mlm.mega.load_state_dict(torch.load(os.path.join(pretrained_checkpoint_path, 'encoder_weights.pt'), map_location='cpu')))
+    print("Original Mega MLM layer:", original_mlm.mlm_head.load_state_dict(torch.load(os.path.join(pretrained_checkpoint_path, 'mlm_head_weights.pt'), map_location='cpu')))
+
+    # create a new config from the old one
+    hf_config = MegaConfig(
+        num_hidden_layers=mega_original_args['depth'],
+        vocab_size=mega_original_args['vocab_size'],
+        hidden_size=mega_original_args['mega_args'].encoder_embed_dim,
+        shared_representation_size=mega_original_args['mega_args'].encoder_z_dim,
+        intermediate_size=mega_original_args['mega_args'].encoder_hidden_dim,
+        ema_projection_size=mega_original_args['mega_args'].encoder_n_dim,
+        dropout_prob=mega_original_args['mega_args'].dropout,
+        attention_probs_dropout_prob=mega_original_args['mega_args'].attention_dropout,
+        hidden_dropout_prob=mega_original_args['mega_args'].hidden_dropout,
+        activation=mega_original_args['mega_args'].activation_fn,
+        attention_activation=mega_original_args['mega_args'].attention_activation_fn,
+        bidirectional=mega_original_args['mega_args'].bidirectional,
+        use_chunking = mega_original_args['mega_args'].encoder_chunk_size > 0,
+        chunk_size=mega_original_args['mega_args'].encoder_chunk_size,
+        truncation=mega_original_args['mega_args'].truncation_length,
+        normalization_type=mega_original_args['mega_args'].normalization_type,
+        normalize_before_mega=True,
+        norm_affine=True,
+        use_feature_dropout=mega_original_args['mega_args'].feature_dropout,
+        relative_positional_bias=mega_original_args['mega_args'].rel_pos_bias,
+        max_positions=mega_original_args['mega_args'].max_source_positions,
+        nffn_hidden_size=mega_original_args['mega_args'].encoder_ffn_embed_dim,
+        normalize_before_ffn=mega_original_args['mega_args'].normalize_before,
+        # new arguments added for HF implementation
+        nffn_activation_dropout_prob=0.0,
+        add_token_type_embeddings=False,
+        add_lm_hidden_dense_layer=False
     )
-    if classification_head:
-        config.num_labels = mega.model.classification_heads["mnli"].out_proj.weight.shape[0]
-    print("Our BERT config:", config)
 
-    model = MegaForSequenceClassification(config) if classification_head else MegaForMaskedLM(config)
-    model.eval()
+    hf_mlm = MegaForMaskedLM(hf_config).eval()
 
-    # Now let's copy all the weights.
-    # Embeddings
-    model.mega.embeddings.word_embeddings.weight = mega_sent_encoder.embed_tokens.weight
-    model.mega.embeddings.position_embeddings.weight = mega_sent_encoder.embed_positions.weight
-    model.mega.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
-        model.mega.embeddings.token_type_embeddings.weight
-    )  # just zero them out b/c Mega doesn't use them.
-    model.mega.embeddings.LayerNorm.weight = mega_sent_encoder.emb_layer_norm.weight
-    model.mega.embeddings.LayerNorm.bias = mega_sent_encoder.emb_layer_norm.bias
+    # the originl checkpoint just uses nn.Embedding for the word embeddings
+    # we use a wrapper module for embeddings to add support for positional embeddings
+    hf_mlm.mega.embedding_layer.word_embeddings.weight = original_mlm.mega.embedding_layer.weight
 
-    for i in range(config.num_hidden_layers):
-        # Encoder: start of layer
-        layer: BertLayer = model.mega.encoder.layer[i]
-        mega_layer: TransformerSentenceEncoderLayer = mega_sent_encoder.layers[i]
+    # modify the state dictionary of the original checkpoint to account for naming issues in the Hugging Face 
+    # ecosystem -- any names containing "beta" or "gamma" aren't safe to use and are renamed upon _load_pretrained
+    original_state_dict = original_mlm.mega.encoders.state_dict()
+    updated_keys = {}
+    for module_name in original_state_dict.keys():
+        new_module_name = None
+        if "beta" in module_name:
+            new_module_name = module_name.replace("beta", "b_param")
+        elif "gamma" in module_name:
+            new_module_name = module_name.replace("gamma", "g_param")
 
-        # self attention
-        self_attn: BertSelfAttention = layer.attention.self
-        assert (
-            mega_layer.self_attn.k_proj.weight.data.shape
-            == mega_layer.self_attn.q_proj.weight.data.shape
-            == mega_layer.self_attn.v_proj.weight.data.shape
-            == torch.Size((config.hidden_size, config.hidden_size))
-        )
+        if new_module_name:
+            updated_keys[module_name] = new_module_name
 
-        self_attn.query.weight.data = mega_layer.self_attn.q_proj.weight
-        self_attn.query.bias.data = mega_layer.self_attn.q_proj.bias
-        self_attn.key.weight.data = mega_layer.self_attn.k_proj.weight
-        self_attn.key.bias.data = mega_layer.self_attn.k_proj.bias
-        self_attn.value.weight.data = mega_layer.self_attn.v_proj.weight
-        self_attn.value.bias.data = mega_layer.self_attn.v_proj.bias
-
-        # self-attention output
-        self_output: BertSelfOutput = layer.attention.output
-        assert self_output.dense.weight.shape == mega_layer.self_attn.out_proj.weight.shape
-        self_output.dense.weight = mega_layer.self_attn.out_proj.weight
-        self_output.dense.bias = mega_layer.self_attn.out_proj.bias
-        self_output.LayerNorm.weight = mega_layer.self_attn_layer_norm.weight
-        self_output.LayerNorm.bias = mega_layer.self_attn_layer_norm.bias
-
-        # intermediate
-        intermediate: BertIntermediate = layer.intermediate
-        assert intermediate.dense.weight.shape == mega_layer.fc1.weight.shape
-        intermediate.dense.weight = mega_layer.fc1.weight
-        intermediate.dense.bias = mega_layer.fc1.bias
-
-        # output
-        bert_output: BertOutput = layer.output
-        assert bert_output.dense.weight.shape == mega_layer.fc2.weight.shape
-        bert_output.dense.weight = mega_layer.fc2.weight
-        bert_output.dense.bias = mega_layer.fc2.bias
-        bert_output.LayerNorm.weight = mega_layer.final_layer_norm.weight
-        bert_output.LayerNorm.bias = mega_layer.final_layer_norm.bias
-        # end of layer
-
-    if classification_head:
-        model.classifier.dense.weight = mega.model.classification_heads["mnli"].dense.weight
-        model.classifier.dense.bias = mega.model.classification_heads["mnli"].dense.bias
-        model.classifier.out_proj.weight = mega.model.classification_heads["mnli"].out_proj.weight
-        model.classifier.out_proj.bias = mega.model.classification_heads["mnli"].out_proj.bias
+    if len(updated_keys) != 0:
+        print(f"Renaming these keys: {updated_keys.keys()}")
     else:
-        # LM Head
-        model.lm_head.dense.weight = mega.model.encoder.lm_head.dense.weight
-        model.lm_head.dense.bias = mega.model.encoder.lm_head.dense.bias
-        model.lm_head.layer_norm.weight = mega.model.encoder.lm_head.layer_norm.weight
-        model.lm_head.layer_norm.bias = mega.model.encoder.lm_head.layer_norm.bias
-        model.lm_head.decoder.weight = mega.model.encoder.lm_head.weight
-        model.lm_head.decoder.bias = mega.model.encoder.lm_head.bias
+        print("No need to rename state dict entries")
+    for old, new in updated_keys.items():
+        original_state_dict[new] = original_state_dict.pop(old)
 
-    # Let's check that we get the same results.
-    input_ids: torch.Tensor = mega.encode(SAMPLE_TEXT).unsqueeze(0)  # batch of size 1
+    # now attempt to load the state dictionary with updated names
+    print("HF Mega encoder:", hf_mlm.mega.encoders.load_state_dict(original_state_dict))
 
-    our_output = model(input_ids)[0]
-    if classification_head:
-        their_output = mega.model.classification_heads["mnli"](mega.extract_features(input_ids))
+    # load the MLM head weights directly
+    print("HF Mega MLM layer:", hf_mlm.mlm_head.load_state_dict(torch.load(os.path.join(pretrained_checkpoint_path, 'mlm_head_weights.pt'), map_location='cpu')))
+
+    # test on a randomly generated input sequence
+    input_ids = torch.randint(0, hf_config.vocab_size, size=(4, 256))
+    input_mask = torch.ones_like(input_ids)
+    # mask a few tokens to make sure masking is applied appropriately :)
+    input_mask[:, -10:] = 0
+
+    # run forward passes
+    original_output = original_mlm(input_ids, input_mask, batch_first=True, ignore_mask_value=0)
+    hf_output = hf_mlm(input_ids, input_mask)[0]
+
+    # print shapes and diff
+    print(f"original output {original_output.shape}")
+    print(f"hf output {hf_output.shape}")
+    print(f"max diff: {(original_output - hf_output).max()}") # 0.0
+    success = torch.allclose(original_output, hf_output, atol=1e-3)
+
+    if success:
+        print("Yay!")
+        hf_mlm.save_pretrained(output_path)
     else:
-        their_output = mega.model(input_ids)[0]
-    print(our_output.shape, their_output.shape)
-    max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
-    print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-7
-    success = torch.allclose(our_output, their_output, atol=1e-3)
-    print("Do both models output the same tensors?", "🔥" if success else "💩")
-    if not success:
-        raise Exception("Something went wRoNg")
+        raise RuntimeError(f"Something's broken :(\nOriginal:\n{original_output}\n\nHF\n{hf_output}\n{hf_mlm}")
 
-    pathlib.Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
+    if includes_tokenizer:
+        print(f"Transferring tokenizer")
+        tokenizer = AutoTokenizer.from_pretrained(pretrained_checkpoint_path)
+        tokenizer.save_pretrained(output_path)
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # Required parameters
+
     parser.add_argument(
-        "--mega_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
+        '--pretrained_checkpoint_path', default=None, type=str, required=True, help="Point to the directory containing your model weights using the official Mega repo"
     )
+
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        '--output_path', default=None, type=str, required=True, help="Location to save the Hugging Face version"
     )
+
     parser.add_argument(
-        "--classification_head", action="store_true", help="Whether to convert a final classification head."
+        '--includes_tokenizer', action="store_true", help="Use this flag if there is a Hugging Face tokenizer in the original checkpoint repo"
     )
+
     args = parser.parse_args()
-    convert_mega_checkpoint_to_pytorch(
-        args.mega_checkpoint_path, args.pytorch_dump_folder_path, args.classification_head
+
+    convert_checkpoint_to_huggingface(
+        args.pretrained_checkpoint_path,
+        args.output_path,
+        args.includes_tokenizer
     )

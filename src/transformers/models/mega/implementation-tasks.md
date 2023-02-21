@@ -149,7 +149,7 @@ Decoder
 * ~~Figure out why extra weights are being loaded/initialized~~
   * Looks like a mismatch in the names due to a utility function renaming keys `gamma` and `beta` in the state dictionary... (see `_load_state_dict_into_model` in [this link](https://huggingface.co/transformers/v4.7.0/_modules/transformers/modeling_utils.html))
   * Renamed the parameters in the Mega modules and original checkpoint from `beta -> b_param` and `gamma -> g_param`
-* Rewrite `convert_mega_original_pytorch_checkpoint_to_pytorch` to save the pretrained wikitext MLM
+* ~~Rewrite `convert_mega_original_pytorch_checkpoint_to_pytorch` to save the pretrained wikitext MLM~~
 * Rewrite tests in `tests/models/mega/test_modeling_mega`
 * Documentation: 
   * ~~Docstrings of individual classes~~
