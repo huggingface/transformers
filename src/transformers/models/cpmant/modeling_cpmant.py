@@ -117,80 +117,6 @@ def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
     return model
 
 
-# Adapted from Bert
-def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch"""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            if pointer.shape != array.shape:
-                raise AssertionError("Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
-
-
 def rms_layernorm(hidden: torch.Tensor, weight: torch.Tensor, eps: float):
     old_dtype = hidden.dtype
     variance = hidden.to(torch.float32).pow(2).mean(dim=-1, keepdim=True)
@@ -209,10 +135,6 @@ class CPMAntLayerNorm(nn.Module):
         init_var: float = 1.0,
     ):
         super().__init__()
-
-        self.eps = config.eps
-        self.dim_norm = config.dim_model
-        self.weight = torch.nn.parameter.Parameter(torch.full((config.dim_model,), init_var))
 
         self.eps = config.eps
         self.dim_norm = config.dim_model
@@ -591,9 +513,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
             querylen = query_pos.size(1)
 
             assert key_pos.size(0) == query_pos.size(0), "key_pos.size(0) != query_pos.size(0)"
-            assert keylen == key_segment.size(1) and querylen == query_segment.size(
-                1
-            ), "keylen != key_segment.size(1) or querylen != query_segment.size(1)"
+            assert keylen == key_segment.size(1) and querylen == query_segment.size(1), "keylen != key_segment.size(1) or querylen != query_segment.size(1)"
 
             key_pos = key_pos.view(batch, -1, keylen)
             query_pos = query_pos.view(batch, querylen, -1)
@@ -769,6 +689,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
         self.segment_embedding = embeddings["segment"]
         self.input_embedding = embeddings["input_ids"]
         self.position_bias = embeddings["position"]
+
     def _prepare_attention_mask(self, input, span, context, length):
         batch = input.size(0)
         device = input.device
@@ -859,10 +780,6 @@ class CPMAntModel(CPMAntPreTrainedModel):
             attentions=all_attentions,
         )
 
-        if not return_dict:
-            return (logits, hidden_states)
-
-        return BaseModelOutput(hidden_states=hidden_states)
 
 @add_start_docstrings(
     """
