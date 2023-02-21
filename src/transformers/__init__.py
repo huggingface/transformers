@@ -27,6 +27,7 @@ from . import dependency_versions_check
 from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_bitsandbytes_available,
     is_flax_available,
     is_keras_nlp_available,
     is_sentencepiece_available,
@@ -47,6 +48,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
+    "audio_utils": [],
     "benchmark": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
@@ -206,6 +208,13 @@ _import_structure = {
         "ChineseCLIPTextConfig",
         "ChineseCLIPVisionConfig",
     ],
+    "models.clap": [
+        "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ClapAudioConfig",
+        "ClapConfig",
+        "ClapProcessor",
+        "ClapTextConfig",
+    ],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
@@ -257,12 +266,14 @@ _import_structure = {
     ],
     "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
     "models.efficientformer": ["EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientFormerConfig"],
+    "models.efficientnet": ["EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientNetConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.ernie": [
         "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ErnieConfig",
     ],
+    "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
@@ -284,6 +295,11 @@ _import_structure = {
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
+    "models.gptsan_japanese": [
+        "GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GPTSanJapaneseConfig",
+        "GPTSanJapaneseTokenizer",
+    ],
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -449,6 +465,11 @@ _import_structure = {
         "TrOCRConfig",
         "TrOCRProcessor",
     ],
+    "models.tvlt": [
+        "TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TvltConfig",
+        "TvltProcessor",
+    ],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",
@@ -588,6 +609,7 @@ _import_structure = {
         "add_end_docstrings",
         "add_start_docstrings",
         "is_apex_available",
+        "is_bitsandbytes_available",
         "is_datasets_available",
         "is_decord_available",
         "is_faiss_available",
@@ -614,6 +636,7 @@ _import_structure = {
         "logging",
     ],
     "utils.bitsandbytes": [],
+    "utils.quantization_config": ["BitsAndBytesConfig"],
 }
 
 # sentencepiece-backed objects
@@ -635,6 +658,7 @@ else:
     _import_structure["models.camembert"].append("CamembertTokenizer")
     _import_structure["models.cpm"].append("CpmTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
+    _import_structure["models.ernie_m"].append("ErnieMTokenizer")
     _import_structure["models.fnet"].append("FNetTokenizer")
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
@@ -754,6 +778,7 @@ else:
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
     _import_structure["models.speecht5"].append("SpeechT5FeatureExtractor")
+    _import_structure["models.tvlt"].append("TvltFeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -813,6 +838,7 @@ else:
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientformer"].append("EfficientFormerImageProcessor")
+    _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
@@ -830,6 +856,7 @@ else:
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
+    _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
@@ -1228,6 +1255,18 @@ else:
             "ChineseCLIPVisionModel",
         ]
     )
+    _import_structure["models.clap"].extend(
+        [
+            "CLAP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ClapAudioModel",
+            "ClapAudioModelWithProjection",
+            "ClapFeatureExtractor",
+            "ClapModel",
+            "ClapPreTrainedModel",
+            "ClapTextModel",
+            "ClapTextModelWithProjection",
+        ]
+    )
     _import_structure["models.clip"].extend(
         [
             "CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1432,6 +1471,14 @@ else:
             "EfficientFormerPreTrainedModel",
         ]
     )
+    _import_structure["models.efficientnet"].extend(
+        [
+            "EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EfficientNetForImageClassification",
+            "EfficientNetModel",
+            "EfficientNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.electra"].extend(
         [
             "ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1461,6 +1508,18 @@ else:
             "ErnieForTokenClassification",
             "ErnieModel",
             "ErniePreTrainedModel",
+        ]
+    )
+    _import_structure["models.ernie_m"].extend(
+        [
+            "ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ErnieMForInformationExtraction",
+            "ErnieMForMultipleChoice",
+            "ErnieMForQuestionAnswering",
+            "ErnieMForSequenceClassification",
+            "ErnieMForTokenClassification",
+            "ErnieMModel",
+            "ErnieMPreTrainedModel",
         ]
     )
     _import_structure["models.esm"].extend(
@@ -1596,6 +1655,14 @@ else:
             "GPTJForSequenceClassification",
             "GPTJModel",
             "GPTJPreTrainedModel",
+        ]
+    )
+    _import_structure["models.gptsan_japanese"].extend(
+        [
+            "GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTSanJapaneseForConditionalGeneration",
+            "GPTSanJapaneseModel",
+            "GPTSanJapanesePreTrainedModel",
         ]
     )
     _import_structure["models.graphormer"].extend(
@@ -2347,6 +2414,15 @@ else:
     )
     _import_structure["models.trocr"].extend(
         ["TROCR_PRETRAINED_MODEL_ARCHIVE_LIST", "TrOCRForCausalLM", "TrOCRPreTrainedModel"]
+    )
+    _import_structure["models.tvlt"].extend(
+        [
+            "TVLT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TvltForAudioVisualClassification",
+            "TvltForPreTraining",
+            "TvltModel",
+            "TvltPreTrainedModel",
+        ]
     )
     _import_structure["models.unispeech"].extend(
         [
@@ -3343,6 +3419,7 @@ else:
             "FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
             "FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING",
             "FLAX_MODEL_MAPPING",
@@ -3356,6 +3433,7 @@ else:
             "FlaxAutoModelForQuestionAnswering",
             "FlaxAutoModelForSeq2SeqLM",
             "FlaxAutoModelForSequenceClassification",
+            "FlaxAutoModelForSpeechSeq2Seq",
             "FlaxAutoModelForTokenClassification",
             "FlaxAutoModelForVision2Seq",
         ]
@@ -3539,6 +3617,13 @@ else:
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
     )
+    _import_structure["models.whisper"].extend(
+        [
+            "FlaxWhisperForConditionalGeneration",
+            "FlaxWhisperModel",
+            "FlaxWhisperPreTrainedModel",
+        ]
+    )
     _import_structure["models.xglm"].extend(
         [
             "FlaxXGLMForCausalLM",
@@ -3714,6 +3799,13 @@ if TYPE_CHECKING:
         ChineseCLIPTextConfig,
         ChineseCLIPVisionConfig,
     )
+    from .models.clap import (
+        CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ClapAudioConfig,
+        ClapConfig,
+        ClapProcessor,
+        ClapTextConfig,
+    )
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
@@ -3765,9 +3857,11 @@ if TYPE_CHECKING:
     )
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientFormerConfig
+    from .models.efficientnet import EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientNetConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
+    from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
@@ -3788,6 +3882,11 @@ if TYPE_CHECKING:
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
+    from .models.gptsan_japanese import (
+        GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GPTSanJapaneseConfig,
+        GPTSanJapaneseTokenizer,
+    )
     from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3942,6 +4041,7 @@ if TYPE_CHECKING:
         TrillssonEfficientNetForSequenceClassification,
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
+    from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.upernet import UperNetConfig
@@ -4075,6 +4175,7 @@ if TYPE_CHECKING:
         add_end_docstrings,
         add_start_docstrings,
         is_apex_available,
+        is_bitsandbytes_available,
         is_datasets_available,
         is_decord_available,
         is_faiss_available,
@@ -4101,6 +4202,9 @@ if TYPE_CHECKING:
         logging,
     )
 
+    # bitsandbytes config
+    from .utils.quantization_config import BitsAndBytesConfig
+
     try:
         if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()
@@ -4115,6 +4219,7 @@ if TYPE_CHECKING:
         from .models.camembert import CamembertTokenizer
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
+        from .models.ernie_m import ErnieMTokenizer
         from .models.fnet import FNetTokenizer
         from .models.gpt_sw3 import GPTSw3Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
@@ -4216,6 +4321,7 @@ if TYPE_CHECKING:
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
         from .models.speecht5 import SpeechT5FeatureExtractor
+        from .models.tvlt import TvltFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():
@@ -4256,6 +4362,7 @@ if TYPE_CHECKING:
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientformer import EfficientFormerImageProcessor
+        from .models.efficientnet import EfficientNetImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
@@ -4273,6 +4380,7 @@ if TYPE_CHECKING:
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
+        from .models.tvlt import TvltImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
@@ -4608,6 +4716,16 @@ if TYPE_CHECKING:
             ChineseCLIPTextModel,
             ChineseCLIPVisionModel,
         )
+        from .models.clap import (
+            CLAP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ClapAudioModel,
+            ClapAudioModelWithProjection,
+            ClapFeatureExtractor,
+            ClapModel,
+            ClapPreTrainedModel,
+            ClapTextModel,
+            ClapTextModelWithProjection,
+        )
         from .models.clip import (
             CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             CLIPModel,
@@ -4770,6 +4888,12 @@ if TYPE_CHECKING:
             EfficientFormerModel,
             EfficientFormerPreTrainedModel,
         )
+        from .models.efficientnet import (
+            EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            EfficientNetForImageClassification,
+            EfficientNetModel,
+            EfficientNetPreTrainedModel,
+        )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
             ElectraForCausalLM,
@@ -4796,6 +4920,16 @@ if TYPE_CHECKING:
             ErnieForTokenClassification,
             ErnieModel,
             ErniePreTrainedModel,
+        )
+        from .models.ernie_m import (
+            ERNIE_M_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ErnieMForInformationExtraction,
+            ErnieMForMultipleChoice,
+            ErnieMForQuestionAnswering,
+            ErnieMForSequenceClassification,
+            ErnieMForTokenClassification,
+            ErnieMModel,
+            ErnieMPreTrainedModel,
         )
         from .models.esm import (
             ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4907,6 +5041,12 @@ if TYPE_CHECKING:
             GPTJForSequenceClassification,
             GPTJModel,
             GPTJPreTrainedModel,
+        )
+        from .models.gptsan_japanese import (
+            GPTSAN_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTSanJapaneseForConditionalGeneration,
+            GPTSanJapaneseModel,
+            GPTSanJapanesePreTrainedModel,
         )
         from .models.graphormer import (
             GRAPHORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5510,6 +5650,13 @@ if TYPE_CHECKING:
             TrillssonEfficientNetPreTrainedModel,
         )
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
+        from .models.tvlt import (
+            TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TvltForAudioVisualClassification,
+            TvltForPreTraining,
+            TvltModel,
+            TvltPreTrainedModel,
+        )
         from .models.unispeech import (
             UNISPEECH_PRETRAINED_MODEL_ARCHIVE_LIST,
             UniSpeechForCTC,
@@ -6311,6 +6458,7 @@ if TYPE_CHECKING:
             FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
             FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
             FLAX_MODEL_MAPPING,
@@ -6324,6 +6472,7 @@ if TYPE_CHECKING:
             FlaxAutoModelForQuestionAnswering,
             FlaxAutoModelForSeq2SeqLM,
             FlaxAutoModelForSequenceClassification,
+            FlaxAutoModelForSpeechSeq2Seq,
             FlaxAutoModelForTokenClassification,
             FlaxAutoModelForVision2Seq,
         )
@@ -6459,6 +6608,7 @@ if TYPE_CHECKING:
             FlaxWav2Vec2Model,
             FlaxWav2Vec2PreTrainedModel,
         )
+        from .models.whisper import FlaxWhisperForConditionalGeneration, FlaxWhisperModel, FlaxWhisperPreTrainedModel
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
             FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6471,6 +6621,7 @@ if TYPE_CHECKING:
             FlaxXLMRobertaModel,
             FlaxXLMRobertaPreTrainedModel,
         )
+
 
 else:
     import sys
