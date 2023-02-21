@@ -569,6 +569,11 @@ Predicted answer: SUM > 87, 53, 69
 
 In case of a conversational set-up, then each table-question pair must be provided **sequentially** to the model, such that the `prev_labels` token types can be overwritten by the predicted `labels` of the previous table-question pair. Again, more info can be found in [this notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb) (for PyTorch) and [this notebook](https://github.com/kamalkraj/Tapas-Tutorial/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb) (for TensorFlow).
 
+## Documentation resources
+
+- [Text classification task guide](./tasks/sequence_classification)
+- [Masked language modeling task guide](./tasks/masked_language_modeling)
+
 ## TAPAS specific outputs
 [[autodoc]] models.tapas.modeling_tapas.TableQuestionAnsweringOutput
 
