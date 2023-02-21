@@ -390,12 +390,6 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # @slow
-    # def test_model_from_pretrained(self):
-    #     for model_name in T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-    #         model = T5Model.from_pretrained(model_name)
-    #         self.assertIsNotNone(model)
-
     @unittest.skip("Test has a segmentation fault on torch 1.8.0")
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

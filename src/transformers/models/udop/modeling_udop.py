@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1988,7 +1988,7 @@ class UDOPDualForConditionalGeneration(UDOPPreTrainedModel):
     ]
 
     def __init__(self, config):
-        super(UDOPDualForConditionalGeneration, self).__init__(config)
+        super().__init__(config)
 
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
         # get max length of decoder part, for UDOP decoder lenght depends
