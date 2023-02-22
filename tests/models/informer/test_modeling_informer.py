@@ -455,7 +455,6 @@ class InformerModelIntegrationTests(unittest.TestCase):
                 past_time_features=batch["past_time_features"],
                 past_observed_mask=batch["past_observed_mask"],
                 static_categorical_features=batch["static_categorical_features"],
-                static_real_features=batch["static_real_features"],
                 future_values=batch["future_values"],
                 future_time_features=batch["future_time_features"],
             ).last_hidden_state
@@ -463,7 +462,12 @@ class InformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.6678, 0.4203, 0.0956], [-0.8622, 0.2728, 0.0858], [-0.5118, 0.2205, -0.0191]], device=torch_device
+            [
+                [4.6951e-01, 7.2927e-01, 8.9877e-01],
+                [4.8908e-01, 3.8113e-01, 9.5783e-01],
+                [7.7888e-04, 3.7370e-01, 1.0078e00],
+            ],
+            device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -478,7 +482,6 @@ class InformerModelIntegrationTests(unittest.TestCase):
                 past_time_features=batch["past_time_features"],
                 past_observed_mask=batch["past_observed_mask"],
                 static_categorical_features=batch["static_categorical_features"],
-                static_real_features=batch["static_real_features"],
                 future_time_features=batch["future_time_features"],
             ).encoder_last_hidden_state
 
@@ -487,7 +490,7 @@ class InformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.2993, 1.8141, -0.4122], [-0.3320, 2.0362, -0.7312], [-0.3640, 2.4771, -0.7129]], device=torch_device
+            [[0.4247, 0.9017, 0.8062], [0.3082, 0.7525, 0.6986], [0.6724, -0.6343, 1.2863]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -499,7 +502,6 @@ class InformerModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             outputs = model.generate(
                 static_categorical_features=batch["static_categorical_features"],
-                static_real_features=batch["static_real_features"],
                 past_time_features=batch["past_time_features"],
                 past_values=batch["past_values"],
                 future_time_features=batch["future_time_features"],
@@ -508,6 +510,6 @@ class InformerModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
-        expected_slice = torch.tensor([2726.9468, 3130.4065, 4020.5728], device=torch_device)
+        expected_slice = torch.tensor([3400.8005, 4289.2637, 7101.9209], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
