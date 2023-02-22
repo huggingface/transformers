@@ -173,8 +173,7 @@ def main(args):
         model = TFAutoModelForMaskedLM.from_config(config)
         model(model.dummy_inputs)  # Pass some dummy inputs through the model to ensure all the weights are built
 
-    # TODO Add collate function - we'll need to do random masking on the fly for the labels
-    #      but we can't use DataCollatorForMaskedLM because tf.data can't compile it
+    # TODO Add collate function - We can mostly use the existing data collator but we can't call tokenizer.pad()
     # TODO Add training loop and any metrics
     # TODO Add model saving
 
