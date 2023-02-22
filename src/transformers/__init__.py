@@ -311,10 +311,7 @@ _import_structure = {
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
-    "models.informer": [
-        "INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "InformerConfig",
-    ],
+    "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
