@@ -209,6 +209,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "EsmForProteinFolding",
     "GPTSanJapaneseModel",
     "TimeSeriesTransformerForPrediction",
+    "InformerForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
     "PegasusXEncoder",
