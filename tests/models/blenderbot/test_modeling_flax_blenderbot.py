@@ -402,8 +402,8 @@ class FlaxBlenderbotModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGener
     @unittest.skipUnless(jax_device != "cpu", "3B test too slow on CPU.")
     @slow
     def test_generation_from_short_input_same_as_parlai_3B(self):
-        FASTER_GEN_KWARGS = dict(num_beams=1, early_stopping=True, min_length=15, max_length=25)
-        TOK_DECODE_KW = dict(skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        FASTER_GEN_KWARGS = {"num_beams": 1, "early_stopping": True, "min_length": 15, "max_length": 25}
+        TOK_DECODE_KW = {"skip_special_tokens": True, "clean_up_tokenization_spaces": True}
 
         model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-3B", from_pt=True)
         tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")

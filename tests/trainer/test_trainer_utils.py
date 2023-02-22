@@ -189,7 +189,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(lengths[indices[0]], 50)
         # The indices should be a permutation of range(100)
-        self.assertEqual(list(sorted(indices)), list(range(100)))
+        self.assertEqual(sorted(indices), list(range(100)))
 
     def test_group_by_length_with_dict(self):
         # Get some inputs of random lengths
@@ -204,7 +204,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(len(data[indices[0]]["input_ids"]), 105)
         # The indices should be a permutation of range(6)
-        self.assertEqual(list(sorted(indices)), list(range(6)))
+        self.assertEqual(sorted(indices), list(range(6)))
 
     def test_group_by_length_with_batch_encoding(self):
         # Get some inputs of random lengths
@@ -219,7 +219,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(len(data[indices[0]]["input_ids"]), 105)
         # The indices should be a permutation of range(6)
-        self.assertEqual(list(sorted(indices)), list(range(6)))
+        self.assertEqual(sorted(indices), list(range(6)))
 
     def test_distributed_length_grouped(self):
         # Get some inputs of random lengths
@@ -232,7 +232,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(lengths[indices_process_0[0]], 50)
         # The indices should be a permutation of range(100)
-        self.assertEqual(list(sorted(indices_process_0 + indices_process_1)), list(range(100)))
+        self.assertEqual(sorted(indices_process_0 + indices_process_1), list(range(100)))
 
     def test_get_parameter_names(self):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))

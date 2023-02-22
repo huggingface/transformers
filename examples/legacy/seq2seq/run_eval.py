@@ -76,7 +76,7 @@ def generate_summaries_or_translations(
     fout.close()
     runtime = int(time.time() - start_time)  # seconds
     n_obs = len(examples)
-    return dict(n_obs=n_obs, runtime=runtime, seconds_per_sample=round(runtime / n_obs, 4))
+    return {"n_obs": n_obs, "runtime": runtime, "seconds_per_sample": round(runtime / n_obs, 4)}
 
 
 def datetime_now():

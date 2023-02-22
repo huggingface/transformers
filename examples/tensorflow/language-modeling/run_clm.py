@@ -600,7 +600,7 @@ def main():
 
         if training_args.output_dir is not None:
             output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
-            results_dict = dict()
+            results_dict = {}
             results_dict["train_loss"] = train_loss
             results_dict["train_perplexity"] = train_perplexity
             results_dict["eval_loss"] = validation_loss

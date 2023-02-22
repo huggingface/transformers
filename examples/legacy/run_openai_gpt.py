@@ -189,7 +189,7 @@ def main():
             return tokenizer.convert_tokens_to_ids(tokenizer.tokenize(obj))
         elif isinstance(obj, int):
             return obj
-        return list(tokenize_and_encode(o) for o in obj)
+        return [tokenize_and_encode(o) for o in obj]
 
     logger.info("Encoding dataset...")
     train_dataset = load_rocstories_dataset(args.train_dataset)

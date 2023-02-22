@@ -557,9 +557,9 @@ def stop_memory_tracing(
             cumulative_memory_dict[frame][2] += cpu_gpu_mem_inc
 
         cumulative_memory = sorted(
-            list(cumulative_memory_dict.items()), key=lambda x: x[1][2], reverse=True
+            cumulative_memory_dict.items(), key=lambda x: x[1][2], reverse=True
         )  # order by the total CPU + GPU memory increase
-        cumulative_memory = list(
+        cumulative_memory = [
             MemoryState(
                 frame=frame,
                 cpu=Memory(cpu_mem_inc),
@@ -567,7 +567,7 @@ def stop_memory_tracing(
                 cpu_gpu=Memory(cpu_gpu_mem_inc),
             )
             for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in cumulative_memory
-        )
+        ]
 
         memory_curr_trace = sorted(memory_curr_trace, key=lambda x: x.cpu_gpu.bytes, reverse=True)
 

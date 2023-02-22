@@ -902,7 +902,7 @@ def get_checkpoint_shard_files(
     with open(index_filename, "r") as f:
         index = json.loads(f.read())
 
-    shard_filenames = sorted(list(set(index["weight_map"].values())))
+    shard_filenames = sorted(set(index["weight_map"].values()))
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
     sharded_metadata["weight_map"] = index["weight_map"].copy()

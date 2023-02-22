@@ -247,7 +247,7 @@ class TFRegNetStage(tf.keras.layers.Layer):
 class TFRegNetEncoder(tf.keras.layers.Layer):
     def __init__(self, config: RegNetConfig, **kwargs):
         super().__init__(**kwargs)
-        self.stages = list()
+        self.stages = []
         # based on `downsample_in_first_stage`, the first layer of the first stage may or may not downsample the input
         self.stages.append(
             TFRegNetStage(

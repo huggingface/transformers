@@ -187,7 +187,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         Do NOT take care of added tokens. Only the lyrics are split into character for the character-based vocabulary.
         """
         # only lyrics are not tokenized, but character based is easily handled
-        return [character for character in lyrics]
+        return list(lyrics)
 
     def tokenize(self, artist, genre, lyrics, **kwargs):
         """

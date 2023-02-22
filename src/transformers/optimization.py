@@ -358,7 +358,7 @@ class AdamW(Optimizer):
             raise ValueError(f"Invalid beta parameter: {betas[1]} - should be in [0.0, 1.0)")
         if not 0.0 <= eps:
             raise ValueError(f"Invalid epsilon value: {eps} - should be >= 0.0")
-        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, correct_bias=correct_bias)
+        defaults = {"lr": lr, "betas": betas, "eps": eps, "weight_decay": weight_decay, "correct_bias": correct_bias}
         super().__init__(params, defaults)
 
     def step(self, closure: Callable = None):
@@ -527,17 +527,17 @@ class Adafactor(Optimizer):
         if warmup_init and not relative_step:
             raise ValueError("`warmup_init=True` requires `relative_step=True`")
 
-        defaults = dict(
-            lr=lr,
-            eps=eps,
-            clip_threshold=clip_threshold,
-            decay_rate=decay_rate,
-            beta1=beta1,
-            weight_decay=weight_decay,
-            scale_parameter=scale_parameter,
-            relative_step=relative_step,
-            warmup_init=warmup_init,
-        )
+        defaults = {
+            "lr": lr,
+            "eps": eps,
+            "clip_threshold": clip_threshold,
+            "decay_rate": decay_rate,
+            "beta1": beta1,
+            "weight_decay": weight_decay,
+            "scale_parameter": scale_parameter,
+            "relative_step": relative_step,
+            "warmup_init": warmup_init,
+        }
         super().__init__(params, defaults)
 
     @staticmethod

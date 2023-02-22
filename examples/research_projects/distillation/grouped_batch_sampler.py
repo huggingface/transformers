@@ -27,7 +27,7 @@ from utils import logger
 def _quantize(x, bins):
     bins = copy.deepcopy(bins)
     bins = sorted(bins)
-    quantized = list(map(lambda y: bisect.bisect_right(bins, y), x))
+    quantized = [bisect.bisect_right(bins, y) for y in x]
     return quantized
 
 

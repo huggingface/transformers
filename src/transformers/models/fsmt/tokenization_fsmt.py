@@ -226,10 +226,10 @@ class FSMTTokenizer(PreTrainedTokenizer):
         self.do_lower_case = do_lower_case
 
         # cache of sm.MosesPunctNormalizer instance
-        self.cache_moses_punct_normalizer = dict()
+        self.cache_moses_punct_normalizer = {}
         # cache of sm.MosesTokenizer instance
-        self.cache_moses_tokenizer = dict()
-        self.cache_moses_detokenizer = dict()
+        self.cache_moses_tokenizer = {}
+        self.cache_moses_detokenizer = {}
 
         if langs and len(langs) == 2:
             self.src_lang, self.tgt_lang = langs
@@ -379,7 +379,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         split_tokens = []
         for token in text:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens
 

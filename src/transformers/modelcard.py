@@ -677,7 +677,7 @@ class TrainingSummary:
             _, eval_lines, eval_results = parse_keras_history(keras_history)
         else:
             eval_lines = []
-            eval_results = dict()
+            eval_results = {}
         hyperparameters = extract_hyperparameters_from_keras(model)
 
         return cls(
@@ -706,7 +706,7 @@ def parse_keras_history(logs):
         # This looks like a `History` object
         if not hasattr(logs, "epoch"):
             # This history looks empty, return empty results
-            return None, [], dict()
+            return None, [], {}
         logs.history["epoch"] = logs.epoch
         logs = logs.history
     else:
@@ -716,7 +716,7 @@ def parse_keras_history(logs):
     lines = []
     for i in range(len(logs["epoch"])):
         epoch_dict = {log_key: log_value_list[i] for log_key, log_value_list in logs.items()}
-        values = dict()
+        values = {}
         for k, v in epoch_dict.items():
             if k.startswith("val_"):
                 k = "validation_" + k[4:]
@@ -797,7 +797,7 @@ def parse_log_history(log_history):
 def extract_hyperparameters_from_keras(model):
     import tensorflow as tf
 
-    hyperparameters = dict()
+    hyperparameters = {}
     if hasattr(model, "optimizer") and model.optimizer is not None:
         hyperparameters["optimizer"] = model.optimizer.get_config()
     else:

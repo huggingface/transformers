@@ -318,7 +318,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         split_tokens = []
         words = re.findall(r"\S+\n?", text)
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(" ")])
+            split_tokens.extend(list(self.bpe(token).split(" ")))
         return split_tokens
 
     def normalizeTweet(self, tweet):
@@ -726,7 +726,7 @@ class TweetTokenizer:
         words = WORD_RE.findall(safe_text)
         # Possibly alter the case, but avoid changing emoticons like :D into :d:
         if not self.preserve_case:
-            words = list(map((lambda x: x if EMOTICON_RE.search(x) else x.lower()), words))
+            words = [x if EMOTICON_RE.search(x) else x.lower() for x in words]
         return words
 
 

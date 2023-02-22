@@ -111,7 +111,7 @@ def eval_data_dir(
         if num_return_sequences > 1:
             preds = chunks(preds, num_return_sequences)  # batch size chunks, each of size num_return_seq
         for i, pred in enumerate(preds):
-            results.append(dict(pred=pred, id=ids[i].item()))
+            results.append({"pred": pred, "id": ids[i].item()})
     save_json(results, save_path)
     return results, sampler.num_replicas
 
@@ -232,7 +232,7 @@ def combine_partial_results(partial_results) -> List:
     records = []
     for partial_result in partial_results:
         records.extend(partial_result)
-    records = list(sorted(records, key=lambda x: x["id"]))
+    records = sorted(records, key=lambda x: x["id"])
     preds = [x["pred"] for x in records]
     return preds
 

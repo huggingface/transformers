@@ -810,10 +810,10 @@ def main():
             logger.info("Loading checkpoints saved during training for evaluation")
             checkpoints = [args.output_dir]
             if args.eval_all_checkpoints:
-                checkpoints = list(
+                checkpoints = [
                     os.path.dirname(c)
                     for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-                )
+                ]
 
         else:
             logger.info("Loading checkpoint %s for evaluation", args.model_name_or_path)
@@ -830,7 +830,7 @@ def main():
             # Evaluate
             result = evaluate(args, model, tokenizer, prefix=global_step)
 
-            result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in result.items())
+            result = {k + ("_{}".format(global_step) if global_step else ""): v for k, v in result.items()}
             results.update(result)
 
     logger.info("Results: {}".format(results))

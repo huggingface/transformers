@@ -162,7 +162,7 @@ class KerasMetricCallback(Callback):
 
     def _postprocess_predictions_or_labels(self, inputs):
         if isinstance(inputs[0], dict):
-            outputs = dict()
+            outputs = {}
             for key in inputs[0].keys():
                 outputs[key] = self._concatenate_batches([batch[key] for batch in inputs])
             # If it's a dict with only one key, just return the array

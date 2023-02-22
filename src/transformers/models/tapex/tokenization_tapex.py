@@ -1453,16 +1453,16 @@ class TapexTokenizer(PreTrainedTokenizer):
         truncated_unrelated_indices = []
         related_indices = []
         if answer is None or len(answer) == 0:
-            answer_set = set([])
+            answer_set = set()
         else:
-            answer_set = set([ans_ex.lower() for ans_ex in answer])
+            answer_set = {ans_ex.lower() for ans_ex in answer}
         # add question key words into answer set
         if question is not None:
             answer_set.update(question.split())
         question_set = set(question.strip("?!.,").split(" "))
         row_max_len = len(table_content["rows"])
         for _row_idx, row in enumerate(table_content["rows"]):
-            lower_row = set([str(cell).lower() for cell in row])
+            lower_row = {str(cell).lower() for cell in row}
             if len(lower_row & answer_set) == 0 and len(lower_row & question_set) == 0:
                 truncated_unrelated_indices.append(_row_idx)
             else:

@@ -54,7 +54,7 @@ class BertAbs(BertAbsPreTrainedModel):
         load_bert_pretrained_extractive = True if bert_extractive_checkpoint else False
         if load_bert_pretrained_extractive:
             self.bert.model.load_state_dict(
-                dict([(n[11:], p) for n, p in bert_extractive_checkpoint.items() if n.startswith("bert.model")]),
+                {n[11:]: p for n, p in bert_extractive_checkpoint.items() if n.startswith("bert.model")},
                 strict=True,
             )
 

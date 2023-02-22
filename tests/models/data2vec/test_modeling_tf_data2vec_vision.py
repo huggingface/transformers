@@ -398,7 +398,7 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
                     # The number of elements in the loss should be the same as the number of elements in the label
                     _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit()
                     added_label = prepared_for_class[
-                        sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
+                        sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)[0]
                     ]
                     loss_size = tf.size(added_label)
 

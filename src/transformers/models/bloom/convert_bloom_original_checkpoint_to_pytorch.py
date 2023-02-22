@@ -89,7 +89,7 @@ def convert_bloom_checkpoint_to_pytorch(
 
     if shard_model:
         file_names = os.listdir(bloom_checkpoint_path)
-        file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))
+        file_names = sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names))
 
         index_dict = {"weight_map": {}, "metadata": {}}
         total_size = 0
@@ -157,7 +157,7 @@ def convert_bloom_checkpoint_to_pytorch(
         model = BloomModel(config)
 
         file_names = os.listdir(bloom_checkpoint_path)
-        file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))
+        file_names = sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names))
 
         missing_keys = None
         for i, file in enumerate(file_names):

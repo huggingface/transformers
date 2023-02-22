@@ -1240,7 +1240,7 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
 
                 sim_matrix = torch.matmul(pooled_output_norm, attack_pooled_output_norm.T)  # batch_size * hidden_dim
                 sim_matrix_target = torch.matmul(labels_pooled_output_norm, attack_pooled_output_norm.T)
-                batch_labels = torch.tensor([i for i in range(batch_size)], device=device)
+                batch_labels = torch.tensor(list(range(batch_size)), device=device)
                 contrastive_loss = (
                     loss_fct(100 * sim_matrix.view(batch_size, -1), batch_labels.view(-1))
                     + loss_fct(100 * sim_matrix_target.view(batch_size, -1), batch_labels.view(-1))

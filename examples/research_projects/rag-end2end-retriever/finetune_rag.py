@@ -164,11 +164,11 @@ class GenerativeQAModule(BaseTransformer):
         self.step_count = 0
         self.metrics = defaultdict(list)
 
-        self.dataset_kwargs: dict = dict(
-            data_dir=self.hparams.data_dir,
-            max_source_length=self.hparams.max_source_length,
-            prefix=prefix or "",
-        )
+        self.dataset_kwargs: dict = {
+            "data_dir": self.hparams.data_dir,
+            "max_source_length": self.hparams.max_source_length,
+            "prefix": prefix or "",
+        }
         n_observations_per_split = {
             "train": self.hparams.n_train,
             "val": self.hparams.n_val,
