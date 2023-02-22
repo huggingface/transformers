@@ -1874,7 +1874,7 @@ class TrainingArguments:
         the token values by removing their value.
         """
         # filter out fields that are defined as field(init=False)
-        d = dict((field.name, getattr(self, field.name)) for field in fields(self) if field.init)
+        d = {field.name: getattr(self, field.name) for field in fields(self) if field.init}
 
         for k, v in d.items():
             if isinstance(v, Enum):

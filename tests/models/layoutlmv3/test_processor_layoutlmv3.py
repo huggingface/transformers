@@ -213,7 +213,7 @@ class LayoutLMv3ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify image
@@ -235,7 +235,7 @@ class LayoutLMv3ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify images
@@ -285,7 +285,7 @@ class LayoutLMv3ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -324,7 +324,7 @@ class LayoutLMv3ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "labels", "pixel_values"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -346,7 +346,7 @@ class LayoutLMv3ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "labels", "pixel_values"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -387,7 +387,7 @@ class LayoutLMv3ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -406,7 +406,7 @@ class LayoutLMv3ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -440,7 +440,7 @@ class LayoutLMv3ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -456,7 +456,7 @@ class LayoutLMv3ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids

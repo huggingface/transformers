@@ -171,11 +171,11 @@ def create_student_by_copying_alternating_layers(
     logger.info(
         f"Copied encoder layers {e_layers_to_copy} and decoder layers {d_layers_to_copy}. Saving them to {save_path}"
     )
-    student.config.init_metadata = dict(
-        teacher_type=teacher.config.model_type,
-        copied_encoder_layers=e_layers_to_copy,
-        copied_decoder_layers=d_layers_to_copy,
-    )
+    student.config.init_metadata = {
+        "teacher_type": teacher.config.model_type,
+        "copied_encoder_layers": e_layers_to_copy,
+        "copied_decoder_layers": d_layers_to_copy,
+    }
     student.save_pretrained(save_path)
     # Save information about copying for easier reproducibility
 

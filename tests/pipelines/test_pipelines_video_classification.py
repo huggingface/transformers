@@ -63,7 +63,7 @@ class VideoClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     def test_small_model_pt(self):
         small_model = "hf-internal-testing/tiny-random-VideoMAEForVideoClassification"
         small_feature_extractor = VideoMAEFeatureExtractor(
-            size=dict(shortest_edge=10), crop_size=dict(height=10, width=10)
+            size={"shortest_edge": 10}, crop_size={"height": 10, "width": 10}
         )
         video_classifier = pipeline(
             "video-classification", model=small_model, feature_extractor=small_feature_extractor, frame_sampling_rate=4
