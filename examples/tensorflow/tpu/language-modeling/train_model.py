@@ -32,10 +32,16 @@ def parse_args():
         description="Prepare TFRecord shards from pre-tokenized samples of the wikitext dataset."
     )
     parser.add_argument(
-        "--pretrained_config",
+        "--pretrained_model_config",
         type=str,
         default="roberta-base",
         help="The model config to use. Note that we don't copy the model's weights, only the config!",
+    )
+    parser.add_argument(
+        "--tokenizer",
+        type=str,
+        default="unigram-tokenizer-wikitext",
+        help="The name of the tokenizer to load. We use the pretrained tokenizer to initialize the model's vocab size.",
     )
     parser.add_argument(
         "--max_length",
@@ -52,16 +58,70 @@ def parse_args():
         " path is appended with `gs://` ('gs://tf-tpu', for example) then the TFRecord"
         " shards will be directly saved to a Google Cloud Storage bucket.",
     )
+    parser.add_argument(
+        "--tpu_name",
+        type=str,
+        help="Name of TPU resource to initialize. Should be blank on Colab, and 'local' on TPU VMs."
+    )
+
+    parser.add_argument(
+        "--tpu_zone",
+        type=str,
+        help="Google cloud zone that TPU resource is located in. Only used for non-Colab TPU nodes."
+    )
+
+    parser.add_argument(
+        "--gcp_project",
+        type=str,
+        help="Google cloud project name. Only used for non-Colab TPU nodes."
+    )
+
+    parser.add_argument(
+        "--bfloat16",
+        action="store_true",
+        help="Use mixed-precision bfloat16 for training. This is the recommended lower-precision format for TPU."
+    )
 
     args = parser.parse_args()
     return args
 
 
+def initialize_tpu(args):
+    try:
+        if args.tpu_name:
+            tpu = tf.distribute.cluster_resolver.TPUClusterResolver(
+                args.tpu_name, zone=args.tpu_zone, project=args.gcp_project
+            )
+        else:
+            tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
+    except ValueError:
+        raise RuntimeError(f"Couldn't connect to TPU!")
+
+    tf.config.experimental_connect_to_cluster(tpu)
+    tf.tpu.experimental.initialize_tpu_system(tpu)
+
+    return tpu
+
+
 def main(args):
-    tokenizer = AutoTokenizer.from_pretrained("unigram-tokenizer-wikitext")
+    tpu = initialize_tpu(args)
+    strategy = tf.distribute.experimental.TPUStrategy(tpu)
+
+    if args.bfloat16:
+        tf.keras.mixed_precision.set_global_policy("mixed_bfloat16")
+
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
     config = AutoConfig.from_pretrained(args.pretrained_config)
     config.vocab_size = tokenizer.vocab_size
-    model = TFAutoModelForMaskedLM.from_config(config)
+
+    with strategy.scope():
+        model = TFAutoModelForMaskedLM.from_config(config)
+        model(model.dummy_inputs)  # Pass some dummy inputs through the model to ensure all the weights are built
+
+
+
+
+
 
 
 
