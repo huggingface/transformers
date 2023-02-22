@@ -12,11 +12,15 @@ class GenerationIntegrationTestsMixin:
     # To be populated by the child classes
     framework_dependent_parameters = {
         "AutoModelForCausalLM": None,
+        "AutoModelForSpeechSeq2Seq": None,
         "AutoModelForSeq2SeqLM": None,
+        "AutoModelForVision2Seq": None,
         "LogitsProcessorList": None,
         "MinLengthLogitsProcessor": None,
         "create_tensor_fn": None,
+        "floats_tensor": None,
         "return_tensors": None,
+        "set_seed": None,
     }
 
     def test_validate_generation_inputs(self):
@@ -486,3 +490,171 @@ class GenerationIntegrationTestsMixin:
         input_ids = tokenizer(article, return_tensors=return_tensors).input_ids
         with self.assertRaises(ValueError):
             model.generate(input_ids, input_ids=input_ids)
+
+    def test_generate_too_many_encoder_kwargs(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForSeq2SeqLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+
+        article = """I need input_ids to generate"""
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+        model = model_cls.from_pretrained("hf-internal-testing/tiny-random-bart", max_length=10)
+        input_ids = tokenizer(article, return_tensors=return_tensors).input_ids
+        with self.assertRaises(ValueError):
+            model.generate(input_ids=input_ids, inputs_embeds=input_ids)
+
+    def test_generate_input_features_as_encoder_kwarg(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForSpeechSeq2Seq"]
+        floats_tensor = self.framework_dependent_parameters["floats_tensor"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        input_features = floats_tensor((3, 80, 60))
+        model = model_cls.from_pretrained("hf-internal-testing/tiny-random-WhisperForConditionalGeneration")
+        if is_pt:
+            input_features.to(torch_device)
+            model = model.to(torch_device)
+
+        output_sequences_kwargs = model.generate(input_features=input_features, max_length=5)
+        output_sequences = model.generate(input_features, max_length=5)
+        if is_pt:
+            output_sequences_kwargs = output_sequences_kwargs.cpu().numpy()
+            output_sequences = output_sequences.cpu().numpy()
+
+        self.assertTrue(np.array_equal(output_sequences, output_sequences_kwargs))
+        self.assertEqual(output_sequences.shape, (3, 5))
+
+    def test_generate_pixel_values_as_encoder_kwarg(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForVision2Seq"]
+        floats_tensor = self.framework_dependent_parameters["floats_tensor"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        pixel_values = floats_tensor((2, 3, 30, 30))
+        model = model_cls.from_pretrained("hf-internal-testing/tiny-random-VisionEncoderDecoderModel-vit-gpt2")
+        model.config.decoder.eos_token_id = None
+        if is_pt:
+            pixel_values = pixel_values.to(torch_device)
+            model = model.to(torch_device)
+
+        output_sequences_kwargs = model.generate(pixel_values=pixel_values, max_length=5)
+        output_sequences = model.generate(pixel_values, max_length=5)
+        if is_pt:
+            output_sequences_kwargs = output_sequences_kwargs.cpu().numpy()
+            output_sequences = output_sequences.cpu().numpy()
+
+        self.assertTrue(np.array_equal(output_sequences, output_sequences_kwargs))
+        self.assertEqual(output_sequences.shape, (2, 5))
+
+    def test_generate_encoder_outputs_attention_mask(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForSpeechSeq2Seq"]
+        floats_tensor = self.framework_dependent_parameters["floats_tensor"]
+        create_tensor_fn = self.framework_dependent_parameters["create_tensor_fn"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        input_features = floats_tensor((3, 80, 60))
+        attention_mask = create_tensor_fn(np.ones(input_features.shape))
+        model = model_cls.from_pretrained("hf-internal-testing/tiny-random-WhisperForConditionalGeneration")
+        if is_pt:
+            input_features = input_features.to(torch_device)
+            attention_mask = attention_mask.to(torch_device)
+            model = model.to(torch_device)
+
+        encoder = model.get_encoder()
+        encoder_outputs = encoder(input_features)
+
+        output_sequences_no_mask = model.generate(encoder_outputs=encoder_outputs)
+        output_sequences_with_mask = model.generate(encoder_outputs=encoder_outputs, attention_mask=attention_mask)
+        if is_pt:
+            output_sequences_no_mask = output_sequences_no_mask.cpu().numpy()
+            output_sequences_with_mask = output_sequences_with_mask.cpu().numpy()
+
+        self.assertTrue(np.array_equal(output_sequences_no_mask, output_sequences_with_mask))
+
+    def test_eos_token_id_int_and_list_greedy_search(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForCausalLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        generation_kwargs = {
+            "do_sample": False,
+            "num_beams": 1,
+        }
+        expectation = 13
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        text = """Hello, my dog is cute and"""
+        tokens = tokenizer(text, return_tensors=return_tensors)
+        model = model_cls.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        if is_pt:
+            model = model.to(torch_device)
+            tokens = tokens.to(torch_device)
+
+        eos_token_id = 873
+        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        self.assertTrue(expectation == len(generated_tokens[0]))
+
+        eos_token_id = [873, 198]
+        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        self.assertTrue(expectation == len(generated_tokens[0]))
+
+    def test_eos_token_id_int_and_list_contrastive_search(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForCausalLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        generation_kwargs = {
+            "do_sample": False,
+            "num_beams": 1,
+            "penalty_alpha": 0.6,
+            "top_k": 4,
+        }
+        expectation = 17
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        text = """Hello, my dog is cute and"""
+        tokens = tokenizer(text, return_tensors=return_tensors)
+        model = model_cls.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        if is_pt:
+            model = model.to(torch_device)
+            tokens = tokens.to(torch_device)
+
+        eos_token_id = 225
+        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        self.assertTrue(expectation == len(generated_tokens[0]))
+
+        eos_token_id = [225, 198]
+        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        self.assertTrue(expectation == len(generated_tokens[0]))
+
+    def test_eos_token_id_int_and_list_beam_search(self):
+        model_cls = self.framework_dependent_parameters["AutoModelForCausalLM"]
+        return_tensors = self.framework_dependent_parameters["return_tensors"]
+        is_pt = not model_cls.__name__.startswith("TF")
+
+        generation_kwargs = {
+            "do_sample": False,
+            "num_beams": 3,
+        }
+        expectation = 13
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        text = """Hello, my dog is cute and"""
+        tokens = tokenizer(text, return_tensors=return_tensors)
+        model = model_cls.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        if is_pt:
+            model = model.to(torch_device)
+            tokens = tokens.to(torch_device)
+
+        eos_token_id = 873
+        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        unpadded_correct_condition = expectation == len(generated_tokens[0])
+        padded_correct_condition = expectation < len(generated_tokens[0]) and all(
+            [token == model.config.pad_token_id for token in generated_tokens[0][expectation:]]
+        )
+        self.assertTrue(unpadded_correct_condition or padded_correct_condition)
+
+        eos_token_id = [873, 198]
+        generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
+        unpadded_correct_condition = expectation == len(generated_tokens[0])
+        padded_correct_condition = expectation < len(generated_tokens[0]) and all(
+            [token == model.config.pad_token_id for token in generated_tokens[0][expectation:]]
+        )
+        self.assertTrue(unpadded_correct_condition or padded_correct_condition)

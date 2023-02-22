@@ -285,6 +285,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
         r"language_model.decoder.embed_tokens.weight",
     ]
     _no_split_modules = ["Blip2Attention", "T5Block", "OPTDecoderLayer"]
+    _keep_in_fp32_modules = ["wo"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

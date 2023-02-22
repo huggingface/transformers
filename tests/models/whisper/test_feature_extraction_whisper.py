@@ -128,8 +128,8 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
-        mel_1 = dict_first.pop("mel_filters")
-        mel_2 = dict_second.pop("mel_filters")
+        mel_1 = feat_extract_first.mel_filters
+        mel_2 = feat_extract_second.mel_filters
         self.assertTrue(np.allclose(mel_1, mel_2))
         self.assertEqual(dict_first, dict_second)
 
@@ -143,8 +143,8 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         dict_first = feat_extract_first.to_dict()
         dict_second = feat_extract_second.to_dict()
-        mel_1 = dict_first.pop("mel_filters")
-        mel_2 = dict_second.pop("mel_filters")
+        mel_1 = feat_extract_first.mel_filters
+        mel_2 = feat_extract_second.mel_filters
         self.assertTrue(np.allclose(mel_1, mel_2))
         self.assertEqual(dict_first, dict_second)
 
