@@ -51,7 +51,7 @@ def get_align_config(model_name):
     vision_config = EfficientNetConfig.from_pretrained("google/efficientnet-b7")
     vision_config.image_size = 289
     vision_config.hidden_dim = 640
-    vision_config.id2label = ({"0": "LABEL_0", "1": "LABEL_1"},)
+    vision_config.id2label = {"0": "LABEL_0", "1": "LABEL_1"}
     vision_config.label2id = {"LABEL_0": 0, "LABEL_1": 1}
 
     text_config = BertConfig()
@@ -80,6 +80,7 @@ def get_processor():
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def rename_keys(original_param_names):
+    # EfficientNet image encoder
     block_names = [v.split("_")[0].split("block")[1] for v in original_param_names if v.startswith("block")]
     block_names = sorted(list(set(block_names)))
     num_blocks = len(block_names)
@@ -131,16 +132,105 @@ def rename_keys(original_param_names):
             (f"block{b}_project_bn/moving_variance:0", f"encoder.blocks.{hf_b}.projection.project_bn.running_var")
         )
 
-    rename_keys.append(("top_conv/kernel:0", "encoder.top_conv.weight"))
-    rename_keys.append(("top_bn/gamma:0", "encoder.top_bn.weight"))
-    rename_keys.append(("top_bn/beta:0", "encoder.top_bn.bias"))
-    rename_keys.append(("top_bn/moving_mean:0", "encoder.top_bn.running_mean"))
-    rename_keys.append(("top_bn/moving_variance:0", "encoder.top_bn.running_var"))
-
     key_mapping = {}
     for item in rename_keys:
         if item[0] in original_param_names:
-            key_mapping[item[0]] = "efficientnet." + item[1]
+            key_mapping[item[0]] = "vision_model.encoder." + item[1]
+
+    # BERT text encoder
+    rename_keys = []
+    old = "tf_bert_model/bert"
+    new = "text_model.text_model"
+    for i in range(12):
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/attention/self/query/kernel:0",
+                f"{new}.encoder.layer.{i}.attention.self.query.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/attention/self/query/bias:0",
+                f"{new}.encoder.layer.{i}.attention.self.query.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/attention/self/key/kernel:0",
+                f"{new}.encoder.layer.{i}.attention.self.key.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/attention/self/key/bias:0",
+                f"{new}.encoder.layer.{i}.attention.self.key.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/attention/self/value/kernel:0",
+                f"{new}.encoder.layer.{i}.attention.self.value.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/attention/self/value/bias:0",
+                f"{new}.encoder.layer.{i}.attention.self.value.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/attention/output/dense/kernel:0",
+                f"{new}.encoder.layer.{i}.attention.output.dense.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/attention/output/dense/bias:0",
+                f"{new}.encoder.layer.{i}.attention.output.dense.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/attention/output/LayerNorm/gamma:0",
+                f"{new}.encoder.layer.{i}.attention.output.LayerNorm.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/attention/output/LayerNorm/beta:0",
+                f"{new}.encoder.layer.{i}.attention.output.LayerNorm.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/intermediate/dense/kernel:0",
+                f"{new}.encoder.layer.{i}.intermediate.dense.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"{old}/encoder/layer_._{i}/intermediate/dense/bias:0",
+                f"{new}.encoder.layer.{i}.intermediate.dense.bias",
+            )
+        )
+        rename_keys.append(
+            (f"{old}/encoder/layer_._{i}/output/dense/kernel:0", f"{new}.encoder.layer.{i}.output.dense.weight")
+        )
+        rename_keys.append(
+            (f"{old}/encoder/layer_._{i}/output/dense/bias:0", f"{new}.encoder.layer.{i}.output.dense.bias")
+        )
+        rename_keys.append(
+            (f"{old}/encoder/layer_._{i}/output/LayerNorm/gamma:0", f"{new}.encoder.layer.{i}.output.LayerNorm.bias")
+        )
+        rename_keys.append(
+            (f"{old}/encoder/layer_._{i}/output/LayerNorm/beta:0", f"{new}.encoder.layer.{i}.output.LayerNorm.bias")
+        )
+
+    rename_keys.append((f"{old}/pooler/dense/kernel:0", f"{new}.pooler.dense.weight"))
+    rename_keys.append((f"{old}/pooler/dense/bias:0", f"{new}.pooler.dense.bias"))
+    rename_keys.append(("dense/kernel:0", "text_projection.weight"))
+    rename_keys.append(("dense/bias:0", "text_projection.bias"))
 
     return key_mapping
 

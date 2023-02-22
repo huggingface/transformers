@@ -23,13 +23,13 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...bert import BertModel
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     BaseModelOutputWithPoolingAndCrossAttentions,
     BaseModelOutputWithPoolingAndNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
+from ...models.bert import BertModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -253,7 +253,7 @@ class ALIGNOutput(ModelOutput):
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/ALIGN.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
+    return nn.functional.cross_entropy(logits, torch.arange(len(logits), label_smoothing=0.1, device=logits.device))
 
 
 def align_loss(similarity: torch.Tensor) -> torch.Tensor:
@@ -305,12 +305,12 @@ class ALIGNVisionEmbeddings(nn.Module):
     def __init__(self, config: ALIGNVisionConfig):
         super().__init__()
 
-        out_channels = round_filters(config, 32)
+        self.out_dim = round_filters(config, 32)
         self.padding = nn.ZeroPad2d(padding=(0, 1, 0, 1))
         self.convolution = nn.Conv2d(
-            config.num_channels, out_channels, kernel_size=3, stride=2, padding="valid", bias=False
+            config.num_channels, self.out_dim, kernel_size=3, stride=2, padding="valid", bias=False
         )
-        self.batchnorm = nn.BatchNorm2d(out_channels, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum)
+        self.batchnorm = nn.BatchNorm2d(self.out_dim, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum)
         self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
@@ -657,19 +657,11 @@ class ALIGNPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        factor = self.config.initializer_factor
         if isinstance(module, ALIGNVisionEmbeddings):
-            factor = self.config.initializer_factor
-            nn.init.normal_(module.convolution.weight, std=module.config.initializer_range * factor)
+            factor = math.sqrt(2.0 / module.out_dim) / 0.879626
+            nn.init.trunc_normal_(module.convolution.weight, std=factor)
         elif isinstance(module, ALIGNModel):
-            nn.init.normal_(
-                module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-            nn.init.normal_(
-                module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
-            )
+            nn.init.xavier_uniform_(module.text_projection.weight)
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -855,8 +847,8 @@ class ALIGNModel(ALIGNPreTrainedModel):
         self.text_model = ALIGNTextModel(text_config)
         self.vision_model = ALIGNVisionModel(vision_config)
 
-        self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
-        self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
+        self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim)
+        self.temperature = nn.Parameter(torch.ones([]) * self.config.temperature_init_value)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -952,8 +944,7 @@ class ALIGNModel(ALIGNPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
+        image_features = vision_outputs[1]  # pooled_output
 
         return image_features
 
@@ -1018,8 +1009,6 @@ class ALIGNModel(ALIGNPreTrainedModel):
         )
 
         image_embeds = vision_outputs[1]
-        image_embeds = self.visual_projection(image_embeds)
-
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
 
@@ -1028,8 +1017,7 @@ class ALIGNModel(ALIGNPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) / self.temperature
         logits_per_image = logits_per_text.t()
 
         loss = None

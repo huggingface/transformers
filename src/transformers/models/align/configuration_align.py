@@ -348,9 +348,7 @@ class ALIGNConfig(PretrainedConfig):
     model_type = "align"
     is_composition = True
 
-    def __init__(
-        self, text_config=None, vision_config=None, projection_dim=640, logit_scale_init_value=2.6592, **kwargs
-    ):
+    def __init__(self, text_config=None, vision_config=None, projection_dim=640, temperature_init_value=1.0, **kwargs):
         super().__init__(**kwargs)
 
         # If `_config_dict` exist, we use them for the backward compatibility.
@@ -373,8 +371,8 @@ class ALIGNConfig(PretrainedConfig):
         self.vision_config = ALIGNVisionConfig(**vision_config)
 
         self.projection_dim = projection_dim
-        self.logit_scale_init_value = logit_scale_init_value
-        self.initializer_factor = 1.0
+        self.temperature_init_value = temperature_init_value
+        self.initializer_factor = 0.879626
 
     @classmethod
     def from_text_vision_configs(cls, text_config: ALIGNTextConfig, vision_config: ALIGNVisionConfig, **kwargs):
