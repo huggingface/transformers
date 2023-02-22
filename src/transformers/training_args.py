@@ -231,9 +231,9 @@ class TrainingArguments:
             Number of steps used for a linear warmup from 0 to `learning_rate`. Overrides any effect of `warmup_ratio`.
         log_level (`str`, *optional*, defaults to `passive`):
             Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug',
-            'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the
-            application set the level.
-        log_level_replica (`str`, *optional*, defaults to `passive`):
+            'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and keeps the
+            current log level for the Transformers library (which will be `"warning"` by default).
+        log_level_replica (`str`, *optional*, defaults to `"warning"`):
             Logger log level to use on replicas. Same choices as `log_level`"
         log_on_each_node (`bool`, *optional*, defaults to `True`):
             In multinode distributed training, whether to log using `log_level` once per node, or only on the main
@@ -690,7 +690,7 @@ class TrainingArguments:
         },
     )
     log_level_replica: Optional[str] = field(
-        default="passive",
+        default="warning",
         metadata={
             "help": "Logger log level to use on replica nodes. Same choices and defaults as ``log_level``",
             "choices": trainer_log_levels.keys(),
@@ -1774,7 +1774,8 @@ class TrainingArguments:
         Returns the log level to be used depending on whether this process is the main process of node 0, main process
         of node non-0, or a non-main process.
 
-        For the main process the log level defaults to `logging.INFO` unless overridden by `log_level` argument.
+        For the main process the log level defaults to the logging level set (`logging.WARNING` if you didn't do
+        anything) unless overridden by `log_level` argument.
 
         For the replica processes the log level defaults to `logging.WARNING` unless overridden by `log_level_replica`
         argument.
@@ -1786,8 +1787,8 @@ class TrainingArguments:
         log_level = trainer_log_levels[self.log_level]
         log_level_replica = trainer_log_levels[self.log_level_replica]
 
-        log_level_main_node = logging.INFO if log_level == -1 else log_level
-        log_level_replica_node = logging.WARNING if log_level_replica == -1 else log_level_replica
+        log_level_main_node = logging.get_verbosity() if log_level == -1 else log_level
+        log_level_replica_node = logging.get_verbosity() if log_level_replica == -1 else log_level_replica
         return log_level_main_node if self.should_log else log_level_replica_node
 
     @property
