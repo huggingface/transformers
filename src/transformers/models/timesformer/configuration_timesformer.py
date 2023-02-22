@@ -78,7 +78,7 @@ class TimesformerConfig(PretrainedConfig):
     >>> # Initializing a TimeSformer timesformer-base style configuration
     >>> configuration = TimesformerConfig()
 
-    >>> # Randomly initializing a model from the configuration
+    >>> # Initializing a model from the configuration
     >>> model = TimesformerModel(configuration)
 
     >>> # Accessing the model configuration

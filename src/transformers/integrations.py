@@ -365,7 +365,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
                 name="huggingface-tune",
                 type="offline",
                 parameters=trainer.hp_space(None),
-                metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
                 parallel_bandwidth=1,
                 budget=n_trials,
             )
@@ -402,7 +402,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
             experiment = conn.experiments().create(
                 name="huggingface-tune",
                 parameters=trainer.hp_space(None),
-                metrics=[dict(name="objective", objective=direction, strategy="optimize")],
+                metrics=[{"name": "objective", "objective": direction, "strategy": "optimize"}],
                 parallel_bandwidth=1,
                 observation_budget=n_trials,
                 project="huggingface",
@@ -425,7 +425,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
                     metrics = trainer.evaluate()
                     trainer.objective = trainer.compute_objective(metrics)
 
-                values = [dict(name="objective", value=trainer.objective)]
+                values = [{"name": "objective", "value": trainer.objective}]
                 obs = conn.experiments(experiment.id).observations().create(suggestion=suggestion.id, values=values)
                 logger.info(f"[suggestion_id, observation_id]: [{suggestion.id}, {obs.id}]")
                 experiment = conn.experiments(experiment.id).fetch()
@@ -1430,17 +1430,26 @@ class ClearMLCallback(TrainerCallback):
     def setup(self, args, state, model, tokenizer, **kwargs):
         if self._clearml is None:
             return
+        if self._initialized:
+            return
         if state.is_world_process_zero:
             logger.info("Automatic ClearML logging enabled.")
             if self._clearml_task is None:
-                self._clearml_task = self._clearml.Task.init(
-                    project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
-                    task_name=os.getenv("CLEARML_TASK", "Trainer"),
-                    auto_connect_frameworks={"tensorboard": False, "pytorch": False},
-                    output_uri=True,
-                )
-                self._initialized = True
-                logger.info("ClearML Task has been initialized.")
+                # This might happen when running inside of a pipeline, where the task is already initialized
+                # from outside of Hugging Face
+                if self._clearml.Task.current_task():
+                    self._clearml_task = self._clearml.Task.current_task()
+                    self._initialized = True
+                    logger.info("External ClearML Task has been connected.")
+                else:
+                    self._clearml_task = self._clearml.Task.init(
+                        project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
+                        task_name=os.getenv("CLEARML_TASK", "Trainer"),
+                        auto_connect_frameworks={"tensorboard": False, "pytorch": False},
+                        output_uri=True,
+                    )
+                    self._initialized = True
+                    logger.info("ClearML Task has been initialized.")
 
             self._clearml_task.connect(args, "Args")
             if hasattr(model, "config") and model.config is not None:

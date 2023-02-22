@@ -85,7 +85,7 @@ def duplicate_interleave(m):
 
 # Copied from transformers.models.gptj.modeling_gptj.apply_rotary_pos_emb
 def apply_rotary_pos_emb(x, sincos, offset=0):
-    sin, cos = map(lambda t: duplicate_interleave(t)[None, offset : x.shape[1] + offset, None, :], sincos)
+    sin, cos = (duplicate_interleave(t)[None, offset : x.shape[1] + offset, None, :] for t in sincos)
     # einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
     return (x * cos) + (rotate_every_two(x) * sin)
 
@@ -610,7 +610,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
     CODEGEN_START_DOCSTRING,
 )
 class CodeGenForCausalLM(CodeGenPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"h\.\d+\.attn\.bias"]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.causal_mask"]
 
     def __init__(self, config):
         super().__init__(config)

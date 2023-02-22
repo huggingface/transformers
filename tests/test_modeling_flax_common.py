@@ -650,6 +650,9 @@ class FlaxModelTesterMixin:
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_attention_outputs(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
@@ -1096,7 +1099,7 @@ class FlaxModelTesterMixin:
                     index = json.loads(f.read())
 
                 all_shards = set(index["weight_map"].values())
-                shards_found = set(f for f in os.listdir(tmp_dir) if f.endswith(".msgpack"))
+                shards_found = {f for f in os.listdir(tmp_dir) if f.endswith(".msgpack")}
                 self.assertSetEqual(all_shards, shards_found)
 
                 # Finally, check the model can be reloaded

@@ -56,9 +56,9 @@ class CheckDummiesTester(unittest.TestCase):
             "pytorch_utils.py",
             "models/bert/configuration_bert.py",
         ]
-        expected_deps = set(os.path.join(transformers_path, f) for f in expected_deps)
+        expected_deps = {os.path.join(transformers_path, f) for f in expected_deps}
         repo = Repo(git_repo_path)
         with checkout_commit(repo, GIT_TEST_SHA):
             deps = get_module_dependencies(bert_module)
-        deps = set(os.path.expanduser(f) for f in deps)
+        deps = {os.path.expanduser(f) for f in deps}
         self.assertEqual(deps, expected_deps)

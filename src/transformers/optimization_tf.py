@@ -176,7 +176,7 @@ class AdamWeightDecay(Adam):
     with the m and v parameters in strange ways as shown in [Decoupled Weight Decay
     Regularization](https://arxiv.org/abs/1711.05101).
 
-    Instead we want ot decay the weights in a manner that doesn't interact with the m/v parameters. This is equivalent
+    Instead we want to decay the weights in a manner that doesn't interact with the m/v parameters. This is equivalent
     to adding the square of the weights to the loss with plain (non-momentum) SGD.
 
     Args:
@@ -262,7 +262,7 @@ class AdamWeightDecay(Adam):
             coefficients = self._fallback_apply_state(var_device, var_dtype)
             apply_state[(var_device, var_dtype)] = coefficients
 
-        return coefficients["lr_t"], dict(apply_state=apply_state)
+        return coefficients["lr_t"], {"apply_state": apply_state}
 
     def _resource_apply_dense(self, grad, var, apply_state=None):
         lr_t, kwargs = self._get_lr(var.device, var.dtype.base_dtype, apply_state)
@@ -333,7 +333,7 @@ class GradientAccumulator(object):
         """The accumulated gradients on the current replica."""
         if not self._gradients:
             raise ValueError("The accumulator should be called first to initialize the gradients")
-        return list(gradient.value() if gradient is not None else gradient for gradient in self._gradients)
+        return [gradient.value() if gradient is not None else gradient for gradient in self._gradients]
 
     def __call__(self, gradients):
         """Accumulates `gradients` on the current replica."""

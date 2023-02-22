@@ -210,7 +210,7 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
             inputs = [inputs]
         elif isinstance(inputs, Iterable):
             # Copy to avoid overriding arguments
-            inputs = [i for i in inputs]
+            inputs = list(inputs)
         else:
             raise ValueError(f"Invalid arguments {kwargs}")
 
@@ -255,7 +255,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
-        device: int = -1,
         task: str = "",
         **kwargs,
     ):
@@ -264,7 +263,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             tokenizer=tokenizer,
             modelcard=modelcard,
             framework=framework,
-            device=device,
             task=task,
             **kwargs,
         )

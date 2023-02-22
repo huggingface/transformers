@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +32,7 @@ from . import (
     blenderbot,
     blenderbot_small,
     blip,
+    blip_2,
     bloom,
     bort,
     bridgetower,
@@ -43,6 +40,7 @@ from . import (
     camembert,
     canine,
     chinese_clip,
+    clap,
     clip,
     clipseg,
     codegen,
@@ -68,9 +66,11 @@ from . import (
     dpr,
     dpt,
     efficientformer,
+    efficientnet,
     electra,
     encoder_decoder,
     ernie,
+    ernie_m,
     esm,
     flaubert,
     flava,
@@ -85,6 +85,7 @@ from . import (
     gpt_neox_japanese,
     gpt_sw3,
     gptj,
+    gptsan_japanese,
     graphormer,
     groupvit,
     herbert,
@@ -171,6 +172,7 @@ from . import (
     trajectory_transformer,
     transfo_xl,
     trocr,
+    tvlt,
     unispeech,
     unispeech_sat,
     upernet,
@@ -197,6 +199,7 @@ from . import (
     xlm_roberta,
     xlm_roberta_xl,
     xlnet,
+    xmod,
     yolos,
     yoso,
 )

@@ -12,6 +12,12 @@ specific language governing permissions and limitations under the License.
 
 # RAG
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/models?filter=rag">
+<img alt="Models" src="https://img.shields.io/badge/All_model_pages-rag-blueviolet">
+</a>
+</div>
+
 ## Overview
 
 Retrieval-augmented generation ("RAG") models combine the powers of pretrained dense retrieval (DPR) and
@@ -42,6 +48,8 @@ parametric-only seq2seq baseline.*
 
 This model was contributed by [ola13](https://huggingface.co/ola13).
 
+Tips:
+- Retrieval-augmented generation (“RAG”) models combine the powers of pretrained dense retrieval (DPR) and Seq2Seq models. RAG models retrieve docs, pass them to a seq2seq model, then marginalize to generate outputs. The retriever and seq2seq modules are initialized from pretrained models, and fine-tuned jointly, allowing both retrieval and generation to adapt to downstream tasks.
 
 ## RagConfig
 
