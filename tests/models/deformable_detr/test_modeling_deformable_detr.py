@@ -27,7 +27,7 @@ from transformers.testing_utils import require_timm, require_torch_gpu, require_
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
-from ...test_pipeline_common import PipelineTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_timm_available():

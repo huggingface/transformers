@@ -470,7 +470,7 @@ EXPECTED_TEST_FILES_NEVER_TOUCHED = [
     "tests/sagemaker/test_single_node_gpu.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_model_parallel.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_data_parallel.py",  # SageMaker test
-    "tests/test_pipeline_common.py",  # Contains no test of its own (only the common tester class)
+    "tests/test_pipeline_mixin.py",  # Contains no test of its own (only the common tester class)
     "tests/utils/test_doc_samples.py",  # Doc tests
 ]
 

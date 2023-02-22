@@ -20,7 +20,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
-from ...test_pipeline_common import PipelineTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():

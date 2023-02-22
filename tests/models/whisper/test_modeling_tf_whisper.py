@@ -28,7 +28,7 @@ from transformers.utils.import_utils import is_datasets_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
-from ...test_pipeline_common import PipelineTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_datasets_available():
