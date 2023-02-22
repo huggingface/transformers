@@ -1572,6 +1572,7 @@ class InformerEncoder(InformerPreTrainedModel):
         )
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Informer,TimeSeriesTransformerConfig->InformerConfig,TIME_SERIES_TRANSFORMER->INFORMER,time-series-transformer->informer,Transformer->Informer
 class InformerDecoder(InformerPreTrainedModel):
     """
     Informer decoder consisting of *config.decoder_layers* layers. Each layer is a [`InformerDecoderLayer`]
@@ -1582,10 +1583,8 @@ class InformerDecoder(InformerPreTrainedModel):
 
     def __init__(self, config: InformerConfig):
         super().__init__(config)
-
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.gradient_checkpointing = False
 
         self.value_embedding = ValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
         self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
@@ -1594,6 +1593,7 @@ class InformerDecoder(InformerPreTrainedModel):
         self.layers = nn.ModuleList([InformerDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
+        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
