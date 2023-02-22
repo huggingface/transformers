@@ -372,6 +372,83 @@ class MegaModelTester:
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
+    # extra checks for Mega-specific model functionality
+    def create_and_check_bidirectionality(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.bidirectional = True 
+        model = MegaModel(config)
+        model.to(torch_device)
+        model.eval()
+        # no mask
+        result = model(
+            input_ids
+        )
+        # with mask & token types
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids
+        )
+
+        self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def check_chunking_shorter_sequence(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.use_chunking=True 
+        config.chunk_size=input_ids.size(1) + 25 
+        model = MegaModel(config)
+
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids
+        )
+
+        self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def check_chunking_longer_sequence(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.use_chunking=True 
+        config.chunk_size=input_ids.size(1) * 2 # we want the chunk size to be < sequence length, and the sequence length to be a multiple of chunk size
+        model = MegaModel(config)
+
+        result = model(
+            input_ids.repeat(1, 8),
+        )
+
+        self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length * 8, self.hidden_size))
+
+    def check_element_attention(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.attention_activation = 'laplace'
+        model = MegaModel(config)
+
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids
+        )
+
+        self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def check_sequence_length_beyond_max_positions(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.max_positions = self.seq_length - 2
+        model = MegaModel(config)
+
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids
+        )
+
+        self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.hidden_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -418,12 +495,6 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # def test_model_various_embeddings(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
-    #     for type in ["absolute", "relative_key", "relative_key_query"]:
-    #         config_and_inputs[0].position_embedding_type = type
-    #         self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_model_as_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
@@ -464,11 +535,6 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    # def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-    #     config_and_inputs[0].position_embedding_type = "relative_key"
-    #     self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
@@ -485,53 +551,31 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
+    def test_for_bidirectionality(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bidirectionality(*config_and_inputs)
+
+    def test_for_chunking_shorter_sequence(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_chunking_shorter_sequence(*config_and_inputs)
+
+    def test_for_chunking_longer_sequence(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_chunking_longer_sequence(*config_and_inputs)
+
+    def test_for_element_attention(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_element_attention(*config_and_inputs)
+
+    def test_for_sequence_length_beyond_max_positions(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_sequence_length_beyond_max_positions(*config_and_inputs)
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in MEGA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = MegaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    # def test_create_position_ids_respects_padding_index(self):
-    #     """Ensure that the default position ids only assign a sequential . This is a regression
-    #     test for https://github.com/huggingface/transformers/issues/1761
-
-    #     The position ids should be masked with the embedding object's padding index. Therefore, the
-    #     first available non-padding position index is MegaEmbeddings.padding_idx + 1
-    #     """
-    #     config = self.model_tester.prepare_config_and_inputs()[0]
-    #     model = MegaEmbeddings(config=config)
-
-    #     input_ids = torch.as_tensor([[12, 31, 13, model.padding_idx]])
-    #     expected_positions = torch.as_tensor(
-    #         [[0 + model.padding_idx + 1, 1 + model.padding_idx + 1, 2 + model.padding_idx + 1, model.padding_idx]]
-    #     )
-
-    #     position_ids = create_position_ids_from_input_ids(input_ids, model.padding_idx)
-    #     self.assertEqual(position_ids.shape, expected_positions.shape)
-    #     self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
-
-    # def test_create_position_ids_from_inputs_embeds(self):
-    #     """Ensure that the default position ids only assign a sequential . This is a regression
-    #     test for https://github.com/huggingface/transformers/issues/1761
-
-    #     The position ids should be masked with the embedding object's padding index. Therefore, the
-    #     first available non-padding position index is MegaEmbeddings.padding_idx + 1
-    #     """
-    #     config = self.model_tester.prepare_config_and_inputs()[0]
-    #     embeddings = MegaEmbeddings(config=config)
-
-    #     inputs_embeds = torch.empty(2, 4, 30)
-    #     expected_single_positions = [
-    #         0 + embeddings.padding_idx + 1,
-    #         1 + embeddings.padding_idx + 1,
-    #         2 + embeddings.padding_idx + 1,
-    #         3 + embeddings.padding_idx + 1,
-    #     ]
-    #     expected_positions = torch.as_tensor([expected_single_positions, expected_single_positions])
-    #     position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
-    #     self.assertEqual(position_ids.shape, expected_positions.shape)
-    #     self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
-
 
 @require_torch
 class MegaModelIntegrationTest(TestCasePlus):

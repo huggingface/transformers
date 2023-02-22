@@ -160,24 +160,17 @@ Decoder
     * Slice testing for classification head (done)
     * LM head ignore keys (done)
   * New tests:
-    * bidirectionality
-    * with/without token types
-    * sequence length > max positions
-    * chunking
-    * softmax and element attention
+    * ~~bidirectionality~~
+    * ~~sequence length > max positions~~
+    * ~~chunking~~
+    * ~~softmax and element attention~~
 * Documentation: 
   * ~~Docstrings of individual classes~~
   * Main docstring
   * Config docstring
   * Anything else in the `mega.mdx` file
-* ~~Tokenizer?~~
-  * looks like autotokenizer points to robertatokenizer, so I think I'm going to leave it for now
-  * Tests don't require tokenizer
-* Test a Mega encoder-decoder model?
-  * Wouldn't have any pretrained weights, but could help catch bugs
-  * Alternatively, could just push ahead with what I have 
-* Train a simple text-to-text model?
-* Push model to hub
+* Run the make commands (fixup and fix-copies, style and quality)
+* ~~Push model to hub~~
   * Include tokenizer
   * Test mask-filling widget
 * Open PR
