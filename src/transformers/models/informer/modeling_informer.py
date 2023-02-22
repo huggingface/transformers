@@ -1817,8 +1817,10 @@ class InformerModel(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
 
-        if config.scaling:
+        if config.scaling == "mean" or config.scaling:
             self.scaler = MeanScaler(dim=1, keepdim=True)
+        elif config.scaling == "std":
+            self.scaler = StdScaler(dim=1, keepdim=True)
         else:
             self.scaler = NOPScaler(dim=1, keepdim=True)
 
@@ -1828,7 +1830,7 @@ class InformerModel(InformerPreTrainedModel):
                 embedding_dims=config.embedding_dimension,
             )
 
-        # Informer encoder-decoder and mask initializer
+        # transformer encoder-decoder and mask initializer
         self.encoder = InformerEncoder(config)
         self.decoder = InformerDecoder(config)
 
@@ -1995,7 +1997,7 @@ class InformerModel(InformerPreTrainedModel):
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = InformerModel.from_pretrained("kashif/informer-tourism-monthly")
+        >>> model = InformerModel.from_pretrained("huggingface/informer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features
@@ -2018,7 +2020,7 @@ class InformerModel(InformerPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_inputs, scale, static_feat = self.create_network_inputs(
+        transformer_inputs, loc, scale, static_feat = self.create_network_inputs(
             past_values=past_values,
             past_time_features=past_time_features,
             past_observed_mask=past_observed_mask,
@@ -2060,7 +2062,7 @@ class InformerModel(InformerPreTrainedModel):
         )
 
         if not return_dict:
-            return decoder_outputs + encoder_outputs + (scale, static_feat)
+            return decoder_outputs + encoder_outputs + (loc, scale, static_feat)
 
         return Seq2SeqTimeSeriesModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -2071,6 +2073,7 @@ class InformerModel(InformerPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            loc=loc,
             scale=scale,
             static_features=static_feat,
         )
