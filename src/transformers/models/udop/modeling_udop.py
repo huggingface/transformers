@@ -302,23 +302,23 @@ class DropPath(nn.Module):
 class PatchEmbed(nn.Module):
     """2D Image to Patch Embedding"""
 
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, norm_layer=None, flatten=True):
+    def __init__(self, config):
         super().__init__()
-        img_size = to_2tuple(img_size)
-        patch_size = to_2tuple(patch_size)
+        img_size = to_2tuple(config.image_size)
+        patch_size = to_2tuple(config.mae_config["patch_size"])
         self.img_size = img_size
         self.patch_size = patch_size
         self.grid_size = (img_size[0] // patch_size[0], img_size[1] // patch_size[1])
         self.num_patches = self.grid_size[0] * self.grid_size[1]
-        self.flatten = flatten
 
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
-        self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
+        self.proj = nn.Conv2d(
+            config.mae_config["in_channels"], config.mae_config["embed_dim"], kernel_size=patch_size, stride=patch_size
+        )
+        self.norm = nn.Identity()
 
     def forward(self, x):
         x = self.proj(x)
-        if self.flatten:
-            x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
         x = self.norm(x)
         return x
 
@@ -410,7 +410,7 @@ class Block(nn.Module):
         dim,
         num_heads,
         mlp_ratio=4.0,
-        qkv_bias=False,
+        qkv_bias=True,
         qk_scale=None,
         drop=0.0,
         attn_drop=0.0,
@@ -449,29 +449,13 @@ class Block(nn.Module):
 class MaskedAutoencoderViT(nn.Module):
     """Masked Autoencoder with VisionTransformer backbone"""
 
-    def __init__(
-        self,
-        img_size=384,
-        patch_size=16,
-        in_chans=3,
-        embed_dim=1024,
-        ctx_embed_dim=1024,
-        depth=24,
-        num_heads=16,
-        decoder_embed_dim=512,
-        decoder_depth=8,
-        decoder_num_heads=16,
-        mlp_ratio=4.0,
-        norm_layer=nn.LayerNorm,
-        norm_pix_loss=False,
-        vocab_size=100,
-        max_2d_position_embeddings=501,
-    ):
+    def __init__(self, config):
         super().__init__()
 
-        self.embed_dim = embed_dim
-        self.decoder_embed_dim = decoder_embed_dim
-        self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
+        self.embed_dim = config.image_size
+        self.decoder_embed_dim = 512
+        embed_dim = config.mae_config["embed_dim"]
+        self.patch_embed = PatchEmbed(config)
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -479,11 +463,12 @@ class MaskedAutoencoderViT(nn.Module):
             torch.zeros(1, num_patches + 1, embed_dim), requires_grad=False
         )  # fixed sin-cos embedding
 
+        # num_heads = 16
+        mlp_ratio = 4.0
+        norm_layer = nn.LayerNorm
+        depth = 24
         self.blocks = nn.ModuleList(
-            [
-                Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, qk_scale=None, norm_layer=norm_layer)
-                for i in range(depth)
-            ]
+            [Block(embed_dim, config.mae_config["num_heads"], config.mae_config["mlp_ratio"]) for i in range(depth)]
         )
         self.norm = norm_layer(embed_dim)
 
@@ -519,7 +504,7 @@ class MaskedAutoencoderViT(nn.Module):
 
     def patchify(self, imgs):
         """
-        imgs: (N, 3, H, W) x: (N, L, patch_size**2 *3)
+        imgs: (batch_size, 3, height, width) x: (N, L, patch_size**2 *3)
         """
         p = self.patch_embed.patch_size[0]
         assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
@@ -587,22 +572,8 @@ class MaskedAutoencoderViT(nn.Module):
         return loss, pred, mask
 
 
-def mae_vit_base_patch16_dec512d8b(image_size, vocab_size, max_2d_position_embeddings, **kwargs):
-    model = MaskedAutoencoderViT(
-        img_size=image_size,
-        patch_size=16,
-        embed_dim=768,
-        depth=12,
-        num_heads=12,
-        decoder_embed_dim=512,
-        decoder_depth=8,
-        decoder_num_heads=16,
-        mlp_ratio=4,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6),
-        vocab_size=vocab_size,
-        max_2d_position_embeddings=max_2d_position_embeddings,
-        **kwargs,
-    )
+def mae_vit_base_patch16_dec512d8b(config):
+    model = MaskedAutoencoderViT(config)
     return model
 
 
@@ -650,20 +621,17 @@ mae_vit_large_patch16 = mae_vit_large_patch16_dec512d8b  # decoder: 512 dim, 8 b
 mae_vit_huge_patch14 = mae_vit_huge_patch14_dec512d8b  # decoder: 512 dim, 8 blocks
 
 
-def mae_model(name, pretrained_weights, image_size, vocab_size, max_2d_position_embeddings, **kwargs):
-    mae_models = {
-        "mae_vit_base_patch16": mae_vit_base_patch16,
-        "mae_vit_large_patch16": mae_vit_large_patch16,
-        "mae_vit_huge_patch14": mae_vit_huge_patch14,
-    }
+def mae_model(config):
+    # mae_models = {
+    #     "mae_vit_base_patch16": mae_vit_base_patch16,
+    #     "mae_vit_large_patch16": mae_vit_large_patch16,
+    #     "mae_vit_huge_patch14": mae_vit_huge_patch14,
+    # }
+    #
+    # if name not in mae_models:
+    #     raise RuntimeError(f"{name} is not available")
 
-    if name not in mae_models:
-        raise RuntimeError(f"{name} is not available")
-
-    model = mae_models[name](
-        image_size=image_size, vocab_size=vocab_size, max_2d_position_embeddings=max_2d_position_embeddings
-    )
-    return model
+    return MaskedAutoencoderViT(config)
 
 
 def get_relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
@@ -1703,8 +1671,7 @@ class UdopCellEmbeddings(UdopPreTrainedModel):
 
 class UdopDualStack(UdopPreTrainedModel):
     """
-    Almost exact copy of transformers UDOPDualStack with the modification of passing `position_bias` in the forward
-    method
+    Almost exact copy of transformers T5Stack with the modification of passing `position_bias` in the forward method
     """
 
     def __init__(self, config, embed_tokens=None):
@@ -1735,13 +1702,7 @@ class UdopDualStack(UdopPreTrainedModel):
         self.init_weights()
 
         if not self.is_decoder:
-            self.vision_encoder = mae_model(
-                config.mae_version,
-                config.mae_checkpoint,
-                config.image_size,
-                config.vocab_size,
-                config.max_2d_position_embeddings,
-            )
+            self.vision_encoder = mae_model(config)
         else:
             self.vision_fc = nn.Linear(config.d_model, config.d_model)
             self.vision_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
@@ -2476,13 +2437,7 @@ class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
         self.device_map = None
         self.model_dim = config.d_model
 
-        mae_model_tmp = mae_model(
-            config.mae_version,
-            config.mae_checkpoint,
-            config.image_size,
-            config.vocab_size,
-            config.max_2d_position_embeddings,
-        )
+        mae_model_tmp = mae_model(config)
 
         self.patch_embed = mae_model_tmp.patch_embed
 
