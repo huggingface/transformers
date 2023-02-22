@@ -587,7 +587,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         output_shape = input_shape + (hidden_states.size(-1),)
 
-        presents = () if use_cache else None
+        presents = () if use_cache and not self.gradient_checkpointing else None
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
