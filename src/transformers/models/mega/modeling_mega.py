@@ -119,26 +119,25 @@ class MultiHeadEMA(nn.Module):
 
     def __init__(
         self,
-        embed_dim,
-        ndim=2,
-        bidirectional=False,
-        truncation=None,
+        config:MegaConfig
     ):
         super().__init__()
 
-        self.embed_dim = embed_dim
-        self.ndim = ndim
-        self.bidirectional = bidirectional
-        self.truncation = truncation
+        self.config = config
+
+        self.embed_dim = config.hidden_size
+        self.ndim = config.ema_projection_size
+        self.bidirectional = config.bidirectional
+        self.truncation = config.truncation
         self.scale = math.sqrt(1.0 / self.ndim)
 
-        kernel_dim = 2 * embed_dim if self.bidirectional else embed_dim
-        self.delta = nn.Parameter(torch.Tensor(kernel_dim, ndim, 1))
-        self.alpha = nn.Parameter(torch.Tensor(kernel_dim, ndim, 1))
+        kernel_dim = 2 * config.hidden_size if self.bidirectional else config.hidden_size
+        self.delta = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
+        self.alpha = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
         # renamed gamma and beta to g_param and b_param respectively to avoid HF renaming things
-        self.b_param = nn.Parameter(torch.Tensor(kernel_dim, ndim, 1))
-        self.g_param = nn.Parameter(torch.Tensor(kernel_dim, ndim))
-        self.omega = nn.Parameter(torch.Tensor(embed_dim))
+        self.b_param = nn.Parameter(torch.Tensor(kernel_dim, self.ndim, 1))
+        self.g_param = nn.Parameter(torch.Tensor(kernel_dim, self.ndim))
+        self.omega = nn.Parameter(torch.Tensor(config.hidden_size))
         self._kernel = None
         self._coeffs = None
 
@@ -147,17 +146,17 @@ class MultiHeadEMA(nn.Module):
     def reset_parameters(self):
         with torch.no_grad():
             # delta & alpha
-            nn.init.normal_(self.delta, mean=0.0, std=0.2)
-            nn.init.normal_(self.alpha, mean=0.0, std=0.2)
+            nn.init.normal_(self.delta, mean=0.0, std=self.config.ema_delta_alpha_range)
+            nn.init.normal_(self.alpha, mean=0.0, std=self.config.ema_delta_alpha_range)
             # beta [1, -1, 1, -1, ...] seems more stable.
             val = torch.ones(self.ndim, 1)
             if self.ndim > 1:
                 idx = torch.tensor(list(range(1, self.ndim, 2)))
                 val.index_fill_(0, idx, -1.0)
-            self.b_param.normal_(mean=0.0, std=0.02).add_(val)
+            self.b_param.normal_(mean=0.0, std=self.config.ema_beta_range).add_(val)
             # gamma & omega
-            nn.init.normal_(self.g_param, mean=0.0, std=1.0)
-            nn.init.normal_(self.omega, mean=0.0, std=1.0)
+            nn.init.normal_(self.g_param, mean=0.0, std=self.config.ema_gamma_omega_range)
+            nn.init.normal_(self.omega, mean=0.0, std=self.config.ema_gamma_omega_range)
 
     def _calc_coeffs(self):
         self._coeffs = None
@@ -345,9 +344,9 @@ class GatedCrossAttention(nn.Module):
         self.h_proj = nn.Linear(self.config.hidden_size, self.config.hidden_size)
 
         if self.config.relative_positional_bias == 'simple':
-            self.rel_pos_bias = SimpleRelativePositionalBias(self.config.max_positions)
+            self.rel_pos_bias = SimpleRelativePositionalBias(config)
         elif self.config.relative_positional_bias == 'rotary':
-            self.rel_pos_bias = RotaryRelativePositionalBias(self.config.shared_representation_size, self.config.max_positions)
+            self.rel_pos_bias = RotaryRelativePositionalBias(config)
         else:
             raise ValueError('unknown relative position bias: {}'.format(self.config.relative_positional_bias))
 
@@ -356,7 +355,7 @@ class GatedCrossAttention(nn.Module):
 
 
     def reset_parameters(self):
-        std = 0.02
+        std = self.config.initializer_range
         nn.init.normal_(self.k_proj.weight, mean=0.0, std=std)
         nn.init.constant_(self.k_proj.bias, 0.0)
 
@@ -555,14 +554,15 @@ class GatedCrossAttention(nn.Module):
 # copied without modification from original Mega code
 class SimpleRelativePositionalBias(nn.Module):
 
-    def __init__(self, max_positions):
+    def __init__(self, config:MegaConfig):
         super().__init__()
-        self.max_positions = max_positions
-        self.rel_pos_bias = nn.Parameter(torch.Tensor(2 * max_positions - 1))
+        self.config = config
+        self.max_positions = config.max_positions
+        self.rel_pos_bias = nn.Parameter(torch.Tensor(2 * config.max_positions - 1))
         self.reset_parameters()
 
     def reset_parameters(self):
-        std = 0.02
+        std = self.config.initializer_range
         nn.init.normal_(self.rel_pos_bias, mean=0.0, std=std)
 
     def forward(self, seq_len):
@@ -585,19 +585,20 @@ class SimpleRelativePositionalBias(nn.Module):
         return t
 
 class RotaryRelativePositionalBias(nn.Module):
-    def __init__(self, embed_dim, max_positions):
+    def __init__(self, config:MegaConfig):
         super().__init__()
-        assert embed_dim % 2 == 0
-        self.embed_dim = embed_dim
-        self.max_positions = max_positions
-        self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(max_positions, embed_dim)
-        self.alpha = nn.Parameter(torch.Tensor(1, embed_dim))
-        self.b_param = nn.Parameter(torch.Tensor(1, embed_dim))
+        assert config.hidden_size % 2 == 0
+        self.config = config
+        self.embed_dim = config.shared_representation_size
+        self.max_positions = config.max_positions
+        self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(config.max_positions, self.embed_dim)
+        self.alpha = nn.Parameter(torch.Tensor(1, self.embed_dim))
+        self.b_param = nn.Parameter(torch.Tensor(1, self.embed_dim))
         self.register_buffer("_float_tensor", torch.FloatTensor(1))
         self.reset_parameters()
 
     def reset_parameters(self):
-        std = 0.02
+        std = self.config.initializer_range
         nn.init.normal_(self.alpha, mean=0.0, std=std)
         nn.init.normal_(self.b_param, mean=0.0, std=std)
 
@@ -812,10 +813,7 @@ class MovingAverageGatedAttention(nn.Module):
         self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__)
 
         self.norm = SequenceNorm(self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine)
-        self.move = MultiHeadEMA(self.config.hidden_size, 
-                                ndim=self.config.ema_projection_size, 
-                                bidirectional=self.config.bidirectional, 
-                                truncation=self.config.truncation)
+        self.move = MultiHeadEMA(config)
         
         self.v_proj = nn.Linear(self.config.hidden_size, self.config.intermediate_size)
         self.mx_proj = nn.Linear(self.config.hidden_size, self.config.shared_representation_size + self.config.intermediate_size + 2 * self.config.hidden_size)
@@ -827,9 +825,9 @@ class MovingAverageGatedAttention(nn.Module):
 
         max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size 
         if self.config.relative_positional_bias == 'simple':
-            self.rel_pos_bias = SimpleRelativePositionalBias(max_positions)
+            self.rel_pos_bias = SimpleRelativePositionalBias(config)
         elif self.config.relative_positional_bias == 'rotary':
-            self.rel_pos_bias = RotaryRelativePositionalBias(self.config.shared_representation_size, max_positions)
+            self.rel_pos_bias = RotaryRelativePositionalBias(config)
         else:
             raise ValueError(f"Unknown relative positional bias: {self.config.relative_positional_bias}")
 
@@ -840,7 +838,7 @@ class MovingAverageGatedAttention(nn.Module):
 
     def reset_parameters(self):
         # possibly remove this in favor of automated initialization by HF classes
-        std = 0.02
+        std = self.config.initializer_range
         mean = 0.0
         nn.init.normal_(self.v_proj.weight, mean=mean, std=std)
         nn.init.constant_(self.v_proj.bias, 0.0)
@@ -1141,7 +1139,7 @@ class NormalizedFeedForwardNetwork(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        std = 0.02
+        std = self.config.initializer_range
         nn.init.normal_(self.fc1.weight, mean=0.0, std=std)
         nn.init.constant_(self.fc1.bias, 0.0)
 
@@ -1165,7 +1163,6 @@ class NormalizedFeedForwardNetwork(nn.Module):
 
         return x
 
-# NOTE: ROBERTA STUFF BEGINS HERE !!!
 class MegaEmbeddings(nn.Module):
     """
     Mega's basic implementation does not incorporate token type embeddings, so this is
@@ -1519,6 +1516,8 @@ class MegaModel(MegaPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        batch_size, sequence_length = input_shape
+
         # if using cache, make sure we have a tuple of tuples which matches the length of our hidden layers
         if (past_key_values is not None) and (len(past_key_values) != self.config.num_hidden_layers):
             raise ValueError(f"Received past key/value cache with size mismatch; expected {self.config.num_hidden_layers}, received {len(past_key_values)}")
@@ -1540,7 +1539,7 @@ class MegaModel(MegaPreTrainedModel):
             encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         # pass through mega layers
-        all_hidden_states = (hidden_states.transpose(0, 1),) if output_hidden_states else None
+        all_hidden_states = (embedding_output,) if output_hidden_states else None
         all_self_attentions = () if output_attentions else None 
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         next_decoder_cache = () if use_cache else None
@@ -1560,7 +1559,7 @@ class MegaModel(MegaPreTrainedModel):
             if output_hidden_states:
                 # store layer-wise hidden states in the way that the user expects
                 # (seq len X batch X embed dim) --> (batch X seq len X embed dim)
-                all_hidden_states += (hidden_states.transpose(0, 1), )
+                all_hidden_states += (hidden_states.view(batch_size, sequence_length, self.config.hidden_size), )
             if output_attentions:
                 self_attn_weights = mega_outputs[1]
                 all_self_attentions += (self_attn_weights, )
@@ -1572,7 +1571,7 @@ class MegaModel(MegaPreTrainedModel):
                 next_decoder_cache += (updated_cache, )
         
         # transpose final hidden states
-        hidden_states = hidden_states.transpose(0, 1)
+        hidden_states = hidden_states.view(batch_size, sequence_length, self.config.hidden_size)
 
         # optional pooling layer
         pooled_output = self.pooler(hidden_states) if self.pooler is not None else None

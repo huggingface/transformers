@@ -151,9 +151,11 @@ Decoder
   * Renamed the parameters in the Mega modules and original checkpoint from `beta -> b_param` and `gamma -> g_param`
 * ~~Rewrite `convert_mega_original_pytorch_checkpoint_to_pytorch` to save the pretrained wikitext MLM~~
 * Rewrite tests in `tests/models/mega/test_modeling_mega`
-  * To keep:
-    * shape testing (all classes)
-    * value/slice testing: MLM (updated) and no head (updated)
+  * To fix:
+    * ~~initialization needs to be able to zero everything~~ (fixed by passing config to subclasses and allowing config to override standard deviation in `reset_parameters`)
+    * ~~equivalence issue~~ (fixed by switching order of tuple entries)
+    * ~~grad testing in hiddens/attentions~~ (fixed by adding embedding output directly instead of transposing - also switched from transpose to view in other hidden states)
+    * ~~generation stuff~~ (passes if bidirectional is False; test bidirectionality separately)
   * To delete:
     * Slice testing for classification head (done)
     * LM head ignore keys (done)

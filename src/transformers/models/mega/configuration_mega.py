@@ -128,6 +128,9 @@ class MegaConfig(PretrainedConfig):
         add_token_type_embeddings=False,
         type_vocab_size=2, # if add_token_type_embeddings is True, this will be used to construct the token type embeddings
         initializer_range=0.02,
+        ema_delta_alpha_range=0.2,
+        ema_beta_range=0.02,
+        ema_gamma_omega_range=1.0,
         layer_norm_eps=1e-12,
         pad_token_id=1,
         bos_token_id=0,
@@ -167,6 +170,9 @@ class MegaConfig(PretrainedConfig):
         self.add_token_type_embeddings = add_token_type_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
+        self.ema_delta_alpha_range = ema_delta_alpha_range # 0.2
+        self.ema_beta_range = ema_beta_range #0.02
+        self.ema_gamma_omega_range = ema_gamma_omega_range #1.0
         self.layer_norm_eps = layer_norm_eps
         self.relative_positional_bias = relative_positional_bias
         self.use_cache = use_cache
