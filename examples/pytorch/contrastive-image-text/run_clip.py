@@ -397,7 +397,7 @@ def main():
     # Preprocessing the datasets.
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples):
-        captions = [caption for caption in examples[caption_column]]
+        captions = list(examples[caption_column])
         text_inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True)
         examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask

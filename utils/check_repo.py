@@ -335,7 +335,7 @@ def check_model_list():
     # Get the models from the directory structure of `src/transformers/models/`
     models = [model for model in dir(transformers.models) if not model.startswith("__")]
 
-    missing_models = sorted(list(set(_models).difference(models)))
+    missing_models = sorted(set(_models).difference(models))
     if missing_models:
         raise Exception(
             f"The following models should be included in {models_dir}/__init__.py: {','.join(missing_models)}."
@@ -547,7 +547,7 @@ def get_all_auto_configured_models():
         for attr_name in dir(transformers.models.auto.modeling_flax_auto):
             if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_flax_auto, attr_name)))
-    return [cls for cls in result]
+    return list(result)
 
 
 def ignore_unautoclassed(model_name):

@@ -1081,7 +1081,7 @@ class Trainer:
                     skipped = 0
                     for module in opt_model.modules():
                         if isinstance(module, nn.Embedding):
-                            skipped += sum(dict((p.data_ptr(), p.numel()) for p in module.parameters()).values())
+                            skipped += sum({p.data_ptr(): p.numel() for p in module.parameters()}.values())
                             print(f"skipped {module}: {skipped/2**20}M params")
                             manager.register_module_override(module, "weight", {"optim_bits": 32})
                             logger.debug(f"bitsandbytes: will optimize {module} in fp32")
@@ -2564,12 +2564,12 @@ class Trainer:
         elif isinstance(data, (tuple, list)):
             return type(data)(self._prepare_input(v) for v in data)
         elif isinstance(data, torch.Tensor):
-            kwargs = dict(device=self.args.device)
+            kwargs = {"device": self.args.device}
             if self.deepspeed and data.dtype != torch.int64:
                 # NLP models inputs are int64 and those get adjusted to the right dtype of the
                 # embedding. Other models such as wav2vec2's inputs are already float and thus
                 # may need special handling to match the dtypes of the model
-                kwargs.update(dict(dtype=self.args.hf_deepspeed_config.dtype()))
+                kwargs.update({"dtype": self.args.hf_deepspeed_config.dtype()})
             return data.to(**kwargs)
         return data
 
