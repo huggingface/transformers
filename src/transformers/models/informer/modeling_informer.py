@@ -1426,8 +1426,8 @@ INFORMER_INPUTS_DOCSTRING = r"""
 
 class InformerEncoder(InformerPreTrainedModel):
     """
-    Informer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`InformerEncoderLayer`].
+    Informer encoder consisting of *config.encoder_layers* self attention layers with distillation layers. Each
+    attention layer is an [`InformerEncoderLayer`].
 
     Args:
         config: InformerConfig

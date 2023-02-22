@@ -14,7 +14,7 @@
 # limitations under the License.
 """Informer model configuration"""
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -145,7 +145,7 @@ class InformerConfig(PretrainedConfig):
         loss: str = "nll",
         input_size: int = 1,
         lags_sequence: List[int] = None,
-        scaling: bool = True,
+        scaling: Optional[Union[str, bool]] = "mean",
         num_dynamic_real_features: int = 0,
         num_static_real_features: int = 0,
         num_static_categorical_features: int = 0,
