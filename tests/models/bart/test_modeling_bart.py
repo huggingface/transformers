@@ -939,7 +939,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     def test_xsum_config_generation_params(self):
         config = BartConfig.from_pretrained("facebook/bart-large-xsum")
-        expected_params = dict(num_beams=6, do_sample=False, early_stopping=True, length_penalty=1.0)
+        expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": 1.0}
         config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 

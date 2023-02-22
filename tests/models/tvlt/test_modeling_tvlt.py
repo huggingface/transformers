@@ -581,7 +581,7 @@ class TvltModelIntegrationTest(unittest.TestCase):
         audio = prepare_audio()
         video_inputs = image_processor(video, return_tensors="pt").to(torch_device)
         audio_inputs = audio_feature_extractor(audio, return_tensors="pt").to(torch_device)
-        inputs = dict()
+        inputs = {}
         inputs.update(video_inputs)
         inputs.update(audio_inputs)
 
@@ -590,7 +590,7 @@ class TvltModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the logits
-        expected_last_hidden_state_slice = torch.tensor([[-0.0186, -0.0691], [0.0242, -0.0398]])
+        expected_last_hidden_state_slice = torch.tensor([[-0.0186, -0.0691], [0.0242, -0.0398]], device=torch_device)
         self.assertTrue(
             torch.allclose(outputs.last_hidden_state[:, :2, :2], expected_last_hidden_state_slice, atol=1e-4)
         )
@@ -606,7 +606,7 @@ class TvltModelIntegrationTest(unittest.TestCase):
         video_mixed_inputs = image_processor(video_mixed, is_mixed=True, return_tensors="pt").to(torch_device)
         audio_inputs = audio_feature_extractor(audio, return_tensors="pt", mask_audio=True).to(torch_device)
         labels = torch.tensor([[0.0]], device=torch_device)
-        inputs = dict()
+        inputs = {}
         inputs.update(video_inputs)
         inputs.update(video_mixed_inputs)
         inputs.update(audio_inputs)

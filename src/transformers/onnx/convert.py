@@ -145,7 +145,7 @@ def export_pytorch(
             device = torch.device(device)
             if device.type == "cuda" and torch.cuda.is_available():
                 model.to(device)
-                model_inputs_device = dict()
+                model_inputs_device = {}
                 for k, v in model_inputs.items():
                     if isinstance(v, Tuple):
                         model_inputs_device[k] = tuple(
