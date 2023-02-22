@@ -91,6 +91,24 @@ ALIGN_TEXT_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -106,9 +124,6 @@ ALIGN_VISION_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -118,7 +133,7 @@ ALIGN_VISION_INPUTS_DOCSTRING = r"""
 
 ALIGN_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+       input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
@@ -138,6 +153,24 @@ ALIGN_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
@@ -169,18 +202,11 @@ class ALIGNVisionModelOutput(ModelOutput):
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -227,8 +253,7 @@ class ALIGNOutput(ModelOutput):
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`ALIGNTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of
-            [`ALIGNVisionModel`].
+            The output of [`ALIGNVisionModel`].
         text_model_output(`BaseModelOutputWithPoolingAndCrossAttentions`):
             The output of the [`ALIGNTextModel`].
         vision_model_output(`BaseModelOutputWithPoolingAndNoAttention`):
@@ -696,7 +721,10 @@ class ALIGNTextModel(ALIGNPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -723,7 +751,10 @@ class ALIGNTextModel(ALIGNPreTrainedModel):
         return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -858,7 +889,10 @@ class ALIGNModel(ALIGNPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -889,7 +923,10 @@ class ALIGNModel(ALIGNPreTrainedModel):
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -904,7 +941,6 @@ class ALIGNModel(ALIGNPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
@@ -931,7 +967,6 @@ class ALIGNModel(ALIGNPreTrainedModel):
         >>> image_features = model.get_image_features(**inputs)
         ```"""
         # Use ALIGN model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -939,7 +974,6 @@ class ALIGNModel(ALIGNPreTrainedModel):
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -955,7 +989,10 @@ class ALIGNModel(ALIGNPreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -994,7 +1031,6 @@ class ALIGNModel(ALIGNPreTrainedModel):
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1002,7 +1038,10 @@ class ALIGNModel(ALIGNPreTrainedModel):
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

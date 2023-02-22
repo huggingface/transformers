@@ -47,7 +47,7 @@ def preprocess(image):
     return image
 
 
-def get_align_config(model_name):
+def get_align_config():
     vision_config = EfficientNetConfig.from_pretrained("google/efficientnet-b7")
     vision_config.image_size = 289
     vision_config.hidden_dim = 640
@@ -135,7 +135,7 @@ def rename_keys(original_param_names):
     key_mapping = {}
     for item in rename_keys:
         if item[0] in original_param_names:
-            key_mapping[item[0]] = "vision_model.encoder." + item[1]
+            key_mapping[item[0]] = "vision_model." + item[1]
 
     # BERT text encoder
     rename_keys = []
@@ -227,32 +227,55 @@ def rename_keys(original_param_names):
             (f"{old}/encoder/layer_._{i}/output/LayerNorm/beta:0", f"{new}.encoder.layer.{i}.output.LayerNorm.bias")
         )
 
+    rename_keys.append((f"{old}/embeddings/word_embeddings/weight:0", f"{new}.embeddings.word_embeddings.weight"))
+    rename_keys.append(
+        (f"{old}/embeddings/position_embeddings/embeddings:0", f"{new}.embeddings.position_embeddings.weight")
+    )
+    rename_keys.append(
+        (f"{old}/embeddings/token_type_embeddings/embeddings:0", f"{new}.embeddings.token_type_embeddings.weight")
+    )
+    rename_keys.append((f"{old}/embeddings/LayerNorm/gamma:0", f"{new}.embeddings.LayerNorm.weight"))
+    rename_keys.append((f"{old}/embeddings/LayerNorm/beta:0", f"{new}.embeddings.LayerNorm.bias"))
+
     rename_keys.append((f"{old}/pooler/dense/kernel:0", f"{new}.pooler.dense.weight"))
     rename_keys.append((f"{old}/pooler/dense/bias:0", f"{new}.pooler.dense.bias"))
     rename_keys.append(("dense/kernel:0", "text_projection.weight"))
     rename_keys.append(("dense/bias:0", "text_projection.bias"))
+    rename_keys.append(("dense/bias:0", "text_projection.bias"))
+    rename_keys.append(("temperature:0", "temperature"))
 
+    for item in rename_keys:
+        if item[0] in original_param_names:
+            key_mapping[item[0]] = item[1]
     return key_mapping
 
 
 def replace_params(hf_params, tf_params, key_mapping):
     for key, value in tf_params.items():
-        if "normalization" in key:
+        if "normalization" or "total" in key:
             continue
 
         hf_key = key_mapping[key]
         if "_conv" in key and "kernel" in key:
             new_hf_value = torch.from_numpy(value).permute(3, 2, 0, 1)
+        elif "embeddings" in key:
+            new_hf_value = torch.from_numpy(value)
         elif "depthwise_kernel" in key:
             new_hf_value = torch.from_numpy(value).permute(2, 3, 0, 1)
         elif "kernel" in key:
             new_hf_value = torch.from_numpy(np.transpose(value))
+        elif "temperature" in key:
+            new_hf_value = value
+        elif "bn/gamma" or "bn/beta" in key:
+            new_hf_value = torch.from_numpy(np.transpose(value)).squeeze()
         else:
             new_hf_value = torch.from_numpy(value)
 
         # Replace HF parameters with original TF model parameters
-        assert hf_params[hf_key].shape == new_hf_value.shape
-        hf_params[hf_key].copy_(new_hf_value)
+        if "temperature" not in key:
+            hf_params[hf_key].copy_(new_hf_value)
+        else:
+            hf_params[hf_key] = new_hf_value
 
 
 @torch.no_grad()
@@ -286,7 +309,7 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
 
     # Initialize processor
     processor = get_processor()
-    inputs = processor(images=prepare_img(), texts="A picture of a cat", return_tensors="pt")
+    inputs = processor(images=prepare_img(), text="A picture of a cat", return_tensors="pt")
 
     # HF model inference
     hf_model.eval()
@@ -305,6 +328,9 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
 
     image_features = original_model.image_encoder(image, training=False)
     text_features = original_model.text_encoder(text, training=False)
+
+    image_features = tf.nn.l2_normalize(image_features, axis=-1)
+    text_features = tf.nn.l2_normalize(text_features, axis=-1)
 
     # Check whether original and HF model outputs match  -> np.allclose
     assert np.allclose(image_features, hf_image_features, atol=1e-3), "The predicted image features are not the same."
