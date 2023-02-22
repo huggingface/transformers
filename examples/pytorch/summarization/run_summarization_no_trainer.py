@@ -164,10 +164,9 @@ def parse_args():
     parser.add_argument(
         "--max_length",
         type=int,
-        default=128,
+        default=None,
         help=(
-            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
+            "The maximum target length to use when predicting with the generate method."
         ),
     )
     parser.add_argument(
@@ -671,7 +670,7 @@ def main():
             args.val_max_target_length = args.max_target_length
 
         gen_kwargs = {
-            "max_length": args.val_max_target_length if args is not None else config.max_length,
+            "max_length": args.max_length if args.max_length is not None else args.val_max_target_length,
             "num_beams": args.num_beams,
         }
         for step, batch in enumerate(eval_dataloader):
