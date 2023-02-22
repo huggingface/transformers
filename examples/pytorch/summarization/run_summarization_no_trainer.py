@@ -165,9 +165,7 @@ def parse_args():
         "--max_length",
         type=int,
         default=None,
-        help=(
-            "The maximum target length to use when predicting with the generate method."
-        ),
+        help=("The maximum target length to use when predicting with the generate method."),
     )
     parser.add_argument(
         "--num_beams",
