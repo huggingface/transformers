@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Mapping
 import numpy as np
 import torch
 
-from ...utils import is_cython_available
+from ...utils import is_cython_available, requires_backends
 
 
 if is_cython_available():
@@ -24,8 +24,7 @@ def convert_to_single_emb(x, offset: int = 512):
 
 
 def preprocess_item(item, keep_features=True):
-    if not is_cython_available():
-        raise ImportError("Graphormer preprocessing needs Cython (pyximport)")
+    requires_backends(preprocess_item, ["cython"])
 
     if keep_features and "edge_attr" in item.keys():  # edge_attr
         edge_attr = np.asarray(item["edge_attr"], dtype=np.int64)
