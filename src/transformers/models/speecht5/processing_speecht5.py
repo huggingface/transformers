@@ -121,7 +121,7 @@ class SpeechT5Processor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
-        input_features = kwargs.pop("input_features", None)
+        input_features = kwargs.pop("input_values", None)
         labels = kwargs.pop("labels", None)
 
         if len(args) > 0:
