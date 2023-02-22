@@ -123,7 +123,7 @@ def get_params(params, from_head_prefix=None):
     appends batch normalization statistics if present"""
 
     # If Both parameters and batch normalization statistics are present
-    if "params" in params and "batch_stats" in params:
+    if "batch_stats" in params:
         # Extract only parameters for the specified head prefix (if specified) and add batch statistics
         if from_head_prefix is not None:
             extracted_params = flatten_dict(unfreeze(params["params"][from_head_prefix]))
