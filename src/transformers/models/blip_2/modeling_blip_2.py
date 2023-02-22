@@ -1229,10 +1229,20 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
     def _preprocess_accelerate(self):
         r"""
-        Some pre-processing hacks to make the model `accelerate` compatible.
+        Some pre-processing hacks to make the model `accelerate` compatible. Check
+        https://github.com/huggingface/transformers/pull/21707 for more details.
         """
+        hf_device_map = self.hf_device_map
+
+        if len(hf_device_map) > 1 and "language_model" not in hf_device_map and torch.cuda.device_count() > 1:
+            # warn users about unexpected behavior when using multi-GPU + BLIP-2 + `accelerate`.
+            logger.warning(
+                "The `language_model` is not in the `hf_device_map` dictionary and you are running your script in a multi-GPU environment. "
+                " this may lead to unexpected behavior when using `accelerate`. Please pass a `device_map` that contains `language_model` to remove this warning"
+            )
+
         if hasattr(self.language_model, "_hf_hook"):
-            self.language_model._hf_hook.io_same_device = True # For `generate` compatibility
+            self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
 
     @add_start_docstrings_to_model_forward(BLIP_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Blip2ForConditionalGenerationModelOutput, config_class=Blip2VisionConfig)
@@ -1307,9 +1317,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         >>> print(generated_text)
         two
         ```"""
-        # preprocess for `accelerate`
-        self._preprocess_accelerate()
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # step 1: forward the images through the vision encoder,

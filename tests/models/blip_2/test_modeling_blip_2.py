@@ -895,8 +895,16 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
     @require_torch_multi_gpu
     def test_inference_t5_multi_gpu(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
+        device_map = device_map = {
+            "query_tokens": 0,
+            "vision_model": 0,
+            "language_model": 1,
+            "language_projection": 0,
+            "qformer": 0,
+        }
+
         model = Blip2ForConditionalGeneration.from_pretrained(
-            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16, device_map="balanced"
+            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16, device_map=device_map
         )
 
         # prepare image
