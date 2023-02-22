@@ -89,6 +89,7 @@ class InformerModelTester:
     def get_config(self):
         return InformerConfig(
             prediction_length=self.prediction_length,
+            d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
             encoder_attention_heads=self.num_attention_heads,
@@ -154,7 +155,7 @@ class InformerModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = InformerEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        transformer_inputs, _, _ = model.create_network_inputs(**inputs_dict)
+        transformer_inputs, _, _, _ = model.create_network_inputs(**inputs_dict)
         enc_input = transformer_inputs[:, : config.context_length, ...]
         dec_input = transformer_inputs[:, config.context_length :, ...]
 
@@ -372,7 +373,7 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
             )
             out_len = len(outputs)
 
-            correct_outlen = 6
+            correct_outlen = 7
 
             if "last_hidden_state" in outputs:
                 correct_outlen += 1
