@@ -1028,7 +1028,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
-        ("cython", (is_cython_available, CYTHON_IMPORT_ERROR))
+        ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
     ]
 )
 
