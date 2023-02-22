@@ -54,8 +54,9 @@ class InformerConfig(PretrainedConfig):
         input_size (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
-        scaling (`bool`, *optional* defaults to `True`):
-            Whether to scale the input targets.
+        scaling (`string` or `bool`, *optional* defaults to `"mean"`):
+            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
+            scaler is set to "mean".
         lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
             The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4,
             5, 6, 7]`.
@@ -75,6 +76,8 @@ class InformerConfig(PretrainedConfig):
             The dimension of the embedding for each of the static categorical features. Should be a list of integers,
             having the same length as `num_static_categorical_features`. Cannot be `None` if
             `num_static_categorical_features` is > 0.
+        d_model (`int`, *optional*, defaults to 64):
+            Dimensionality of the transformer layers.
         encoder_layers (`int`, *optional*, defaults to 2):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 2):
@@ -119,7 +122,7 @@ class InformerConfig(PretrainedConfig):
     >>> from transformers import InformerConfig, InformerModel
 
     >>> # Initializing a default Informer configuration
-    >>> configuration = InformerConfig()
+    >>> configuration = InformerConfig(prediction_length=7)
 
     >>> # Randomly initializing a model (with random weights) from the configuration
     >>> model = InformerModel(configuration)
@@ -149,6 +152,7 @@ class InformerConfig(PretrainedConfig):
         num_time_features: int = 0,
         cardinality: Optional[List[int]] = None,
         embedding_dimension: Optional[List[int]] = None,
+        d_model: int = 64,
         encoder_ffn_dim: int = 32,
         decoder_ffn_dim: int = 32,
         encoder_attention_heads: int = 2,
@@ -207,7 +211,8 @@ class InformerConfig(PretrainedConfig):
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
-        self.d_model = input_size * len(self.lags_sequence) + self._number_of_features
+        self.feature_size = input_size * len(self.lags_sequence) + self._number_of_features
+        self.d_model = d_model
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -243,5 +248,5 @@ class InformerConfig(PretrainedConfig):
             + self.num_dynamic_real_features
             + self.num_time_features
             + self.num_static_real_features
-            + self.input_size  # the log(scale)
+            + self.input_size * 2  # the log1p(abs(loc)) and log(scale) features
         )

@@ -263,6 +263,40 @@ class FeatureEmbedder(nn.Module):
         )
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.StdScaler
+class StdScaler(nn.Module):
+    """
+    Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
+    by subtracting from the mean and dividing by the standard deviation.
+
+    Args:
+        dim (`int`):
+            Dimension along which to calculate the mean and standard deviation.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        minimum_scale (`float`, *optional*, defaults to 1e-5):
+            Default scale that is used for elements that are constantly zero along dimension `dim`.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-5):
+        super().__init__()
+        if not dim > 0:
+            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
+        self.dim = dim
+        self.keepdim = keepdim
+        self.minimum_scale = minimum_scale
+
+    @torch.no_grad()
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        denominator = weights.sum(self.dim, keepdim=self.keepdim)
+        denominator = denominator.clamp_min(1.0)
+        loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
+
+        variance = (((data - loc) * weights) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        scale = torch.sqrt(variance + self.minimum_scale)
+        return (data - loc) / scale, loc, scale
+
+
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.MeanScaler
 class MeanScaler(nn.Module):
     """
@@ -408,6 +442,51 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     inverted_mask = 1.0 - expanded_mask
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+
+
+# Copied from transformers.models.marian.modeling_marian.MarianSinusoidalPositionalEmbedding with Marian->TimeSeries
+class TimeSeriesSinusoidalPositionalEmbedding(nn.Embedding):
+    """This module produces sinusoidal positional embeddings of any length."""
+
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
+        super().__init__(num_positions, embedding_dim)
+        self.weight = self._init_weight(self.weight)
+
+    @staticmethod
+    def _init_weight(out: nn.Parameter) -> nn.Parameter:
+        """
+        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
+        the 2nd half of the vector. [dim // 2:]
+        """
+        n_pos, dim = out.shape
+        position_enc = np.array(
+            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+        )
+        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
+        sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
+        out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
+        out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
+        out.detach_()
+        return out
+
+    @torch.no_grad()
+    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0) -> torch.Tensor:
+        """`input_ids_shape` is expected to be [bsz x seqlen]."""
+        bsz, seq_len = input_ids_shape[:2]
+        positions = torch.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+        )
+        return super().forward(positions)
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.ValueEmbedding
+class ValueEmbedding(nn.Module):
+    def __init__(self, feature_size, d_model):
+        super(ValueEmbedding, self).__init__()
+        self.value_projection = nn.Linear(in_features=feature_size, out_features=d_model, bias=False)
+
+    def forward(self, x):
+        return self.value_projection(x)
 
 
 @dataclass
@@ -1184,7 +1263,7 @@ INFORMER_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`InformerConfig`]):
+        config ([`TimeSeriesTransformerConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1192,28 +1271,41 @@ INFORMER_START_DOCSTRING = r"""
 
 INFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Past values of the time series, that serve as context in order to predict the future. These values may
-            contain lags, i.e. additional values from the past which are added in order to serve as "extra context".
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
+            Past values of the time series, that serve as context in order to predict the future. The sequence size of
+            this tensor must be larger than the `context_length` of the model, since the model will use the larger size
+            to construct lag features, i.e. additional values from the past which are added in order to serve as "extra
+            context".
+
+            The `sequence_length` here is equal to `config.context_length` + `max(config.lags_sequence)`, which if no
+            `lags_sequence` is configured, is equal to `config.context_length` + 7 (as by default, the largest
+            look-back index in `config.lags_sequence` is 7). The property `_past_length` returns the actual length of
+            the past.
+
             The `past_values` is what the Transformer encoder gets as input (with optional additional features, such as
-            `static_categorical_features`, `static_real_features`, `past_time_features`).
+            `static_categorical_features`, `static_real_features`, `past_time_features` and lags).
 
-            The sequence length here is equal to `context_length` + `max(config.lags_sequence)`.
+            Optionally, missing values need to be replaced with zeros and indicated via the `past_observed_mask`.
 
-            Missing values need to be replaced with zeros.
-        past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
-            Optional time features, which the model internally will add to `past_values`. These could be things like
+            For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number of
+            variates in the time series per time step.
+        past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`):
+            Required time features, which the model internally will add to `past_values`. These could be things like
             "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
             could also be so-called "age" features, which basically help the model know "at which point in life" a
             time-series is. Age features have small values for distant past time steps and increase monotonically the
-            more we approach the current time step.
+            more we approach the current time step. Holiday features are also a good example of time features.
 
             These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where
             the position encodings are learned from scratch internally as parameters of the model, the Time Series
-            Transformer requires to provide additional time features.
+            Transformer requires to provide additional time features. The Time Series Transformer only learns
+            additional embeddings for `static_categorical_features`.
 
-            The Informer only learns additional embeddings for `static_categorical_features`.
-        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Additional dynamic real covariates can be concatenated to this tensor, with the caveat that these features
+            must but known at prediction time.
+
+            The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`, *optional*):
             Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected in
             `[0, 1]`:
 
@@ -1233,26 +1325,37 @@ INFORMER_INPUTS_DOCSTRING = r"""
             Static real features are features which have the same value for all time steps (static over time).
 
             A typical example of a static real feature is promotion information.
-        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)`):
+        future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)` or `(batch_size, prediction_length, input_size)`, *optional*):
             Future values of the time series, that serve as labels for the model. The `future_values` is what the
-            Transformer needs to learn to output, given the `past_values`.
+            Transformer needs during training to learn to output, given the `past_values`.
+
+            The sequence length here is equal to `prediction_length`.
 
             See the demo notebook and code snippets for details.
 
-            Missing values need to be replaced with zeros.
-        future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
-            Optional time features, which the model internally will add to `future_values`. These could be things like
-            "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
-            could also be so-called "age" features, which basically help the model know "at which point in life" a
-            time-series is. Age features have small values for distant past time steps and increase monotonically the
-            more we approach the current time step.
+            Optionally, during training any missing values need to be replaced with zeros and indicated via the
+            `future_observed_mask`.
+
+            For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number of
+            variates in the time series per time step.
+        future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`):
+            Required time features for the prediction window, which the model internally will add to `future_values`.
+            These could be things like "month of year", "day of the month", etc. encoded as vectors (for instance as
+            Fourier features). These could also be so-called "age" features, which basically help the model know "at
+            which point in life" a time-series is. Age features have small values for distant past time steps and
+            increase monotonically the more we approach the current time step. Holiday features are also a good example
+            of time features.
 
             These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where
             the position encodings are learned from scratch internally as parameters of the model, the Time Series
-            Transformer requires to provide additional features.
+            Transformer requires to provide additional time features. The Time Series Transformer only learns
+            additional embeddings for `static_categorical_features`.
 
-            The Informer only learns additional embeddings for `static_categorical_features`.        
-        future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Additional dynamic real covariates can be concatenated to this tensor, with the caveat that these features
+            must but known at prediction time.
+
+            The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
+        future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`, *optional*):
             Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
             in `[0, 1]`:
 
@@ -1291,7 +1394,7 @@ INFORMER_INPUTS_DOCSTRING = r"""
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.        
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
@@ -1302,7 +1405,7 @@ INFORMER_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.        
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
@@ -1337,10 +1440,12 @@ class InformerEncoder(InformerPreTrainedModel):
         self.layerdrop = config.encoder_layerdrop
         self.gradient_checkpointing = False
 
-        embed_dim = config.d_model
-
+        self.value_embedding = ValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
+            config.context_length + config.prediction_length, config.d_model
+        )
         self.layers = nn.ModuleList([InformerEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(embed_dim)
+        self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         if config.distil is not None:
             self.conv_layers = nn.ModuleList([ConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)])
@@ -1394,8 +1499,10 @@ class InformerEncoder(InformerPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = inputs_embeds
-        hidden_states = self.layernorm_embedding(hidden_states)
+        hidden_states = self.value_embedding(inputs_embeds)
+        embed_pos = self.embed_positions(inputs_embeds.size())
+
+        hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
@@ -1478,11 +1585,15 @@ class InformerDecoder(InformerPreTrainedModel):
 
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
+        self.gradient_checkpointing = False
 
+        self.value_embedding = ValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
+            config.context_length + config.prediction_length, config.d_model
+        )
         self.layers = nn.ModuleList([InformerDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1598,9 +1709,9 @@ class InformerDecoder(InformerPreTrainedModel):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
-        hidden_states = inputs_embeds
-        hidden_states = self.layernorm_embedding(hidden_states)
-
+        hidden_states = self.value_embedding(inputs_embeds)
+        embed_pos = self.embed_positions(inputs_embeds.size(), past_key_values_length=self.config.context_length)
+        hidden_states = self.layernorm_embedding(hidden_states + embed_pos)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
@@ -1701,6 +1812,7 @@ class InformerDecoder(InformerPreTrainedModel):
     "The bare Informer Model outputting raw hidden-states without any specific head on top.",
     INFORMER_START_DOCSTRING,
 )
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER,time-series-transformer->informer
 class InformerModel(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
@@ -1791,12 +1903,12 @@ class InformerModel(InformerPreTrainedModel):
 
         context = past_values[:, -self.config.context_length :]
         observed_context = past_observed_mask[:, -self.config.context_length :]
-        _, scale = self.scaler(context, observed_context)
+        _, loc, scale = self.scaler(context, observed_context)
 
         inputs = (
-            torch.cat((past_values, future_values), dim=1) / scale
+            (torch.cat((past_values, future_values), dim=1) - loc) / scale
             if future_values is not None
-            else past_values / scale
+            else (past_values - loc) / scale
         )
 
         inputs_length = (
@@ -1817,11 +1929,13 @@ class InformerModel(InformerPreTrainedModel):
         )
 
         # static features
-        static_feat = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
+        log_abs_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
+        log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
+        static_feat = torch.cat((log_abs_loc, log_scale), dim=1)
+
         if static_real_features is not None:
             static_feat = torch.cat((static_real_features, static_feat), dim=1)
         if static_categorical_features is not None:
-            # embeddings
             embedded_cat = self.embedder(static_categorical_features)
             static_feat = torch.cat((embedded_cat, static_feat), dim=1)
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
@@ -1829,14 +1943,14 @@ class InformerModel(InformerPreTrainedModel):
         # all features
         features = torch.cat((expanded_static_feat, time_feat), dim=-1)
 
+        # lagged features
         lagged_sequence = self.get_lagged_subsequences(sequence=inputs, subsequences_length=subsequences_length)
-
         lags_shape = lagged_sequence.shape
         reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
 
         transformer_inputs = torch.cat((reshaped_lagged_sequence, features), dim=-1)
 
-        return transformer_inputs, scale, static_feat
+        return transformer_inputs, loc, scale, static_feat
 
     def get_encoder(self):
         return self.encoder
