@@ -204,7 +204,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
-            actual_keys = sorted(list(inputs.keys()))
+            actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -216,7 +216,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
-            actual_keys = sorted(list(inputs.keys()))
+            actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -260,7 +260,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
-            actual_keys = sorted(list(inputs.keys()))
+            actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -294,7 +294,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
                 "xpath_subs_seq",
                 "xpath_tags_seq",
             ]
-            actual_keys = sorted(list(inputs.keys()))
+            actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -331,7 +331,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
                 "xpath_subs_seq",
                 "xpath_tags_seq",
             ]
-            actual_keys = sorted(list(inputs.keys()))
+            actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -367,7 +367,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
-            actual_keys = sorted(list(inputs.keys()))
+            actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -390,7 +390,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
-            actual_keys = sorted(list(inputs.keys()))
+            actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -425,7 +425,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
-            actual_keys = sorted(list(inputs.keys()))
+            actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -444,7 +444,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
-            actual_keys = sorted(list(inputs.keys()))
+            actual_keys = sorted(inputs.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids

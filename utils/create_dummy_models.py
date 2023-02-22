@@ -413,10 +413,10 @@ def convert_processors(processors, tiny_config, output_folder, result):
             feature_extractors.append(processor.feature_extractor)
 
     # check the built processors have the unique type
-    num_types = len(set([x.__class__.__name__ for x in feature_extractors]))
+    num_types = len({x.__class__.__name__ for x in feature_extractors})
     if num_types >= 2:
         raise ValueError(f"`feature_extractors` should contain at most 1 type, but it contains {num_types} types!")
-    num_types = len(set([x.__class__.__name__.replace("Fast", "") for x in tokenizers]))
+    num_types = len({x.__class__.__name__.replace("Fast", "") for x in tokenizers})
     if num_types >= 2:
         raise ValueError(f"`tokenizers` should contain at most 1 tokenizer type, but it contains {num_types} types!")
 
@@ -712,7 +712,7 @@ def build_composite_models(config_class, output_dir):
                 shutil.copytree(decoder_processor_path, model_path, dirs_exist_ok=True)
 
             # fill `result`
-            result["processor"] = tuple(set([x.__name__ for x in encoder_processor + decoder_processor]))
+            result["processor"] = tuple({x.__name__ for x in encoder_processor + decoder_processor})
 
             result["pytorch"] = {model_class.__name__: {"model": model_class.__name__, "checkpoint": model_path}}
 

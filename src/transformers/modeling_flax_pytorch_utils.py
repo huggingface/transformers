@@ -76,7 +76,7 @@ def rename_key_and_reshape_tensor(
 
     def is_key_or_prefix_key_in_dict(key: Tuple[str]) -> bool:
         """Checks if `key` of `(prefix,) + key` is in random_flax_state_dict"""
-        return len(set(random_flax_state_dict) & set([key, (model_prefix,) + key])) > 0
+        return len(set(random_flax_state_dict) & {key, (model_prefix,) + key}) > 0
 
     # layer norm
     renamed_pt_tuple_key = pt_tuple_key[:-1] + ("scale",)
@@ -141,11 +141,11 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
 
     flax_state_dict = {}
 
-    load_model_with_head_into_base_model = (model_prefix not in flax_model_params) and (
-        model_prefix in set([k.split(".")[0] for k in pt_state_dict.keys()])
+    load_model_with_head_into_base_model = (model_prefix not in flax_model.params) and (
+        model_prefix in {k.split(".")[0] for k in pt_state_dict.keys()}
     )
-    load_base_model_into_model_with_head = (model_prefix in flax_model_params) and (
-        model_prefix not in set([k.split(".")[0] for k in pt_state_dict.keys()])
+    load_base_model_into_model_with_head = (model_prefix in flax_model.params) and (
+        model_prefix not in {k.split(".")[0] for k in pt_state_dict.keys()}
     )
 
     # Need to change some parameters name to match Flax names
@@ -214,21 +214,11 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
 
         model_prefix = flax_model.base_model_prefix
 
-        # use params dict if the model contains batch norm layers and then add batch_stats keys,values to dict
-        if "params" in flax_model.params and "batch_stats" in flax_model.params:
-            flax_model_params = flax_model.params["params"]
-
-            random_flax_state_dict = flatten_dict(flax_model_params)
-            random_flax_state_dict.update(flatten_dict(flax_model.params["batch_stats"]))
-        else:
-            flax_model_params = flax_model.params
-            random_flax_state_dict = flatten_dict(flax_model_params)
-
-        load_model_with_head_into_base_model = (model_prefix not in flax_model_params) and (
-            model_prefix in set([k.split(".")[0] for k in pt_state_dict.keys()])
+        load_model_with_head_into_base_model = (model_prefix not in flax_model.params) and (
+            model_prefix in {k.split(".")[0] for k in pt_state_dict.keys()}
         )
-        load_base_model_into_model_with_head = (model_prefix in flax_model_params) and (
-            model_prefix not in set([k.split(".")[0] for k in pt_state_dict.keys()])
+        load_base_model_into_model_with_head = (model_prefix in flax_model.params) and (
+            model_prefix not in {k.split(".")[0] for k in pt_state_dict.keys()}
         )
         # Need to change some parameters name to match Flax names
         for pt_key, pt_tensor in pt_state_dict.items():
@@ -330,10 +320,10 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     pt_model_dict = pt_model.state_dict()
 
     load_model_with_head_into_base_model = (pt_model.base_model_prefix in flax_state) and (
-        pt_model.base_model_prefix not in set([k.split(".")[0] for k in pt_model_dict.keys()])
+        pt_model.base_model_prefix not in {k.split(".")[0] for k in pt_model_dict.keys()}
     )
     load_base_model_into_model_with_head = (pt_model.base_model_prefix not in flax_state) and (
-        pt_model.base_model_prefix in set([k.split(".")[0] for k in pt_model_dict.keys()])
+        pt_model.base_model_prefix in {k.split(".")[0] for k in pt_model_dict.keys()}
     )
 
     # keep track of unexpected & missing keys

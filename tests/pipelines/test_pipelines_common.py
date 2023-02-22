@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import copy
-import importlib
 import logging
 import os
 import random
@@ -53,7 +52,7 @@ from transformers.testing_utils import (
     require_torch_or_tf,
     slow,
 )
-from transformers.utils import is_tf_available, is_torch_available
+from transformers.utils import direct_transformers_import, is_tf_available, is_torch_available
 from transformers.utils import logging as transformers_logging
 
 
@@ -69,12 +68,7 @@ PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent.parent, "src/tr
 
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"),
-    submodule_search_locations=[PATH_TO_TRANSFORMERS],
-)
-transformers_module = spec.loader.load_module()
+transformers_module = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
 class ANY:
@@ -612,7 +606,7 @@ class PipelineUtilsTest(unittest.TestCase):
         dataset = PipelineIterator(dummy_dataset, add, {"extra": 2})
         self.assertEqual(len(dataset), 4)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [2, 3, 4, 5])
 
     @require_torch
@@ -630,7 +624,7 @@ class PipelineUtilsTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             len(dataset)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [2, 3, 4, 5])
 
     @require_torch
@@ -644,7 +638,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelineIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}])
 
     @require_torch
@@ -660,7 +654,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelineIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(
             nested_simplify(outputs), [{"id": [[12, 22]]}, {"id": [[2, 3]]}, {"id": [[2, 4]]}, {"id": [[5]]}]
         )
@@ -677,7 +671,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelineChunkIterator(dataset, preprocess_chunk, {}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
 
         self.assertEqual(outputs, [0, 1, 0, 1, 2])
 
@@ -698,7 +692,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelinePackIterator(dataset, pack, {})
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(
             outputs,
             [
@@ -725,7 +719,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelinePackIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}], [{"id": 4}, {"id": 5}]])
 
         # is_false Across batch
@@ -736,7 +730,7 @@ class PipelineUtilsTest(unittest.TestCase):
 
         dataset = PipelinePackIterator(dummy_dataset, add, {"extra": 2}, loader_batch_size=3)
 
-        outputs = [item for item in dataset]
+        outputs = list(dataset)
         self.assertEqual(outputs, [[{"id": 2}, {"id": 3}, {"id": 4}, {"id": 5}]])
 
     @slow

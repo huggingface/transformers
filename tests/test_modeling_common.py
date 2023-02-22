@@ -325,6 +325,18 @@ class ModelTesterMixin:
             else:
                 check_save_load(first, second)
 
+    def test_from_pretrained_no_checkpoint(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            state_dict = model.state_dict()
+
+            new_model = model_class.from_pretrained(
+                pretrained_model_name_or_path=None, config=config, state_dict=state_dict
+            )
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1631,7 +1643,7 @@ class ModelTesterMixin:
                 params = dict(model_reloaded.named_parameters())
                 params.update(dict(model_reloaded.named_buffers()))
                 # param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
-                param_names = set(k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys())
+                param_names = {k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys()}
 
                 missing_keys = set(infos["missing_keys"])
 
@@ -1758,8 +1770,8 @@ class ModelTesterMixin:
     def _postprocessing_to_ignore_test_cases(self, tf_outputs, pt_outputs, model_class):
         """For temporarily ignoring some failed test cases (issues to be fixed)"""
 
-        tf_keys = set([k for k, v in tf_outputs.items() if v is not None])
-        pt_keys = set([k for k, v in pt_outputs.items() if v is not None])
+        tf_keys = {k for k, v in tf_outputs.items() if v is not None}
+        pt_keys = {k for k, v in pt_outputs.items() if v is not None}
 
         key_differences = tf_keys.symmetric_difference(pt_keys)
 
@@ -2776,15 +2788,6 @@ class ModelUtilsTest(TestCasePlus):
             BertModel.from_pretrained(TINY_T5)
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
 
-    def test_model_from_pretrained_no_checkpoint(self):
-        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
-        model = BertModel(config)
-        state_dict = model.state_dict()
-
-        new_model = BertModel.from_pretrained(pretrained_model_name_or_path=None, config=config, state_dict=state_dict)
-        for p1, p2 in zip(model.parameters(), new_model.parameters()):
-            self.assertTrue(torch.equal(p1, p2))
-
     def test_model_from_config_torch_dtype(self):
         # test that the model can be instantiated with dtype of user's choice - as long as it's a
         # float dtype. To make it happen config.torch_dtype needs to be set before instantiating the
@@ -2992,7 +2995,7 @@ class ModelUtilsTest(TestCasePlus):
                     index = json.loads(f.read())
 
                 all_shards = set(index["weight_map"].values())
-                shards_found = set(f for f in os.listdir(tmp_dir) if f.endswith(".bin"))
+                shards_found = {f for f in os.listdir(tmp_dir) if f.endswith(".bin")}
                 self.assertSetEqual(all_shards, shards_found)
 
                 # Finally, check the model can be reloaded

@@ -596,7 +596,7 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
             self.relative_position_bias = None
 
         # stochastic depth decay rule
-        dpr = [x for x in tf.linspace(0.0, config.drop_path_rate, config.num_hidden_layers)]
+        dpr = list(tf.linspace(0.0, config.drop_path_rate, config.num_hidden_layers))
         self.layer = [
             TFData2VecVisionLayer(
                 config,
