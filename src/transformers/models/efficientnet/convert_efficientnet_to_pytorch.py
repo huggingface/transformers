@@ -160,7 +160,7 @@ def convert_image_processor(model_name):
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def rename_keys(original_param_names):
     block_names = [v.split("_")[0].split("block")[1] for v in original_param_names if v.startswith("block")]
-    block_names = sorted(list(set(block_names)))
+    block_names = sorted(set(block_names))
     num_blocks = len(block_names)
     block_name_mapping = {b: str(i) for b, i in zip(block_names, range(num_blocks))}
 
@@ -267,7 +267,7 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_m
     tf_params = {param.name: param.numpy() for param in tf_params}
     for param in tf_non_train_params:
         tf_params[param.name] = param.numpy()
-    tf_param_names = [k for k in tf_params.keys()]
+    tf_param_names = list(tf_params.keys())
 
     # Load HuggingFace model
     config = get_efficientnet_config(model_name)
