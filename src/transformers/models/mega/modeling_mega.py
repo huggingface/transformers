@@ -1578,7 +1578,7 @@ class MegaModel(MegaPreTrainedModel):
         pooled_output = self.pooler(hidden_states) if self.pooler is not None else None
 
         if not return_dict:
-            return (hidden_states, pooled_output), (next_decoder_cache, all_hidden_states, all_self_attentions, all_cross_attentions)
+            return (hidden_states, pooled_output) + (all_hidden_states, next_decoder_cache, all_self_attentions, all_cross_attentions)
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=hidden_states,
