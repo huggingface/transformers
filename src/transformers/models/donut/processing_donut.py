@@ -130,7 +130,7 @@ class DonutProcessor(ProcessorMixin):
         if added_vocab is None:
             added_vocab = self.tokenizer.get_added_vocab()
 
-        output = dict()
+        output = {}
 
         while tokens:
             start_token = re.search(r"<s_(.*?)>", tokens, re.IGNORECASE)

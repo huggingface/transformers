@@ -367,13 +367,13 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
 
-    kwargs = dict(
-        model=model,
-        model_parameters=model_parameters,
-        config_params=config,
-        optimizer=optimizer,
-        lr_scheduler=lr_scheduler,
-    )
+    kwargs = {
+        "model": model,
+        "model_parameters": model_parameters,
+        "config_params": config,
+        "optimizer": optimizer,
+        "lr_scheduler": lr_scheduler,
+    }
 
     deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
 
