@@ -464,7 +464,7 @@ def main():
 
         return tokenized_examples
 
-    processed_datasets = dict()
+    processed_datasets = {}
     if training_args.do_train:
         if "train" not in datasets:
             raise ValueError("--do_train requires a train dataset")

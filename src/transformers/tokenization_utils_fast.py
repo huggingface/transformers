@@ -162,7 +162,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         base_vocab = self._tokenizer.get_vocab(with_added_tokens=False)
         full_vocab = self._tokenizer.get_vocab(with_added_tokens=True)
-        added_vocab = dict((tok, index) for tok, index in full_vocab.items() if tok not in base_vocab)
+        added_vocab = {tok: index for tok, index in full_vocab.items() if tok not in base_vocab}
         return added_vocab
 
     def __len__(self) -> int:

@@ -194,9 +194,9 @@ def prune_heads(args, model, eval_dataloader, head_mask):
     original_time = datetime.now() - before_time
 
     original_num_params = sum(p.numel() for p in model.parameters())
-    heads_to_prune = dict(
-        (layer, (1 - head_mask[layer].long()).nonzero().squeeze().tolist()) for layer in range(len(head_mask))
-    )
+    heads_to_prune = {
+        layer: (1 - head_mask[layer].long()).nonzero().squeeze().tolist() for layer in range(len(head_mask))
+    }
 
     for k, v in heads_to_prune.items():
         if isinstance(v, int):

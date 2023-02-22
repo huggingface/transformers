@@ -258,7 +258,7 @@ def load_pytorch_state_dict_in_tf2_model(
     symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
     tf_loaded_numel = 0
     weight_value_tuples = []
-    all_pytorch_weights = set(list(pt_state_dict.keys()))
+    all_pytorch_weights = set(pt_state_dict.keys())
     missing_keys = []
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
@@ -425,7 +425,7 @@ def load_tf2_state_dict_in_pytorch_model(pt_model, tf_state_dict, allow_missing_
         )
         tf_weights_map[pt_name] = (tf_weight, transpose)
 
-    all_tf_weights = set(list(tf_weights_map.keys()))
+    all_tf_weights = set(tf_weights_map.keys())
     loaded_pt_weights_data_ptr = {}
     missing_keys_pt = []
     for pt_weight_name, pt_weight in current_pt_params_dict.items():

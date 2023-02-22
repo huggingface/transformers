@@ -185,12 +185,12 @@ def convert_hf_name_to_opus_name(hf_model_name):
 def get_system_metadata(repo_root):
     import git
 
-    return dict(
-        helsinki_git_sha=git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
-        transformers_git_sha=git.Repo(path=".", search_parent_directories=True).head.object.hexsha,
-        port_machine=socket.gethostname(),
-        port_time=time.strftime("%Y-%m-%d-%H:%M"),
-    )
+    return {
+        "helsinki_git_sha": git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
+        "transformers_git_sha": git.Repo(path=".", search_parent_directories=True).head.object.hexsha,
+        "port_machine": socket.gethostname(),
+        "port_time": time.strftime("%Y-%m-%d-%H:%M"),
+    }
 
 
 # docstyle-ignore
@@ -366,7 +366,7 @@ def _parse_readme(lns):
 
 def save_tokenizer_config(dest_dir: Path, separate_vocabs=False):
     dname = dest_dir.name.split("-")
-    dct = dict(target_lang=dname[-1], source_lang="-".join(dname[:-1]), separate_vocabs=separate_vocabs)
+    dct = {"target_lang": dname[-1], "source_lang": "-".join(dname[:-1]), "separate_vocabs": separate_vocabs}
     save_json(dct, dest_dir / "tokenizer_config.json")
 
 
