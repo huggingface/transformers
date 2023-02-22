@@ -910,6 +910,34 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 self.assertEqual(fx_keys, pt_keys)
                 self.check_pt_flax_outputs(fx_outputs, pt_outputs_loaded, model_class)
 
+    def test_mask_feature_prob(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.mask_feature_prob = 0.2
+        config.mask_feature_length = 2
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+
+            # forward pass
+            encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
+            self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
+
+    def test_mask_time_prob(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.mask_time_prob = 0.2
+        config.mask_time_length = 2
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+
+            # forward pass
+            encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
+            self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
+
 
 @require_torch
 @require_torchaudio
