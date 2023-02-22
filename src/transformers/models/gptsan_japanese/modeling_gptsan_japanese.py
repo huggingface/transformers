@@ -1029,7 +1029,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
             )  # n_layer x batch x n_heads x N x N
 
         # outputs
-        present_key_value_states = tuple() if self.config.use_cache or use_cache else None
+        present_key_value_states = () if self.config.use_cache or use_cache else None
         all_hidden_states = () if self.config.output_hidden_states or output_hidden_states else None
         all_attentions = () if self.config.output_attentions or output_attentions else None
         all_router_probs = () if self.config.output_router_logits or output_router_logits else None
