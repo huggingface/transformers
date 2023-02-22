@@ -924,7 +924,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
             `MoEModelOutputWithPastAndCrossAttentions` or `tuple` if `return_dict` returns
             MoEModelOutputWithPastAndCrossAttentions insted of tuple
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         device = self.position_embeddings.weight.device
         if input_ids is None:
             input_ids = torch.zeros([1, 1]).int().to(device)  # dummy for input_ids was None
