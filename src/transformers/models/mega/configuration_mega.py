@@ -172,6 +172,7 @@ class MegaConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
         self.add_lm_hidden_dense_layer = add_lm_hidden_dense_layer
+        self.num_attention_heads=1 # not used but required by Hugging Face
 
 
 class MegaOnnxConfig(OnnxConfig):

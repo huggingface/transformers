@@ -873,6 +873,8 @@ class MovingAverageGatedAttention(nn.Module):
             lengths = padding_mask.sum(-1, keepdim=True)
             # B x K x 1 x 1
             lengths = lengths.clamp(min=1.0).unsqueeze(-1)
+        else:
+            lengths = slen
         
         if causal_mask is not None:
             lengths = causal_mask.sum(dim=-1, keepdim=True)
@@ -1390,8 +1392,8 @@ MEGA_INPUTS_DOCSTRING = r"""
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
-            This parameter can only be used when the model is initialized with `type_vocab_size` parameter with value
-            >= 2. All the value in this tensor should be always < type_vocab_size.
+            This parameter can only be used when the model is initialized with `add_token_type_embeddings` parameter set 
+            to `True`. All the value in this tensor should be always < config.type_vocab_size.
 
             [What are token type IDs?](../glossary#token-type-ids)
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
@@ -1417,15 +1419,16 @@ class MegaModel(MegaPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in *Attention is
-    all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
-    Kaiser and Illia Polosukhin.
+    cross-attention is added after self-attention, following the architecture described in *Mega: Moving Average
+    Equipped Gated Attention*_ by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig, 
+    Jonathan May, and Luke Zettlemoyer
 
     To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
-    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
+    to `True` and `bidirectional` set to `False`. To be used in a Seq2Seq model, the model needs to initialized with 
+    both `is_decoder=True` and `bidirectional=False` argument as well as `add_cross_attention` set to `True`; an 
+    `encoder_hidden_states` is then expected as an input to the forward pass.
 
-    .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
+    .. _*Mega: Moving Average Equipped Gated Attention*: https://arxiv.org/abs/2209.10655
 
     """
 
@@ -1498,6 +1501,10 @@ class MegaModel(MegaPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if self.config.use_chunking and (input_ids.size(1) > self.config.chunk_size):
+            if input_ids.size(1) % self.config.chunk_size != 0:
+                raise ValueError(f"config.use_chunking is activated; input sequence length must be shorter than or a multiple of config.chunk_size\nreceived sequence length of {input_ids.size(1)} with chunk size {self.config.chunk_size}")
+
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
@@ -1533,7 +1540,7 @@ class MegaModel(MegaPreTrainedModel):
             encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         # pass through mega layers
-        all_hidden_states = () if output_hidden_states else None
+        all_hidden_states = (hidden_states.transpose(0, 1),) if output_hidden_states else None
         all_self_attentions = () if output_attentions else None 
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         next_decoder_cache = () if use_cache else None
@@ -1673,6 +1680,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("mnaylor/mega-base-wikitext")
         >>> config = AutoConfig.from_pretrained("mnaylor/mega-base-wikitext")
         >>> config.is_decoder = True
+        >>> config.bidirectional = False
         >>> model = MegaForCausalLM.from_pretrained("mnaylor/mega-base-wikitext", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")

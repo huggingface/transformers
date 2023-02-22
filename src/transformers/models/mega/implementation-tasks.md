@@ -157,9 +157,16 @@ Decoder
   * To delete:
     * Slice testing for classification head (done)
     * LM head ignore keys (done)
+  * New tests:
+    * bidirectionality
+    * with/without token types
+    * sequence length > max positions
+    * chunking
+    * softmax and element attention
 * Documentation: 
   * ~~Docstrings of individual classes~~
   * Main docstring
+  * Config docstring
   * Anything else in the `mega.mdx` file
 * ~~Tokenizer?~~
   * looks like autotokenizer points to robertatokenizer, so I think I'm going to leave it for now
