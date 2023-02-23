@@ -269,6 +269,11 @@ class PretrainedConfig(PushToHubMixin):
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.tf_legacy_loss = kwargs.pop("tf_legacy_loss", False)  # Only used by TensorFlow models
         self.pruned_heads = kwargs.pop("pruned_heads", {})
+        if self.pruned_heads and not isinstance(self.pruned_heads, dict):
+            raise ValueError("Argument pruned_heads should be a dictionary.")
+        if self.pruned_heads:
+            self.pruned_heads = {int(key): value for key, value in self.pruned_heads.items()}
+
         self.tie_word_embeddings = kwargs.pop(
             "tie_word_embeddings", True
         )  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
@@ -695,23 +700,9 @@ class PretrainedConfig(PushToHubMixin):
 
         config = cls(**config_dict, **kwargs)
 
-        if hasattr(config, "pruned_heads"):
-            config.pruned_heads = {int(key): value for key, value in config.pruned_heads.items()}
-
-        # Update config with kwargs if needed
-        if "num_labels" in kwargs and "id2label" in kwargs:
-            num_labels = kwargs["num_labels"]
-            id2label = kwargs["id2label"] if kwargs["id2label"] is not None else []
-            if len(id2label) != num_labels:
-                raise ValueError(
-                    f"You passed along `num_labels={num_labels }` with an incompatible id to label map: "
-                    f"{kwargs['id2label']}. Since those arguments are inconsistent with each other, you should remove "
-                    "one of them."
-                )
         to_remove = []
         for key, value in kwargs.items():
             if hasattr(config, key):
-                setattr(config, key, value)
                 if key != "torch_dtype":
                     to_remove.append(key)
         for key in to_remove:
