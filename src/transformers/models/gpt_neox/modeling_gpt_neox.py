@@ -84,7 +84,7 @@ class GPTNeoXAttention(nn.Module):
         self.head_size = self.hidden_size // self.num_attention_heads
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
         max_positions = config.max_position_embeddings
-        
+
         # previously `dtype=torch.uint8`, cf pytorch 1.2.0 compatibility
         self.register_buffer(
             "bias",

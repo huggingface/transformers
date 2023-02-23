@@ -178,7 +178,7 @@ class ImageGPTAttention(nn.Module):
         super().__init__()
 
         max_positions = config.max_position_embeddings
-        
+
         # previously `dtype=torch.uint8`, cf pytorch 1.2.0 compatibility
         self.register_buffer(
             "bias",
