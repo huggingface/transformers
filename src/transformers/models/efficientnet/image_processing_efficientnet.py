@@ -199,7 +199,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
             rescaled_image = rescaled_image.astype(np.float32)
         else:
             rescaled_image = rescale(image, scale=scale, data_format=data_format, **kwargs)
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
+        return rescaled_image
 
     def normalize(
         self,
@@ -328,13 +328,10 @@ class EfficientNetImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]
-
         if do_center_crop:
             images = [self.center_crop(image=image, size=crop_size) for image in images]
-
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor, offset=rescale_offset) for image in images]
-
         if do_normalize:
             images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
 

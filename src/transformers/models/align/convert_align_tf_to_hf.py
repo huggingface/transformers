@@ -53,6 +53,7 @@ def get_align_config():
     vision_config.hidden_dim = 640
     vision_config.id2label = {"0": "LABEL_0", "1": "LABEL_1"}
     vision_config.label2id = {"LABEL_0": 0, "LABEL_1": 1}
+    vision_config.depthwise_padding = []
 
     text_config = BertConfig()
     config = ALIGNConfig.from_text_vision_configs(
@@ -70,7 +71,12 @@ def prepare_img():
 
 def get_processor():
     image_processor = EfficientNetImageProcessor(
-        do_center_crop=True, rescale_offset=True, do_normalize=False, include_top=False
+        do_center_crop=True,
+        rescale_factor=1 / 127.5,
+        rescale_offset=True,
+        do_normalize=False,
+        include_top=False,
+        resample=Image.BILINEAR,
     )
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     tokenizer.model_max_length = 64
@@ -82,7 +88,7 @@ def get_processor():
 def rename_keys(original_param_names):
     # EfficientNet image encoder
     block_names = [v.split("_")[0].split("block")[1] for v in original_param_names if v.startswith("block")]
-    block_names = sorted(list(set(block_names)))
+    block_names = sorted(set(block_names))
     num_blocks = len(block_names)
     block_name_mapping = {b: str(i) for b, i in zip(block_names, range(num_blocks))}
 
@@ -252,7 +258,7 @@ def rename_keys(original_param_names):
 
 def replace_params(hf_params, tf_params, key_mapping):
     for key, value in tf_params.items():
-        if "normalization" or "total" in key:
+        if key not in key_mapping:
             continue
 
         hf_key = key_mapping[key]
@@ -272,10 +278,7 @@ def replace_params(hf_params, tf_params, key_mapping):
             new_hf_value = torch.from_numpy(value)
 
         # Replace HF parameters with original TF model parameters
-        if "temperature" not in key:
-            hf_params[hf_key].copy_(new_hf_value)
-        else:
-            hf_params[hf_key] = new_hf_value
+        hf_params[hf_key].copy_(new_hf_value)
 
 
 @torch.no_grad()
@@ -295,17 +298,16 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     tf_params = {param.name: param.numpy() for param in tf_params}
     for param in tf_non_train_params:
         tf_params[param.name] = param.numpy()
-    tf_param_names = [k for k in tf_params.keys()]
+    list(tf_params.keys())
 
     # Load HuggingFace model
     config = get_align_config()
     hf_model = ALIGNModel(config).eval()
-    hf_params = hf_model.state_dict()
-
-    # Create src-to-dst parameter name mapping dictionary
-    print("Converting parameters...")
-    key_mapping = rename_keys(tf_param_names)
-    replace_params(hf_params, tf_params, key_mapping)
+    hf_model.state_dict()
+    """
+    # Create src-to-dst parameter name mapping dictionary print("Converting parameters...") key_mapping =
+    rename_keys(tf_param_names) replace_params(hf_params, tf_params, key_mapping)
+    """
 
     # Initialize processor
     processor = get_processor()
@@ -321,9 +323,14 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
 
     # Original model inference
     original_model.trainable = False
-    image = prepare_img()
-    input_arr = tf.keras.preprocessing.image.img_to_array(image)
-    image = preprocess(np.array([input_arr]))
+    tf_image_processor = EfficientNetImageProcessor(
+        do_center_crop=True,
+        do_rescale=False,
+        do_normalize=False,
+        include_top=False,
+        resample=Image.BILINEAR,
+    )
+    image = tf_image_processor(images=prepare_img(), return_tensors="tf", data_format="channels_last")["pixel_values"]
     text = tok(tf.constant(["A picture of a cat"]))
 
     image_features = original_model.image_encoder(image, training=False)

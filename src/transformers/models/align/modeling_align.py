@@ -828,7 +828,6 @@ class ALIGNVisionModel(ALIGNPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.embeddings(pixel_values)
-
         encoder_outputs = self.encoder(
             embedding_output,
             output_hidden_states=output_hidden_states,
@@ -1048,7 +1047,7 @@ class ALIGNModel(ALIGNPreTrainedModel):
         )
 
         image_embeds = vision_outputs[1]
-        text_embeds = text_outputs[1]
+        text_embeds = text_outputs[0][:, 0, :]
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
