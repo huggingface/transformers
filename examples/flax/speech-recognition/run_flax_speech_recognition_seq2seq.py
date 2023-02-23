@@ -35,9 +35,10 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 from datasets import Dataset, DatasetDict, load_dataset, load_metric
-from flax import traverse_util
+from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad, unreplicate
-from flax.training.common_utils import get_metrics, onehot, shard
+from flax.training import train_state
+from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from flax.training.train_state import TrainState
 from huggingface_hub import Repository, create_repo
 from tqdm import tqdm
@@ -103,6 +104,24 @@ class ModelArguments:
             "with private models)."
         },
     )
+    dtype: Optional[str] = field(
+        default="float32",
+        metadata={
+            "help": (
+                "Floating-point format in which the model weights should be initialized and trained. Choose one of"
+                " `[float32, float16, bfloat16]`."
+            )
+        },
+    )
+    num_beams: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Number of beams to use for evaluation. This argument will be passed to `model.generate`, "
+                "which is used during evaluation."
+            )
+        },
+    )
 
 
 @flax.struct.dataclass
@@ -159,7 +178,11 @@ class DataTrainingArguments:
     )
     min_duration_in_seconds: float = field(
         default=0.0,
-        metadata={"help": "Filter audio files in that are shorter than `min_duration_in_seconds` seconds"},
+        metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"},
+    )
+    max_label_length: float = field(
+        default=128,
+        metadata={"help": "Truncate transcriptions that are longer `max_eval_length` tokens."},
     )
     pad_input_to_multiple_of: Optional[int] = field(
         default=None,
@@ -274,8 +297,8 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         model_input_name = self.processor.model_input_names[0]
-        input_features = [{model_input_name: feature[model_input_name]} for feature in features]
-        label_features = [{"input_ids": feature["labels"]} for feature in features]
+        input_features = {model_input_name: features[model_input_name]}
+        label_features = {"input_ids": features["labels"]}
 
         # reformat list to dict and set to pytorch format
         batch = self.processor.feature_extractor.pad(
@@ -335,6 +358,13 @@ def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuf
     for idx in batch_idx:
         batch = dataset[idx]
         yield batch
+
+
+class TrainState(train_state.TrainState):
+    dropout_rng: jnp.ndarray
+
+    def replicate(self):
+        return jax_utils.replicate(self).replace(dropout_rng=shard_prng_key(self.dropout_rng))
 
 
 def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
@@ -505,6 +535,9 @@ def main():
     # We need to read the audio files as arrays and tokenize the targets.
     max_input_length = int(data_args.max_duration_in_seconds * feature_extractor.sampling_rate)
     min_input_length = int(data_args.min_duration_in_seconds * feature_extractor.sampling_rate)
+    max_label_length = (
+        data_args.max_label_length if data_args.max_label_length is not None else model.config.max_length
+    )
     pad_input_to_multiple_of = data_args.pad_input_to_multiple_of
     pad_target_to_multiple_of = data_args.pad_target_to_multiple_of
     audio_column_name = data_args.audio_column_name
@@ -586,9 +619,9 @@ def main():
         decoder_start_token_id=model.config.decoder_start_token_id,
         input_padding="longest",
         target_padding="longest",
-        max_target_length=model.config.max_length,
+        max_target_length=max_label_length,
         pad_input_to_multiple_of=pad_input_to_multiple_of,
-        pad_target_to_multiple_of=pad_target_to_multiple_of if pad_target_to_multiple_of else model.config.max_length,
+        pad_target_to_multiple_of=pad_target_to_multiple_of if pad_target_to_multiple_of else max_label_length,
     )
 
     # Enable tensorboard only on the master node
@@ -661,7 +694,7 @@ def main():
     state = TrainState.create(apply_fn=model.__call__, params=model.params, tx=adamw, dropout_rng=dropout_rng)
 
     # label smoothed cross entropy
-    def loss_fn(logits, labels, padding_mask, label_smoothing_factor=0.0):
+    def loss_fn(logits, labels, label_smoothing_factor=0.0):
         """
         The label smoothing implementation is adapted from Flax's official example:
         https://github.com/google/flax/blob/87a211135c6a377c8f29048a1cac3840e38b9da4/examples/wmt/train.py#L104
@@ -677,7 +710,8 @@ def main():
         loss = optax.softmax_cross_entropy(logits, soft_labels)
         loss = loss - normalizing_constant
 
-        # ignore padded tokens from loss
+        # ignore padded tokens from loss, i.e. where labels are not set to -100
+        padding_mask = labels >= 0
         loss = loss * padding_mask
         loss = loss.sum()
         num_labels = padding_mask.sum()
@@ -690,7 +724,7 @@ def main():
         def compute_loss(params):
             labels = batch.pop("labels")
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
-            loss, num_labels = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+            loss, num_labels = loss_fn(logits, labels, label_smoothing_factor)
             return loss, num_labels
 
         grad_fn = jax.value_and_grad(compute_loss, has_aux=True)
@@ -714,7 +748,7 @@ def main():
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
 
-        loss, num_labels = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
+        loss, num_labels = loss_fn(logits, labels, label_smoothing_factor)
         num_labels = jax.lax.psum(num_labels, "batch")
 
         # true loss = total loss / total samples
@@ -725,11 +759,8 @@ def main():
         return metrics
 
     # Define generation function
-    max_length = (
-        data_args.val_max_target_length if data_args.val_max_target_length is not None else model.config.max_length
-    )
-    num_beams = data_args.num_beams if data_args.num_beams is not None else model.config.num_beams
-    gen_kwargs = {"max_length": max_length, "num_beams": num_beams}
+    num_beams = model_args.num_beams if model_args.num_beams is not None else model.config.num_beams
+    gen_kwargs = {"max_length": max_label_length, "num_beams": num_beams}
 
     def generate_step(params, batch):
         model.params = params
@@ -788,7 +819,7 @@ def main():
         eval_labels = []
 
         eval_loader = data_loader(input_rng, vectorized_datasets["eval"], eval_batch_size, drop_last=False)
-        eval_steps = math.ceil(vectorized_datasets["eval"] / eval_batch_size)
+        eval_steps = math.ceil(len(vectorized_datasets["eval"]) / eval_batch_size)
         for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
             # Model forward
             samples = next(eval_loader)
@@ -796,13 +827,13 @@ def main():
             labels = batch["labels"]
 
             metrics = pad_shard_unpad(p_eval_step, static_return=True)(
-                state.params, batch, min_device_batch=per_device_eval_batch_size
+                state.params, batch.data, min_device_batch=per_device_eval_batch_size
             )
             eval_metrics.append(metrics)
 
             # generation
-            if data_args.predict_with_generate:
-                generated_ids = pad_shard_unpad(p_generate_step)(state.params, batch)
+            if training_args.predict_with_generate:
+                generated_ids = pad_shard_unpad(p_generate_step)(state.params, batch.data)
                 eval_preds.extend(jax.device_get(generated_ids.reshape(-1, gen_kwargs["max_length"])))
                 eval_labels.extend(labels)
 
@@ -812,7 +843,7 @@ def main():
 
         # compute WER metric
         wer_desc = ""
-        if data_args.predict_with_generate:
+        if training_args.predict_with_generate:
             wer_metric = compute_metrics(eval_preds, eval_labels)
             eval_metrics.update(wer_metric)
             wer_desc = " ".join([f"Eval {key}: {value} |" for key, value in wer_metric.items()])
