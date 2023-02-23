@@ -357,6 +357,13 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
 
 
 def _get_model_class(config, model_mapping):
+
+    if config.model_type not in model_mapping._config_mapping:
+        if config.model_type in model_mapping._model_mapping:
+            model_class_name = model_mapping._model_mapping[config.model_type]
+            model_class = model_mapping._load_attr_from_module(config.model_type, model_class_name)
+            return model_class
+
     supported_models = model_mapping[type(config)]
     if not isinstance(supported_models, (list, tuple)):
         return supported_models
