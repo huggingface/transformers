@@ -16,10 +16,11 @@
 
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union, Dict
 
 import torch
 import torch.utils.checkpoint
+import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
@@ -33,6 +34,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
+from .cross_attention import AttnProcessor, CrossAttnProcessor, AttnProcessor2_0
 
 
 logger = logging.get_logger(__name__)
@@ -253,10 +255,26 @@ class CLIPAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        
+        processor = AttnProcessor2_0() if hasattr(F, "scaled_dot_product_attention") else CrossAttnProcessor()
+        self.set_processor(processor)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+    
+    def set_processor(self, processor: "AttnProcessor"):
+        # if current processor is in `self._modules` and if passed `processor` is not, we need to
+        # pop `processor` from `self._modules`
+        if (
+            hasattr(self, "processor")
+            and isinstance(self.processor, torch.nn.Module)
+            and not isinstance(processor, torch.nn.Module)
+        ):
+            logger.info(f"You are removing possibly trained weights of {self.processor} with {processor}")
+            self._modules.pop("processor")
 
+        self.processor = processor
+    
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -776,7 +794,60 @@ class CLIPTextModel(CLIPPreTrainedModel):
         self.text_model = CLIPTextTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
+    
+    @property
+    def attn_processors(self) -> Dict[str, AttnProcessor]:
+        r"""
+        Returns:
+            `dict` of attention processors: A dictionary containing all attention processors used in the model with
+            indexed by its weight name.
+        """
+        # set recursively
+        processors = {}
 
+        def fn_recursive_add_processors(name: str, module: torch.nn.Module, processors: Dict[str, AttnProcessor]):
+            if hasattr(module, "set_processor"):
+                processors[f"{name}.processor"] = module.processor
+
+            for sub_name, child in module.named_children():
+                fn_recursive_add_processors(f"{name}.{sub_name}", child, processors)
+
+            return processors
+
+        for name, module in self.named_children():
+            fn_recursive_add_processors(name, module, processors)
+
+        return processors
+
+    def set_attn_processor(self, processor: Union[AttnProcessor, Dict[str, AttnProcessor]]):
+        r"""
+        Parameters:
+            `processor (`dict` of `AttnProcessor` or `AttnProcessor`):
+                The instantiated processor class or a dictionary of processor classes that will be set as the processor
+                of **all** `CrossAttention` layers.
+            In case `processor` is a dict, the key needs to define the path to the corresponding cross attention processor. This is strongly recommended when setting trainablae attention processors.:
+        """
+        count = len(self.attn_processors.keys())
+
+        if isinstance(processor, dict) and len(processor) != count:
+            raise ValueError(
+                f"A dict of processors was passed, but the number of processors {len(processor)} does not match the"
+                f" number of attention layers: {count}. Please make sure to pass {count} processor classes."
+            )
+
+        def fn_recursive_attn_processor(name: str, module: torch.nn.Module, processor):
+            if hasattr(module, "set_processor"):
+                if not isinstance(processor, dict):
+                    module.set_processor(processor)
+                else:
+                    module.set_processor(processor.pop(f"{name}.processor"))
+
+            for sub_name, child in module.named_children():
+                fn_recursive_attn_processor(f"{name}.{sub_name}", child, processor)
+
+        for name, module in self.named_children():
+            fn_recursive_attn_processor(name, module, processor)
+    
     def get_input_embeddings(self) -> nn.Module:
         return self.text_model.embeddings.token_embedding
 
