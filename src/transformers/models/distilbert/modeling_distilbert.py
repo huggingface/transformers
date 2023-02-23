@@ -117,7 +117,10 @@ class Embeddings(nn.Module):
         Returns: torch.tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings, no token_type
         embeddings)
         """
-        seq_length = input_ids.size(1)
+        if input_ids is not None:
+            input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
+
+        seq_length = input_embeds.size(1)
 
         # Setting the position-ids to the registered buffer in constructor, it helps
         # when tracing the model without passing position-ids, solves
@@ -127,9 +130,6 @@ class Embeddings(nn.Module):
         else:
             position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
-
-        if input_ids is not None:
-            input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
 
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
