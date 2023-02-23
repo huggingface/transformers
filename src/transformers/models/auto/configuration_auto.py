@@ -26,10 +26,7 @@ from ...utils import CONFIG_NAME, logging
 
 logger = logging.get_logger(__name__)
 
-SPECIAL_MODEL_TYPES_TO_CANONICAL_MODEL_TYPES = {
-    "nllb": "m2m_100",
-    "decision_transformer_gpt2": "decision_transformer"
-}
+SPECIAL_MODEL_TYPES_TO_CANONICAL_MODEL_TYPES = {"nllb": "m2m_100", "decision_transformer_gpt2": "decision_transformer"}
 
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
@@ -909,7 +906,7 @@ class AutoConfig:
             model_type = config_dict["model_type"]
             if model_type not in CONFIG_MAPPING:
                 if model_type in SPECIAL_MODEL_TYPES_TO_CANONICAL_MODEL_TYPES:
-                   model_type = SPECIAL_MODEL_TYPES_TO_CANONICAL_MODEL_TYPES[model_type]
+                    model_type = SPECIAL_MODEL_TYPES_TO_CANONICAL_MODEL_TYPES[model_type]
             config_class = CONFIG_MAPPING[model_type]
             return config_class.from_dict(config_dict, **unused_kwargs)
         else:
