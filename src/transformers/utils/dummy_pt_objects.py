@@ -6371,14 +6371,14 @@ class TvltPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class UDOPDualForConditionalGeneration(metaclass=DummyObject):
+class UdopDualForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class UDOPUnimodelForConditionalGeneration(metaclass=DummyObject):
+class UdopUnimodelForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

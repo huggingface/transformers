@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import collections.abc
 import copy
 import logging
 import math
@@ -21,8 +20,6 @@ import random
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from functools import partial
-from itertools import repeat
 from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -291,7 +288,7 @@ class UdopDropPath(nn.Module):
         return f"drop_prob={round(self.drop_prob,3):0.3f}"
 
 
-class PatchEmbed(nn.Module):
+class UdopPatchEmbed(nn.Module):
     """2D Image to Patch Embedding"""
 
     def __init__(self, config):
@@ -306,16 +303,16 @@ class PatchEmbed(nn.Module):
         self.proj = nn.Conv2d(
             config.mae_config["in_channels"], config.mae_config["embed_dim"], kernel_size=patch_size, stride=patch_size
         )
-        self.norm = nn.Identity()
 
     def forward(self, x):
         x = self.proj(x)
-        x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
-        x = self.norm(x)
+        x = x.flatten(2).transpose(1, 2)  # batch size, channel, height, weight -> batch_size, N, channel
         return x
 
 
 class UdopMlp(nn.Module):
+    """Copied from Efficientformer's MLP"""
+
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
         super().__init__()
         out_features = out_features or in_features
@@ -367,7 +364,9 @@ class Attention(nn.Module):
         return x
 
 
-class CrossAttention(nn.Module):
+class UdopCrossAttention(nn.Module):
+    """Copied from Xclip's cross attention"""
+
     def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.0, proj_drop=0.0):
         super().__init__()
         self.num_heads = num_heads
@@ -401,7 +400,7 @@ class CrossAttention(nn.Module):
         return x
 
 
-class Block(nn.Module):
+class UdopMaeBlock(nn.Module):
     def __init__(
         self,
         config,
@@ -435,7 +434,7 @@ class MaskedAutoencoderViT(nn.Module):
         # self.embed_dim = config.image_size
         self.decoder_embed_dim = 512
         embed_dim = config.mae_config["embed_dim"]
-        self.patch_embed = PatchEmbed(config)
+        self.patch_embed = UdopPatchEmbed(config)
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -443,7 +442,7 @@ class MaskedAutoencoderViT(nn.Module):
 
         norm_layer = nn.LayerNorm
         depth = 24
-        self.blocks = nn.ModuleList([Block(config) for i in range(depth)])
+        self.blocks = nn.ModuleList([UdopMaeBlock(config) for i in range(depth)])
         self.norm = norm_layer(embed_dim)
 
         self.initialize_weights()
@@ -972,8 +971,7 @@ class UdopDenseGatedActDense(nn.Module):
         hidden_states = hidden_gelu * hidden_linear
         hidden_states = self.dropout(hidden_states)
 
-        if hidden_states.dtype != self.wo.weight.dtype:
-            hidden_states = hidden_states.to(self.wo.weight.dtype)
+        hidden_states = hidden_states.to(self.wo.weight.dtype)
 
         hidden_states = self.wo(hidden_states)
         return hidden_states
@@ -1411,7 +1409,7 @@ class UdopBlock(nn.Module):
         else:
             outputs = outputs + attention_outputs
 
-        return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+        return outputs
 
 
 class UdopLayerNorm(nn.Module):
@@ -1935,9 +1933,6 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
                 image=image,
                 ids_keep=ids_keep,
             )
-
-        if encoder_outputs is None:
-            return None
 
         if masked_lm_labels is not None:
             labels = masked_lm_labels
