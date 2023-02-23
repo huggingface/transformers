@@ -192,6 +192,7 @@ else:
                     "MBart50TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("mega", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
@@ -266,7 +267,6 @@ else:
             ),
             ("retribert", ("RetriBertTokenizer", "RetriBertTokenizerFast" if is_tokenizers_available() else None)),
             ("roberta", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
-            ("mega", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "roberta-prelayernorm",
                 ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None),

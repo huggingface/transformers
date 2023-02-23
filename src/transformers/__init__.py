@@ -360,6 +360,7 @@ _import_structure = {
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTProcessor"],
+    "models.mega": ["MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegaConfig"],
     "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.megatron_gpt2": [],
     "models.mluke": [],
@@ -404,7 +405,6 @@ _import_structure = {
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
     "models.retribert": ["RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RetriBertConfig", "RetriBertTokenizer"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
-    "models.mega": ["MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegaConfig"],
     "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
@@ -1880,6 +1880,19 @@ else:
             "MCTCTPreTrainedModel",
         ]
     )
+    _import_structure["models.mega"].extend(
+        [
+            "MEGA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MegaForCausalLM",
+            "MegaForMaskedLM",
+            "MegaForMultipleChoice",
+            "MegaForQuestionAnswering",
+            "MegaForSequenceClassification",
+            "MegaForTokenClassification",
+            "MegaModel",
+            "MegaPreTrainedModel",
+        ]
+    )
     _import_structure["models.megatron_bert"].extend(
         [
             "MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2188,19 +2201,6 @@ else:
             "RobertaForTokenClassification",
             "RobertaModel",
             "RobertaPreTrainedModel",
-        ]
-    )
-    _import_structure["models.mega"].extend(
-        [
-            "MEGA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MegaForCausalLM",
-            "MegaForMaskedLM",
-            "MegaForMultipleChoice",
-            "MegaForQuestionAnswering",
-            "MegaForSequenceClassification",
-            "MegaForTokenClassification",
-            "MegaModel",
-            "MegaPreTrainedModel",
         ]
     )
     _import_structure["models.roberta_prelayernorm"].extend(
@@ -3944,6 +3944,7 @@ if TYPE_CHECKING:
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
+    from .models.mega import MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP, MegaConfig
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
@@ -3982,7 +3983,6 @@ if TYPE_CHECKING:
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
-    from .models.mega import MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP, MegaConfig
     from .models.roberta_prelayernorm import (
         ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RobertaPreLayerNormConfig,
@@ -5215,6 +5215,17 @@ if TYPE_CHECKING:
             MBartPreTrainedModel,
         )
         from .models.mctct import MCTCT_PRETRAINED_MODEL_ARCHIVE_LIST, MCTCTForCTC, MCTCTModel, MCTCTPreTrainedModel
+        from .models.mega import (
+            MEGA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MegaForCausalLM,
+            MegaForMaskedLM,
+            MegaForMultipleChoice,
+            MegaForQuestionAnswering,
+            MegaForSequenceClassification,
+            MegaForTokenClassification,
+            MegaModel,
+            MegaPreTrainedModel,
+        )
         from .models.megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegatronBertForCausalLM,
@@ -5469,17 +5480,6 @@ if TYPE_CHECKING:
             RobertaForTokenClassification,
             RobertaModel,
             RobertaPreTrainedModel,
-        )
-        from .models.mega import (
-            MEGA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MegaForCausalLM,
-            MegaForMaskedLM,
-            MegaForMultipleChoice,
-            MegaForQuestionAnswering,
-            MegaForSequenceClassification,
-            MegaForTokenClassification,
-            MegaModel,
-            MegaPreTrainedModel,
         )
         from .models.roberta_prelayernorm import (
             ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST,

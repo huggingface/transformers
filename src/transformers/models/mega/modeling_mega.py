@@ -15,14 +15,13 @@
 """PyTorch Mega model."""
 
 import math
-from typing import List, Optional, Tuple, Union, Dict, Callable
-import uuid
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-import torch.nn.functional as F
 
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -57,56 +56,60 @@ MEGA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Mega source code converted to pure PyTorch
 # resources
 #   - paper: https://arxiv.org/abs/2209.10655
-#   - original implementation: https://github.com/facebookresearch/mega 
+#   - original implementation: https://github.com/facebookresearch/mega
 # notable differences from the original implementation:
-#   - refactored away from stateful representation of incremental decoding 
+#   - refactored away from stateful representation of incremental decoding
 #     state in favor of Hugging Face's typical `past_key_values`
 #   - fixed inconsistency in how causal masks are expected by `softmax_attention`
 #     and `element_attention` in MovingAverageGatedAttention (see https://github.com/facebookresearch/mega/issues/11)
-#   - added support for token type embeddings (not specifically included 
+#   - added support for token type embeddings (not specifically included
 #     or excluded in the original implementation/paper)
+
 
 # starting with activation functions
 def relu2(x):
     return torch.square(F.relu(x))
 
+
 def laplace(x, mu=0.707107, sigma=0.282095):
     x = (x - mu).div(sigma * math.sqrt(2.0))
     return 0.5 * (1.0 + torch.erf(x))
 
+
 def gelu_accurate(x):
     if not hasattr(gelu_accurate, "_a"):
         gelu_accurate._a = math.sqrt(2 / math.pi)
-    return (
-        0.5 * x * (1 + torch.tanh(gelu_accurate._a * (x + 0.044715 * torch.pow(x, 3))))
-    )
+    return 0.5 * x * (1 + torch.tanh(gelu_accurate._a * (x + 0.044715 * torch.pow(x, 3))))
+
 
 def get_activation_fn(activation: str) -> Callable:
-    """ Returns the activation function corresponding to `activation` """
+    """Returns the activation function corresponding to `activation`"""
     if activation == "relu":
         return F.relu
     elif activation == "gelu":
         return F.gelu
     elif activation == "gelu_accurate":
         return gelu_accurate
-    elif activation == 'silu':
+    elif activation == "silu":
         return F.silu
     elif activation == "linear":
         return lambda x: x
     else:
         raise RuntimeError("--activation-fn {} not supported".format(activation))
 
+
 # utility for causal LM masking in the format that Mega expects
 def generate_causal_mask(seq_len):
-    '''
-    Tiny utility to generate a `seq_len` by `seq_len` causal mask,
-    where 1 corresponds to *not masked* and 0 corresponds to *masked*
+    """
+    Tiny utility to generate a `seq_len` by `seq_len` causal mask, where 1 corresponds to *not masked* and 0
+    corresponds to *masked*
 
     causal_mask[i][j] corresponds to whether token `i` can attend to token `j`
-    '''
+    """
     seq_ids = torch.arange(seq_len)
     causal_mask = seq_ids[None, :].repeat(seq_len, 1) <= seq_ids[:, None]
     return causal_mask.to(torch.long)
+
 
 # EMA attention module
 # largely left unmodified except the incremental state
@@ -115,10 +118,7 @@ class MultiHeadEMA(nn.Module):
     See "https://arxiv.org/abs/2209.10655" for more details.
     """
 
-    def __init__(
-        self,
-        config:MegaConfig
-    ):
+    def __init__(self, config: MegaConfig):
         super().__init__()
 
         self.config = config
@@ -172,7 +172,7 @@ class MultiHeadEMA(nn.Module):
         vander = torch.arange(length).to(p).view(1, 1, length) * torch.log(q)
         kernel = (p * self.b_param) * torch.exp(vander)
         # D x L
-        return torch.einsum('dnl,dn->dl', kernel, self.g_param * self.scale)
+        return torch.einsum("dnl,dn->dl", kernel, self.g_param * self.scale)
 
     def coeffs(self):
         if self.training:
@@ -203,7 +203,7 @@ class MultiHeadEMA(nn.Module):
         if hx is not None:
             # D x N x L * D x N x 1 -> D x N x L
             k = vander[:, :, 1:] * (self.g_param * self.scale).unsqueeze(-1)
-            ox = torch.einsum('bdn,dnl->bdl', hx, k)
+            ox = torch.einsum("bdn,dnl->bdl", hx, k)
             # D x N * B x D x N -> B x D x N
             hh = vander[:, :, -1] * hx
         else:
@@ -213,7 +213,7 @@ class MultiHeadEMA(nn.Module):
         # D x N x L
         vander = vander[:, :, :-1]
         kernel = (p * self.b_param) * vander
-        k = torch.einsum('dnl,dn->dl', kernel, self.g_param * self.scale)
+        k = torch.einsum("dnl,dn->dl", kernel, self.g_param * self.scale)
 
         k_f = torch.fft.rfft(k.float(), n=2 * length)
         x_f = torch.fft.rfft(x.float(), n=2 * length)
@@ -223,7 +223,7 @@ class MultiHeadEMA(nn.Module):
         if ox is not None:
             out = out + ox
 
-        h = torch.einsum('bdl,dnl->bdn', x, torch.flip(kernel, dims=[2]))
+        h = torch.einsum("bdl,dnl->bdn", x, torch.flip(kernel, dims=[2]))
         if hh is not None:
             h = h + hh
         # L x B x D, B x D x N
@@ -236,7 +236,7 @@ class MultiHeadEMA(nn.Module):
         if hx is not None:
             h = h + q.squeeze(-1) * hx
         # B x D
-        out = torch.einsum('bdn,dn->bd', h, self.g_param * self.scale)
+        out = torch.einsum("bdn,dn->bd", h, self.g_param * self.scale)
         # 1 x B x D, B x D x N
         return out.unsqueeze(0), h
 
@@ -245,16 +245,16 @@ class MultiHeadEMA(nn.Module):
         x,
         attention_mask: Optional[torch.Tensor] = None,
         prev_state: Optional[torch.Tensor] = None,
-        use_cache: bool = False
+        use_cache: bool = False,
     ) -> torch.Tensor:
         """
         EMA-based self-attention
 
         Inputs
-            x (Tensor): hidden state input with shape (Sequence Length x Batch x Embedding Size)
-            attention_mask (Tensor): indicates which inputs are to be ignored (mostly due to padding),
+            x (Tensor): hidden state input with shape (Sequence Length x Batch x Embedding Size) attention_mask
+            (Tensor): indicates which inputs are to be ignored (mostly due to padding),
                 where elements are either 1 = *not masked* or 0 = *masked*
-            prev_state (Tensor, optional): if provided, the hidden state returned from the previous 
+            prev_state (Tensor, optional): if provided, the hidden state returned from the previous
                 timestep during incremental decoding
             use_cache (boolean): if True, perfom incremental decoding; uses `prev_state` as the prior
                 timestep, and returns the updated EMA hidden state for use in the next step
@@ -277,7 +277,7 @@ class MultiHeadEMA(nn.Module):
             x = x * (attention_mask.unsqueeze(1).type_as(x))
 
         if self.bidirectional and use_cache:
-            raise ValueError('Bidirectional EMA does not support incremental state')
+            raise ValueError("Bidirectional EMA does not support incremental state")
 
         if use_cache:
             out, updated_state = self.step(x, seq_len, hx=prev_state)
@@ -304,12 +304,13 @@ class MultiHeadEMA(nn.Module):
             k_f = torch.fft.rfft(k.float(), n=2 * fft_len)
             x_f = torch.fft.rfft(x.float(), n=2 * fft_len)
             # B x D x L
-            out = torch.fft.irfft(x_f * k_f, n=2 * fft_len)[..., s:s + seq_len]
+            out = torch.fft.irfft(x_f * k_f, n=2 * fft_len)[..., s : s + seq_len]
             out = out.type_as(x)
             # B x D x L -> L x B x D
             out = F.silu(out.permute(2, 0, 1) + residual)
 
             return out, None
+
 
 # Gated cross-attention
 # removed before_attn_fn argument and unused static_kv
@@ -325,32 +326,39 @@ class GatedCrossAttention(nn.Module):
         self.config = config
         self.activation = get_activation_fn(activation=self.config.activation)
         self.attention_activation = self.config.attention_activation
-        self.scaling = self.config.shared_representation_size ** -0.5 if self.attention_activation == 'softmax' else None
+        self.scaling = (
+            self.config.shared_representation_size**-0.5 if self.attention_activation == "softmax" else None
+        )
 
         dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
         self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
         self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob, module_name=self.__class__.__name__)
         # Attention dropout is standard dropout
-        self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__)
+        self.attention_dropout = MegaDropout(
+            self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__
+        )
 
         self.prenorm = self.config.normalize_before_mega
-        self.norm = SequenceNorm(self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine)
+        self.norm = SequenceNorm(
+            self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine
+        )
 
         self.k_proj = nn.Linear(self.config.hidden_size, self.config.shared_representation_size)
         self.v_proj = nn.Linear(self.config.hidden_size, self.config.hidden_size)
-        self.q_proj = nn.Linear(self.config.hidden_size, 2 * self.config.hidden_size + self.config.shared_representation_size)
+        self.q_proj = nn.Linear(
+            self.config.hidden_size, 2 * self.config.hidden_size + self.config.shared_representation_size
+        )
         self.h_proj = nn.Linear(self.config.hidden_size, self.config.hidden_size)
 
-        if self.config.relative_positional_bias == 'simple':
+        if self.config.relative_positional_bias == "simple":
             self.rel_pos_bias = SimpleRelativePositionalBias(config)
-        elif self.config.relative_positional_bias == 'rotary':
+        elif self.config.relative_positional_bias == "rotary":
             self.rel_pos_bias = RotaryRelativePositionalBias(config)
         else:
-            raise ValueError('unknown relative position bias: {}'.format(self.config.relative_positional_bias))
+            raise ValueError("unknown relative position bias: {}".format(self.config.relative_positional_bias))
 
         self.reset_parameters()
         self.softmax = nn.Softmax(dim=-1)
-
 
     def reset_parameters(self):
         std = self.config.initializer_range
@@ -388,12 +396,12 @@ class GatedCrossAttention(nn.Module):
         # B x L2 x L1
         qk = torch.bmm(q, k.transpose(1, 2)) / lengths + bias
 
-        if self.attention_activation == 'relu2':
+        if self.attention_activation == "relu2":
             attn_weights = relu2(qk).type_as(qk)
-        elif self.attention_activation == 'laplace':
+        elif self.attention_activation == "laplace":
             attn_weights = laplace(qk).type_as(qk)
         else:
-            raise ValueError('Unknown attention activation function: {}'.format(self.attention_activation))
+            raise ValueError("Unknown attention activation function: {}".format(self.attention_activation))
 
         if key_padding_mask is not None:
             attn_weights = attn_weights * key_padding_mask.unsqueeze(1)
@@ -420,7 +428,7 @@ class GatedCrossAttention(nn.Module):
         qk = torch.bmm(q, k.transpose(1, 2)) + bias
 
         if key_padding_mask is not None:
-            qk = qk.masked_fill((1 - key_padding_mask).unsqueeze(1).to(torch.bool), float('-inf'))
+            qk = qk.masked_fill((1 - key_padding_mask).unsqueeze(1).to(torch.bool), float("-inf"))
 
         attn_weights = self.softmax(qk).type_as(qk)
         return attn_weights
@@ -430,26 +438,27 @@ class GatedCrossAttention(nn.Module):
         query,
         key: Optional[torch.Tensor],
         value: Optional[torch.Tensor],
-        padding_mask: Optional[torch.Tensor] = None, ## NOT USED
+        padding_mask: Optional[torch.Tensor] = None,  ## NOT USED
         key_padding_mask: Optional[torch.Tensor] = None,
         prev_key_values: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
-        use_cache: bool = False
+        use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         EMA-based self-attention
 
         Inputs
-            query (Tensor): the self (or target) sequence input with shape (Target Sequence Length x Batch x Embedding Size)
-            key (Tensor): the cross (or source) sequence input with shape (Source Sequence Length x Batch x Embedding Size)
-            value (Tensor): the cross (or source) sequence input with shape (Source Sequence Length x Batch x Embedding Size)
-            padding_mask (Tensor): NOT USED, but left in place to match the original implementation
-            key_padding_mask (optional, Tensor): padding mask corresponding to the source sequence (Batch Size x Source Sequence Length)
-            prev_key_values (tuple of Tensors, optional): if provided, the hidden state returned from the previous 
-                timestep during incremental decoding; expects that prior cross-attention keys and values will be the last two 
-                items in the tuple
-            output_attentions (boolean): if true, cross-attention weights will be returned
-            use_cache (boolean): if True, perfom incremental decoding; uses `prev_state` as the prior
+            query (Tensor): the self (or target) sequence input with shape (Target Sequence Length x Batch x Embedding
+            Size) key (Tensor): the cross (or source) sequence input with shape (Source Sequence Length x Batch x
+            Embedding Size) value (Tensor): the cross (or source) sequence input with shape (Source Sequence Length x
+            Batch x Embedding Size) padding_mask (Tensor): NOT USED, but left in place to match the original
+            implementation key_padding_mask (optional, Tensor): padding mask corresponding to the source sequence
+            (Batch Size x Source Sequence Length) prev_key_values (tuple of Tensors, optional): if provided, the hidden
+            state returned from the previous
+                timestep during incremental decoding; expects that prior cross-attention keys and values will be the
+                last two items in the tuple
+            output_attentions (boolean): if true, cross-attention weights will be returned use_cache (boolean): if
+            True, perfom incremental decoding; uses `prev_state` as the prior
                 timestep, and returns the updated EMA hidden state for use in the next step
 
         Returns
@@ -468,7 +477,7 @@ class GatedCrossAttention(nn.Module):
             # expect prev_key_values to have (self_key, self_value, self_ema, cross_key, cross_value)
             prev_cross_key, prev_cross_value = prev_key_values[-2:]
             key = value = None
-            
+
             # use the self-attention cache to get the position id of the current step
             prev_self_key = prev_key_values[0]
             num_incremental_steps = prev_self_key.size(1) + 1
@@ -483,7 +492,9 @@ class GatedCrossAttention(nn.Module):
 
         # L2 x B x (2*D+S)
         base = self.q_proj(q)
-        u, r, q = torch.split(base, [self.config.hidden_size, self.config.hidden_size, self.config.shared_representation_size], dim=-1)
+        u, r, q = torch.split(
+            base, [self.config.hidden_size, self.config.hidden_size, self.config.shared_representation_size], dim=-1
+        )
 
         # L2 x B x D
         u = torch.sigmoid(u)
@@ -511,7 +522,7 @@ class GatedCrossAttention(nn.Module):
 
         # if we're returning the cache for later use, store these now for later return (can be done without having prev_key_values provided)
         if use_cache:
-            updated_cross_key = k 
+            updated_cross_key = k
             updated_cross_value = v
 
         ctx_len = k.size(1)
@@ -524,7 +535,7 @@ class GatedCrossAttention(nn.Module):
             assert key_padding_mask.size(0) == bsz
             assert key_padding_mask.size(1) == ctx_len
 
-        if self.attention_activation == 'softmax':
+        if self.attention_activation == "softmax":
             attn_weights = self.softmax_attention(q, k, key_padding_mask, num_incremental_steps)
         else:
             attn_weights = self.element_attention(q, k, key_padding_mask, num_incremental_steps)
@@ -541,21 +552,20 @@ class GatedCrossAttention(nn.Module):
         if not self.prenorm:
             out = self.norm(out)
 
-        outputs = (out, attn_weights) if output_attentions else (out, )
+        outputs = (out, attn_weights) if output_attentions else (out,)
         if use_cache:
             outputs = outputs + (updated_cross_key, updated_cross_value)
-        
+
         return outputs
 
 
 # Positional embeddings
 # copied without modification from original Mega code
 class SimpleRelativePositionalBias(nn.Module):
-
-    def __init__(self, config:MegaConfig):
+    def __init__(self, config: MegaConfig):
         super().__init__()
         self.config = config
-        self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size 
+        self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size
         self.rel_pos_bias = nn.Parameter(torch.Tensor(2 * config.max_positions - 1))
         self.reset_parameters()
 
@@ -565,10 +575,10 @@ class SimpleRelativePositionalBias(nn.Module):
 
     def forward(self, seq_len):
         if seq_len > self.max_positions:
-            raise ValueError('Sequence length {} going beyond max length {}'.format(seq_len, self.max_positions))
+            raise ValueError("Sequence length {} going beyond max length {}".format(seq_len, self.max_positions))
 
         # seq_len * 2 -1
-        b = self.rel_pos_bias[(self.max_positions - seq_len):(self.max_positions + seq_len - 1)]
+        b = self.rel_pos_bias[(self.max_positions - seq_len) : (self.max_positions + seq_len - 1)]
         # seq_len * 3 - 1
         t = F.pad(b, (0, seq_len))
         # (seq_len * 3 - 1) * seq_len
@@ -582,17 +592,20 @@ class SimpleRelativePositionalBias(nn.Module):
         t = t[:, start:end]
         return t
 
+
 class RotaryRelativePositionalBias(nn.Module):
-    def __init__(self, config:MegaConfig):
+    def __init__(self, config: MegaConfig):
         super().__init__()
         assert config.hidden_size % 2 == 0
         self.config = config
         self.embed_dim = config.shared_representation_size
-        self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size 
-        self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(config.max_positions, self.embed_dim)
+        self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size
+        self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(
+            config.max_positions, self.embed_dim
+        )
         self.alpha = nn.Parameter(torch.Tensor(1, self.embed_dim))
         self.b_param = nn.Parameter(torch.Tensor(1, self.embed_dim))
-        self.register_buffer("_float_tensor", torch.FloatTensor(1))
+        self.register_buffer("_float_tensor", torch.FloatTensor([0.0]))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -624,8 +637,9 @@ class RotaryRelativePositionalBias(nn.Module):
     def forward(self, seq_len):
         a = self.rotary(self.alpha.expand(seq_len, self.embed_dim))
         b = self.rotary(self.b_param.expand(seq_len, self.embed_dim))
-        t = torch.einsum('mk,nk->mn', a, b)
+        t = torch.einsum("mk,nk->mn", a, b)
         return t
+
 
 # Normalization modules
 # copied without modification
@@ -638,7 +652,7 @@ class ScaleNorm(nn.Module):
         if affine:
             self.scalar = nn.Parameter(torch.Tensor(1))
         else:
-            self.register_parameter('scalar', None)
+            self.register_parameter("scalar", None)
 
         self.reset_parameters()
 
@@ -654,6 +668,7 @@ class ScaleNorm(nn.Module):
         x = x * torch.rsqrt(mean_square + self.eps)
         return x
 
+
 class RMSNorm(nn.Module):
     def __init__(self, number_features, eps=1e-6, affine=True):
         super().__init__()
@@ -663,7 +678,7 @@ class RMSNorm(nn.Module):
         if affine:
             self.weight = nn.Parameter(torch.Tensor(self.num_features))
         else:
-            self.register_parameter('weight', None)
+            self.register_parameter("weight", None)
 
         self.reset_parameters()
 
@@ -679,21 +694,22 @@ class RMSNorm(nn.Module):
         x = x * torch.rsqrt(mean_square + self.eps)
         return x
 
+
 class SequenceNorm(nn.Module):
     def __init__(self, norm_type, embedding_dim, eps=1e-5, affine=True, export=False):
         super().__init__()
-        if norm_type == 'layernorm':
-          self.norm = nn.LayerNorm(embedding_dim, eps, elementwise_affine=affine)
-        elif norm_type == 'scalenorm':
+        if norm_type == "layernorm":
+            self.norm = nn.LayerNorm(embedding_dim, eps, elementwise_affine=affine)
+        elif norm_type == "scalenorm":
             self.norm = ScaleNorm(dim=-1, eps=eps, affine=affine)
-        elif norm_type == 'rmsnorm':
+        elif norm_type == "rmsnorm":
             self.norm = RMSNorm(embedding_dim, eps=eps, affine=affine)
-        elif norm_type == 'batchnorm':
+        elif norm_type == "batchnorm":
             self.norm = nn.BatchNorm1d(embedding_dim, eps=eps, affine=affine)
-        elif norm_type == 'syncbatchnorm':
+        elif norm_type == "syncbatchnorm":
             self.norm = nn.SyncBatchNorm(embedding_dim, eps=eps, affine=affine)
         else:
-            raise ValueError('Unknown norm type: {}'.format(norm_type))
+            raise ValueError("Unknown norm type: {}".format(norm_type))
 
     def normalize(self, x):
         if isinstance(self.norm, nn.modules.batchnorm._BatchNorm):
@@ -707,10 +723,10 @@ class SequenceNorm(nn.Module):
     def forward(self, x):
         return self.normalize(x)
 
+
 # Dropout: standard dropout + feature dropout
 # unmodified, but changed name from Fairseq->Mega
 class MegaDropout(nn.Module):
-
     def __init__(self, p, module_name=None):
         super().__init__()
         self.p = p
@@ -724,31 +740,25 @@ class MegaDropout(nn.Module):
             return x
 
     def make_generation_fast_(
-        self,
-        name: str,
-        retain_dropout: bool = False,
-        retain_dropout_modules: Optional[List[str]] = None,
-        **kwargs
+        self, name: str, retain_dropout: bool = False, retain_dropout_modules: Optional[List[str]] = None, **kwargs
     ):
         if retain_dropout:
             if retain_dropout_modules is not None and self.module_name is None:
                 logger.warning(
-                    'Cannot enable dropout during inference for module {} '
-                    'because module_name was not set'.format(name)
+                    "Cannot enable dropout during inference for module {} "
+                    "because module_name was not set".format(name)
                 )
             elif (
                 retain_dropout_modules is None  # if None, apply to all modules
                 or self.module_name in retain_dropout_modules
             ):
-                logger.info(
-                    'Enabling dropout during inference for module: {}'.format(name)
-                )
+                logger.info("Enabling dropout during inference for module: {}".format(name))
                 self.apply_during_inference = True
             else:
-                logger.info('Disabling dropout for module: {}'.format(name))
+                logger.info("Disabling dropout for module: {}".format(name))
+
 
 class MegaFeatureDropout(nn.Module):
-
     def __init__(self, p, module_name=None):
         super().__init__()
         self.p = p
@@ -768,68 +778,74 @@ class MegaFeatureDropout(nn.Module):
             return x
 
     def make_generation_fast_(
-        self,
-        name: str,
-        retain_dropout: bool = False,
-        retain_dropout_modules: Optional[List[str]] = None,
-        **kwargs
+        self, name: str, retain_dropout: bool = False, retain_dropout_modules: Optional[List[str]] = None, **kwargs
     ):
         if retain_dropout:
             if retain_dropout_modules is not None and self.module_name is None:
                 logger.warning(
-                    'Cannot enable dropout during inference for module {} '
-                    'because module_name was not set'.format(name)
+                    "Cannot enable dropout during inference for module {} "
+                    "because module_name was not set".format(name)
                 )
             elif (
                 retain_dropout_modules is None  # if None, apply to all modules
                 or self.module_name in retain_dropout_modules
             ):
-                logger.info(
-                    'Enabling dropout during inference for module: {}'.format(name)
-                )
+                logger.info("Enabling dropout during inference for module: {}".format(name))
                 self.apply_during_inference = True
             else:
-                logger.info('Disabling dropout for module: {}'.format(name))
+                logger.info("Disabling dropout for module: {}".format(name))
+
 
 # Mega attention: EMA + self-attention
 # differences from original include hidden state refactor and fixed inconsistency with additive/multiplicative attention masks
 class MovingAverageGatedAttention(nn.Module):
     """
-    Pure PyTorch implementation of Mega block; see https://arxiv.org/abs/2209.10655 
-    and original fairseq implementation at https://github.com/facebookresearch/mega
-    (copyright Meta Research, licensed under MIT License)
+    Pure PyTorch implementation of Mega block; see https://arxiv.org/abs/2209.10655 and original fairseq implementation
+    at https://github.com/facebookresearch/mega (copyright Meta Research, licensed under MIT License)
     """
-    def __init__(self, config : MegaConfig):
+
+    def __init__(self, config: MegaConfig):
         super().__init__()
         self.config = config
         self.activation = get_activation_fn(self.config.activation)
-        self.scaling = self.config.shared_representation_size ** -0.5 if self.config.attention_activation == 'softmax' else None 
+        self.scaling = (
+            self.config.shared_representation_size**-0.5 if self.config.attention_activation == "softmax" else None
+        )
         dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
         self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
         self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob, module_name=self.__class__.__name__)
         # attention dropout is standard dropout
-        self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__)
+        self.attention_dropout = MegaDropout(
+            self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__
+        )
 
-        self.norm = SequenceNorm(self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine)
+        self.norm = SequenceNorm(
+            self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine
+        )
         self.move = MultiHeadEMA(config)
-        
+
         self.v_proj = nn.Linear(self.config.hidden_size, self.config.intermediate_size)
-        self.mx_proj = nn.Linear(self.config.hidden_size, self.config.shared_representation_size + self.config.intermediate_size + 2 * self.config.hidden_size)
+        self.mx_proj = nn.Linear(
+            self.config.hidden_size,
+            self.config.shared_representation_size + self.config.intermediate_size + 2 * self.config.hidden_size,
+        )
         self.h_proj = nn.Linear(self.config.intermediate_size, self.config.hidden_size)
 
         # renamed gamma and beta to g_param and b_param respectively due to HF renaming weights
         self.g_param = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
         self.b_param = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
 
-        if self.config.relative_positional_bias == 'simple':
+        if self.config.relative_positional_bias == "simple":
             self.rel_pos_bias = SimpleRelativePositionalBias(config)
-        elif self.config.relative_positional_bias == 'rotary':
+        elif self.config.relative_positional_bias == "rotary":
             self.rel_pos_bias = RotaryRelativePositionalBias(config)
         else:
             raise ValueError(f"Unknown relative positional bias: {self.config.relative_positional_bias}")
 
         self.softmax = nn.Softmax(dim=-1)
-        self.attention_function = self.softmax_attention if self.config.attention_activation == 'softmax' else self.element_attention
+        self.attention_function = (
+            self.softmax_attention if self.config.attention_activation == "softmax" else self.element_attention
+        )
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -838,26 +854,26 @@ class MovingAverageGatedAttention(nn.Module):
         mean = 0.0
         nn.init.normal_(self.v_proj.weight, mean=mean, std=std)
         nn.init.constant_(self.v_proj.bias, 0.0)
-        
+
         nn.init.normal_(self.mx_proj.weight, mean=mean, std=std)
         nn.init.constant_(self.mx_proj.bias, 0.0)
-        
+
         nn.init.normal_(self.h_proj.weight, mean=mean, std=std)
         nn.init.constant_(self.h_proj.bias, 0.0)
-        
+
         nn.init.normal_(self.g_param, mean=mean, std=std)
         nn.init.constant_(self.b_param, 0.0)
-    
-    def element_attention(self, q, k, padding_mask, causal_mask):
-        '''
-        Apply element-wise attention via relu^2 or laplace. Same as original 
-        implementation but with standardized causal attention mask
 
-        padding_mask: tensor with shape (batch x no. chunks x chunk size x sequence length), or None
-        causal_mask: tensor with shape (sequence length x sequence length), or None
+    def element_attention(self, q, k, padding_mask, causal_mask):
+        """
+        Apply element-wise attention via relu^2 or laplace. Same as original implementation but with standardized
+        causal attention mask
+
+        padding_mask: tensor with shape (batch x no. chunks x chunk size x sequence length), or None causal_mask:
+        tensor with shape (sequence length x sequence length), or None
 
         Both masks expect 1 to indicate *not masked* and 0 to indicate *masked*
-        '''
+        """
         slen = k.size(2)
         if padding_mask is not None:
             # 1 for *not masked*
@@ -869,7 +885,7 @@ class MovingAverageGatedAttention(nn.Module):
             lengths = lengths.clamp(min=1.0).unsqueeze(-1)
         else:
             lengths = slen
-        
+
         if causal_mask is not None:
             lengths = causal_mask.sum(dim=-1, keepdim=True)
 
@@ -879,41 +895,41 @@ class MovingAverageGatedAttention(nn.Module):
             assert q.size(2) == 1, "Size mismatch between Q and K in element attention"
             # 1 x C
             bias = bias[-1:]
-    
+
         # B x K x C x C
-        qk = torch.matmul(q, k.transpose(2, 3)) / lengths + bias 
-    
-        if self.config.attention_activation == 'relu2':
+        qk = torch.matmul(q, k.transpose(2, 3)) / lengths + bias
+
+        if self.config.attention_activation == "relu2":
             attn_weights = relu2(qk).type_as(qk)
-        elif self.config.attention_activation == 'laplace':
+        elif self.config.attention_activation == "laplace":
             attn_weights = laplace(qk).type_as(qk)
         else:
             raise ValueError(f"Unknown attention activation function: {self.config.attention_activation}")
-    
+
         if padding_mask is not None:
-            attn_weights = attn_weights * padding_mask.unsqueeze(2) 
+            attn_weights = attn_weights * padding_mask.unsqueeze(2)
 
         if causal_mask is not None:
             attn_weights = attn_weights * causal_mask
-    
+
         return attn_weights
 
     def softmax_attention(self, q, k, padding_mask, causal_mask):
-        'Standard softmax attention with combined padding/attention mask'
+        "Standard softmax attention with combined padding/attention mask"
         slen = k.size(2)
         # C x C
         bias = self.rel_pos_bias(slen)
         if slen != q.size(2):
             assert q.size(2) == 1, "Size mismatch between Q and K in softmax attention"
             # 1 x C
-            bias = bias[-1:] 
+            bias = bias[-1:]
 
         # scaled attention
-        q = q * self.scaling 
+        q = q * self.scaling
 
         # B x K x C x C (if chunking)
         # B x 1 x S x S (otherwise)
-        qk = torch.matmul(q, k.transpose(2, 3)) + bias 
+        qk = torch.matmul(q, k.transpose(2, 3)) + bias
 
         # apply causal mask (presumed to be 1/0 for not masked / masked)
         # additive, but convert to 0/-inf (which is not explicitly in the Mega source code)
@@ -930,51 +946,53 @@ class MovingAverageGatedAttention(nn.Module):
             padding_mask = 1 - padding_mask
             padding_mask_all = padding_mask.all(dim=-1, keepdim=True)
             padding_mask = torch.logical_and(padding_mask, ~padding_mask_all)
-            qk = qk.masked_fill(padding_mask.unsqueeze(2).to(torch.bool), float('-inf'))
-    
+            qk = qk.masked_fill(padding_mask.unsqueeze(2).to(torch.bool), float("-inf"))
+
         attn_weights = self.softmax(qk).type_as(qk)
-        return attn_weights 
+        return attn_weights
 
     def forward(
-        self, 
-        x, 
+        self,
+        x,
         padding_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
         prev_key_values: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions = False,
-        use_cache=False
+        output_attentions=False,
+        use_cache=False,
     ):
         """
         Mega's self-attention block, which combines multi-headed EMA with traditional self-attention
 
         Inputs
-            x (Tensor): hidden states to be updated by Mega's self-attention, with shape (Sequence Length x Batch x Embedding Dim)
-            padding_mask (optional, Tensor): mask to indicate padding tokens, with expected shape 
+            x (Tensor): hidden states to be updated by Mega's self-attention, with shape (Sequence Length x Batch x
+            Embedding Dim) padding_mask (optional, Tensor): mask to indicate padding tokens, with expected shape
                 (Batch x Sequence Length), where entries are 1 for *not masked* and 0 for *masked*
             causal_mask (optional, Tensor): if provided, used to enforce causal attention;
-                expected shape is (Sequence Length x Sequence Length), and entries are 1 for *not masked* and
-                0 for *masked*
-            prev_key_values (tuple of Tensors, optional): if provided, the hidden state returned from the previous 
-                timestep during incremental decoding; expects that self-attention key, value, and EMA states 
-                are the first 3 entries in the tuple
-            output_attentions (boolean): if true, cross-attention weights will be returned
-            use_cache (boolean): if True, perfom incremental decoding and return incremental states for next step
+                expected shape is (Sequence Length x Sequence Length), and entries are 1 for *not masked* and 0 for
+                *masked*
+            prev_key_values (tuple of Tensors, optional): if provided, the hidden state returned from the previous
+                timestep during incremental decoding; expects that self-attention key, value, and EMA states are the
+                first 3 entries in the tuple
+            output_attentions (boolean): if true, cross-attention weights will be returned use_cache (boolean): if
+            True, perfom incremental decoding and return incremental states for next step
 
         Returns
             - hidden states sequence updated by Mega self-attention, with same shapes as `x`
             - (if output_attentions) the self-attention weights
-            - (if use_cache), the incremental state for use in the next step of incremental decoding; 
+            - (if use_cache), the incremental state for use in the next step of incremental decoding;
                 a tuple of tensors representing (key, value, EMA state)
         """
 
         seq_len, bsz, embed_dim = x.size()
-        assert embed_dim == self.config.hidden_size, f"Input embedding dimension should be {self.config.hidden_size}; received {embed_dim}"
+        assert (
+            embed_dim == self.config.hidden_size
+        ), f"Input embedding dimension should be {self.config.hidden_size}; received {embed_dim}"
 
         # store inputs for residual connection and handle pre-norm if requested
-        residual = x 
+        residual = x
         if self.config.normalize_before_mega:
             x = self.norm(x)
-    
+
         # L x B x E
         v = self.activation(self.v_proj(x))
 
@@ -987,22 +1005,25 @@ class MovingAverageGatedAttention(nn.Module):
             # the first 3 items in the saved states will be these regardless of whether cross-attention is present
             prev_self_key, prev_self_value, prev_ema_state = prev_key_values[0:3]
         else:
-            prev_self_key = prev_self_value = prev_ema_state = None 
+            prev_self_key = prev_self_value = prev_ema_state = None
 
         # L x B x D
         # updated_ema_state will be None if use_cache=False
-        mx, updated_ema_state = self.move(x, attention_mask=padding_mask, prev_state=prev_ema_state, use_cache=use_cache)
+        mx, updated_ema_state = self.move(
+            x, attention_mask=padding_mask, prev_state=prev_ema_state, use_cache=use_cache
+        )
         mx = self.dropout(mx)
 
         # L x B x D -> L x B x (2*D+S+E)
         base = self.mx_proj(mx)
         u, zr, hx = torch.split(
-            base, [
-                self.config.hidden_size, 
-                self.config.shared_representation_size + self.config.intermediate_size, 
-                self.config.hidden_size
-            ], 
-            dim=-1
+            base,
+            [
+                self.config.hidden_size,
+                self.config.shared_representation_size + self.config.intermediate_size,
+                self.config.hidden_size,
+            ],
+            dim=-1,
         )
 
         # L x B x D
@@ -1011,10 +1032,10 @@ class MovingAverageGatedAttention(nn.Module):
         # L x B x (E + S)
         z, r = torch.split(F.silu(zr), [self.config.shared_representation_size, self.config.intermediate_size], dim=-1)
 
-        # L x B x S -> L x B x 1 x S -> L x B x 2 X S 
+        # L x B x S -> L x B x 1 x S -> L x B x 2 X S
         z = z.unsqueeze(2) * self.g_param + self.b_param
-        
-        # L x B x 2 x S -> L x B x S 
+
+        # L x B x 2 x S -> L x B x S
         q, k = torch.unbind(z, dim=2)
 
         # L x B x D -> B x L x D
@@ -1024,7 +1045,7 @@ class MovingAverageGatedAttention(nn.Module):
 
         if self.config.is_decoder:
             # combine history and current to save updated state (if history is provided)
-            # when chunking is applied, the past states will be None at the end of the chunk, in 
+            # when chunking is applied, the past states will be None at the end of the chunk, in
             # which case, proceed as if no K/V history had been provided
             # saved states are stored with shape (bsz, seq_len, dim)
             if prev_self_key is not None:
@@ -1034,18 +1055,18 @@ class MovingAverageGatedAttention(nn.Module):
 
             # if not chunking, store as-is
             if not self.config.use_chunking:
-                updated_self_key = k 
+                updated_self_key = k
                 updated_self_value = v
             else:
-                curr_len = k.size(1) % self.config.chunk_size 
+                curr_len = k.size(1) % self.config.chunk_size
                 if curr_len == 0:
                     # if we're chunking and have reached the end of a chunk, wipe out the saved state
-                    updated_self_key = None 
+                    updated_self_key = None
                     updated_self_value = None
                 else:
-                    updated_self_key = k 
+                    updated_self_key = k
                     updated_self_value = v
-    
+
         ctx_len = k.size(1)
         if not self.config.use_chunking:
             # if we're not chunking, treat the entire sequence as one long chunk
@@ -1062,9 +1083,9 @@ class MovingAverageGatedAttention(nn.Module):
                 q = q.unsqueeze(1)
             else:
                 # B x L x S -> B x K x C x S
-                nc = seq_len // self.config.chunk_size 
+                nc = seq_len // self.config.chunk_size
                 q = q.reshape(bsz, nc, self.config.chunk_size, self.config.shared_representation_size)
-      
+
             if ctx_len < self.config.chunk_size:
                 k = k.unsqueeze(1)
                 v = v.unsqueeze(1)
@@ -1072,20 +1093,18 @@ class MovingAverageGatedAttention(nn.Module):
                     padding_mask = padding_mask.unsqueeze(1)
             else:
                 # B x L x S -> B x K x C x S
-                nc = ctx_len // self.config.chunk_size 
+                nc = ctx_len // self.config.chunk_size
                 k = k.reshape(bsz, nc, self.config.chunk_size, self.config.shared_representation_size)
                 v = v.reshape(bsz, nc, self.config.chunk_size, self.config.intermediate_size)
                 if padding_mask is not None:
                     padding_mask = padding_mask.view(bsz, nc, self.config.chunk_size)
-        
+
         # this is in the original Mega implementation to work around fork/join parallelism not supporting optional types
         if padding_mask is not None and padding_mask.dim() == 0:
-            padding_mask = None 
+            padding_mask = None
 
-        attn_weights = self.attention_function(q, k, 
-                                               padding_mask=padding_mask, 
-                                               causal_mask=causal_mask)
-    
+        attn_weights = self.attention_function(q, k, padding_mask=padding_mask, causal_mask=causal_mask)
+
         v = self.hidden_dropout(v, batch_first=True)
         kernel = self.attention_dropout(attn_weights)
 
@@ -1101,12 +1120,13 @@ class MovingAverageGatedAttention(nn.Module):
         if not self.config.normalize_before_mega:
             out = self.norm(out)
 
-        return_values = (out, attn_weights) if output_attentions else (out, )
+        return_values = (out, attn_weights) if output_attentions else (out,)
 
         if self.config.is_decoder:
             return_values = return_values + (updated_self_key, updated_self_value, updated_ema_state)
-    
+
         return return_values
+
 
 # Normalized feed-forward network
 # left as-is from original Mega repo aside from retrieving args from Hugging Face config
@@ -1114,7 +1134,8 @@ class NormalizedFeedForwardNetwork(nn.Module):
     """
     Normalized feed-forward network used in Mega blocks
     """
-    def __init__(self, config : MegaConfig):
+
+    def __init__(self, config: MegaConfig):
         super().__init__()
 
         self.config = config
@@ -1124,10 +1145,14 @@ class NormalizedFeedForwardNetwork(nn.Module):
 
         dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
         self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
-        self.hidden_dropout = dropout_module(self.config.nffn_activation_dropout_prob, module_name=self.__class__.__name__)
+        self.hidden_dropout = dropout_module(
+            self.config.nffn_activation_dropout_prob, module_name=self.__class__.__name__
+        )
 
         self.prenorm = self.config.normalize_before_ffn
-        self.norm = SequenceNorm(self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine)
+        self.norm = SequenceNorm(
+            self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine
+        )
 
         self.fc1 = nn.Linear(self.config.hidden_size, self.config.nffn_hidden_size)
         self.fc2 = nn.Linear(self.config.nffn_hidden_size, self.config.hidden_size)
@@ -1159,10 +1184,11 @@ class NormalizedFeedForwardNetwork(nn.Module):
 
         return x
 
+
 class MegaEmbeddings(nn.Module):
     """
-    Mega's basic implementation does not incorporate token type embeddings, so this is
-    a stripped-down version of RoBERTa's embeddings which optionally includes token types
+    Mega's basic implementation does not incorporate token type embeddings, so this is a stripped-down version of
+    RoBERTa's embeddings which optionally includes token types
     """
 
     def __init__(self, config: MegaConfig):
@@ -1175,14 +1201,12 @@ class MegaEmbeddings(nn.Module):
         # End copy
         self.padding_idx = config.pad_token_id
 
-    def forward(
-        self, input_ids=None, token_type_ids=None, inputs_embeds=None
-    ):
+    def forward(self, input_ids=None, token_type_ids=None, inputs_embeds=None):
         if (input_ids is None) and (inputs_embeds is None):
             raise ValueError("Must provide one of input_ids or inputs_embeds")
         elif input_ids is not None:
             input_shape = input_ids.size()
-            
+
             # get the word embeddings if only IDs are provided
             inputs_embeds = self.word_embeddings(input_ids)
         else:
@@ -1201,6 +1225,7 @@ class MegaEmbeddings(nn.Module):
         else:
             embeddings = inputs_embeds
         return embeddings
+
 
 class MegaLayer(nn.Module):
     def __init__(self, config: MegaConfig):
@@ -1225,32 +1250,33 @@ class MegaLayer(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[torch.FloatTensor]] = None,
         output_attentions: Optional[bool] = False,
-        use_cache: bool = False
+        use_cache: bool = False,
     ) -> Tuple[torch.Tensor]:
         """
-        A single Mega layer: either encoder or decoder, with optional cross-attention and optional 
-        normalized feed-forward layer
+        A single Mega layer: either encoder or decoder, with optional cross-attention and optional normalized
+        feed-forward layer
 
         Inputs
-            hidden_states (Tensor): hidden states to be updated by Mega's self-attention, with shape 
+            hidden_states (Tensor): hidden states to be updated by Mega's self-attention, with shape
                 (Target Sequence Length x Batch x Embedding Dim)
-            attention_mask (optional, Tensor): mask to indicate padding tokens, with expected shape 
+            attention_mask (optional, Tensor): mask to indicate padding tokens, with expected shape
                 (Batch x Target Sequence Length), where entries are 1 for *not masked* and 0 for *masked*
             encoder_hidden_states (optional, Tensor): encoder hidden states required for cross-attention, with
                 shape (Source Sequence Length x Batch x Embedding Dim)
             encoder_attention_mask (optional, Tensor): attention mask to denote padding in the source
                 sequence, with shape (Batch x Source Sequence Length)
-            past_key_value (tuple of Tensors, optional): if provided, the hidden state returned from the previous 
-                timestep during incremental decoding; expects that self-attention key, value, and EMA states 
-                are the first 3 entries in the tuple, and (if doing cross-attention) cross-attention key 
-                and value are the last 2 entries in the tuple
-            output_attentions (boolean): if true, cross-attention weights will be returned
-            use_cache (boolean): if True, perfom incremental decoding and return incremental states for next step
+            past_key_value (tuple of Tensors, optional): if provided, the hidden state returned from the previous
+                timestep during incremental decoding; expects that self-attention key, value, and EMA states are the
+                first 3 entries in the tuple, and (if doing cross-attention) cross-attention key and value are the last
+                2 entries in the tuple
+            output_attentions (boolean): if true, cross-attention weights will be returned use_cache (boolean): if
+            True, perfom incremental decoding and return incremental states for next step
 
         Returns
             - hidden states sequence updated by Mega, with same shapes as `hidden_states`
-            - (if output_attentions) the self-attention weights and (if using cross-attention) the cross-attention weights
-            - (if use_cache), the incremental state for use in the next step of incremental decoding; 
+            - (if output_attentions) the self-attention weights and (if using cross-attention) the cross-attention
+              weights
+            - (if use_cache), the incremental state for use in the next step of incremental decoding;
                 a tuple of tensors representing (key, value, EMA state) and optionally cross-attention key and value
 
         """
@@ -1263,40 +1289,44 @@ class MegaLayer(nn.Module):
             causal_mask = generate_causal_mask(sequence_length)
         else:
             causal_mask = None
-        
-        # incremental decoding in the MultiHeadEMA module requires that the attention mask has the same 
-        # sequence length as the input tensor; if we're caching incremental states, we assume the input 
-        # sequence length is 1 (Mega will break otherwise), so we take the padding mask for the final 
+
+        # incremental decoding in the MultiHeadEMA module requires that the attention mask has the same
+        # sequence length as the input tensor; if we're caching incremental states, we assume the input
+        # sequence length is 1 (Mega will break otherwise), so we take the padding mask for the final
         # token in the input (mask is received as [batch X sequence length])
         if use_cache and (past_key_value is not None) and (attention_mask is not None):
             mega_padding_mask = attention_mask[:, -1].unsqueeze(-1)
         else:
             mega_padding_mask = attention_mask
 
-        mega_outputs = self.mega_layer(x=hidden_states, 
-                                       padding_mask=mega_padding_mask,
-                                       causal_mask=causal_mask,
-                                       prev_key_values=past_key_value, 
-                                       output_attentions=output_attentions, 
-                                       use_cache=use_cache)
+        mega_outputs = self.mega_layer(
+            x=hidden_states,
+            padding_mask=mega_padding_mask,
+            causal_mask=causal_mask,
+            prev_key_values=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+        )
 
         new_hidden_states = mega_outputs[0]
         self_key, self_value, self_ema_state = mega_outputs[-3:] if use_cache else (None, None, None)
         self_attention_weights = mega_outputs[1] if output_attentions else None
-        
+
         # optional cross attention
         if self.cross_attn is not None:
             if encoder_hidden_states is None:
-                raise ValueError(f"Requested cross-attention without providing encoder hidden states")
-            
-            cross_attn_outputs = self.cross_attn(query=new_hidden_states,
-                                                 key=encoder_hidden_states,
-                                                 value=encoder_hidden_states,
-                                                 padding_mask=None,
-                                                 key_padding_mask=encoder_attention_mask,
-                                                 prev_key_values=past_key_value,
-                                                 output_attentions=output_attentions,
-                                                 use_cache=use_cache)
+                raise ValueError("Requested cross-attention without providing encoder hidden states")
+
+            cross_attn_outputs = self.cross_attn(
+                query=new_hidden_states,
+                key=encoder_hidden_states,
+                value=encoder_hidden_states,
+                padding_mask=None,
+                key_padding_mask=encoder_attention_mask,
+                prev_key_values=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
 
             # update the hidden state from cross attention
             new_hidden_states = cross_attn_outputs[0]
@@ -1308,20 +1338,25 @@ class MegaLayer(nn.Module):
         if self.nffn is not None:
             new_hidden_states = self.nffn(new_hidden_states)
 
-        outs = (new_hidden_states,) 
+        outs = (new_hidden_states,)
         if output_attentions:
             outs = outs + (self_attention_weights,)
             if self.cross_attn is not None:
-                outs = outs + (cross_attention_weights, )
-        
+                outs = outs + (cross_attention_weights,)
+
         if use_cache:
-            new_key_values = (self_key, self_value, self_ema_state, )
+            new_key_values = (
+                self_key,
+                self_value,
+                self_ema_state,
+            )
             if self.cross_attn is not None:
                 new_key_values = new_key_values + (cross_key, cross_value)
-            
+
             outs = outs + (new_key_values,)
-        
+
         return outs
+
 
 class MegaPooler(nn.Module):
     def __init__(self, config):
@@ -1412,8 +1447,8 @@ MEGA_INPUTS_DOCSTRING = r"""
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
-            This parameter can only be used when the model is initialized with `add_token_type_embeddings` parameter set 
-            to `True`. All the value in this tensor should be always < config.type_vocab_size.
+            This parameter can only be used when the model is initialized with `add_token_type_embeddings` parameter
+            set to `True`. All the value in this tensor should be always < config.type_vocab_size.
 
             [What are token type IDs?](../glossary#token-type-ids)
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
@@ -1440,12 +1475,12 @@ class MegaModel(MegaPreTrainedModel):
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added after self-attention, following the architecture described in *Mega: Moving Average
-    Equipped Gated Attention*_ by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig, 
+    Equipped Gated Attention*_ by Xuezhe Ma, Chunting Zhou, Xiang Kong, Junxian He, Liangke Gui, Graham Neubig,
     Jonathan May, and Luke Zettlemoyer
 
     To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True` and `bidirectional` set to `False`. To be used in a Seq2Seq model, the model needs to initialized with 
-    both `is_decoder=True` and `bidirectional=False` argument as well as `add_cross_attention` set to `True`; an 
+    to `True` and `bidirectional` set to `False`. To be used in a Seq2Seq model, the model needs to initialized with
+    both `is_decoder=True` and `bidirectional=False` argument as well as `add_cross_attention` set to `True`; an
     `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Mega: Moving Average Equipped Gated Attention*: https://arxiv.org/abs/2209.10655
@@ -1459,9 +1494,7 @@ class MegaModel(MegaPreTrainedModel):
         self.config = config
 
         self.embedding_layer = MegaEmbeddings(config)
-        self.encoders = nn.ModuleList(
-            [MegaLayer(config) for _ in range(config.num_hidden_layers)]
-        )
+        self.encoders = nn.ModuleList([MegaLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.pooler = MegaPooler(config) if add_pooling_layer else None
 
@@ -1523,7 +1556,9 @@ class MegaModel(MegaPreTrainedModel):
 
         if self.config.use_chunking and (input_ids.size(1) > self.config.chunk_size):
             if input_ids.size(1) % self.config.chunk_size != 0:
-                raise ValueError(f"config.use_chunking is activated; input sequence length must be shorter than or a multiple of config.chunk_size\nreceived sequence length of {input_ids.size(1)} with chunk size {self.config.chunk_size}")
+                raise ValueError(
+                    f"config.use_chunking is activated; input sequence length must be shorter than or a multiple of config.chunk_size\nreceived sequence length of {input_ids.size(1)} with chunk size {self.config.chunk_size}"
+                )
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1543,13 +1578,13 @@ class MegaModel(MegaPreTrainedModel):
 
         # if using cache, make sure we have a tuple of tuples which matches the length of our hidden layers
         if (past_key_values is not None) and (len(past_key_values) != self.config.num_hidden_layers):
-            raise ValueError(f"Received past key/value cache with size mismatch; expected {self.config.num_hidden_layers}, received {len(past_key_values)}")
-        
+            raise ValueError(
+                f"Received past key/value cache with size mismatch; expected {self.config.num_hidden_layers}, received {len(past_key_values)}"
+            )
+
         # get embeddings (batch X sequence length X embed dim)
         embedding_output = self.embedding_layer(
-            input_ids=input_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds
+            input_ids=input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
 
         # transpose for Mega --> (seq len X batch X embed dim)
@@ -1563,7 +1598,7 @@ class MegaModel(MegaPreTrainedModel):
 
         # pass through mega layers
         all_hidden_states = (embedding_output,) if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None 
+        all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         next_decoder_cache = () if use_cache else None
         for i, mega_layer in enumerate(self.encoders):
@@ -1575,24 +1610,24 @@ class MegaModel(MegaPreTrainedModel):
                 encoder_attention_mask=encoder_attention_mask,
                 past_key_value=current_decoder_cache,
                 output_attentions=output_attentions,
-                use_cache=use_cache
+                use_cache=use_cache,
             )
 
             hidden_states = mega_outputs[0]
             if output_hidden_states:
                 # store layer-wise hidden states in the way that the user expects
                 # (seq len X batch X embed dim) --> (batch X seq len X embed dim)
-                all_hidden_states += (hidden_states.view(batch_size, sequence_length, self.config.hidden_size), )
+                all_hidden_states += (hidden_states.view(batch_size, sequence_length, self.config.hidden_size),)
             if output_attentions:
                 self_attn_weights = mega_outputs[1]
-                all_self_attentions += (self_attn_weights, )
+                all_self_attentions += (self_attn_weights,)
                 if self.config.add_cross_attention:
                     cross_attn_weights = mega_outputs[2]
-                    all_cross_attentions += (cross_attn_weights, )
+                    all_cross_attentions += (cross_attn_weights,)
             if use_cache:
                 updated_cache = mega_outputs[-1]
-                next_decoder_cache += (updated_cache, )
-        
+                next_decoder_cache += (updated_cache,)
+
         # transpose final hidden states
         hidden_states = hidden_states.view(batch_size, sequence_length, self.config.hidden_size)
 
@@ -1600,7 +1635,12 @@ class MegaModel(MegaPreTrainedModel):
         pooled_output = self.pooler(hidden_states) if self.pooler is not None else None
 
         if not return_dict:
-            return (hidden_states, pooled_output) + (all_hidden_states, next_decoder_cache, all_self_attentions, all_cross_attentions)
+            return (hidden_states, pooled_output) + (
+                all_hidden_states,
+                next_decoder_cache,
+                all_self_attentions,
+                all_cross_attentions,
+            )
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=hidden_states,
@@ -1608,7 +1648,7 @@ class MegaModel(MegaPreTrainedModel):
             past_key_values=next_decoder_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -1782,7 +1822,7 @@ class MegaForMaskedLM(MegaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"mlm_head.weight", r"mlm_head.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
-    def __init__(self, config:MegaConfig):
+    def __init__(self, config: MegaConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1879,11 +1919,10 @@ class MegaForMaskedLM(MegaPreTrainedModel):
         )
 
 
-
 @add_start_docstrings(
     """
-    Mega Model transformer with a sequence classification/regression head on top (a linear layer on top of the
-    pooled output) e.g. for GLUE tasks.
+    Mega Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
     """,
     MEGA_START_DOCSTRING,
 )

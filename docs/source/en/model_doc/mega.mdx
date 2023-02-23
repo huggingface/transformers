@@ -26,7 +26,7 @@ The design choices in the Transformer attention mechanism, including weak induct
 
 Tips:
 
-Mega can perform quite well with relatively few parameters. See Appendix D in the Mega paper for examples of architectural specs which perform well in various settings.
+Mega can perform quite well with relatively few parameters. See Appendix D in the Mega paper for examples of architectural specs which perform well in various settings. If using Mega as a decoder, be sure to set `bidirectional=False` to avoid errors with default bidirectional EMA self-attention.
 
 This model was contributed by [mnaylor](https://huggingface.co/mnaylor).
 The original code can be found [here](https://github.com/facebookresearch/mega).

@@ -15,7 +15,6 @@
 
 
 import unittest
-from copy import deepcopy
 
 from transformers import MegaConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
@@ -39,7 +38,6 @@ if is_torch_available():
     )
     from transformers.models.mega.modeling_mega import (
         MEGA_PRETRAINED_MODEL_ARCHIVE_LIST,
-        MegaEmbeddings,
     )
 
 
@@ -59,7 +57,7 @@ class MegaModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_positions=1024,
-        bidirectional=False, # needed for decoding, and can't modify common generation tests; test separately by overriding
+        bidirectional=False,  # needed for decoding, and can't modify common generation tests; test separately by overriding
         ema_projection_size=16,
         shared_representation_size=64,
         use_chunking=False,
@@ -103,7 +101,7 @@ class MegaModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
-        self.num_attention_heads=1
+        self.num_attention_heads = 1
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -133,12 +131,9 @@ class MegaModelTester:
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
-            # num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
-            # hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            # max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             # added args
@@ -151,7 +146,7 @@ class MegaModelTester:
             chunk_size=self.chunk_size,
             attention_activation=self.attention_activation,
             use_normalized_ffn=self.use_normalized_ffn,
-            nffn_hidden_size=self.nffn_hidden_size
+            nffn_hidden_size=self.nffn_hidden_size,
         )
 
     def get_pipeline_config(self):
@@ -171,7 +166,7 @@ class MegaModelTester:
         ) = self.prepare_config_and_inputs()
 
         config.is_decoder = True
-        config.bidirectional = False 
+        config.bidirectional = False
         encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
         encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
@@ -376,43 +371,35 @@ class MegaModelTester:
     def create_and_check_bidirectionality(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        config.bidirectional = True 
+        config.bidirectional = True
         model = MegaModel(config)
         model.to(torch_device)
         model.eval()
         # no mask
-        result = model(
-            input_ids
-        )
+        result = model(input_ids)
         # with mask & token types
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids
-        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
         self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def check_chunking_shorter_sequence(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        config.use_chunking=True 
-        config.chunk_size=input_ids.size(1) + 25 
+        config.use_chunking = True
+        config.chunk_size = input_ids.size(1) + 25
         model = MegaModel(config)
 
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids
-        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
         self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def check_chunking_longer_sequence(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        config.use_chunking=True 
-        config.chunk_size=input_ids.size(1) * 2 # we want the chunk size to be < sequence length, and the sequence length to be a multiple of chunk size
+        config.use_chunking = True
+        config.chunk_size = (
+            input_ids.size(1) * 2
+        )  # we want the chunk size to be < sequence length, and the sequence length to be a multiple of chunk size
         model = MegaModel(config)
 
         result = model(
@@ -424,14 +411,10 @@ class MegaModelTester:
     def check_element_attention(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        config.attention_activation = 'laplace'
+        config.attention_activation = "laplace"
         model = MegaModel(config)
 
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids
-        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
         self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.hidden_size))
 
@@ -441,11 +424,7 @@ class MegaModelTester:
         config.max_positions = self.seq_length - 2
         model = MegaModel(config)
 
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            token_type_ids=token_type_ids
-        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
 
         self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.hidden_size))
 
@@ -577,6 +556,7 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             model = MegaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+
 @require_torch
 class MegaModelIntegrationTest(TestCasePlus):
     @slow
@@ -589,11 +569,9 @@ class MegaModelIntegrationTest(TestCasePlus):
         expected_shape = torch.Size((1, 11, 50265))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
-        expected_slice = torch.tensor([[
-            [ 67.8389,  10.1470, -32.7148],
-            [-11.1655,  29.1152,  23.1304],
-            [ -3.8015,  66.0397,  29.6733]
-        ]])
+        expected_slice = torch.tensor(
+            [[[67.8389, 10.1470, -32.7148], [-11.1655, 29.1152, 23.1304], [-3.8015, 66.0397, 29.6733]]]
+        )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
@@ -607,10 +585,8 @@ class MegaModelIntegrationTest(TestCasePlus):
         expected_shape = torch.Size((1, 11, 128))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice. taken from output[:, :3, :3]
-        expected_slice = torch.tensor([[
-            [ 1.1767, -0.6349,  2.8494],
-            [-0.5109, -0.7745,  1.9495],
-            [-0.3287, -0.2111,  3.3367]
-        ]])
+        expected_slice = torch.tensor(
+            [[[1.1767, -0.6349, 2.8494], [-0.5109, -0.7745, 1.9495], [-0.3287, -0.2111, 3.3367]]]
+        )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
