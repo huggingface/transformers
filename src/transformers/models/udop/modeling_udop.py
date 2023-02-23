@@ -335,30 +335,35 @@ class UdopMlp(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0.0, proj_drop=0.0):
+    def __init__(self, config):
         super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
+        self.num_heads = config.mae_config["num_heads"]
+        dim = config.mae_config["embed_dim"]
+        head_dim = dim // self.num_heads
         # NOTE scale factor was wrong in my original version, can set manually to be compat with prev weights
-        self.scale = qk_scale or head_dim**-0.5
+        self.scale = head_dim**-0.5
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
+        self.qkv = nn.Linear(dim, dim * 3)
+        # self.attn_drop = nn.Dropout(0)
         self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_drop)
+        # self.proj_drop = nn.Dropout(0)
 
     def forward(self, x):
-        B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        batch_size, N, num_channels = x.shape
+        qkv = (
+            self.qkv(x)
+            .reshape(batch_size, N, 3, self.num_heads, num_channels // self.num_heads)
+            .permute(2, 0, 3, 1, 4)
+        )
         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
+        # attn = self.attn_drop(attn)
 
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = (attn @ v).transpose(1, 2).reshape(batch_size, N, num_channels)
         x = self.proj(x)
-        x = self.proj_drop(x)
+        # x = self.proj_drop(x)
         return x
 
 
@@ -403,14 +408,7 @@ class Block(nn.Module):
     ):
         super().__init__()
         self.norm1 = nn.LayerNorm(config.mae_config["embed_dim"])
-        self.attn = Attention(
-            config.mae_config["embed_dim"],
-            num_heads=config.mae_config["num_heads"],
-            qkv_bias=True,
-            qk_scale=None,
-            attn_drop=0.0,
-            proj_drop=0.0,
-        )
+        self.attn = Attention(config)
 
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = nn.Identity()
@@ -548,65 +546,7 @@ class MaskedAutoencoderViT(nn.Module):
         return loss, pred, mask
 
 
-def mae_vit_base_patch16_dec512d8b(config):
-    model = MaskedAutoencoderViT(config)
-    return model
-
-
-def mae_vit_large_patch16_dec512d8b(image_size, vocab_size, max_2d_position_embeddings, **kwargs):
-    model = MaskedAutoencoderViT(
-        img_size=image_size,
-        patch_size=16,
-        embed_dim=1024,
-        depth=24,
-        num_heads=16,
-        decoder_embed_dim=512,
-        decoder_depth=8,
-        decoder_num_heads=16,
-        mlp_ratio=4,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6),
-        vocab_size=vocab_size,
-        max_2d_position_embeddings=max_2d_position_embeddings,
-        **kwargs,
-    )
-    return model
-
-
-def mae_vit_huge_patch14_dec512d8b(image_size, vocab_size, max_2d_position_embeddings, **kwargs):
-    model = MaskedAutoencoderViT(
-        img_size=image_size,
-        patch_size=14,
-        embed_dim=1280,
-        depth=32,
-        num_heads=16,
-        decoder_embed_dim=512,
-        decoder_depth=8,
-        decoder_num_heads=16,
-        mlp_ratio=4,
-        norm_layer=partial(nn.LayerNorm, eps=1e-6),
-        vocab_size=vocab_size,
-        max_2d_position_embeddings=max_2d_position_embeddings,
-        **kwargs,
-    )
-    return model
-
-
-# set recommended archs
-mae_vit_base_patch16 = mae_vit_base_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
-mae_vit_large_patch16 = mae_vit_large_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
-mae_vit_huge_patch14 = mae_vit_huge_patch14_dec512d8b  # decoder: 512 dim, 8 blocks
-
-
 def mae_model(config):
-    # mae_models = {
-    #     "mae_vit_base_patch16": mae_vit_base_patch16,
-    #     "mae_vit_large_patch16": mae_vit_large_patch16,
-    #     "mae_vit_huge_patch14": mae_vit_huge_patch14,
-    # }
-    #
-    # if name not in mae_models:
-    #     raise RuntimeError(f"{name} is not available")
-
     return MaskedAutoencoderViT(config)
 
 
