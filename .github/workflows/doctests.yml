@@ -34,6 +34,9 @@ jobs:
         run: |
           python3 utils/print_env.py
 
+      - name: Show installed libraries and their versions
+        run: pip freeze
+
       - name: Prepare files for doctests
         run: |
           python3 utils/prepare_for_doc_test.py src docs
