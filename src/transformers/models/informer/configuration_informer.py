@@ -41,8 +41,9 @@ class InformerConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        prediction_length (`int`):
-            The prediction length for the decoder. In other words, the prediction horizon of the model.
+        prediction_length (`int`, defaults to 1):
+            The prediction length for the decoder. In other words, the prediction horizon of the model. This value is
+            typically set from the dataset one is training on and we recommend to change it appropriately.
         context_length (`int`, *optional*, defaults to `prediction_length`):
             The context length for the encoder. If `None`, the context length will be the same as the
             `prediction_length`.
@@ -139,7 +140,7 @@ class InformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        prediction_length: Optional[int] = None,
+        prediction_length: int = 1,
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
