@@ -52,6 +52,7 @@ if is_torch_available():
         RegressionModelConfig,
         RegressionPreTrainedModel,
     )
+
     # hack to restore original logging level pre #21700
     get_regression_trainer = partial(tests.trainer.test_trainer.get_regression_trainer, log_level="info")
 
