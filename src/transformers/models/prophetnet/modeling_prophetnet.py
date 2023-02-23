@@ -918,8 +918,11 @@ class ProphetNetNgramSelfAttention(nn.Module):
         query_states = self._shape(query_states, ngram_sequence_length, batch_size)
         key_states = self._shape(key_states, -1, batch_size)
         value_states = self._shape(value_states, -1, batch_size)
-
-        proj_shape = (batch_size * self.num_attn_heads, -1, self.head_dim)
+        # BUG: Don't need to mix batch size and attention heads
+        # proj_shape = (batch_size * self.num_attn_heads, -1, self.head_dim)
+        # FIXME: No need to mix batch size and attention heads
+        proj_shape = (batch_size, self.num_attn_heads, -1, self.head_dim)
+        
 
         query_states = query_states.view(*proj_shape)
         key_states = key_states.view(*proj_shape)
@@ -928,9 +931,15 @@ class ProphetNetNgramSelfAttention(nn.Module):
         # chunk into main stream and predict stream
         hidden_states_list = hidden_states.chunk(1 + self.ngram, dim=1)
 
-        query_states_list = query_states.chunk(1 + self.ngram, dim=1)
-        key_states_list = key_states.chunk(1 + self.ngram, dim=1)
-        value_states_list = value_states.chunk(1 + self.ngram, dim=1)
+        #BUG: Next dimension because we don't mix up batch size and attention heads
+        # query_states_list = query_states.chunk(1 + self.ngram, dim=1)
+        # key_states_list = key_states.chunk(1 + self.ngram, dim=1)
+        # value_states_list = value_states.chunk(1 + self.ngram, dim=1)
+        
+        #FIXME: Next dimension because we don't mix up batch size and attention heads
+        query_states_list = query_states.chunk(1 + self.ngram, dim=2)
+        key_states_list = key_states.chunk(1 + self.ngram, dim=2)
+        value_states_list = value_states.chunk(1 + self.ngram, dim=2)
 
         main_hidden_states, hidden_states_predict_list = hidden_states_list[0], hidden_states_list[1:]
         main_query_states, predict_query_states_list = query_states_list[0], query_states_list[1:]
@@ -955,7 +964,10 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         # MAIN-STREAM
         # main attn weights
-        main_attn_weights = torch.bmm(main_query_states, main_key_states.transpose(1, 2))
+        # BUG: Don't need to mix batch size and attention heads
+        # main_attn_weights = torch.bmm(main_query_states, main_key_states.transpose(1, 2))
+        main_attn_weights = torch.einsum("bntc,bncs->bnts", main_query_states, main_key_states.transpose(2, 3))
+        
 
         # retrieve relative position embeddings for each layer -> see paper for more details
         main_relative_pos_embeddings = self.get_main_relative_pos_embeddings(
@@ -984,11 +996,18 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         main_attn_probs = nn.functional.dropout(main_attn_probs, p=self.attention_dropout, training=self.training)
         # project to attn_output
-        main_attn_output = torch.bmm(main_attn_probs, main_value_states)
-
+        # BUG: Change Bmm to einsum
+        # main_attn_output = torch.bmm(main_attn_probs, main_value_states)
+        # main_attn_output = (
+        #     main_attn_output.view(batch_size, self.num_attn_heads, sequence_length, self.head_dim)
+        #     .transpose(1, 2)
+        #     .reshape(batch_size, 1, sequence_length, hidden_size)
+        # )
+        # FIXME: Change Bmm to einsum
+        main_attn_output = torch.einsum("bntc,bncs->bnts", main_attn_probs, main_value_states)
         # reshape so that num_heads dim is merged into last `head_dim` axis
         main_attn_output = (
-            main_attn_output.view(batch_size, self.num_attn_heads, sequence_length, self.head_dim)
+            main_attn_output
             .transpose(1, 2)
             .reshape(batch_size, 1, sequence_length, hidden_size)
         )
@@ -997,11 +1016,11 @@ class ProphetNetNgramSelfAttention(nn.Module):
         # PREDICT-STREAM
         # [ngram, B*head, T, c]
         predict_query_states = torch.cat(predict_query_states_list, 0).view(
-            self.ngram, -1, sequence_length, self.head_dim
+            self.ngram, batch_size, self.num_attn_heads, sequence_length, self.head_dim
         )
         # [ngram, B*head, 2*T, c]
         predict_key_states = torch.cat(
-            [torch.cat([main_key_states, key], 1).unsqueeze(0) for key in predict_key_states_list], 0
+            [torch.cat([main_key_states, key], 2).unsqueeze(0) for key in predict_key_states_list], 0
         )
 
         # [ngram, T, B, C]
@@ -1011,10 +1030,10 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         # [ngram, B*head, 2*T, c]
         predict_value_states = torch.cat(
-            [torch.cat([main_value_states, v_p], 1).unsqueeze(0) for v_p in predict_value_states_list], 0
+            [torch.cat([main_value_states, v_p], 2).unsqueeze(0) for v_p in predict_value_states_list], 0
         )
         # [ngram, B*head, T, 2*T]
-        predict_attn_weights = torch.einsum("nbtc,nbsc->nbts", (predict_query_states, predict_key_states))
+        predict_attn_weights = torch.einsum("nbhtc,nbhsc->nbhts", (predict_query_states, predict_key_states))
 
         # [ngram, B*head, T, S]
         # retrieve relative position embeddings for each layer -> see paper for more details
@@ -1053,7 +1072,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         )
         # project to attention output
         # [ngram, B*head, T, c]
-        predict_attn_output = torch.einsum("nbts,nbsc->nbtc", (predict_attn_probs, predict_value_states))
+        predict_attn_output = torch.einsum("nbhts,nbhsc->nbhtc", (predict_attn_probs, predict_value_states))
 
         # reshape so that num_heads dim is merged into last `head_dim` axis
         # [ngram, B, T, C]
@@ -1081,7 +1100,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
         self, hidden_states, attn_weights, position_ids, main_relative_position_buckets
     ):
         # input hidden_states [B,T,C], input attn_weights [T*head,T,S], input position_ids [B,T] or [1,1]
-
+        batch_size, num_attn_heads, tgt_len, src_len = attn_weights.shape
+        attn_weights = attn_weights.view(batch_size * num_attn_heads, tgt_len, src_len)
+        #FIXME: How to interact when main_relative_position_buckets is None
         if main_relative_position_buckets is None:
             batch_size, sequence_length = hidden_states.shape[:2]
             relative_positions = (
@@ -1115,7 +1136,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         main_relative_pos_embeddings = torch.gather(
             rel_pos_embeddings, dim=1, index=main_relative_position_buckets
-        ).view(attn_weights.shape[:2] + (-1,))
+        ).view(batch_size, num_attn_heads, tgt_len ,-1,)
 
         return main_relative_pos_embeddings
 
@@ -1163,7 +1184,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         predict_relative_pos_embeddings = torch.gather(
             rel_pos_embeddings, dim=1, index=predict_relative_position_buckets
         ).view(
-            self.ngram, batch_size * self.num_attn_heads, sequence_length, -1
+            self.ngram, batch_size,  self.num_attn_heads, sequence_length, -1
         )  # [ngram, B*head, T, S]
 
         return predict_relative_pos_embeddings
@@ -1779,17 +1800,33 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             device=hidden_states.device,
         )
         causal_mask = torch.triu(causal_mask, 1)
-        extended_causal_mask = causal_mask[:seq_length, :seq_length][None, :, :].expand(
-            (batch_size,) + causal_mask.shape
+        
+        # BUG: this is not correct, it should be batch_size, num_decoder_attention_heads, seq_length, seq_length
+        # extended_causal_mask = causal_mask[:seq_length, :seq_length][None, :, :].expand(
+        #     (batch_size,) + causal_mask.shape
+        # )
+
+        # # add usual attention mask
+        # if attention_mask is not None:
+        #     extended_attention_mask = (1.0 - attention_mask[:, None, :]) * torch.finfo(self.dtype).min
+        #     extended_attention_mask = extended_causal_mask + extended_attention_mask
+        # else:
+        #     extended_attention_mask = extended_causal_mask
+        # return extended_attention_mask.repeat(self.config.num_decoder_attention_heads, 1, 1).to(hidden_states.dtype)
+        
+        # FIXME: this is doesn't mix batch dimension with number of heads
+        extended_causal_mask = causal_mask[:seq_length, :seq_length][None, None, :, :].expand(
+            (batch_size, self.config.num_decoder_attention_heads) + causal_mask.shape
         )
 
         # add usual attention mask
         if attention_mask is not None:
+            # BUG: What to do when attention_mask is not None?
             extended_attention_mask = (1.0 - attention_mask[:, None, :]) * torch.finfo(self.dtype).min
             extended_attention_mask = extended_causal_mask + extended_attention_mask
         else:
             extended_attention_mask = extended_causal_mask
-        return extended_attention_mask.repeat(self.config.num_decoder_attention_heads, 1, 1).to(hidden_states.dtype)
+        return extended_attention_mask.to(hidden_states.dtype)
 
     def prepare_predict_attention_mask(self, hidden_states, attention_mask):
         batch_size, seq_length = hidden_states.shape[:2]
@@ -1807,8 +1844,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             ],
             dim=-1,
         )
-        extended_predict_causal_mask = predict_causal_mask[:, None, :, :].expand(
-            predict_causal_mask.shape[:1] + (batch_size,) + predict_causal_mask.shape[1:]
+        extended_predict_causal_mask = predict_causal_mask[:, None, None, :, :].expand(
+            predict_causal_mask.shape[:1] + (batch_size,self.config.num_decoder_attention_heads) + predict_causal_mask.shape[1:]
         )
 
         # add usual attention mask
@@ -1822,9 +1859,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             extended_predict_attention_mask = extended_predict_causal_mask + extended_attention_mask
         else:
             extended_predict_attention_mask = extended_predict_causal_mask
-        return extended_predict_attention_mask.repeat(1, self.config.num_decoder_attention_heads, 1, 1).to(
-            hidden_states.dtype
-        )
+        return extended_predict_attention_mask.to(hidden_states.dtype)
 
 
 @add_start_docstrings(
