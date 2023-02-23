@@ -698,15 +698,15 @@ class PretrainedConfig(PushToHubMixin):
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
-        config = cls(**config_dict, **kwargs)
-
         to_remove = []
         for key, value in kwargs.items():
             if hasattr(config, key):
                 if key != "torch_dtype":
                     to_remove.append(key)
         for key in to_remove:
-            kwargs.pop(key, None)
+            config.pop(key, None)
+
+        config = cls(**config_dict, **kwargs)
 
         logger.info(f"Model config {config}")
         if return_unused_kwargs:
