@@ -1459,6 +1459,8 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         """
         self.encoder._freeze_parameters()
 
+    @add_start_docstrings_to_model_forward(WHISPER_ENCODER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_features: Optional[torch.LongTensor] = None,
