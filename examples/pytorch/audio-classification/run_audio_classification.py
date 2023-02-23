@@ -168,9 +168,6 @@ class ModelArguments:
         default=False,
         metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
     )
-    dropout: Optional[float] = field(
-        default=0., metadata={"help": "Encoder dropout to apply."}
-    )
 
     def __post_init__(self):
         if not self.freeze_feature_extractor and self.freeze_feature_encoder:
@@ -345,7 +342,6 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    config.activation_dropout = config.attention_dropout = config.dropout = model_args.dropout
     model = AutoModelForAudioClassification.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),
