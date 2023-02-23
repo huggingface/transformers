@@ -121,8 +121,8 @@ class InformerConfig(PretrainedConfig):
     ```python
     >>> from transformers import InformerConfig, InformerModel
 
-    >>> # Initializing a default Informer configuration
-    >>> configuration = InformerConfig(prediction_length=7)
+    >>> # Initializing an Informer configuration with 12 time steps for prediction
+    >>> configuration = InformerConfig(prediction_length=12)
 
     >>> # Randomly initializing a model (with random weights) from the configuration
     >>> model = InformerModel(configuration)
