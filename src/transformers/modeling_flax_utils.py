@@ -653,7 +653,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 **kwargs,
             )
         else:
-            model_kwargs = kwargs
+            model_kwargs = kwargs.copy()
 
         if commit_hash is None:
             commit_hash = getattr(config, "_commit_hash", None)
