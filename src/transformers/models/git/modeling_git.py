@@ -1477,7 +1477,7 @@ class GitForCausalLM(GitPreTrainedModel):
         >>> # sample frames
         >>> num_frames = model.config.num_image_with_embedding
         >>> indices = sample_frame_indices(
-        ...     clip_len=num_frames, frame_sample_rate=1, seg_len=container.streams.video[0].frames
+        ...     clip_len=num_frames, frame_sample_rate=4, seg_len=container.streams.video[0].frames
         ... )
         >>> frames = read_video_pyav(container, indices)
 
