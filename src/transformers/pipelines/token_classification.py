@@ -231,7 +231,7 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         return super().__call__(inputs, **kwargs)
 
-    def preprocess(self, text, offset_mapping=None, **preprocess_params):
+    def preprocess(self, sentence, offset_mapping=None, **preprocess_params):
         padding = preprocess_params.pop("padding", False)
         stride = preprocess_params.pop("stride", 0)
         return_overflowing_tokens = preprocess_params.pop("return_overflowing_tokens", False)
@@ -251,14 +251,14 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         for i in range(num_chunks):
             if self.framework == "tf":
-                model_inputs = {k: tf.expend_dims(v[i], 0) for k, v in inputs.items()}
+                model_inputs = {k: tf.expand_dims(v[i], 0) for k, v in inputs.items()}
             else:
                 model_inputs = {k: v[i].unsqueeze(0) for k, v in inputs.items()}
 
             if offset_mapping:
                 model_inputs["offset_mapping"] = offset_mapping if i == 0 else None
 
-            model_inputs["text"] = text if i == 0 else None
+            model_inputs["sentence"] = sentence if i == 0 else None
             model_inputs["is_last"] = i == num_chunks - 1
 
             yield model_inputs
@@ -281,7 +281,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         if ignore_labels is None:
             ignore_labels = ["O"]
         stride = postprocess_params.pop("stride", 0)
-        text = all_outputs[0]["text"]
+        sentence = all_outputs[0]["sentence"]
         keys = ["input_ids", "logits", "special_tokens_mask"]
         if "offset_mapping" in all_outputs[0].keys():
             x = all_outputs[0]["offset_mapping"]
@@ -339,7 +339,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             offset_mapping = all_outputs[0].pop("offset_mapping", None)
 
         pre_entities = self.gather_pre_entities(
-            text, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
+            sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
         )
         grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
         # Filter anything that is in self.ignore_labels
@@ -353,7 +353,7 @@ class TokenClassificationPipeline(ChunkPipeline):
 
     def gather_pre_entities(
         self,
-        text: str,
+        sentence: str,
         input_ids: np.ndarray,
         scores: np.ndarray,
         offset_mapping: Optional[List[Tuple[int, int]]],
@@ -375,7 +375,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                     if self.framework == "pt":
                         start_ind = start_ind.item()
                         end_ind = end_ind.item()
-                word_ref = text[start_ind:end_ind]
+                word_ref = sentence[start_ind:end_ind]
                 if getattr(self.tokenizer._tokenizer.model, "continuing_subword_prefix", None):
                     # This is a BPE, word aware tokenizer, there is a correct way
                     # to fuse tokens
