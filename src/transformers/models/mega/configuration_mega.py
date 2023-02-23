@@ -45,36 +45,81 @@ class MegaConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Mega model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MegaModel`] or [`TFMegaModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 128):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        num_hidden_layers (`int`, *optional*, defaults to 4):
+            Number of hidden layers in the Mega encoder.
+        intermediate_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the hidden size (attention value projection) within the Mega encoder (H in the Mega paper).
+        ema_projection_size (`int`, *optional*, defaults to 16):
+            Dimensionality of the MultiHeadEMA
+        bidirectional (`bool`, *optional*, defaults to `True`):
+            Whether the MultiHeadEMA used in Mega's self-attention should work bidirectionally (True) or
+            unidirectionally (False). Bidirectional EMA is incompatible with causal decoding, so this should be
+            False if you intend to use the model as a decoder.
+        shared_representation_size (`int`, *optional*, defaults to 64):
+            Dimensionality of the linear projection for shared representation after silu gating (Z in the Mega 
+            paper). 
+        use_chunking (`bool`, *optional*, defaults to `False`):
+            Whether to chunk inputs for linear self-attention complexity (described as Mega-chunk in the paper)
+        chunk_size (`int`, *optional*, defaults to -1):
+            If `use_chunking` is True, determines the size of the chunks to apply to the input sequence. If chunking
+            is used, input sequences must be padded to a multiple of `chunk_size`
+        truncation (`int`, *optional*, defaults to None):
+            If specified, the sequence length for which to truncate MultiHeadEMA
+        normalize_before_mega (`bool`, *optional*, defaults to `True`):
+            Whether to normalize before (True) or after (False) passing through Mega encoder blocks
+        normalization_type (`str`, *optional*, defaults to `"scalenorm"`):
+            Type of normalization to use in Mega encoder blocks. Choose one of `"scalenorm"`, `"layernorm"`, 
+            `"rmsnorm"`, `"batchnorm"`, or `"syncbatchnorm"` (GPU required for syncbatchnorm)
+        norm_affine (`bool`, *optional*, defaults to `True`):
+            If True, applies a parameterized affine transformation to inputs during normalization
+        activation (`str`, *optional*, defaults to `"silu"`):
+            Activation function to apply within Mega encoder blocks. Choose one of `"silu"`, `"relu"`, 
+            `"linear"`, `"gelu"`, or `"gelu_accurate"`
+        attention_activation (`str`, *optional*, defaults to `"softmax"`):
+            Activation function to apply for single-headed self-attention (a la Transformer). Choose 
+            one of `"softmax"`, `"laplace"`, or `"relu2"`
+        dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probability for EMA self-attention 
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
+        use_feature_dropout (`bool`, *optional*, defaults to `False`):
+            Whether to use feature-based (True) or standard dropout (False) 
+        use_normalized_ffn (`bool`, *optional*, defaults to `True`):
+            Whether to use the normalized feed-forward sub-layer in Mega blocks (True) or pass Mega
+            encoder output as-is (False)
+        nffn_hidden_size (`int`, *optional*, defaults to 256):
+            If using the NFFN layer (use_normalized_ffn = True), this is the hidden size of the NFFN
+        normalize_before_ffn (`bool`, *optional*, defaults to `True`):
+            Whether to normalize before (True) or after (False) the feed-forward portion of NFFN
+        nffn_activation_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the NFFN component.
+        max_positions (`int`, *optional*, defaults to 2048):
+            The maximum sequence length to use for positional representations. For "simple" relative positional bias,
+            this is a hard limit on input length; "rotary" relative positional bias will extrapolate to longer sequences
+        add_token_type_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to account for token types in embeddings. Left as optional to maintain compatibility with 
+            original implementation while adding support for token types.
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`MegaModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`MegaModel`]. Only used if
+            `add_token_type_embeddings = True`
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        ema_delta_alpha_range (`float`, *optional*, defaults to 0.2):
+            The standard deviation for initializing the delta and alpha parameters in MultiHeadEMA.
+        ema_beta_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation for initializing the beta parameter in MultiHeadEMA.
+        ema_gamma_omega_range (`float`, *optional*, defaults to 1.0):
+            The standard deviation for initializing the gamma and omega parameters in MultiHeadEMA.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+        relative_positional_bias (`str`, *optional*, defaults to `"rotary"`):
+            Type of relative positional encoding. Choose one of `"rotary"` or `"simple"`. If `"simple"` is 
+            selected, `max_positions` is used as a limit on input size, while `"rotary"` extrapolates beyond
+            `max_positions`.
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -82,6 +127,9 @@ class MegaConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        add_lm_hidden_dense_layer (`bool`, *optional*, defaults to `True`):
+            Whether to include a hidden layer for projection between encoder outputs and LM heads (True) or pass
+            hidden states directly to LM head (False). Remains optional for compatibility with original implementation
 
     Examples:
 
@@ -124,7 +172,7 @@ class MegaConfig(PretrainedConfig):
         nffn_hidden_size=256, # if use_normalized_ffn is True, this will be used to construct the linear layer
         normalize_before_ffn=True, # when to apply norm in the NFFN
         nffn_activation_dropout_prob=0.1,
-        max_positions=1024,
+        max_positions=2048,
         add_token_type_embeddings=False,
         type_vocab_size=2, # if add_token_type_embeddings is True, this will be used to construct the token type embeddings
         initializer_range=0.02,

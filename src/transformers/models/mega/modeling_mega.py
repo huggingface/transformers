@@ -25,7 +25,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 import torch.nn.functional as F
 
 from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
@@ -35,7 +34,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -317,8 +315,8 @@ class MultiHeadEMA(nn.Module):
 # removed before_attn_fn argument and unused static_kv
 # otherwise left as-is with the exception of hidden states
 class GatedCrossAttention(nn.Module):
-    """Gated Structured State Attention.
-    See "" for more details.
+    """Gated Structured State Attention for use in encoder-decoder model
+    See Mega paper for more details.
     """
 
     def __init__(self, config: MegaConfig):
@@ -557,7 +555,7 @@ class SimpleRelativePositionalBias(nn.Module):
     def __init__(self, config:MegaConfig):
         super().__init__()
         self.config = config
-        self.max_positions = config.max_positions
+        self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size 
         self.rel_pos_bias = nn.Parameter(torch.Tensor(2 * config.max_positions - 1))
         self.reset_parameters()
 
@@ -590,7 +588,7 @@ class RotaryRelativePositionalBias(nn.Module):
         assert config.hidden_size % 2 == 0
         self.config = config
         self.embed_dim = config.shared_representation_size
-        self.max_positions = config.max_positions
+        self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size 
         self.sine, self.cosine = RotaryRelativePositionalBias.get_sinusoid_embeddings(config.max_positions, self.embed_dim)
         self.alpha = nn.Parameter(torch.Tensor(1, self.embed_dim))
         self.b_param = nn.Parameter(torch.Tensor(1, self.embed_dim))
@@ -823,7 +821,6 @@ class MovingAverageGatedAttention(nn.Module):
         self.g_param = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
         self.b_param = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
 
-        max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size 
         if self.config.relative_positional_bias == 'simple':
             self.rel_pos_bias = SimpleRelativePositionalBias(config)
         elif self.config.relative_positional_bias == 'rotary':
@@ -833,7 +830,6 @@ class MovingAverageGatedAttention(nn.Module):
 
         self.softmax = nn.Softmax(dim=-1)
         self.attention_function = self.softmax_attention if self.config.attention_activation == 'softmax' else self.element_attention
-
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -1231,6 +1227,33 @@ class MegaLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: bool = False
     ) -> Tuple[torch.Tensor]:
+        """
+        A single Mega layer: either encoder or decoder, with optional cross-attention and optional 
+        normalized feed-forward layer
+
+        Inputs
+            hidden_states (Tensor): hidden states to be updated by Mega's self-attention, with shape 
+                (Target Sequence Length x Batch x Embedding Dim)
+            attention_mask (optional, Tensor): mask to indicate padding tokens, with expected shape 
+                (Batch x Target Sequence Length), where entries are 1 for *not masked* and 0 for *masked*
+            encoder_hidden_states (optional, Tensor): encoder hidden states required for cross-attention, with
+                shape (Source Sequence Length x Batch x Embedding Dim)
+            encoder_attention_mask (optional, Tensor): attention mask to denote padding in the source
+                sequence, with shape (Batch x Source Sequence Length)
+            past_key_value (tuple of Tensors, optional): if provided, the hidden state returned from the previous 
+                timestep during incremental decoding; expects that self-attention key, value, and EMA states 
+                are the first 3 entries in the tuple, and (if doing cross-attention) cross-attention key 
+                and value are the last 2 entries in the tuple
+            output_attentions (boolean): if true, cross-attention weights will be returned
+            use_cache (boolean): if True, perfom incremental decoding and return incremental states for next step
+
+        Returns
+            - hidden states sequence updated by Mega, with same shapes as `hidden_states`
+            - (if output_attentions) the self-attention weights and (if using cross-attention) the cross-attention weights
+            - (if use_cache), the incremental state for use in the next step of incremental decoding; 
+                a tuple of tensors representing (key, value, EMA state) and optionally cross-attention key and value
+
+        """
 
         # Mega self-attention
         # create a causal mask for self-attention if we're decoding
