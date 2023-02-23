@@ -10,9 +10,11 @@ from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, ChunkPipeline
 
 
 if is_tf_available():
+    import tensorflow as tf
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
 if is_torch_available():
+    import torch
     from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
 
@@ -257,6 +259,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                 model_inputs["offset_mapping"] = offset_mapping if i == 0 else None
 
             model_inputs["text"] = text if i == 0 else None
+            model_inputs["is_last"] = i == num_chunks - 1
 
             yield model_inputs
 
