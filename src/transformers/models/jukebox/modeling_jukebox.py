@@ -70,8 +70,8 @@ def filter_logits(logits, top_k=0, top_p=0.0, filter_value=-float("Inf")):
         sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
         sorted_indices_to_remove[..., 0] = 0
 
-        # indices_to_remove = sorted_indices[sorted_indices_to_remove]
-        indices_to_remove = torch.zeros_like(logits, dtype=torch.uint8).scatter_(
+        # previously `dtype=torch.uint8`, cf pytorch 1.2.0 compatibility
+        indices_to_remove = torch.zeros_like(logits, dtype=torch.bool).scatter_(
             dim=-1, index=sorted_indices, src=sorted_indices_to_remove
         )
         logits[indices_to_remove] = filter_value
