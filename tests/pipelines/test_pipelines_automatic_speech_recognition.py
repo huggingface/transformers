@@ -526,7 +526,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
         output = pipe(array, chunk_length_s=10)
         self.assertDictEqual(
-            output,
+            nested_simplify(output),
             {
                 "chunks": [
                     {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
@@ -552,7 +552,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                     },
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (26.66, 31.060000000000002),
+                        "timestamp": (26.66, 31.06),
                     },
                 ],
                 "text": (
