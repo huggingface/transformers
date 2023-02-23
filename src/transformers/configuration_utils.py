@@ -697,7 +697,9 @@ class PretrainedConfig(PushToHubMixin):
         # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
-
+        kwargs = {
+            (cls.attribute_map[key] if (key != "attribute_map" and key in cls.attribute_map) else key): value for key, value in kwargs.items()
+        }
         to_remove = []
         for key, value in kwargs.items():
             if key in config_dict:
