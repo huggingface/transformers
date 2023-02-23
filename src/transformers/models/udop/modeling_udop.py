@@ -206,26 +206,15 @@ num_heads)`.
 AUGMENTATION_RANGE = (0.80, 1.25)
 
 
-def _ntuple(n):
-    def parse(x):
-        if isinstance(x, collections.abc.Iterable):
-            return x
-        return tuple(repeat(x, n))
-
-    return parse
-
-
-to_2tuple = _ntuple(2)
-
-
 def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    """
+    Copied from CVT Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
-    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
-    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
-    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
-
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
     """
     if drop_prob == 0.0 or not training:
         return x
@@ -255,7 +244,9 @@ def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
 
 
 def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
-    assert embed_dim % 2 == 0
+    """Copied from vit mae"""
+    if embed_dim % 2 != 0:
+        raise ValueError("embed_dim must be even")
 
     # use half of dimensions to encode grid_h
     emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])  # (H*W, D/2)
@@ -267,7 +258,8 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
 
 def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     """
-    embed_dim: output dimension for each position pos: a list of positions to be encoded: size (M,) out: (M, D)
+    Copied from vit mae embed_dim: output dimension for each position pos: a list of positions to be encoded: size (M,)
+    out: (M, D)
     """
     assert embed_dim % 2 == 0
     omega = np.arange(embed_dim // 2, dtype=float)
@@ -284,11 +276,11 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     return emb
 
 
-class DropPath(nn.Module):
+class UdopDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: float = 0.0, scale_by_keep: bool = True):
-        super(DropPath, self).__init__()
+        super().__init__()
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
 
@@ -304,8 +296,8 @@ class PatchEmbed(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        img_size = to_2tuple(config.image_size)
-        patch_size = to_2tuple(config.mae_config["patch_size"])
+        img_size = (config.image_size, config.image_size)
+        patch_size = (config.mae_config["patch_size"], config.mae_config["patch_size"])
         self.img_size = img_size
         self.patch_size = patch_size
         self.grid_size = (img_size[0] // patch_size[0], img_size[1] // patch_size[1])
@@ -323,7 +315,7 @@ class PatchEmbed(nn.Module):
         return x
 
 
-class Mlp(nn.Module):
+class UdopMlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
         super().__init__()
         out_features = out_features or in_features
@@ -407,36 +399,26 @@ class CrossAttention(nn.Module):
 class Block(nn.Module):
     def __init__(
         self,
-        dim,
-        num_heads,
-        mlp_ratio=4.0,
-        qkv_bias=True,
-        qk_scale=None,
-        drop=0.0,
-        attn_drop=0.0,
-        drop_path=0.0,
-        act_layer=nn.GELU,
-        norm_layer=nn.LayerNorm,
-        use_cross_attention=False,
+        config,
     ):
         super().__init__()
-        self.norm1 = norm_layer(dim)
+        self.norm1 = nn.LayerNorm(config.mae_config["embed_dim"])
         self.attn = Attention(
-            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop
+            config.mae_config["embed_dim"],
+            num_heads=config.mae_config["num_heads"],
+            qkv_bias=True,
+            qk_scale=None,
+            attn_drop=0.0,
+            proj_drop=0.0,
         )
 
-        self.use_cross_attention = use_cross_attention
-        if use_cross_attention:
-            self.cross_attn = CrossAttention(
-                dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop
-            )
-            self.norm_ct = norm_layer(dim)
-
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
+        self.drop_path = nn.Identity()
+        self.norm2 = nn.LayerNorm(config.mae_config["embed_dim"])
+        mlp_hidden_dim = int(config.mae_config["embed_dim"] * config.mae_config["mlp_ratio"])
+        self.mlp = UdopMlp(
+            in_features=config.mae_config["embed_dim"], hidden_features=mlp_hidden_dim, act_layer=nn.GELU
+        )
 
     def forward(self, x, context=None):
         x = x + self.drop_path(self.attn(self.norm1(x)))
@@ -452,24 +434,18 @@ class MaskedAutoencoderViT(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.embed_dim = config.image_size
+        # self.embed_dim = config.image_size
         self.decoder_embed_dim = 512
         embed_dim = config.mae_config["embed_dim"]
         self.patch_embed = PatchEmbed(config)
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(
-            torch.zeros(1, num_patches + 1, embed_dim), requires_grad=False
-        )  # fixed sin-cos embedding
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim), requires_grad=False)
 
-        # num_heads = 16
-        mlp_ratio = 4.0
         norm_layer = nn.LayerNorm
         depth = 24
-        self.blocks = nn.ModuleList(
-            [Block(embed_dim, config.mae_config["num_heads"], config.mae_config["mlp_ratio"]) for i in range(depth)]
-        )
+        self.blocks = nn.ModuleList([Block(config) for i in range(depth)])
         self.norm = norm_layer(embed_dim)
 
         self.initialize_weights()
