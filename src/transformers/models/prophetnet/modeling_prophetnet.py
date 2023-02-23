@@ -754,15 +754,20 @@ class ProphetNetAttention(nn.Module):
 
         if attention_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights + attention_mask
-
+        # BUG: No longer need to reshape attention weights
+        # if output_attentions:
+        #     # this operation is a bit awkward, but it's required to
+        #     # make sure that attn_weights keeps its gradient.
+        #     # In order to do so, attn_weights have to be reshaped
+        #     # twice and have to be reused in the following
+        #     attn_weights_reshaped = attn_weights.view(batch_size, self.num_attn_heads, tgt_len, src_len)
+        #     attn_weights = attn_weights_reshaped.view(batch_size * self.num_attn_heads, tgt_len, src_len)
+        # else:
+        #     attn_weights_reshaped = None
+        # FIXME: This is a workaround to fix the bug
         if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_attn_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_attn_heads, tgt_len, src_len)
-        else:
+            attn_weights_reshaped = attn_weights
+        else: 
             attn_weights_reshaped = None
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -1593,11 +1598,22 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             ]
             extended_attention_mask = self.prepare_attention_mask(hidden_states, attention_mask)
             extended_predict_attention_mask = self.prepare_predict_attention_mask(hidden_states, attention_mask)
-
+        
         # prepare encoder attention mask
+        # BUG encoder_attention_mask mixes batch dimension with sequence dimension
+        # if encoder_attention_mask is not None:
+        #     extended_encoder_attention_mask = (
+        #         1.0 - encoder_attention_mask[:, None, :].repeat(self.config.num_decoder_attention_heads, 1, 1)
+        #     ) * torch.finfo(self.dtype).min
+        #     extended_encoder_attention_mask = extended_encoder_attention_mask.to(inputs_embeds.dtype)
+        # else:
+        #     extended_encoder_attention_mask = None
+        
+        # prepare encoder attention mask
+        # FIXME: encoder_attention_mask mixes batch dimension with sequence dimension
         if encoder_attention_mask is not None:
             extended_encoder_attention_mask = (
-                1.0 - encoder_attention_mask[:, None, :].repeat(self.config.num_decoder_attention_heads, 1, 1)
+                1.0 - encoder_attention_mask[:,None, None, :].repeat(1,self.config.num_decoder_attention_heads, 1, 1)
             ) * torch.finfo(self.dtype).min
             extended_encoder_attention_mask = extended_encoder_attention_mask.to(inputs_embeds.dtype)
         else:
