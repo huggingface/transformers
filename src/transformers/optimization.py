@@ -32,7 +32,7 @@ from .utils.versions import require_version
 logger = logging.get_logger(__name__)
 
 
-def _get_constant_schedule_lr_lambda():
+def _get_constant_schedule_lr_lambda(_):
     return 1
 
 
