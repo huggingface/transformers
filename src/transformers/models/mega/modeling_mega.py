@@ -1942,11 +1942,9 @@ class MegaForSequenceClassification(MegaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MEGA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        checkpoint="cardiffnlp/twitter-mnaylor/mega-base-wikitext-emotion",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'optimism'",
-        expected_loss=0.08,
     )
     def forward(
         self,
@@ -2128,11 +2126,9 @@ class MegaForTokenClassification(MegaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MEGA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        checkpoint="Jean-Baptiste/mega-large-ner-english",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="['O', 'ORG', 'ORG', 'O', 'O', 'O', 'O', 'O', 'LOC', 'O', 'LOC', 'LOC']",
-        expected_loss=0.01,
     )
     def forward(
         self,
@@ -2228,11 +2224,9 @@ class MegaForQuestionAnswering(MegaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MEGA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        checkpoint="deepset/mnaylor/mega-base-wikitext-squad2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="' puppet'",
-        expected_loss=0.86,
     )
     def forward(
         self,

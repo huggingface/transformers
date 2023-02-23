@@ -176,7 +176,6 @@ class MegaConfig(PretrainedConfig):
         ema_delta_alpha_range=0.2,
         ema_beta_range=0.02,
         ema_gamma_omega_range=1.0,
-        layer_norm_eps=1e-12,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
