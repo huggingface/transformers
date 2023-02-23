@@ -261,6 +261,10 @@ class PretrainedConfig(PushToHubMixin):
 
     def __init__(self, **kwargs):
         # Attributes with defaults
+        kwargs = {
+            (self.attribute_map[key] if (key in self.attribute_map) else key): value for key, value in kwargs.items()
+        }
+
         self.return_dict = kwargs.pop("return_dict", True)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
