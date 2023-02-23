@@ -289,24 +289,27 @@ def main():
         data_args.audio_column_name, datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate)
     )
 
+    model_input_name = feature_extractor.model_input_names[0]
+
     def train_transforms(batch):
         """Apply train_transforms across a batch."""
-        output_batch = {"input_values": []}
+        output_batch = {model_input_name: []}
         for audio in batch[data_args.audio_column_name]:
             wav = random_subsample(
-                audio["array"], max_length=data_args.max_length_seconds, sample_rate=feature_extractor.sampling_rate
+                audio["array"], max_length=data_args.max_length_seconds, sample_rate=audio["sampling_rate"]
             )
-            output_batch["input_values"].append(wav)
+            inputs = feature_extractor(wav, sampling_rate=audio["sampling_rate"])
+            output_batch[model_input_name].append(inputs.get(model_input_name)[0])
         output_batch["labels"] = list(batch[data_args.label_column_name])
 
         return output_batch
 
     def val_transforms(batch):
         """Apply val_transforms across a batch."""
-        output_batch = {"input_values": []}
+        output_batch = {model_input_name: []}
         for audio in batch[data_args.audio_column_name]:
-            wav = audio["array"]
-            output_batch["input_values"].append(wav)
+            inputs = feature_extractor(audio["array"], sampling_rate=audio["sampling_rate"])
+            output_batch[model_input_name].append(inputs.get(model_input_name)[0])
         output_batch["labels"] = list(batch[data_args.label_column_name])
 
         return output_batch
