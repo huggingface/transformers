@@ -114,8 +114,6 @@ class MegaConfig(PretrainedConfig):
             The standard deviation for initializing the beta parameter in MultiHeadEMA.
         ema_gamma_omega_range (`float`, *optional*, defaults to 1.0):
             The standard deviation for initializing the gamma and omega parameters in MultiHeadEMA.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
         relative_positional_bias (`str`, *optional*, defaults to `"rotary"`):
             Type of relative positional encoding. Choose one of `"rotary"` or `"simple"`. If `"simple"` is selected,
             `max_positions` is used as a limit on input size, while `"rotary"` extrapolates beyond `max_positions`.
@@ -220,7 +218,6 @@ class MegaConfig(PretrainedConfig):
         self.ema_delta_alpha_range = ema_delta_alpha_range  # 0.2
         self.ema_beta_range = ema_beta_range  # 0.02
         self.ema_gamma_omega_range = ema_gamma_omega_range  # 1.0
-        self.layer_norm_eps = layer_norm_eps
         self.relative_positional_bias = relative_positional_bias
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
