@@ -6,7 +6,7 @@ import numpy as np
 
 from ..models.bert.tokenization_bert import BasicTokenizer
 from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, ChunkPipeline
 
 
 if is_tf_available():
@@ -82,7 +82,7 @@ class AggregationStrategy(ExplicitEnum):
                   end up with different tags. Word entity will simply be the token with the maximum score.
     """,
 )
-class TokenClassificationPipeline(Pipeline):
+class TokenClassificationPipeline(ChunkPipeline):
     """
     Named Entity Recognition pipeline using any `ModelForTokenClassification`. See the [named entity recognition
     examples](../task_summary#named-entity-recognition) for more information.
@@ -139,6 +139,8 @@ class TokenClassificationPipeline(Pipeline):
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
         offset_mapping: Optional[List[Tuple[int, int]]] = None,
+        process_all: Optional[bool] = None,
+        stride: Optional[int] = None
     ):
         preprocess_params = {}
         if offset_mapping is not None:
@@ -179,6 +181,20 @@ class TokenClassificationPipeline(Pipeline):
             postprocess_params["aggregation_strategy"] = aggregation_strategy
         if ignore_labels is not None:
             postprocess_params["ignore_labels"] = ignore_labels
+
+        if process_all is not None:
+            if self.tokenizer.is_fast:
+                preprocess_params["return_overflowing_tokens"] = process_all
+                preprocess_params["padding"] = True
+                if stride is not None:
+                    preprocess_params["stride"] = stride
+                    postprocess_params["stride"] = stride
+            else:
+                process_all = False
+                warnings.warn(
+                    "`process_all` cannot be used with Slow tokenizers, defaulted to"
+                    f' `process_all="{process_all}"` instead.'
+                )
         return preprocess_params, {}, postprocess_params
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
@@ -213,60 +229,114 @@ class TokenClassificationPipeline(Pipeline):
 
         return super().__call__(inputs, **kwargs)
 
-    def preprocess(self, sentence, offset_mapping=None):
+    def preprocess(self, text, offset_mapping=None, **preprocess_params):
+        padding = preprocess_params.pop("padding", False)
+        stride = preprocess_params.pop("stride", 0)
+        return_overflowing_tokens = preprocess_params.pop("return_overflowing_tokens", False)
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
-        model_inputs = self.tokenizer(
-            sentence,
+        inputs = self.tokenizer(
+            text,
             return_tensors=self.framework,
             truncation=truncation,
             return_special_tokens_mask=True,
             return_offsets_mapping=self.tokenizer.is_fast,
+            return_overflowing_tokens=return_overflowing_tokens,
+            max_length=self.tokenizer.model_max_length,
+            padding=padding,
+            stride=stride
         )
-        if offset_mapping:
-            model_inputs["offset_mapping"] = offset_mapping
+        num_chunks = len(inputs["input_ids"])
 
-        model_inputs["sentence"] = sentence
+        for i in range(num_chunks):
+            if self.framework == "tf":
+                model_inputs = {k: tf.expend_dims(v[i], 0) for k, v in inputs.items()}
+            else:
+                model_inputs = {k: v[i].unsqueeze(0) for k, v in inputs.items()}
 
-        return model_inputs
+            if offset_mapping:
+                model_inputs["offset_mapping"] = offset_mapping if i == 0 else None
+
+            model_inputs["text"] = text if i == 0 else None
+
+            yield model_inputs
 
     def _forward(self, model_inputs):
         # Forward
-        special_tokens_mask = model_inputs.pop("special_tokens_mask")
-        offset_mapping = model_inputs.pop("offset_mapping", None)
-        sentence = model_inputs.pop("sentence")
+        model_outputs = model_inputs
+        model_inputs = {k: model_inputs[k] for k in self.tokenizer.model_input_names}
         if self.framework == "tf":
             logits = self.model(model_inputs.data)[0]
         else:
             output = self.model(**model_inputs)
             logits = output["logits"] if isinstance(output, dict) else output[0]
 
-        return {
-            "logits": logits,
-            "special_tokens_mask": special_tokens_mask,
-            "offset_mapping": offset_mapping,
-            "sentence": sentence,
-            **model_inputs,
-        }
+        model_outputs["logits"] = logits
 
-    def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None):
+        return model_outputs
+
+    def postprocess(self, all_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None, **postprocess_params):
         if ignore_labels is None:
             ignore_labels = ["O"]
-        logits = model_outputs["logits"][0].numpy()
-        sentence = model_outputs["sentence"]
-        input_ids = model_outputs["input_ids"][0]
-        offset_mapping = model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
-        special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
+        stride = postprocess_params.pop("stride", 0)
+        text = all_outputs[0]["text"]
+        keys = ["input_ids", "logits", "special_tokens_mask"]
+        if "offset_mapping" in all_outputs[0].keys():
+            x = all_outputs[0]["offset_mapping"]
+            if self.framework == "tf":
+                if tf.is_tensor(x):
+                    keys.append("offset_mapping")
+            else:
+                if torch.is_tensor(x):
+                    keys.append("offset_mapping")
 
+        outputs = {}
+        for k in keys:
+            outputs[k] = np.array([model_outputs[k][0].numpy() for model_outputs in all_outputs])
+        logits = outputs.pop("logits")
         maxes = np.max(logits, axis=-1, keepdims=True)
         shifted_exp = np.exp(logits - maxes)
         scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
-        if self.framework == "tf":
-            input_ids = input_ids.numpy()
-            offset_mapping = offset_mapping.numpy() if offset_mapping is not None else None
+        outputs["scores"] = scores
+
+        # Keep special_tokens_mask to avoid changing tests for gather_pre_entities()
+        special_tokens_mask = outputs["special_tokens_mask"].copy()
+
+        # Remove special tokens
+        for k in outputs.keys():
+            outputs[k] = [outputs[k][i][special_tokens_mask[i] == 0] for i in range(len(special_tokens_mask))]
+
+        # Update each token scores with the maximum scores in all overlapping parts
+        scores = outputs.pop("scores")
+        for i in range(len(scores)-1):
+            chunk_length = len(scores[0])
+            # Stack the ovelapping part between the current and the next chunk
+            overlapping_scores = np.stack((scores[i][chunk_length-stride:], scores[i+1][:stride]))
+            # Get the highest score for each token in each chunk
+            tokens_max_scores = np.max(overlapping_scores, axis=-1)
+            # Get the chunk id of the highest score for each token
+            chunk_idx = np.argmax(tokens_max_scores, axis=0)
+            # Update scores
+            for idx, chunk_idx in enumerate(chunk_idx):
+                scores[i+1][idx] = overlapping_scores[chunk_idx][idx]
+
+        outputs["scores"] = scores
+
+        for k, v in outputs.items():
+            aggregated_outputs = [outputs[k][i][:chunk_length-stride] for i in range(len(outputs[k])-1)]
+            aggregated_outputs.append(outputs[k][-1])
+            outputs[k] = np.concatenate(aggregated_outputs)
+
+        input_ids = outputs.pop("input_ids")
+        scores = outputs.pop("scores")
+        special_tokens_mask = outputs.pop("special_tokens_mask")
+        offset_mapping = outputs.pop("offset_mapping", None)
+
+        if offset_mapping is None:
+            offset_mapping = all_outputs[0].pop("offset_mapping", None)
 
         pre_entities = self.gather_pre_entities(
-            sentence, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
+            text, input_ids, scores, offset_mapping, special_tokens_mask, aggregation_strategy
         )
         grouped_entities = self.aggregate(pre_entities, aggregation_strategy)
         # Filter anything that is in self.ignore_labels
@@ -280,7 +350,7 @@ class TokenClassificationPipeline(Pipeline):
 
     def gather_pre_entities(
         self,
-        sentence: str,
+        text: str,
         input_ids: np.ndarray,
         scores: np.ndarray,
         offset_mapping: Optional[List[Tuple[int, int]]],
@@ -290,9 +360,8 @@ class TokenClassificationPipeline(Pipeline):
         """Fuse various numpy arrays into dicts with all the information needed for aggregation"""
         pre_entities = []
         for idx, token_scores in enumerate(scores):
-            # Filter special_tokens, they should only occur
-            # at the sentence boundaries since we're not encoding pairs of
-            # sentences so we don't have to keep track of those.
+            # Keep special_tokens_mask to avoid changing tests for gather_pre_entities()
+            # Special tokens are already removed
             if special_tokens_mask[idx]:
                 continue
 
@@ -303,7 +372,7 @@ class TokenClassificationPipeline(Pipeline):
                     if self.framework == "pt":
                         start_ind = start_ind.item()
                         end_ind = end_ind.item()
-                word_ref = sentence[start_ind:end_ind]
+                word_ref = text[start_ind:end_ind]
                 if getattr(self.tokenizer._tokenizer.model, "continuing_subword_prefix", None):
                     # This is a BPE, word aware tokenizer, there is a correct way
                     # to fuse tokens
