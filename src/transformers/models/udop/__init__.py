@@ -54,8 +54,8 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_udop"] = [
-        "UDOPDualForConditionalGeneration",
-        "UDOPUnimodelForConditionalGeneration",
+        "UdopDualForConditionalGeneration",
+        "UdopUnimodelForConditionalGeneration",
     ]
 
 if TYPE_CHECKING:

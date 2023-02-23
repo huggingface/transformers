@@ -51,6 +51,9 @@ PRIVATE_MODELS = [
     "MaskFormerSwinPreTrainedModel",
     "BridgeTowerTextModel",
     "BridgeTowerVisionModel",
+    "UdopDualStack",
+    "UdopUniStack",
+    "UdopCellEmbeddings",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -157,7 +160,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SpeechT5TextEncoder",  # Building part of bigger (tested) model.
     "UdopDualStack",  # Building part of bigger (tested) model.
     "UdopUniStack",  # Building part of bigger (tested) model.
-    "CellEmbeddings",  # Building part of bigger (tested) model.
+    "UdopCellEmbeddings",  # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't

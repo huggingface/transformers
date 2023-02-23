@@ -452,7 +452,8 @@ class TrainingArguments:
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
         fsdp_min_num_params (`int`, *optional*, defaults to `0`):
-            This parameter is deprecated, use fsdp_config instead .FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is passed).
+            This parameter is deprecated, use fsdp_config instead .FSDP's minimum number of parameters for Default Auto
+            Wrapping. (useful only when `fsdp` field is passed).
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,

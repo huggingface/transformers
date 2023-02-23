@@ -1,3 +1,4 @@
+
 # coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
@@ -242,6 +243,8 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("tapas", "TapasForMaskedLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("tvlt", "TvltForPreTraining"),
+        ("udop_dual", "UdopDualForConditionalGeneration"),
+        ("udop_uni", "UdopUnimodelForConditionalGeneration"),
         ("unispeech", "UniSpeechForPreTraining"),
         ("unispeech-sat", "UniSpeechSatForPreTraining"),
         ("videomae", "VideoMAEForPreTraining"),

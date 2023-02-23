@@ -2432,8 +2432,9 @@ else:
     )
     _import_structure["models.udop"].extend(
         [
-            "UDOPDualForConditionalGeneration",
-            "UDOPUnimodelForConditionalGeneration",
+            "UdopDualForConditionalGeneration",
+            "UdopUnimodelForConditionalGeneration",
+
         ]
     )
     _import_structure["models.unispeech"].extend(

@@ -536,6 +536,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("transfo-xl", "Transformer-XL"),
         ("trocr", "TrOCR"),
         ("tvlt", "TVLT"),
+        ("udop", "Udop"),
         ("ul2", "UL2"),
         ("unispeech", "UniSpeech"),
         ("unispeech-sat", "UniSpeechSat"),
