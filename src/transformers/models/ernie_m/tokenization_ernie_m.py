@@ -133,8 +133,8 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         if vocab_file is not None:
             self.vocab = self.load_vocab(filepath=vocab_file)
         else:
-            self.vocab = dict((self.sp_model.id_to_piece(id), id) for id in range(self.sp_model.get_piece_size()))
-        self.reverse_vocab = dict((v, k) for k, v in self.vocab.items())
+            self.vocab = {self.sp_model.id_to_piece(id): id for id in range(self.sp_model.get_piece_size())}
+        self.reverse_vocab = {v: k for k, v in self.vocab.items()}
 
     def get_offset_mapping(self, text):
         if text is None:
@@ -325,7 +325,7 @@ class ErnieMTokenizer(PreTrainedTokenizer):
                     "You should not supply a second sequence if the provided sequence of "
                     "ids is already formatted with special tokens for the model."
                 )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+            return [1 if x in [self.sep_token_id, self.cls_token_id] else 0 for x in token_ids_0]
 
         if token_ids_1 is not None:
             return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]

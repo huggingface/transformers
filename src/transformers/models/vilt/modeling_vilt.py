@@ -171,7 +171,7 @@ class ViltEmbeddings(nn.Module):
         non_valid_nums = [v.size(0) for v in non_valid_row_idx]
         pad_nums = [max_image_length - v for v in valid_nums]
 
-        select = list()
+        select = []
         for i, (v, nv, p) in enumerate(zip(valid_nums, non_valid_nums, pad_nums)):
             if p <= 0:
                 valid_choice = torch.multinomial(torch.ones(v).float(), max_image_length)

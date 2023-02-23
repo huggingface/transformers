@@ -584,7 +584,7 @@ def input_processing(func, config, **kwargs):
     if "kwargs" in output:
         del output["kwargs"]
 
-    cast_output = dict()
+    cast_output = {}
     for key, val in output.items():
         if isinstance(val, tf.Tensor) and val.dtype == tf.int64:
             cast_output[key] = tf.cast(val, tf.int32)
@@ -737,7 +737,7 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
     # Since TF adds the name of the class to its weights, and uses the index and not the name of the layer to load
     # the weight, we have to get rid of the first prefix of the name of the layer.
     model_keys = set()
-    model_layer_map = dict()
+    model_layer_map = {}
     for i, k in enumerate(model.weights):
         if "model." in k.name or len(k.name.split("/")) == 1:
             layer_name = k.name
@@ -901,10 +901,10 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
         )
 
         # Find the missing layers from the high level list of layers
-        missing_layers = list(set([layer.name for layer in model.layers]) - saved_h5_model_layers_name)
+        missing_layers = list({layer.name for layer in model.layers} - saved_h5_model_layers_name)
 
         # Find the unexpected layers from the high level list of layers
-        unexpected_layers = list(saved_h5_model_layers_name - set([layer.name for layer in model.layers]))
+        unexpected_layers = list(saved_h5_model_layers_name - {layer.name for layer in model.layers})
         saved_weight_names_set = set()
         symbolic_weights_names = set()
         weight_value_tuples = []
@@ -1349,7 +1349,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             else:
                 collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="np")
         if collate_fn_args is None:
-            collate_fn_args = dict()
+            collate_fn_args = {}
 
         if not isinstance(dataset, datasets.Dataset):
             raise TypeError("Dataset argument should be a datasets.Dataset!")
@@ -1471,7 +1471,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         elif "mc_labels" in arg_names:
             return {"labels": "logits", "mc_labels": "mc_logits"}
         else:
-            return dict()
+            return {}
 
     def train_step(self, data):
         """
@@ -2613,19 +2613,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
                 try:
                     # Load from URL or cache if already cached
-                    cached_file_kwargs = dict(
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        proxies=proxies,
-                        resume_download=resume_download,
-                        local_files_only=local_files_only,
-                        use_auth_token=use_auth_token,
-                        user_agent=user_agent,
-                        revision=revision,
-                        subfolder=subfolder,
-                        _raise_exceptions_for_missing_entries=False,
-                        _commit_hash=commit_hash,
-                    )
+                    cached_file_kwargs = {
+                        "cache_dir": cache_dir,
+                        "force_download": force_download,
+                        "proxies": proxies,
+                        "resume_download": resume_download,
+                        "local_files_only": local_files_only,
+                        "use_auth_token": use_auth_token,
+                        "user_agent": user_agent,
+                        "revision": revision,
+                        "subfolder": subfolder,
+                        "_raise_exceptions_for_missing_entries": False,
+                        "_commit_hash": commit_hash,
+                    }
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
                     # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
