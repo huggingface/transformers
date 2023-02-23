@@ -2557,6 +2557,7 @@ else:
     _import_structure["models.whisper"].extend(
         [
             "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "WhisperForAudioClassification",
             "WhisperForConditionalGeneration",
             "WhisperModel",
             "WhisperPreTrainedModel",
@@ -5747,6 +5748,7 @@ if TYPE_CHECKING:
         )
         from .models.whisper import (
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            WhisperForAudioClassification,
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
