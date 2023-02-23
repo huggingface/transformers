@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 
 SPECIAL_MODEL_TYPES_TO_CANONICAL_MODEL_TYPES = {
     "nllb": "m2m_100",
-    "decision_transformer_gpt2": "decision_transformer_gpt2"
+    "decision_transformer_gpt2": "decision_transformer"
 }
 
 CONFIG_MAPPING_NAMES = OrderedDict(
