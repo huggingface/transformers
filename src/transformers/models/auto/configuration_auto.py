@@ -575,6 +575,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
         ("decision_transformer_gpt2", "decision_transformer"),
+        # ("nllb", "nllb"),  # Question: I am not sure how to deal with this.
     ]
 )
 

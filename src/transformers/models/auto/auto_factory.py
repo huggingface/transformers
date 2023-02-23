@@ -357,7 +357,6 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
 
 
 def _get_model_class(config, model_mapping):
-
     if config.model_type not in model_mapping._config_mapping:
         if config.model_type in model_mapping._model_mapping:
             model_class_name = model_mapping._model_mapping[config.model_type]
