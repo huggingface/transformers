@@ -43,9 +43,9 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        prediction_length (`int`, defaults to 1):
+        prediction_length (`int`, defaults to 24):
             The prediction length for the decoder. In other words, the prediction horizon of the model. This value is
-            typically set from the dataset one is training on and we recommend to change it appropriately.
+            typically dictated by the dataset and we recommend to change it appropriately.
         context_length (`int`, *optional*, defaults to `prediction_length`):
             The context length for the encoder. If `None`, the context length will be the same as the
             `prediction_length`.
@@ -61,8 +61,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
             scaler is set to "mean".
         lags_sequence (`list[int]`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`):
-            The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4,
-            5, 6, 7]`.
+            The lags of the input time series as covariates often dictated by the frequency of the data. Default is
+            `[1, 2, 3, 4, 5, 6, 7]` but we recommend to change it based on the dataset appropriately.
         num_time_features (`int`, *optional*, defaults to 0):
             The number of time features in the input time series.
         num_dynamic_real_features (`int`, *optional*, defaults to 0):
@@ -136,7 +136,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        prediction_length: int = 1,
+        prediction_length: int = 24,
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
