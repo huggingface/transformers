@@ -168,6 +168,9 @@ class ModelArguments:
         default=False,
         metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
     )
+    dropout: Optional[float] = field(
+        default=0., metadata={"help": "Encoder dropout to apply."}
+    )
 
     def __post_init__(self):
         if not self.freeze_feature_extractor and self.freeze_feature_encoder:
@@ -293,23 +296,23 @@ def main():
 
     def train_transforms(batch):
         """Apply train_transforms across a batch."""
-        output_batch = {model_input_name: []}
+        subsampled_wavs = []
         for audio in batch[data_args.audio_column_name]:
             wav = random_subsample(
-                audio["array"], max_length=data_args.max_length_seconds, sample_rate=audio["sampling_rate"]
+                audio["array"], max_length=data_args.max_length_seconds, sample_rate=feature_extractor.sampling_rate
             )
-            inputs = feature_extractor(wav, sampling_rate=audio["sampling_rate"])
-            output_batch[model_input_name].append(inputs.get(model_input_name)[0])
+            subsampled_wavs.append(wav)
+        inputs = feature_extractor(subsampled_wavs, sampling_rate=feature_extractor.sampling_rate)
+        output_batch = {model_input_name: inputs.get(model_input_name)}
         output_batch["labels"] = list(batch[data_args.label_column_name])
 
         return output_batch
 
     def val_transforms(batch):
         """Apply val_transforms across a batch."""
-        output_batch = {model_input_name: []}
-        for audio in batch[data_args.audio_column_name]:
-            inputs = feature_extractor(audio["array"], sampling_rate=audio["sampling_rate"])
-            output_batch[model_input_name].append(inputs.get(model_input_name)[0])
+        wavs = [audio["array"] for audio in batch[data_args.audio_column_name]]
+        inputs = feature_extractor(wavs, sampling_rate=feature_extractor.sampling_rate)
+        output_batch = {model_input_name: inputs.get(model_input_name)}
         output_batch["labels"] = list(batch[data_args.label_column_name])
 
         return output_batch
@@ -342,6 +345,7 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+    config.activation_dropout = config.attention_dropout = config.dropout = model_args.dropout
     model = AutoModelForAudioClassification.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),
