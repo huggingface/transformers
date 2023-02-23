@@ -346,6 +346,14 @@ class ConfigTestUtils(unittest.TestCase):
 
         self.assertIsNotNone(config)
 
+    def test_from_pretrained_custom(self):
+        # Check custom config class gets additional kwargs when initialize from_pretrained
+        config = CustomConfig.from_pretrained("hf-internal-testing/config-no-model")
+        self.assertEqual(config.attribute, 1)
+
+        config = CustomConfig.from_pretrained("hf-internal-testing/config-no-model", attribute=42)
+        self.assertEqual(config.attribute, 42)
+
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
