@@ -16,25 +16,18 @@
  Processing saving/loading class for common processors.
 """
 
-import importlib.util
 import os
-import sys
 from pathlib import Path
 
 from .dynamic_module_utils import custom_object_save
 from .tokenization_utils_base import PreTrainedTokenizerBase
-from .utils import PushToHubMixin, copy_func, logging
+from .utils import PushToHubMixin, copy_func, direct_transformers_import, logging
 
 
 logger = logging.get_logger(__name__)
 
 # Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
-spec = importlib.util.spec_from_file_location(
-    "transformers", Path(__file__).parent / "__init__.py", submodule_search_locations=[Path(__file__).parent]
-)
-transformers_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(transformers_module)
-transformers_module = sys.modules["transformers"]
+transformers_module = direct_transformers_import(Path(__file__).parent)
 
 
 AUTO_TO_BASE_CLASS_MAPPING = {

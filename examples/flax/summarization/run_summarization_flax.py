@@ -742,14 +742,12 @@ def main():
         flat_params = traverse_util.flatten_dict(params)
         # find out all LayerNorm parameters
         layer_norm_candidates = ["layernorm", "layer_norm", "ln"]
-        layer_norm_named_params = set(
-            [
-                layer[-2:]
-                for layer_norm_name in layer_norm_candidates
-                for layer in flat_params.keys()
-                if layer_norm_name in "".join(layer).lower()
-            ]
-        )
+        layer_norm_named_params = {
+            layer[-2:]
+            for layer_norm_name in layer_norm_candidates
+            for layer in flat_params.keys()
+            if layer_norm_name in "".join(layer).lower()
+        }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 

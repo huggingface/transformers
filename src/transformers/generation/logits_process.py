@@ -419,7 +419,7 @@ class EtaLogitsWarper(LogitsWarper):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         # Calculate the adaptive cutoff
         probabilities = scores.softmax(dim=-1)
-        entropy = torch.distributions.Categorical(probs=probabilities).entropy()
+        entropy = torch.distributions.Categorical(logits=scores).entropy()
         eta = torch.min(self.epsilon, torch.sqrt(self.epsilon) * torch.exp(-entropy))[..., None]
         indices_to_remove = probabilities < eta
 
@@ -951,7 +951,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
         for k in range(input_ids.shape[0]):
-            seq = [t for t in input_ids[k, self.begin_index :].tolist()]
+            seq = list(input_ids[k, self.begin_index :].tolist())
             last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.timestamp_begin
             penultimate_was_timestamp = len(seq) < 2 or seq[-2] >= self.timestamp_begin
 

@@ -55,7 +55,7 @@ class TimeSeriesTransformerModelTester:
         embedding_dimension=5,
         num_time_features=4,
         is_training=True,
-        hidden_size=16,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=4,
@@ -98,6 +98,7 @@ class TimeSeriesTransformerModelTester:
             context_length=self.context_length,
             lags_sequence=self.lags_sequence,
             num_time_features=self.num_time_features,
+            num_static_real_features=1,
             num_static_categorical_features=1,
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
@@ -149,7 +150,7 @@ class TimeSeriesTransformerModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = TimeSeriesTransformerEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        transformer_inputs, _, _ = model.create_network_inputs(**inputs_dict)
+        transformer_inputs, _, _, _ = model.create_network_inputs(**inputs_dict)
         enc_input = transformer_inputs[:, : config.context_length, ...]
         dec_input = transformer_inputs[:, config.context_length :, ...]
 
@@ -186,13 +187,18 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TimeSeriesTransformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TimeSeriesTransformerConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=TimeSeriesTransformerConfig,
+            has_text_modality=False,
+            prediction_length=self.model_tester.prediction_length,
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_save_load_strict(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        config, _ = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
             model = model_class(config)
 
@@ -303,7 +309,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             )
             out_len = len(outputs)
 
-            correct_outlen = 6
+            correct_outlen = 7
 
             if "last_hidden_state" in outputs:
                 correct_outlen += 1
@@ -389,13 +395,13 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
                 static_real_features=batch["static_real_features"],
                 future_values=batch["future_values"],
                 future_time_features=batch["future_time_features"],
-            )[0]
+            ).last_hidden_state
 
-        expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
+        expected_shape = torch.Size((64, model.config.context_length, model.config.d_model))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.3125, -1.2884, -1.1118], [-0.5801, -1.4907, -0.7782], [0.0849, -1.6557, -0.9755]], device=torch_device
+            [[-0.6322, -1.5771, -0.9340], [-0.1011, -1.0263, -0.7208], [0.4979, -0.6487, -0.7189]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -412,12 +418,12 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
                 static_categorical_features=batch["static_categorical_features"],
                 static_real_features=batch["static_real_features"],
                 future_time_features=batch["future_time_features"],
-            )[1]
-        expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
+            ).encoder_last_hidden_state
+        expected_shape = torch.Size((64, model.config.context_length, model.config.d_model))
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.9127, -0.2056, -0.5259], [1.0572, 1.4104, -0.1964], [0.1358, 2.0348, 0.5739]], device=torch_device
+            [[0.8177, -1.7989, -0.3127], [1.6964, -1.0607, -0.1749], [1.8395, 0.1110, 0.0263]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -438,6 +444,6 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
-        expected_slice = torch.tensor([2289.5203, 2778.3054, 4648.1313], device=torch_device)
+        expected_slice = torch.tensor([3883.5037, 4630.2251, 7562.1338], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
