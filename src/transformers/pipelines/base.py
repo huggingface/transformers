@@ -329,32 +329,40 @@ def get_framework(model, revision: Optional[str] = None):
     Select framework (TensorFlow or PyTorch) to use.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
-            If both frameworks are installed, picks the one corresponding to the model passed (either a model class or
+        model (`str`, [`PreTrainedModel`], [`TFPreTrainedModel`] or [`FlaxPreTrainedModel`]):
+            If multiple frameworks are installed, picks the one corresponding to the model passed (either a model class or
             the model name). If no specific model is provided, defaults to using PyTorch.
     """
     warnings.warn(
         "`get_framework` is deprecated and will be removed in v5, use `infer_framework_from_model` instead.",
         FutureWarning,
     )
-    if not is_tf_available() and not is_torch_available():
+    if not is_tf_available() and not ( is_torch_available() or is_flax_available()):
         raise RuntimeError(
-            "At least one of TensorFlow 2.0 or PyTorch should be installed. "
+            "At least one of TensorFlow 2.0, PyTorch or Flax should be installed. "
             "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
             "To install PyTorch, read the instructions at https://pytorch.org/."
+            "To install Flax, read the instructions at https://flax.readthedocs.io/en/latest/installation.html"
         )
     if isinstance(model, str):
         if is_torch_available() and not is_tf_available():
             model = AutoModel.from_pretrained(model, revision=revision)
         elif is_tf_available() and not is_torch_available():
             model = TFAutoModel.from_pretrained(model, revision=revision)
+        elif is_flax_available() and not (is_torch_available() or is_tf_available()):
+            model = FlaxAutoModel.from_pretrained(model, revision=revision)
         else:
             try:
                 model = AutoModel.from_pretrained(model, revision=revision)
             except OSError:
                 model = TFAutoModel.from_pretrained(model, revision=revision)
 
-    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
+    if model.__class__.__name__.startswith("TF"):
+        framework = "tf"  
+    elif model.__class__.__name__.startswith("Flax"):
+        framework = "flax"
+    else:
+        framework = "pt"
     return framework
 
 
@@ -383,6 +391,8 @@ def get_default_model_and_revision(
         framework = "pt"
     elif is_tf_available() and not is_torch_available():
         framework = "tf"
+    elif is_flax_available() and not (is_torch_available() or is_tf_available()):
+        framework = "flax"
 
     defaults = targeted_task["default"]
     if task_options:
@@ -801,6 +811,15 @@ class Pipeline(_ScikitCompat):
                 self.device = torch.device("cpu")
             else:
                 self.device = torch.device(f"cuda:{device}")
+        elif is_flax_available() and self.framework == "flax":
+            if isinstance(device, str):
+                self.device = device
+            elif device < 0:
+                jax.config.update('jax_platform_name', 'cpu')
+                self.device = jax.devices("cpu")[0]
+            else:
+                jax.config.update('jax_platform_name', 'cuda')
+                self.device = jax.devices("cuda")[device]
         else:
             self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
@@ -902,7 +921,7 @@ class Pipeline(_ScikitCompat):
             with tf.device("/CPU:0" if self.device == -1 else f"/device:GPU:{self.device}"):
                 yield
         elif self.framework == "flax":
-            yield
+            yield # TODO : find a way to do this in flax
         else:
             if self.device.type == "cuda":
                 torch.cuda.set_device(self.device)
@@ -940,6 +959,8 @@ class Pipeline(_ScikitCompat):
             if device == torch.device("cpu") and inputs.dtype in {torch.float16, torch.bfloat16}:
                 inputs = inputs.float()
             return inputs.to(device)
+        elif isinstance(inputs, jnp.ndarray):
+            return jax.device_put(inputs, device=device)
         else:
             return inputs
 
@@ -1029,9 +1050,9 @@ class Pipeline(_ScikitCompat):
                     model_outputs = self._forward(model_inputs, **forward_params)
                     model_outputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
             elif self.framework == "flax":
-                # model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
+                model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                 model_outputs = self._forward(model_inputs, **forward_params)
-                # model_outputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
+                model_outputs = self._ensure_tensor_on_device(model_outputs, device=jax.devices("cpu")[0])
             else:
                 raise ValueError(f"Framework {self.framework} is not supported")
         return model_outputs
@@ -1209,6 +1230,7 @@ class PipelineRegistry:
         pipeline_class: type,
         pt_model: Optional[Union[type, Tuple[type]]] = None,
         tf_model: Optional[Union[type, Tuple[type]]] = None,
+        flax_model: Optional[Union[type, Tuple[type]]] = None,
         default: Optional[Dict] = None,
         type: Optional[str] = None,
     ) -> None:
@@ -1225,10 +1247,15 @@ class PipelineRegistry:
         elif not isinstance(tf_model, tuple):
             tf_model = (tf_model,)
 
-        task_impl = {"impl": pipeline_class, "pt": pt_model, "tf": tf_model}
+        if flax_model is None:
+            flax_model = ()
+        elif not isinstance(flax_model, tuple):
+            flax_model = (flax_model,)
+
+        task_impl = {"impl": pipeline_class, "pt": pt_model, "tf": tf_model, "flax": flax_model}
 
         if default is not None:
-            if "model" not in default and ("pt" in default or "tf" in default):
+            if "model" not in default and ("pt" in default or "tf" in default or "flax" in default):
                 default = {"model": default}
             task_impl["default"] = default
 

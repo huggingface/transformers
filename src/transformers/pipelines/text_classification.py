@@ -3,7 +3,7 @@ from typing import Dict
 
 import numpy as np
 
-from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
+from ..utils import ExplicitEnum, add_end_docstrings, is_flax_available, is_tf_available, is_torch_available
 from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
 
 
@@ -13,6 +13,8 @@ if is_tf_available():
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
+if is_flax_available():
+    from ..models.auto.modeling_flax_auto import FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
 def sigmoid(_outputs):
     return 1.0 / (1.0 + np.exp(-_outputs))
@@ -82,11 +84,12 @@ class TextClassificationPipeline(Pipeline):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.check_model_type(
-            TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
-            if self.framework == "tf"
-            else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
-        )
+        if self.framework == "tf":
+            self.check_model_type(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
+        elif self.framework == "flax":
+            self.check_model_type(FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
+        else:
+            self.check_model_type(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING)
 
     def _sanitize_parameters(self, return_all_scores=None, function_to_apply=None, top_k="", **tokenizer_kwargs):
         # Using "" as default argument because we're going to use `top_k=None` in user code to declare
@@ -162,7 +165,7 @@ class TextClassificationPipeline(Pipeline):
             return result
 
     def preprocess(self, inputs, **tokenizer_kwargs) -> Dict[str, GenericTensor]:
-        return_tensors = self.framework
+        return_tensors = self.framework if self.framework != "flax" else "jax"
         if isinstance(inputs, dict):
             return self.tokenizer(**inputs, return_tensors=return_tensors, **tokenizer_kwargs)
         elif isinstance(inputs, list) and len(inputs) == 1 and isinstance(inputs[0], list) and len(inputs[0]) == 2:
@@ -197,7 +200,10 @@ class TextClassificationPipeline(Pipeline):
                 function_to_apply = ClassificationFunction.NONE
 
         outputs = model_outputs["logits"][0]
-        outputs = outputs.numpy()
+
+        # Convert to numpy array if we're using JAX/Flax framework
+        if self.framework != "flax":
+            outputs = outputs.numpy()
 
         if function_to_apply == ClassificationFunction.SIGMOID:
             scores = sigmoid(outputs)

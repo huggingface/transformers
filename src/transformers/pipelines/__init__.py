@@ -206,10 +206,12 @@ SUPPORTED_TASKS = {
         "impl": TextClassificationPipeline,
         "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
+        "flax": (FlaxAutoModelForSequenceClassification,) if is_flax_available() else (),
         "default": {
             "model": {
                 "pt": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
                 "tf": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
+                "flax": ("Shubhamai/distilbert-base-uncased-finetuned-sst-2-english", "1dd3802"), # NOTE: Add flax model
             },
         },
         "type": "text",

@@ -15,6 +15,7 @@
 import unittest
 
 from transformers import (
+    FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     PreTrainedTokenizer,
@@ -23,6 +24,7 @@ from transformers import (
 from transformers.pipelines import ImageClassificationPipeline, pipeline
 from transformers.testing_utils import (
     nested_simplify,
+    require_flax,
     require_tf,
     require_torch,
     require_torch_or_tf,
@@ -48,6 +50,7 @@ else:
 class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
         image_classifier = ImageClassificationPipeline(model=model, image_processor=processor, top_k=2)
@@ -141,6 +144,32 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     def test_small_model_tf(self):
         small_model = "hf-internal-testing/tiny-random-vit"
         image_classifier = pipeline("image-classification", model=small_model, framework="tf")
+
+        outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
+        )
+
+        outputs = image_classifier(
+            [
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+            ],
+            top_k=2,
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
+                [{"label": "LABEL_1", "score": 0.574}, {"label": "LABEL_0", "score": 0.426}],
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        small_model = "Shubhamai/tiny-random-vit"
+        image_classifier = pipeline("image-classification", model=small_model, framework="flax")
 
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
         self.assertEqual(

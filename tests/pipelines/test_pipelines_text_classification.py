@@ -15,12 +15,13 @@
 import unittest
 
 from transformers import (
+    FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     TextClassificationPipeline,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import nested_simplify, require_flax, require_tf, require_torch, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -28,6 +29,7 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
     @require_torch
     def test_small_model_pt(self):
@@ -105,6 +107,15 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         outputs = text_classifier("This is great !")
         self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
 
+    @require_flax
+    def test_small_model_flax(self):
+        text_classifier = pipeline(
+            task="text-classification", model="Shubhamai/tiny-random-distilbert", framework="flax"
+        )
+
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
     @slow
     @require_torch
     def test_pt_bert(self):
@@ -121,6 +132,18 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
     @require_tf
     def test_tf_bert(self):
         text_classifier = pipeline("text-classification", framework="tf")
+
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 1.0}])
+        outputs = text_classifier("This is bad !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "NEGATIVE", "score": 1.0}])
+        outputs = text_classifier("Birds are a type of animal")
+        self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 0.988}])
+
+    @slow
+    @require_flax
+    def test_flax_bert(self):
+        text_classifier = pipeline("text-classification", framework="flax")
 
         outputs = text_classifier("This is great !")
         self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 1.0}])

@@ -33,6 +33,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
+    FlaxAutoModelForSequenceClassification,
     TextClassificationPipeline,
     TFAutoModelForSequenceClassification,
     pipeline,
@@ -46,13 +47,14 @@ from transformers.testing_utils import (
     RequestCounter,
     is_staging_test,
     nested_simplify,
+    require_flax,
     require_tensorflow_probability,
     require_tf,
     require_torch,
     require_torch_or_tf,
     slow,
 )
-from transformers.utils import direct_transformers_import, is_tf_available, is_torch_available
+from transformers.utils import direct_transformers_import, is_flax_available, is_tf_available, is_torch_available
 from transformers.utils import logging as transformers_logging
 
 
@@ -284,7 +286,7 @@ class PipelineTestCaseMeta(type):
         url = "https://huggingface.co/datasets/hf-internal-testing/tiny-random-model-summary/raw/main/processor_classes.json"
         tiny_model_summary = requests.get(url).json()
 
-        for prefix, key in [("pt", "model_mapping"), ("tf", "tf_model_mapping")]:
+        for prefix, key in [("pt", "model_mapping"), ("tf", "tf_model_mapping"), ("flax", "flax_model_mapping")]:
             mapping = dct.get(key, {})
             if mapping:
                 for config_class, model_architectures in mapping.items():
@@ -434,6 +436,20 @@ class CommonPipelineTest(unittest.TestCase):
             results.append(out)
         self.assertEqual(len(results), 10)
 
+    @require_flax
+    def test_iterator_data_flax(self):
+        def data(n: int):
+            for _ in range(n):
+                yield "This is a test"
+
+        pipe = pipeline(model="Shubhamai/tiny-random-distilbert", framework="flax")
+        out = pipe("This is a test")
+        results = []
+        for out in pipe(data(10)):
+            self.assertEqual(nested_simplify(out), {"label": "LABEL_0", "score": 0.504})
+            results.append(out)
+        self.assertEqual(len(results), 10)
+
     @require_torch
     def test_unbatch_attentions_hidden_states(self):
         model = DistilBertForSequenceClassification.from_pretrained(
@@ -473,6 +489,18 @@ class PipelineScikitCompatTest(unittest.TestCase):
         actual_output = text_classifier.predict(data)
         self.assertEqual(expected_output, actual_output)
 
+    @require_flax
+    def test_pipeline_predict_flax(self):
+        data = ["This is a test"]
+
+        text_classifier = pipeline(
+            task="text-classification", model="Shubhamai/tiny-random-distilbert", framework="flax"
+        )
+
+        expected_output = [{"label": ANY(str), "score": ANY(float)}]
+        actual_output = text_classifier.predict(data)
+        self.assertEqual(expected_output, actual_output)
+
     @require_torch
     def test_pipeline_transform_pt(self):
         data = ["This is a test"]
@@ -491,6 +519,18 @@ class PipelineScikitCompatTest(unittest.TestCase):
 
         text_classifier = pipeline(
             task="text-classification", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
+        )
+
+        expected_output = [{"label": ANY(str), "score": ANY(float)}]
+        actual_output = text_classifier.transform(data)
+        self.assertEqual(expected_output, actual_output)
+
+    @require_flax
+    def test_pipeline_transform_flax(self):
+        data = ["This is a test"]
+
+        text_classifier = pipeline(
+            task="text-classification", model="Shubhamai/tiny-random-distilbert", framework="flax"
         )
 
         expected_output = [{"label": ANY(str), "score": ANY(float)}]
@@ -898,6 +938,7 @@ class CustomPipelineTest(unittest.TestCase):
             pipeline_class=PairClassificationPipeline,
             pt_model=AutoModelForSequenceClassification if is_torch_available() else None,
             tf_model=TFAutoModelForSequenceClassification if is_tf_available() else None,
+            flax_model=FlaxAutoModelForSequenceClassification if is_flax_available() else None,
             default={"pt": "hf-internal-testing/tiny-random-distilbert"},
             type="text",
         )
@@ -906,6 +947,7 @@ class CustomPipelineTest(unittest.TestCase):
         _, task_def, _ = PIPELINE_REGISTRY.check_task("custom-text-classification")
         self.assertEqual(task_def["pt"], (AutoModelForSequenceClassification,) if is_torch_available() else ())
         self.assertEqual(task_def["tf"], (TFAutoModelForSequenceClassification,) if is_tf_available() else ())
+        self.assertEqual(task_def["flax"], (FlaxAutoModelForSequenceClassification,) if is_flax_available() else ())
         self.assertEqual(task_def["type"], "text")
         self.assertEqual(task_def["impl"], PairClassificationPipeline)
         self.assertEqual(task_def["default"], {"model": {"pt": "hf-internal-testing/tiny-random-distilbert"}})
@@ -914,12 +956,14 @@ class CustomPipelineTest(unittest.TestCase):
         del PIPELINE_REGISTRY.supported_tasks["custom-text-classification"]
 
     @require_torch_or_tf
+    @require_flax
     def test_dynamic_pipeline(self):
         PIPELINE_REGISTRY.register_pipeline(
             "pair-classification",
             pipeline_class=PairClassificationPipeline,
             pt_model=AutoModelForSequenceClassification if is_torch_available() else None,
             tf_model=TFAutoModelForSequenceClassification if is_tf_available() else None,
+            flax_model=FlaxAutoModelForSequenceClassification if is_flax_available() else None,
         )
 
         classifier = pipeline("pair-classification", model="hf-internal-testing/tiny-random-bert")
@@ -937,6 +981,7 @@ class CustomPipelineTest(unittest.TestCase):
                         "impl": "custom_pipeline.PairClassificationPipeline",
                         "pt": ("AutoModelForSequenceClassification",) if is_torch_available() else (),
                         "tf": ("TFAutoModelForSequenceClassification",) if is_tf_available() else (),
+                        "flax": ("FlaxAutoModelForSequenceClassification",) if is_flax_available() else (),
                     }
                 },
             )
