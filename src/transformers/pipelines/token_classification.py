@@ -237,7 +237,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         return_overflowing_tokens = preprocess_params.pop("return_overflowing_tokens", False)
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
         inputs = self.tokenizer(
-            text,
+            sentence,
             return_tensors=self.framework,
             truncation=truncation,
             return_special_tokens_mask=True,
