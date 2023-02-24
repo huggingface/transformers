@@ -526,7 +526,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
         output = pipe(array, chunk_length_s=10)
         self.assertDictEqual(
-            output,
+            nested_simplify(output),
             {
                 "chunks": [
                     {"text": " A man said to the universe, Sir, I exist.", "timestamp": (0.0, 5.5)},
@@ -548,11 +548,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
                     },
                     {
                         "text": " the thousands of spectators, retrievality is not worth thinking about.",
-                        "timestamp": (19.6, 24.98),
+                        "timestamp": (19.6, 26.66),
                     },
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (24.98, 30.98),
+                        "timestamp": (26.66, 31.06),
                     },
                 ],
                 "text": (
@@ -1109,6 +1109,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(90, 0, 0), (30, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 90), (1, 30)])
+
+        outs = list(chunk_iter(inputs, feature_extractor, 36, 6, 6, ratio))
+        self.assertEqual(len(outs), 4)
+        self.assertEqual([o["stride"] for o in outs], [(36, 0, 6), (36, 6, 6), (36, 6, 6), (28, 6, 0)])
+        self.assertEqual([o["input_values"].shape for o in outs], [(1, 36), (1, 36), (1, 36), (1, 28)])
 
         inputs = torch.LongTensor([i % 2 for i in range(100)])
         input_values = feature_extractor(inputs, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")[
