@@ -189,13 +189,19 @@ class TokenClassificationPipeline(ChunkPipeline):
                 preprocess_params["return_overflowing_tokens"] = process_all
                 preprocess_params["padding"] = True
                 if stride is not None:
+                    if stride < 0:
+                        stride = 0
+                        warnings.warn(
+                            "`stride` cannot be a negative number, defaulted to"
+                            f' `stride={stride}` instead.'
+                        )
                     preprocess_params["stride"] = stride
                     postprocess_params["stride"] = stride
             else:
                 process_all = False
                 warnings.warn(
                     "`process_all` cannot be used with Slow tokenizers, defaulted to"
-                    f' `process_all="{process_all}"` instead.'
+                    f' `process_all={process_all}` instead.'
                 )
         return preprocess_params, {}, postprocess_params
 
@@ -302,32 +308,40 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         outputs["scores"] = scores
 
-        # Keep special_tokens_mask to avoid changing tests for gather_pre_entities()
-        special_tokens_mask = outputs["special_tokens_mask"].copy()
-
-        # Remove special tokens
-        for k in outputs.keys():
-            outputs[k] = [outputs[k][i][special_tokens_mask[i] == 0] for i in range(len(special_tokens_mask))]
+        special_tokens_mask = outputs["special_tokens_mask"]
 
         # Update each token scores with the maximum scores in all overlapping parts
         scores = outputs.pop("scores")
         for i in range(len(scores)-1):
-            chunk_length = len(scores[0])
+            # Get current and next chunks without special tokens
+            current_mask = special_tokens_mask[i]
+            next_mask = special_tokens_mask[i+1]
+
+            current_scores = scores[i][current_mask == 0]
+            next_scores = scores[i+1][next_mask == 0]
+
+            chunk_length = len(current_scores)
             # Stack the ovelapping part between the current and the next chunk
-            overlapping_scores = np.stack((scores[i][chunk_length-stride:], scores[i+1][:stride]))
+            overlapping_scores = np.stack((current_scores[chunk_length-stride:], next_scores[:stride]))
             # Get the highest score for each token in each chunk
             tokens_max_scores = np.max(overlapping_scores, axis=-1)
             # Get the chunk id of the highest score for each token
             chunk_idx = np.argmax(tokens_max_scores, axis=0)
             # Update scores
-            for idx, chunk_idx in enumerate(chunk_idx):
-                scores[i+1][idx] = overlapping_scores[chunk_idx][idx]
+            idx_to_update = [idx for idx in range(len(next_mask)) if next_mask[idx] == 0]
+            for idx, (chunk_idx, j) in enumerate(zip(chunk_idx, idx_to_update)):
+                scores[i+1][j] = overlapping_scores[chunk_idx][idx]
 
         outputs["scores"] = scores
 
+        # Aggregate chunks
         for k, v in outputs.items():
-            aggregated_outputs = [outputs[k][i][:chunk_length-stride] for i in range(len(outputs[k])-1)]
-            aggregated_outputs.append(outputs[k][-1])
+            aggregated_outputs = []
+            for i in range(len(outputs[k])):
+                mask = special_tokens_mask[i]
+                last_idx = [idx for idx in range(len(mask)) if mask[idx] == 0][-1]
+                aggregated_outputs.append(outputs[k][i][:last_idx-stride])
+            aggregated_outputs.append(outputs[k][-1][last_idx-stride:])
             outputs[k] = np.concatenate(aggregated_outputs)
 
         input_ids = outputs.pop("input_ids")
