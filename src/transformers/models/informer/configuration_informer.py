@@ -111,9 +111,10 @@ class InformerConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
         attention_type (`str`, *optional*, defaults to "prob"):
-            Attention used in encoder. This can be set to "prob" (Informer's ProbAttention) or "full" (transformer).
-        attention_factor (`int`, *optional*, defaults to 2):
-            ProbSparse attention factor.
+            Attention used in encoder. This can be set to "prob" (Informer's ProbAttention) or "full"
+            (vanilla transformer's canonical self-attention).
+        sampling_factor (`int`, *optional*, defaults to 5):
+            ProbSparse sampling factor.  It is used to control the reduced query matrix (Q_reduce) input length.
         distil (`bool`, *optional*, defaults to `True`):
             Whether to use distilling in encoder.
 
@@ -172,7 +173,7 @@ class InformerConfig(PretrainedConfig):
         use_cache=True,
         # Informer arguments
         attention_type: str = "prob",
-        attention_factor: int = 2,
+        sampling_factor: int = 5,
         distil: bool = True,
         **kwargs,
     ):
@@ -237,7 +238,7 @@ class InformerConfig(PretrainedConfig):
 
         # Informer
         self.attention_type = attention_type
-        self.attention_factor = attention_factor
+        self.sampling_factor = sampling_factor
         self.distil = distil
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

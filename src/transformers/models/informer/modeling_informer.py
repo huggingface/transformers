@@ -805,11 +805,11 @@ class ProbSparseAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_decoder: bool = False,
-        attention_factor: int = 5,
+        sampling_factor: int = 5,
         bias: bool = True,
     ):
         super().__init__()
-        self.factor = attention_factor
+        self.factor = sampling_factor
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
@@ -892,21 +892,21 @@ class ProbSparseAttention(nn.Module):
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
-        # c*ln(L_k)
         L_K = key_states.size(1)
-        U_part = min(self.factor * np.ceil(np.log1p(L_K)).astype("int").item(), L_K)
+        log_L_K = np.ceil(np.log1p(L_K)).astype("int").item()
 
-        # c*ln(L_q)
         L_Q = query_states.size(1)
-        u = min(self.factor * np.ceil(np.log1p(L_Q)).astype("int").item(), L_Q)
+        log_L_Q = np.ceil(np.log1p(L_Q)).astype("int").item()
+
+        U_part = min(self.factor * log_L_K, L_K)
+        u = min(self.factor * log_L_Q, L_Q)
 
         if L_K > 0:
             index_sample = torch.randint(0, L_K, (U_part,))
-
-            # real U = U_part(factor*ln(L_k))*L_q
             K_sample = key_states[:, index_sample, :]
         else:
             K_sample = key_states
+
         Q_K_sample = torch.bmm(query_states, K_sample.transpose(1, 2))
 
         # find the Top_k query with sparsity measurement
@@ -914,15 +914,14 @@ class ProbSparseAttention(nn.Module):
             M = Q_K_sample.max(dim=-1)[0] - torch.div(Q_K_sample.sum(dim=-1), L_K)
             M_top = M.topk(u, sorted=False)[1]
 
-            # use the reduced Q to calculate Q_K
-            # factor*ln(L_q)
+            # calculate Q_reduce: query_states[:, M_top]
             dim_for_slice = torch.arange(query_states.size(0)).unsqueeze(-1)
             Q_reduce = query_states[dim_for_slice, M_top]
         else:
             Q_reduce = query_states
             M_top = None
 
-        # score_top
+        # Use Q_reduce to calculate attention weights
         attn_weights = torch.bmm(Q_reduce, key_states.transpose(1, 2))
 
         src_len = key_states.size(1)
@@ -974,7 +973,8 @@ class ProbSparseAttention(nn.Module):
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.bmm(attn_probs, value_states)
 
-        # get initial context
+        # calculate contex for updating the attn_output, based on:
+        # https://github.com/zhouhaoyi/Informer2020/blob/ac59c7447135473fb2aafeafe94395f884d5c7a5/models/attn.py#L74
         if self.is_decoder:
             context = value_states.cumsum(dim=-2)
         else:
@@ -1038,7 +1038,7 @@ class InformerEncoderLayer(nn.Module):
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
-                attention_factor=config.attention_factor,
+                sampling_factor=config.sampling_factor,
             )
         else:
             self.self_attn = InformerAttention(
@@ -1115,7 +1115,7 @@ class InformerDecoderLayer(nn.Module):
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
-                attention_factor=config.attention_factor,
+                sampling_factor=config.sampling_factor,
                 is_decoder=True,
             )
         else:

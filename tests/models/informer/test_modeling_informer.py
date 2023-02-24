@@ -57,7 +57,7 @@ class InformerModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         lags_sequence=[1, 2, 3, 4, 5],
-        attention_factor=10,
+        sampling_factor=10,
         distil=False,
     ):
         self.parent = parent
@@ -78,12 +78,12 @@ class InformerModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
         self.encoder_seq_length = min(
-            attention_factor * np.ceil(np.log1p(context_length)).astype("int").item(), context_length
+            sampling_factor * np.ceil(np.log1p(context_length)).astype("int").item(), context_length
         )
         self.decoder_seq_length = min(
-            attention_factor * np.ceil(np.log1p(prediction_length)).astype("int").item(), prediction_length
+            sampling_factor * np.ceil(np.log1p(prediction_length)).astype("int").item(), prediction_length
         )
-        self.attention_factor = attention_factor
+        self.sampling_factor = sampling_factor
         self.distil = distil
 
     def get_config(self):
@@ -105,7 +105,7 @@ class InformerModelTester:
             num_static_real_features=1,
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
-            attention_factor=self.attention_factor,
+            sampling_factor=self.sampling_factor,
             distil=self.distil,
         )
 
