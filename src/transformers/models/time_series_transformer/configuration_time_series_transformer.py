@@ -43,9 +43,9 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        prediction_length (`int`, defaults to 24):
+        prediction_length (`int`):
             The prediction length for the decoder. In other words, the prediction horizon of the model. This value is
-            typically dictated by the dataset and we recommend to change it appropriately.
+            typically dictated by the dataset and we recommend to set it appropriately.
         context_length (`int`, *optional*, defaults to `prediction_length`):
             The context length for the encoder. If `None`, the context length will be the same as the
             `prediction_length`.
@@ -136,7 +136,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        prediction_length: int = 24,
+        prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
@@ -169,6 +169,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         **kwargs,
     ):
         # time series specific configuration
+        if prediction_length is None:
+            raise ValueError("The `prediction_length` should be specified.")
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
         self.distribution_output = distribution_output
