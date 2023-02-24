@@ -17,11 +17,13 @@ import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
-from transformers import PreTrainedTokenizerBase, PreTrainedTokenizerFast, logger
+from transformers import PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.udop import UdopTokenizer
 from transformers.models.udop.tokenization_udop import convert_slow_udoptokenizer
+from ...utils import is_sentencepiece_available, logging
 
 
+logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 
