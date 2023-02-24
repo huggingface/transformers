@@ -2506,6 +2506,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         from_auto_class = kwargs.pop("_from_auto", False)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
+        tf_to_pt_weight_rename = kwargs.pop("tf_to_pt_weight_rename", None)
 
         if trust_remote_code is True:
             logger.warning(
@@ -2745,7 +2746,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(
-                model, resolved_archive_file, allow_missing_keys=True, output_loading_info=output_loading_info, _prefix=load_weight_prefix
+                model, resolved_archive_file, allow_missing_keys=True, output_loading_info=output_loading_info, _prefix=load_weight_prefix, tf_to_pt_weight_rename=tf_to_pt_weight_rename
             )
 
         # we might need to extend the variable scope for composite models

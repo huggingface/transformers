@@ -152,7 +152,7 @@ def apply_transpose(transpose: TransposeType, weight, match_shape=None, pt_to_tf
 
 
 def load_pytorch_checkpoint_in_tf2_model(
-    tf_model, pytorch_checkpoint_path, tf_inputs=None, allow_missing_keys=False, output_loading_info=False, _prefix=None
+    tf_model, pytorch_checkpoint_path, tf_inputs=None, allow_missing_keys=False, output_loading_info=False, _prefix=None, tf_to_pt_weight_rename=None,
 ):
     """Load pytorch checkpoints in a TF 2.0 model"""
     try:
@@ -185,6 +185,7 @@ def load_pytorch_checkpoint_in_tf2_model(
         allow_missing_keys=allow_missing_keys,
         output_loading_info=output_loading_info,
         _prefix=_prefix,
+        tf_to_pt_weight_rename=tf_to_pt_weight_rename,
     )
 
 
@@ -198,7 +199,7 @@ def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_mi
 
 
 def load_pytorch_weights_in_tf2_model(
-    tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False, output_loading_info=False, _prefix=None,
+    tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False, output_loading_info=False, _prefix=None, tf_to_pt_weight_rename=None,
 ):
     """Load pytorch state_dict in a TF 2.0 model."""
     try:
@@ -219,11 +220,12 @@ def load_pytorch_weights_in_tf2_model(
         allow_missing_keys=allow_missing_keys,
         output_loading_info=output_loading_info,
         _prefix=_prefix,
+        tf_to_pt_weight_rename=tf_to_pt_weight_rename,
     )
 
 
 def load_pytorch_state_dict_in_tf2_model(
-    tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False, output_loading_info=False, _prefix=None,
+    tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False, output_loading_info=False, _prefix=None, tf_to_pt_weight_rename=None,
 ):
     """Load a pytorch state_dict in a TF 2.0 model."""
     import tensorflow as tf
@@ -280,6 +282,8 @@ def load_pytorch_state_dict_in_tf2_model(
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
             sw_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=symbolic_weight.shape, name_scope=_prefix,
         )
+        if tf_to_pt_weight_rename is not None:
+            name = tf_to_pt_weight_rename(name)
 
         # Find associated numpy array in pytorch model state dict
         if name not in pt_state_dict:
