@@ -2201,7 +2201,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
                 pos_emb = self.output_position_encodings(batch_size)
             elif self.position_encoding_type == "fourier":
                 pos_emb = self.output_position_encodings(
-                    self.output_index_dims, batch_size=batch_size, device=inputs.device, pos=pos
+                    self.output_index_dims, batch_size=batch_size, device=inputs.device, dtype=inputs.dtype, pos=pos
                 )
 
             # Optionally project them to a target dimension.
@@ -2215,7 +2215,9 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             if self.position_encoding_type == "trainable":
                 pos_emb = self.output_position_encodings(batch_size)
             elif self.position_encoding_type == "fourier":
-                pos_emb = self.output_position_encodings(index_dims, batch_size, device=inputs.device)
+                pos_emb = self.output_position_encodings(
+                    index_dims, batch_size, device=inputs.device, dtype=inputs.dtype
+                )
 
             # Optionally project them to a target dimension.
             pos_emb = self.positions_projection(pos_emb)
@@ -3329,7 +3331,7 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
         if self.position_encoding_type == "trainable":
             pos_enc = self.position_embeddings(batch_size)
         elif self.position_encoding_type == "fourier":
-            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device)
+            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device, dtype=inputs.dtype)
 
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
