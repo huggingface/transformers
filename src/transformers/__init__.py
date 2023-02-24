@@ -122,6 +122,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.seaformer": ["SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeaFormerConfig", "SeaFormerTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.altclip": [
         "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -687,6 +688,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.seaformer"].append("SeaFormerTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -968,6 +970,22 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.seaformer"].extend(
+        [
+            "SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SeaFormerForMaskedLM",
+            "SeaFormerForCausalLM",
+            "SeaFormerForMultipleChoice",
+            "SeaFormerForQuestionAnswering",
+            "SeaFormerForSequenceClassification",
+            "SeaFormerForTokenClassification",
+            "SeaFormerLayer",
+            "SeaFormerModel",
+            "SeaFormerPreTrainedModel",
+            "load_tf_weights_in_seaformer",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3707,6 +3725,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.seaformer import SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SeaFormerConfig, SeaFormerTokenizer
     from .models.altclip import (
         ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AltCLIPConfig,
@@ -4229,6 +4248,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.seaformer import SeaFormerTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -4458,6 +4478,20 @@ if TYPE_CHECKING:
         from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
+
+        from .models.seaformer import (
+            SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SeaFormerForMaskedLM,
+            SeaFormerForCausalLM,
+            SeaFormerForMultipleChoice,
+            SeaFormerForQuestionAnswering,
+            SeaFormerForSequenceClassification,
+            SeaFormerForTokenClassification,
+            SeaFormerLayer,
+            SeaFormerModel,
+            SeaFormerPreTrainedModel,
+            load_tf_weights_in_seaformer,
+        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from . import (
+    seaformer,
     albert,
     altclip,
     audio_spectrogram_transformer,
