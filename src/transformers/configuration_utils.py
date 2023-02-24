@@ -706,9 +706,7 @@ class PretrainedConfig(PushToHubMixin):
         to_remove = []
         for key, value in kwargs.items():
             if hasattr(config, key):
-                setattr(config, key, value)
-                if key != "torch_dtype":
-                    to_remove.append(key)
+                to_remove.append(key)
         for key in to_remove:
             kwargs.pop(key, None)
 
