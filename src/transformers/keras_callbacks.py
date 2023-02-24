@@ -162,7 +162,7 @@ class KerasMetricCallback(Callback):
 
     def _postprocess_predictions_or_labels(self, inputs):
         if isinstance(inputs[0], dict):
-            outputs = dict()
+            outputs = {}
             for key in inputs[0].keys():
                 outputs[key] = self._concatenate_batches([batch[key] for batch in inputs])
             # If it's a dict with only one key, just return the array
@@ -231,10 +231,12 @@ class KerasMetricCallback(Callback):
                     # This converts any dict-subclass to a regular dict
                     # Keras REALLY doesn't like it when we pass around a BatchEncoding or other derived class
                     predictions = dict(predictions)
-                if self.output_cols is not None:
-                    predictions = {key: predictions[key] for key in self.output_cols}
-                else:
-                    predictions = {key: val for key, val in predictions.items() if key not in ignore_keys + ["loss"]}
+                    if self.output_cols is not None:
+                        predictions = {key: predictions[key] for key in self.output_cols}
+                    else:
+                        predictions = {
+                            key: val for key, val in predictions.items() if key not in ignore_keys + ["loss"]
+                        }
             prediction_list.append(predictions)
             if not self.use_keras_label:
                 labels = {key: batch[key].numpy() for key in self.label_cols}

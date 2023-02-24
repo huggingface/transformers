@@ -440,7 +440,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         """
 
         # Load the index
-        state_sharded_dict = dict()
+        state_sharded_dict = {}
 
         for shard_file in shard_files:
             # load using msgpack utils
@@ -708,19 +708,19 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 filename = WEIGHTS_NAME if from_pt else FLAX_WEIGHTS_NAME
                 try:
                     # Load from URL or cache if already cached
-                    cached_file_kwargs = dict(
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        proxies=proxies,
-                        resume_download=resume_download,
-                        local_files_only=local_files_only,
-                        use_auth_token=use_auth_token,
-                        user_agent=user_agent,
-                        revision=revision,
-                        subfolder=subfolder,
-                        _raise_exceptions_for_missing_entries=False,
-                        _commit_hash=commit_hash,
-                    )
+                    cached_file_kwargs = {
+                        "cache_dir": cache_dir,
+                        "force_download": force_download,
+                        "proxies": proxies,
+                        "resume_download": resume_download,
+                        "local_files_only": local_files_only,
+                        "use_auth_token": use_auth_token,
+                        "user_agent": user_agent,
+                        "revision": revision,
+                        "subfolder": subfolder,
+                        "_raise_exceptions_for_missing_entries": False,
+                        "_commit_hash": commit_hash,
+                    }
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
                     # Since we set _raise_exceptions_for_missing_entries=False, we don't get an expection but a None
@@ -837,7 +837,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 # keep the params on CPU if we don't want to initialize
                 state = jax.tree_util.tree_map(lambda x: jax.device_put(x, jax.devices("cpu")[0]), state)
 
-        if "params" in state and "batch_stats" in state:  # if flax model contains batch norm layers
+        if "batch_stats" in state:  # if flax model contains batch norm layers
             # if model is base model only use model_prefix key
             if (
                 cls.base_model_prefix not in dict(model.params_shape_tree["params"])
@@ -876,9 +876,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         unexpected_keys = set(state.keys()) - model.required_params
 
         # Disabling warning when porting pytorch weights to flax, flax does not uses num_batches_tracked
-        # for unexpected_key in unexpected_keys.copy():
-        #     if "num_batches_tracked" in unexpected_key[-1]:
-        #         unexpected_keys.remove(unexpected_key)
+        for unexpected_key in unexpected_keys.copy():
+            if "num_batches_tracked" in unexpected_key[-1]:
+                unexpected_keys.remove(unexpected_key)
 
         if missing_keys and not _do_init:
             logger.warning(

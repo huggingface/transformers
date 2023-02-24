@@ -99,7 +99,7 @@ class GenerationConfig(PushToHubMixin):
         > Parameters for manipulation of the model output logits
 
         temperature (`float`, *optional*, defaults to 1.0):
-            The value used to module the next token probabilities.
+            The value used to modulate the next token probabilities.
         top_k (`int`, *optional*, defaults to 50):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
         top_p (`float`, *optional*, defaults to 1.0):
@@ -298,6 +298,9 @@ class GenerationConfig(PushToHubMixin):
         self.validate()
 
     def __eq__(self, other):
+        if not isinstance(other, GenerationConfig):
+            return False
+
         self_dict = self.__dict__.copy()
         other_dict = other.__dict__.copy()
         # ignore metadata
