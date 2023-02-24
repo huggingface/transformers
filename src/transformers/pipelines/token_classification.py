@@ -268,7 +268,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         model_outputs = model_inputs
         model_inputs = {k: model_inputs[k] for k in self.tokenizer.model_input_names}
         if self.framework == "tf":
-            logits = self.model(model_inputs.data)[0]
+            logits = self.model(**model_inputs)[0]
         else:
             output = self.model(**model_inputs)
             logits = output["logits"] if isinstance(output, dict) else output[0]
