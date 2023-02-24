@@ -197,10 +197,8 @@ class TokenClassificationPipeline(ChunkPipeline):
             postprocess_params["aggregation_strategy"] = aggregation_strategy
         if ignore_labels is not None:
             postprocess_params["ignore_labels"] = ignore_labels
-        if process_all is not None:
+        if process_all is True:
             if self.tokenizer.is_fast:
-                preprocess_params["return_overflowing_tokens"] = process_all
-                preprocess_params["padding"] = True
                 if stride is not None:
                     if stride < 0:
                         stride = 0
@@ -208,8 +206,14 @@ class TokenClassificationPipeline(ChunkPipeline):
                             "`stride` cannot be a negative number, defaulted to"
                             f" `stride={stride}` instead."
                         )
-                    preprocess_params["stride"] = stride
-                    postprocess_params["stride"] = stride
+                tokenizer_params = {
+                    "return_overflowing_tokens": True,
+                    "max_length": self.tokenizer.model_max_length,
+                    "padding": True,
+                    "stride": stride,
+                }
+                preprocess_params["tokenizer_params"] = tokenizer_params
+                postprocess_params["stride"] = stride
             else:
                 process_all = False
                 warnings.warn(
@@ -250,11 +254,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         return super().__call__(inputs, **kwargs)
 
     def preprocess(self, sentence, offset_mapping=None, **preprocess_params):
-        padding = preprocess_params.pop("padding", False)
-        stride = preprocess_params.pop("stride", 0)
-        return_overflowing_tokens = preprocess_params.pop(
-            "return_overflowing_tokens", False
-        )
+        tokenizer_params = preprocess_params.pop("tokenizer_params", {})
         truncation = (
             True
             if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0
@@ -266,10 +266,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             truncation=truncation,
             return_special_tokens_mask=True,
             return_offsets_mapping=self.tokenizer.is_fast,
-            # return_overflowing_tokens=return_overflowing_tokens,
-            # max_length=self.tokenizer.model_max_length,
-            # padding=padding,
-            # stride=stride,
+            **tokenizer_params
         )
         num_chunks = len(inputs["input_ids"])
 
