@@ -24,9 +24,7 @@ def convert_to_single_emb(x, offset: int = 512):
 
 
 def preprocess_item(item, keep_features=True):
-    requires_backends(preprocess_item, ["Cython"])
-    if not is_cython_available():
-        raise ImportError("Graphormer preprocessing needs Cython (pyximport)")
+    requires_backends(preprocess_item, ["cython"])
 
     if keep_features and "edge_attr" in item.keys():  # edge_attr
         edge_attr = np.asarray(item["edge_attr"], dtype=np.int64)
