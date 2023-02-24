@@ -1,0 +1,169 @@
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Zero-shot object detection
+
+[[open-in-colab]]
+
+Traditionally, models used for the [object detection](object_detection) task require labeled image datasets for training,
+and are limited to detecting the set of classes from the training data.
+
+Zero-shot object detection task supported by the [Owl-ViT](./model_doc/owlvit) model uses a different approach. OWL-ViT
+is an open-vocabulary object detector. It means that it can detect objects in images based on free-text queries, without
+the need to fine-tune the model on labeled datasets.
+
+OWL-ViT leverages multi-modal representations to perform open-vocabulary detection. It uses [CLIP](./model_doc/clip) with
+a [ViT](./model_doc/vit)-like Transformer as its backbone to get multi-modal visual and text features. CLIP learns to
+associate images and their corresponding textual descriptions, and ViT can process image patches as inputs. The authors
+of OWL-ViT first trained CLIP from scratch and then fine-tuned it end-to-end on standard object detection datasets using
+a bipartite matching loss.
+
+With this approach, the model can detect objects based on textual descriptions without prior training on labeled datasets.
+
+In this guide, you will learn how to use Owl-ViT:
+- to detect objects based on text prompts
+- for batch object detection
+- for image guided object detection
+
+Before you begin, make sure you have all the necessary libraries installed:
+
+```bash
+pip install -q datasets transformers
+```
+
+## Zero shot object detection pipeline
+
+The simplest way to try out inference with Owl-ViT is to use it in a [`Pipeline`]. Instantiate a pipeline
+for zero shot object detection from a [checkpoint on the Hugging Face Hub](https://huggingface.co/models?other=owlvit):
+
+```python
+>>> from transformers import pipeline
+
+>>> checkpoint = "google/owlvit-base-patch32"
+>>> detector = pipeline(model=checkpoint, task="zero-shot-object-detection")
+```
+
+Next, choose an image you'd like to detect objects in. Here we'll use the image of astronaut Eileen Collins, which is
+part of the [NASA](https://www.nasa.gov/multimedia/imagegallery/index.html) Great Images dataset.
+
+```py
+>>> import skimage
+>>> import numpy as np
+>>> from PIL import Image
+
+>>> image = skimage.data.astronaut()
+>>> image = Image.fromarray(np.uint8(image)).convert("RGB")
+
+>>> image
+```
+
+<!-- TODO: add the image -->
+
+Pass the image and the candidate object labels to look for to the pipeline.
+Here we pass the image directly but you can also pass a local path to an image or a url.
+
+```py
+>>> predictions = detector(
+...     image,
+...     candidate_labels=["human face", "rocket", "nasa badge", "star-spangled banner"],
+... )
+>>> predictions
+[{'score': 0.3571370542049408,
+  'label': 'human face',
+  'box': {'xmin': 180, 'ymin': 71, 'xmax': 271, 'ymax': 178}},
+ {'score': 0.28099656105041504,
+  'label': 'nasa badge',
+  'box': {'xmin': 129, 'ymin': 348, 'xmax': 206, 'ymax': 427}},
+ {'score': 0.2110239565372467,
+  'label': 'rocket',
+  'box': {'xmin': 350, 'ymin': -1, 'xmax': 468, 'ymax': 288}},
+ {'score': 0.13790413737297058,
+  'label': 'star-spangled banner',
+  'box': {'xmin': 1, 'ymin': 1, 'xmax': 105, 'ymax': 509}},
+ {'score': 0.11950037628412247,
+  'label': 'nasa badge',
+  'box': {'xmin': 277, 'ymin': 338, 'xmax': 327, 'ymax': 380}},
+ {'score': 0.10649408400058746,
+  'label': 'rocket',
+  'box': {'xmin': 358, 'ymin': 64, 'xmax': 424, 'ymax': 280}}]
+```
+
+Let's visualize the predictions:
+
+```py
+>>> from PIL import ImageDraw
+
+>>> draw = ImageDraw.Draw(image)
+
+>>> for prediction in predictions:
+...     box = prediction["box"]
+...     label = prediction["label"]
+...     score = prediction["score"]
+
+...     xmin, ymin, xmax, ymax = box.values()
+...     draw.rectangle((xmin, ymin, xmax, ymax), outline="red", width=1)
+...     draw.text((xmin, ymin), f"{label}: {round(score,2)}", fill="white")
+
+>>> image
+```
+
+<!-- TODO: Insert image-->
+
+## Text-prompted zero shot object detection by hand
+
+Now that you've seen how you can use the zero shot object detection pipeline, let's replicate the same
+result manually.
+
+Start by loading the model and associated processor from a [checkpoint on the Hugging Face Hub](https://huggingface.co/models?other=owlvit):
+
+```py
+>>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
+
+>>> checkpoint = "google/owlvit-base-patch32"
+>>> model = AutoModelForZeroShotObjectDetection.from_pretrained(checkpoint)
+>>> processor = AutoProcessor.from_pretrained(checkpoint)
+```
+
+Here we'll use the same image and text prompts, but you're welcome to switch things up and pick a different example.
+Use the processor to prepare the inputs for the model. The processor combines an image processor that prepares the
+image for the model by resizing and normalizing it, and a [`CLIPTokenizer`] that takes care of the text inputs.
+
+```py
+>>> text_queries = ["human face", "rocket", "nasa badge", "star-spangled banner"]
+>>> inputs = processor(text=text_queries, images=image, return_tensors="pt")
+```
+
+Pass the inputs through the model and visualize the results:
+
+```py
+>>> import torch
+>>> with torch.no_grad():
+...   outputs = model(**inputs)
+...   target_sizes = torch.tensor([image.size[::-1]])
+...   results = processor.post_process_object_detection(outputs, threshold=0.1, target_sizes=target_sizes)[0]
+
+>>> draw = ImageDraw.Draw(image)
+
+>>> scores = results["scores"].tolist()
+>>> labels = results["labels"].tolist()
+>>> boxes = results["boxes"].tolist()
+
+>>> for box, score, label in zip(boxes, scores, labels):
+...     xmin, ymin, xmax, ymax = box
+...     draw.rectangle((xmin, ymin, xmax, ymax), outline="red", width=1)
+...     draw.text((xmin, ymin), f"{text_queries[label]}: {round(score,2)}", fill="white")
+
+>>> image
+```
+
+## Batch processing
+
