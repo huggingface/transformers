@@ -808,7 +808,7 @@ if __name__ == "__main__":
             "time_spent": "",
             "failures": {},
             "job_link": {},
-            "error": {"unclassified": 0, "single": 0, "multi": 0},
+            "error": {"unclassified": False, "single": False, "multi": False},
         }
         for model in models
         if f"run_all_tests_gpu_{model}_test_reports" in available_artifacts
