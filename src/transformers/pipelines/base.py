@@ -15,6 +15,7 @@
 import collections
 import csv
 import importlib
+import inspect
 import json
 import os
 import pickle
@@ -266,7 +267,7 @@ def infer_framework_load_model(
         if isinstance(model, str):
             raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
 
-    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
+    framework = "tf" if "keras.engine.training.Model" in str(inspect.getmro(model.__class__)) else "pt"
     return framework, model
 
 
@@ -339,7 +340,7 @@ def get_framework(model, revision: Optional[str] = None):
             except OSError:
                 model = TFAutoModel.from_pretrained(model, revision=revision)
 
-    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
+    framework = "tf" if "keras.engine.training.Model" in str(inspect.getmro(model.__class__)) else "pt"
     return framework
 
 
