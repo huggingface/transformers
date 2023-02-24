@@ -599,6 +599,9 @@ def main():
     metric = load_metric("wer")
 
     def compute_metrics(preds, labels):
+        # replace padded labels by the padding token
+        labels[labels == -100] = tokenizer.pad_token_id
+
         pred_str = tokenizer.batch_decode(preds, skip_special_tokens=True)
         # we do not want to group tokens when computing the metrics
         label_str = tokenizer.batch_decode(labels, skip_special_tokens=True)
