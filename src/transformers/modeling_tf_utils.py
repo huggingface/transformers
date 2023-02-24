@@ -2745,7 +2745,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(
-                model, resolved_archive_file, allow_missing_keys=True, output_loading_info=output_loading_info
+                model, resolved_archive_file, allow_missing_keys=True, output_loading_info=output_loading_info, _prefix=load_weight_prefix
             )
 
         # we might need to extend the variable scope for composite models
@@ -2761,7 +2761,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             state_dict = safe_load_file(resolved_archive_file)
             # Load from a PyTorch checkpoint
             return load_pytorch_state_dict_in_tf2_model(
-                model, state_dict, allow_missing_keys=True, output_loading_info=output_loading_info
+                model, state_dict, allow_missing_keys=True, output_loading_info=output_loading_info, _prefix=load_weight_prefix
             )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
