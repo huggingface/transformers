@@ -268,7 +268,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             return_offsets_mapping=self.tokenizer.is_fast,
             return_overflowing_tokens=return_overflowing_tokens,
             max_length=self.tokenizer.model_max_length,
-            padding=padding,
+            # padding=padding,
             stride=stride,
         )
         num_chunks = len(inputs["input_ids"])
