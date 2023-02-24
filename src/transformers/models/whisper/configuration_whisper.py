@@ -154,7 +154,7 @@ class WhisperConfig(PretrainedConfig):
             mask_time_min_masks''
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
+            masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
             the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
             span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
             may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
@@ -164,7 +164,7 @@ class WhisperConfig(PretrainedConfig):
         mask_feature_min_masks (`int`, *optional*, defaults to 0),:
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
-            ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
+            `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
 
 
     Example:

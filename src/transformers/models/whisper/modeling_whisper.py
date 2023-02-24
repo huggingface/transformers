@@ -1128,7 +1128,6 @@ class WhisperModel(WhisperPreTrainedModel):
         """
         self.encoder._freeze_parameters()
 
-    # Modified from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_input_features(
         self,
         input_features: torch.FloatTensor,
