@@ -1,0 +1,57 @@
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Pop2Piano
+
+## Overview
+
+The Pop2Piano model was proposed in [Pop2Piano : Pop Audio-based Piano Cover Generation](https://arxiv.org/abs/2211.00895) by Jongho Choi, Kyogu Lee.
+
+The abstract from the paper is the following:
+
+*The piano cover of pop music is widely enjoyed by people. How-
+ever, the generation task of the pop piano cover is still understudied.
+This is partly due to the lack of synchronized {Pop, Piano
+Cover} data pairs, which made it challenging to apply the latest
+data-intensive deep learning-based methods. To leverage the power
+of the data-driven approach, we make a large amount of paired and
+synchronized {Pop, Piano Cover} data using an automated
+pipeline. In this paper, we present Pop2Piano, a Transformer net-
+work that generates piano covers given waveforms of pop music. To
+the best of our knowledge, this is the first model to directly generate
+a piano cover from pop audio without melody and chord extraction
+modules. We show that Pop2Piano trained with our dataset can
+generate plausible piano covers.*
+
+Tips:
+
+<INSERT TIPS ABOUT MODEL HERE>
+
+This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
+The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
+
+
+## Pop2PianoConfig
+
+[[autodoc]] Pop2PianoConfig
+
+## Pop2PianoModel
+
+[[autodoc]] Pop2PianoModel
+    - forward
+    - _mask_input_features
+
+## Pop2PianoForConditionalGeneration
+
+[[autodoc]] Pop2PianoForConditionalGeneration
+    - forward
+
