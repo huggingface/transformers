@@ -56,6 +56,7 @@ else:
     _import_structure["modeling_udop"] = [
         "UdopDualForConditionalGeneration",
         "UdopUnimodelForConditionalGeneration",
+        "UdopPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -75,7 +76,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_udop import UdopTokenizer
         from .tokenization_udop_fast import UdopTokenizerFast
 
     try:
