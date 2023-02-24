@@ -11,14 +11,16 @@ from ..utils import (
     is_tf_available,
     is_torch_available,
 )
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, ChunkPipeline
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline, Dataset
 
 
 if is_tf_available():
     import tensorflow as tf
+
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 if is_torch_available():
     import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
 
@@ -34,24 +36,16 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
         elif isinstance(inputs, str):
             inputs = [inputs]
             batch_size = 1
-        elif (
-            Dataset is not None
-            and isinstance(inputs, Dataset)
-            or isinstance(inputs, types.GeneratorType)
-        ):
+        elif Dataset is not None and isinstance(inputs, Dataset) or isinstance(inputs, types.GeneratorType):
             return inputs, None
         else:
             raise ValueError("At least one input is required.")
         offset_mapping = kwargs.get("offset_mapping")
         if offset_mapping:
-            if isinstance(offset_mapping, list) and isinstance(
-                offset_mapping[0], tuple
-            ):
+            if isinstance(offset_mapping, list) and isinstance(offset_mapping[0], tuple):
                 offset_mapping = [offset_mapping]
             if len(offset_mapping) != batch_size:
-                raise ValueError(
-                    "offset_mapping should have the same batch size as the input"
-                )
+                raise ValueError("offset_mapping should have the same batch size as the input")
         return inputs, offset_mapping
 
 
@@ -134,9 +128,7 @@ class TokenClassificationPipeline(ChunkPipeline):
 
     default_input_names = "sequences"
 
-    def __init__(
-        self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs
-    ):
+    def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
@@ -203,8 +195,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                     if stride < 0:
                         stride = 0
                         warnings.warn(
-                            "`stride` cannot be a negative number, defaulted to"
-                            f" `stride={stride}` instead."
+                            "`stride` cannot be a negative number, defaulted to" f" `stride={stride}` instead."
                         )
                 tokenizer_params = {
                     "return_overflowing_tokens": True,
@@ -255,11 +246,7 @@ class TokenClassificationPipeline(ChunkPipeline):
 
     def preprocess(self, sentence, offset_mapping=None, **preprocess_params):
         tokenizer_params = preprocess_params.pop("tokenizer_params", {})
-        truncation = (
-            True
-            if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0
-            else False
-        )
+        truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
         inputs = self.tokenizer(
             sentence,
             return_tensors=self.framework,
@@ -317,9 +304,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                     keys.append("offset_mapping")
         outputs = {}
         for k in keys:
-            outputs[k] = np.array(
-                [model_outputs[k][0].numpy() for model_outputs in all_outputs]
-            )
+            outputs[k] = np.array([model_outputs[k][0].numpy() for model_outputs in all_outputs])
         logits = outputs.pop("logits")
         maxes = np.max(logits, axis=-1, keepdims=True)
         shifted_exp = np.exp(logits - maxes)
@@ -341,17 +326,13 @@ class TokenClassificationPipeline(ChunkPipeline):
 
             chunk_length = len(current_scores)
             # Stack the ovelapping part between the current and the next chunk
-            overlapping_scores = np.stack(
-                (current_scores[chunk_length - stride :], next_scores[:stride])
-            )
+            overlapping_scores = np.stack((current_scores[chunk_length - stride :], next_scores[:stride]))
             # Get the highest score for each token in each chunk
             tokens_max_scores = np.max(overlapping_scores, axis=-1)
             # Get the chunk id of the highest score for each token
             chunk_idx = np.argmax(tokens_max_scores, axis=0)
             # Update scores
-            idx_to_update = [
-                idx for idx in range(len(next_mask)) if next_mask[idx] == 0
-            ]
+            idx_to_update = [idx for idx in range(len(next_mask)) if next_mask[idx] == 0]
             for idx, (chunk_idx, j) in enumerate(zip(chunk_idx, idx_to_update)):
                 scores[i + 1][j] = overlapping_scores[chunk_idx][idx]
         outputs["scores"] = scores
@@ -415,9 +396,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                         start_ind = start_ind.item()
                         end_ind = end_ind.item()
                 word_ref = sentence[start_ind:end_ind]
-                if getattr(
-                    self.tokenizer._tokenizer.model, "continuing_subword_prefix", None
-                ):
+                if getattr(self.tokenizer._tokenizer.model, "continuing_subword_prefix", None):
                     # This is a BPE, word aware tokenizer, there is a correct way
                     # to fuse tokens
                     is_subword = len(word) != len(word_ref)
@@ -432,10 +411,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                             "Tokenizer does not support real words, using fallback heuristic",
                             UserWarning,
                         )
-                    is_subword = (
-                        start_ind > 0
-                        and " " not in sentence[start_ind - 1 : start_ind + 1]
-                    )
+                    is_subword = start_ind > 0 and " " not in sentence[start_ind - 1 : start_ind + 1]
                 if int(input_ids[idx]) == self.tokenizer.unk_token_id:
                     word = word_ref
                     is_subword = False
@@ -454,9 +430,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             pre_entities.append(pre_entity)
         return pre_entities
 
-    def aggregate(
-        self, pre_entities: List[dict], aggregation_strategy: AggregationStrategy
-    ) -> List[dict]:
+    def aggregate(self, pre_entities: List[dict], aggregation_strategy: AggregationStrategy) -> List[dict]:
         if aggregation_strategy in {
             AggregationStrategy.NONE,
             AggregationStrategy.SIMPLE,
@@ -480,12 +454,8 @@ class TokenClassificationPipeline(ChunkPipeline):
             return entities
         return self.group_entities(entities)
 
-    def aggregate_word(
-        self, entities: List[dict], aggregation_strategy: AggregationStrategy
-    ) -> dict:
-        word = self.tokenizer.convert_tokens_to_string(
-            [entity["word"] for entity in entities]
-        )
+    def aggregate_word(self, entities: List[dict], aggregation_strategy: AggregationStrategy) -> dict:
+        word = self.tokenizer.convert_tokens_to_string([entity["word"] for entity in entities])
         if aggregation_strategy == AggregationStrategy.FIRST:
             scores = entities[0]["scores"]
             idx = scores.argmax()
@@ -514,9 +484,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         }
         return new_entity
 
-    def aggregate_words(
-        self, entities: List[dict], aggregation_strategy: AggregationStrategy
-    ) -> List[dict]:
+    def aggregate_words(self, entities: List[dict], aggregation_strategy: AggregationStrategy) -> List[dict]:
         """
         Override tokens from a given word that disagree to force agreement on word boundaries.
 
@@ -527,9 +495,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             AggregationStrategy.NONE,
             AggregationStrategy.SIMPLE,
         }:
-            raise ValueError(
-                "NONE and SIMPLE strategies are invalid for word aggregation"
-            )
+            raise ValueError("NONE and SIMPLE strategies are invalid for word aggregation")
         word_entities = []
         word_group = None
         for entity in entities:
@@ -538,9 +504,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             elif entity["is_subword"]:
                 word_group.append(entity)
             else:
-                word_entities.append(
-                    self.aggregate_word(word_group, aggregation_strategy)
-                )
+                word_entities.append(self.aggregate_word(word_group, aggregation_strategy))
                 word_group = [entity]
         # Last item
         word_entities.append(self.aggregate_word(word_group, aggregation_strategy))
