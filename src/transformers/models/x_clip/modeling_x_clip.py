@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
@@ -33,6 +34,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ..clip.cross_attention import AttnProcessor, AttnProcessor2_0, CrossAttnProcessor
 from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 
 

@@ -19,6 +19,7 @@ from typing import Any, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.utils.checkpoint
 
 from ...activations import ACT2FN
@@ -32,6 +33,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ..clip.cross_attention import AttnProcessor, AttnProcessor2_0, CrossAttnProcessor
 from .configuration_altclip import AltCLIPConfig, AltCLIPTextConfig, AltCLIPVisionConfig
 
 
