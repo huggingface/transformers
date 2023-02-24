@@ -164,6 +164,7 @@ class ALIGNVisionModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = ALIGNVisionModelTester(self)
@@ -203,10 +204,6 @@ class ALIGNVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_with_projection(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
-
     def test_training(self):
         pass
 
@@ -232,20 +229,22 @@ class ALIGNTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=12,
+        batch_size=13,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
-        use_labels=True,
+        use_token_type_ids=True,
         vocab_size=99,
         hidden_size=32,
-        projection_dim=32,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
         initializer_range=0.02,
         scope=None,
     ):
@@ -254,16 +253,18 @@ class ALIGNTextModelTester:
         self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
+        self.use_token_type_ids = use_token_type_ids
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
 
@@ -274,45 +275,50 @@ class ALIGNTextModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        if input_mask is not None:
-            batch_size, seq_length = input_mask.shape
-            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
-            for batch_idx, start_index in enumerate(rnd_start_indices):
-                input_mask[batch_idx, :start_index] = 1
-                input_mask[batch_idx, start_index:] = 0
+        token_type_ids = None
+        if self.use_token_type_ids:
+            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
         config = self.get_config()
 
-        return config, input_ids, input_mask
+        return config, input_ids, token_type_ids, input_mask
 
     def get_config(self):
         return ALIGNTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
-            dropout=self.dropout,
-            attention_dropout=self.attention_dropout,
+            hidden_act=self.hidden_act,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
+            type_vocab_size=self.type_vocab_size,
+            is_decoder=False,
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(self, config, input_ids, input_mask):
+    def create_and_check_model(self, config, input_ids, token_type_ids, input_mask):
         model = ALIGNTextModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(input_ids, attention_mask=input_mask)
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+            result = model(input_ids, token_type_ids=token_type_ids)
             result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, input_mask = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+        ) = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
 
@@ -333,10 +339,6 @@ class ALIGNTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_with_projection(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
     def test_training(self):
         pass

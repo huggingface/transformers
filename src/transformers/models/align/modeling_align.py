@@ -694,6 +694,10 @@ class ALIGNPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, ALIGNTextModel):
+            module.gradient_checkpointing = value
+
 
 @add_start_docstrings(
     """The text model from ALIGN without any head or projection on top.""",
