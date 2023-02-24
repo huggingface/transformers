@@ -700,7 +700,7 @@ class PretrainedConfig(PushToHubMixin):
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
-        config_dict = {key: value for key,value in config_dict.items() if key not in kwargs}
+        config_dict = {key: value for key, value in config_dict.items() if key not in kwargs}
 
         config = cls(**config_dict, **kwargs)
 
@@ -955,4 +955,3 @@ if PretrainedConfig.push_to_hub.__doc__ is not None:
     PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
         object="config", object_class="AutoConfig", object_files="configuration file"
     )
-
