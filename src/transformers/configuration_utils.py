@@ -103,7 +103,7 @@ class PretrainedConfig(PushToHubMixin):
         tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
             and decoder model to have the exact same parameter names.
-        prune_heads (`Dict[int, List[int]]`, *optional*, defaults to `{}`):
+        pruned_heads (`Dict[int, List[int]]`, *optional*, defaults to `{}`):
             Pruned heads of the model. The keys are the selected layer indices and the associated values, the list of
             heads to prune in said layer.
 
@@ -389,13 +389,13 @@ class PretrainedConfig(PushToHubMixin):
                 "`Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`."
             )
 
-        # Additional attributes without default values
-        for key, value in kwargs.items():
-            try:
-                setattr(self, key, value)
-            except AttributeError as err:
-                logger.error(f"Can't set {key} with value {value} for {self}")
-                raise err
+        # # Additional attributes without default values
+        # for key, value in kwargs.items():
+        #     try:
+        #         setattr(self, key, value)
+        #     except AttributeError as err:
+        #         logger.error(f"Can't set {key} with value {value} for {self}")
+        #         raise err
 
     @property
     def name_or_path(self) -> str:
@@ -704,7 +704,7 @@ class PretrainedConfig(PushToHubMixin):
 
         config = cls(**config_dict, **kwargs)
 
-        kwargs.pop("name_or_path", None)
+        # kwargs.pop("name_or_path", None)
         to_remove = []
         for key, value in kwargs.items():
             if hasattr(config, key):
