@@ -16,11 +16,11 @@
 
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union, Dict
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
-import torch.utils.checkpoint
 import torch.nn.functional as F
+import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
@@ -34,7 +34,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_clip import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
-from .cross_attention import AttnProcessor, CrossAttnProcessor, AttnProcessor2_0
+from .cross_attention import AttnProcessor, AttnProcessor2_0, CrossAttnProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -255,13 +255,13 @@ class CLIPAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        
+
         processor = AttnProcessor2_0() if hasattr(F, "scaled_dot_product_attention") else CrossAttnProcessor()
         self.set_processor(processor)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-    
+
     def set_processor(self, processor: "AttnProcessor"):
         # if current processor is in `self._modules` and if passed `processor` is not, we need to
         # pop `processor` from `self._modules`
@@ -274,7 +274,7 @@ class CLIPAttention(nn.Module):
             self._modules.pop("processor")
 
         self.processor = processor
-    
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -794,7 +794,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
         self.text_model = CLIPTextTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
-    
+
     @property
     def attn_processors(self) -> Dict[str, AttnProcessor]:
         r"""
@@ -847,7 +847,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
 
         for name, module in self.named_children():
             fn_recursive_attn_processor(name, module, processor)
-    
+
     def get_input_embeddings(self) -> nn.Module:
         return self.text_model.embeddings.token_embedding
 

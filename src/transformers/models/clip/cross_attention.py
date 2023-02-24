@@ -11,34 +11,41 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib.util
+import sys
 from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
+from packaging import version
 from torch import nn
 
-from ...utils import (
-    logging
-)
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
+# The package importlib_metadata is in a different place, depending on the python version.
+if sys.version_info < (3, 8):
+    import importlib_metadata
+else:
+    import importlib.metadata as importlib_metadata
+
+
 _xformers_available = importlib.util.find_spec("xformers") is not None
 try:
     _xformers_version = importlib_metadata.version("xformers")
-    if _torch_available:
-        import torch
-
-        if version.Version(torch.__version__) < version.Version("1.12"):
-            raise ValueError("PyTorch should be >= 1.12")
+    if version.Version(torch.__version__) < version.Version("1.12"):
+        raise ValueError("PyTorch should be >= 1.12")
     logger.debug(f"Successfully imported xformers version {_xformers_version}")
 except importlib_metadata.PackageNotFoundError:
     _xformers_available = False
 
+
 def is_xformers_available():
     return _xformers_available
+
 
 if is_xformers_available():
     import xformers
@@ -49,15 +56,13 @@ else:
 
 class CrossAttention(nn.Module):
     r"""
-    A cross attention layer.
     Parameters:
-        query_dim (`int`): The number of channels in the query.
-        cross_attention_dim (`int`, *optional*):
+    A cross attention layer.
+        query_dim (`int`): The number of channels in the query. cross_attention_dim (`int`, *optional*):
             The number of channels in the encoder_hidden_states. If not given, defaults to `query_dim`.
-        heads (`int`,  *optional*, defaults to 8): The number of heads to use for multi-head attention.
-        dim_head (`int`,  *optional*, defaults to 64): The number of channels in each head.
-        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
-        bias (`bool`, *optional*, defaults to False):
+        heads (`int`, *optional*, defaults to 8): The number of heads to use for multi-head attention. dim_head (`int`,
+        *optional*, defaults to 64): The number of channels in each head. dropout (`float`, *optional*, defaults to
+        0.0): The dropout probability to use. bias (`bool`, *optional*, defaults to False):
             Set to `True` for the query, key, and value linear layers to contain a bias parameter.
     """
 
