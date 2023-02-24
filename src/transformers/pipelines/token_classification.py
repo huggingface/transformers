@@ -266,10 +266,10 @@ class TokenClassificationPipeline(ChunkPipeline):
             truncation=truncation,
             return_special_tokens_mask=True,
             return_offsets_mapping=self.tokenizer.is_fast,
-            return_overflowing_tokens=return_overflowing_tokens,
-            max_length=self.tokenizer.model_max_length,
+            # return_overflowing_tokens=return_overflowing_tokens,
+            # max_length=self.tokenizer.model_max_length,
             # padding=padding,
-            stride=stride,
+            # stride=stride,
         )
         num_chunks = len(inputs["input_ids"])
 
