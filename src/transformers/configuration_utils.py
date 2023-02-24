@@ -704,15 +704,11 @@ class PretrainedConfig(PushToHubMixin):
         kwargs = {
             (cls.attribute_map[key] if (key != "attribute_map" and key in cls.attribute_map) else key): value for key, value in kwargs.items()
         }
-        to_remove = []
-        for key, value in kwargs.items():
-            if key in config_dict:
-                if key != "torch_dtype":
-                    to_remove.append(key)
-        for key in to_remove:
-            config_dict.pop(key, None)
+        config_dict = {key: value for key,value in config_dict.items() if key not in kwargs}
 
         config = cls(**config_dict, **kwargs)
+
+        kwargs.pop("name_or_path", None)
 
         logger.info(f"Model config {config}")
         if return_unused_kwargs:
