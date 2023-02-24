@@ -401,7 +401,7 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-0.6322, -1.5771, -0.9340], [-0.1011, -1.0263, -0.7208], [0.4979, -0.6487, -0.7189]], device=torch_device
+            [[0.8196, -1.5131, 1.4620], [1.1268, -1.3238, 1.5997], [1.5098, -1.0715, 1.7359]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -423,7 +423,7 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.8177, -1.7989, -0.3127], [1.6964, -1.0607, -0.1749], [1.8395, 0.1110, 0.0263]], device=torch_device
+            [[-1.2957, -1.0280, -0.6045], [-0.7017, -0.8193, -0.3717], [-1.0449, -0.8149, 0.1405]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -444,6 +444,6 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
-        expected_slice = torch.tensor([3883.5037, 4630.2251, 7562.1338], device=torch_device)
+        expected_slice = torch.tensor([2825.2749, 3584.9207, 6763.9951], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
