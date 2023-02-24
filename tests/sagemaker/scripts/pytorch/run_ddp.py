@@ -29,7 +29,7 @@ def main():
     os.environ["NCCL_DEBUG"] = "INFO"
 
     if num_nodes > 1:
-        cmd = f"""python -m torch.distributed.launch \
+        cmd = f"""torchrun \
                 --nnodes={num_nodes}  \
                 --node_rank={rank}  \
                 --nproc_per_node={num_gpus}  \
@@ -38,7 +38,7 @@ def main():
                 ./run_glue.py \
                 {"".join([f" --{parameter} {value}" for parameter,value in args.__dict__.items()])}"""
     else:
-        cmd = f"""python -m torch.distributed.launch \
+        cmd = f"""torchrun \
             --nproc_per_node={num_gpus}  \
             ./run_glue.py \
             {"".join([f" --{parameter} {value}" for parameter,value in args.__dict__.items()])}"""

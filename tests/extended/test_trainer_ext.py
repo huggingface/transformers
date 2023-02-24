@@ -366,12 +366,11 @@ class TestTrainerExt(TestCasePlus):
                 n_gpus_to_use = get_gpu_count()
             master_port = get_torch_dist_unique_port()
             distributed_args = f"""
-                -m torch.distributed.launch
                 --nproc_per_node={n_gpus_to_use}
                 --master_port={master_port}
                 {self.examples_dir_str}/pytorch/translation/run_translation.py
             """.split()
-            cmd = [sys.executable] + distributed_args + args
+            cmd = ["torchrun"] + distributed_args + args
             # keep for quick debug
             # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
             execute_subprocess_async(cmd, env=self.get_env())

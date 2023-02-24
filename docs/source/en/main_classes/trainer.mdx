@@ -196,7 +196,7 @@ Let's discuss how you can tell your program which GPUs are to be used and in wha
 When using [`DistributedDataParallel`](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) to use only a subset of your GPUs, you simply specify the number of GPUs to use. For example, if you have 4 GPUs, but you wish to use the first 2 you can do:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=2  trainer-program.py ...
+torchrun --nproc_per_node=2  trainer-program.py ...
 ```
 
 if you have either [`accelerate`](https://github.com/huggingface/accelerate) or [`deepspeed`](https://github.com/microsoft/DeepSpeed) installed you can also accomplish the same by using one of:
@@ -222,7 +222,7 @@ If you have multiple GPUs and you'd like to use only 1 or a few of those GPUs, s
 For example, let's say you have 4 GPUs: 0, 1, 2 and 3. To run only on the physical GPUs 0 and 2, you can do:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,2 python -m torch.distributed.launch trainer-program.py ...
+CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
 ```
 
 So now pytorch will see only 2 GPUs, where your physical GPUs 0 and 2 are mapped to `cuda:0` and `cuda:1` correspondingly.
@@ -230,7 +230,7 @@ So now pytorch will see only 2 GPUs, where your physical GPUs 0 and 2 are mapped
 You can even change their order:
 
 ```bash
-CUDA_VISIBLE_DEVICES=2,0 python -m torch.distributed.launch trainer-program.py ...
+CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
 ```
 
 Here your physical GPUs 0 and 2 are mapped to `cuda:1` and `cuda:0` correspondingly.
@@ -251,7 +251,7 @@ As with any environment variable you can, of course, export those instead of add
 
 ```bash
 export CUDA_VISIBLE_DEVICES=0,2
-python -m torch.distributed.launch trainer-program.py ...
+torchrun trainer-program.py ...
 ```
 
 but this approach can be confusing since you may forget you set up the environment variable earlier and not understand why the wrong GPUs are used. Therefore, it's a common practice to set the environment variable just for a specific run on the same command line as it's shown in most examples of this section.
@@ -488,12 +488,12 @@ If after trying everything suggested you still encounter build issues, please, p
 **Usage**:
 
 To use the first version of Sharded data-parallelism, add `--sharded_ddp simple` to the command line arguments, and
-make sure you have added the distributed launcher `-m torch.distributed.launch --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE` if you haven't been using it already.
+make sure you have added the distributed launcher `torchrun --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE` if you haven't been using it already.
 
 For example here is how you could use it for `run_translation.py` with 2 GPUs:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=2 examples/pytorch/translation/run_translation.py \
+torchrun --nproc_per_node=2 examples/pytorch/translation/run_translation.py \
 --model_name_or_path t5-small --per_device_train_batch_size 1   \
 --output_dir output_dir --overwrite_output_dir \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
@@ -511,12 +511,12 @@ Notes:
   able to use significantly larger batch sizes using the same hardware (e.g. 3x and even bigger) which should lead to
   significantly shorter training time.
 
-3. To use the second version of Sharded data-parallelism, add `--sharded_ddp zero_dp_2` or `--sharded_ddp zero_dp_3` to the command line arguments, and make sure you have added the distributed launcher `-m torch.distributed.launch --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE` if you haven't been using it already.
+3. To use the second version of Sharded data-parallelism, add `--sharded_ddp zero_dp_2` or `--sharded_ddp zero_dp_3` to the command line arguments, and make sure you have added the distributed launcher `torchrun --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE` if you haven't been using it already.
 
 For example here is how you could use it for `run_translation.py` with 2 GPUs:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=2 examples/pytorch/translation/run_translation.py \
+torchrun --nproc_per_node=2 examples/pytorch/translation/run_translation.py \
 --model_name_or_path t5-small --per_device_train_batch_size 1   \
 --output_dir output_dir --overwrite_output_dir \
 --do_train --max_train_samples 500 --num_train_epochs 1 \
@@ -560,25 +560,25 @@ as the model saving with FSDP activated is only available with recent fixes.
 **Usage**:
 
 - Make sure you have added the distributed launcher
-`-m torch.distributed.launch --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE` if you haven't been using it already.
+`torchrun --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE` if you haven't been using it already.
 
-- **Sharding Strategy**: 
+- **Sharding Strategy**:
   - FULL_SHARD : Shards optimizer states + gradients + model parameters across data parallel workers/GPUs.
-  For this, add `--fsdp full_shard` to the command line arguments. 
+  For this, add `--fsdp full_shard` to the command line arguments.
   - SHARD_GRAD_OP : Shards optimizer states + gradients across data parallel workers/GPUs.
     For this, add `--fsdp shard_grad_op` to the command line arguments.
   - NO_SHARD : No sharding. For this, add `--fsdp no_shard` to the command line arguments.
-- To offload the parameters and gradients to the CPU, 
+- To offload the parameters and gradients to the CPU,
 add `--fsdp "full_shard offload"` or `--fsdp "shard_grad_op offload"` to the command line arguments.
--  To automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`, 
+-  To automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`,
 add `--fsdp "full_shard auto_wrap"` or `--fsdp "shard_grad_op auto_wrap"` to the command line arguments.
-- To enable both CPU offloading and auto wrapping, 
+- To enable both CPU offloading and auto wrapping,
 add `--fsdp "full_shard offload auto_wrap"` or `--fsdp "shard_grad_op offload auto_wrap"` to the command line arguments.
 - If auto wrapping is enabled, you can either use transformer based auto wrap policy or size based auto wrap policy.
   - For transformer based auto wrap policy, please add `--fsdp_transformer_layer_cls_to_wrap <value>` to command line arguments.
   This specifies the transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ....
-  This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units. 
-  Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
+  This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
+  Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers.
   Remaining layers including the shared embeddings are conveniently wrapped in same outermost FSDP unit.
   Therefore, use this for transformer based models.
   - For size based auto wrap policy, please add `--fsdp_min_num_params <number>` to command line arguments.
@@ -587,22 +587,22 @@ add `--fsdp "full_shard offload auto_wrap"` or `--fsdp "shard_grad_op offload au
 **Few caveats to be aware of**
 - Mixed precision is currently not supported with FSDP as we wait for PyTorch to fix support for it.
 More details in this [issues](https://github.com/pytorch/pytorch/issues/75676).
-- FSDP currently doesn't support multiple parameter groups. 
+- FSDP currently doesn't support multiple parameter groups.
 More details mentioned in this [issue](https://github.com/pytorch/pytorch/issues/76501)
 (`The original model parameters' .grads are not set, meaning that they cannot be optimized separately (which is why we cannot support multiple parameter groups)`).
 
-### Using Trainer for accelerated PyTorch Training on Mac 
+### Using Trainer for accelerated PyTorch Training on Mac
 
-With PyTorch v1.12 release, developers and researchers can take advantage of Apple silicon GPUs for significantly faster model training. 
+With PyTorch v1.12 release, developers and researchers can take advantage of Apple silicon GPUs for significantly faster model training.
 This unlocks the ability to perform machine learning workflows like prototyping and fine-tuning locally, right on Mac.
-Apple's Metal Performance Shaders (MPS) as a backend for PyTorch enables this and can be used via the new `"mps"` device. 
+Apple's Metal Performance Shaders (MPS) as a backend for PyTorch enables this and can be used via the new `"mps"` device.
 This will map computational graphs and primitives on the MPS Graph framework and tuned kernels provided by MPS.
 For more information please refer official documents [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)
-and [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html). 
+and [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html).
 
 <Tip warning={false}>
 
-We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine. 
+We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine.
 It has major fixes related to model correctness and performance improvements for transformer based models.
 Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details.
 
@@ -611,15 +611,15 @@ Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details
 **Benefits of Training and Inference using Apple Silicon Chips**
 
 1. Enables users to train larger networks or batch sizes locally
-2. Reduces data retrieval latency and provides the GPU with direct access to the full memory store due to unified memory architecture. 
+2. Reduces data retrieval latency and provides the GPU with direct access to the full memory store due to unified memory architecture.
 Therefore, improving end-to-end performance.
 3. Reduces costs associated with cloud-based development or the need for additional local GPUs.
 
-**Pre-requisites**: To install torch with mps support, 
+**Pre-requisites**: To install torch with mps support,
 please follow this nice medium article [GPU-Acceleration Comes to PyTorch on M1 Macs](https://medium.com/towards-data-science/gpu-acceleration-comes-to-pytorch-on-m1-macs-195c399efcc1).
 
 **Usage**:
-User has to just pass `--use_mps_device` argument. 
+User has to just pass `--use_mps_device` argument.
 For example, you can run the official Glue text classififcation task (from the root folder) using Apple Silicon GPU with below command:
 
 ```bash
@@ -641,14 +641,14 @@ python examples/pytorch/text-classification/run_glue.py \
 
 **A few caveats to be aware of**
 
-1. Some PyTorch operations have not been implemented in mps and will throw an error. 
-One way to get around that is to set the environment variable `PYTORCH_ENABLE_MPS_FALLBACK=1`, 
+1. Some PyTorch operations have not been implemented in mps and will throw an error.
+One way to get around that is to set the environment variable `PYTORCH_ENABLE_MPS_FALLBACK=1`,
 which will fallback to CPU for these operations. It still throws a UserWarning however.
-2. Distributed setups `gloo` and `nccl` are not working with `mps` device. 
+2. Distributed setups `gloo` and `nccl` are not working with `mps` device.
 This means that currently only single GPU of `mps` device type can be used.
 
 Finally, please, remember that, 🤗 `Trainer` only integrates MPS backend, therefore if you
-have any problems or questions with regards to MPS backend usage, please, 
+have any problems or questions with regards to MPS backend usage, please,
 file an issue with [PyTorch GitHub](https://github.com/pytorch/pytorch/issues).
 
 Sections that were moved:

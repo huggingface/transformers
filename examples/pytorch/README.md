@@ -98,7 +98,7 @@ the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html)
 use the following command:
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
     --nproc_per_node number_of_gpu_you_have path_to_script.py \
 	--all_arguments_of_the_script
 ```
@@ -107,7 +107,7 @@ As an example, here is how you would fine-tune the BERT large model (with whole 
 classification MNLI task using the `run_glue` script, with 8 GPUs:
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
     --nproc_per_node 8 pytorch/text-classification/run_glue.py \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --task_name mnli \
@@ -138,7 +138,7 @@ very detailed [pytorch/xla README](https://github.com/pytorch/xla/blob/master/RE
 In this repo, we provide a very simple launcher script named
 [xla_spawn.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/xla_spawn.py) that lets you run our
 example scripts on multiple TPU cores without any boilerplate. Just pass a `--num_cores` flag to this script, then your
-regular training script with its arguments (this is similar to the `torch.distributed.launch` helper for
+regular training script with its arguments (this is similar to the `torchrun` helper for
 `torch.distributed`):
 
 ```bash
@@ -281,7 +281,7 @@ To enable Neptune logging, in your `TrainingArguments`, set the `report_to` argu
 
 ```python
 training_args = TrainingArguments(
-    "quick-training-distilbert-mrpc", 
+    "quick-training-distilbert-mrpc",
     evaluation_strategy="steps",
     eval_steps = 20,
     report_to = "neptune",

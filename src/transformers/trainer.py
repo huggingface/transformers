@@ -1684,8 +1684,7 @@ class Trainer:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
                 # references registered here no longer work on other gpus, breaking the module
                 raise ValueError(
-                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP"
-                    " (torch.distributed.launch)."
+                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP" " (torchrun)."
                 )
             else:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa

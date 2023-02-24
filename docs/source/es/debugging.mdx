@@ -15,7 +15,7 @@ specific language governing permissions and limitations under the License.
 ## Debug de problemas de Network multi-GPU
 
 Cuando entrenas o infieres con `DistributedDataParallel` y varias GPUs, si encuentras problemas de intercomunicación entre procesos y/o nodos, puedes usar el siguiente script para diagnosticar problemas de red.
- 
+
 ```bash
 wget https://raw.githubusercontent.com/huggingface/transformers/main/scripts/distributed/torch-distributed-gpu-test.py
 ```
@@ -50,7 +50,7 @@ Esta función está disponible actualmente sólo para PyTorch.
 
 <Tip>
 
-Para el entrenamiento multi-GPU, requiere DDP (`torch.distributed.launch`).
+Para el entrenamiento multi-GPU, requiere DDP (`torchrun`).
 
 </Tip>
 
@@ -128,7 +128,7 @@ abs min  abs max  metadata
 El output del ejemplo se ha recortado en el centro por razones de brevedad.
 
 La segunda columna muestra el valor del elemento más grande en términos absolutos, por lo que si observas con detenimiento los últimos fotogramas,
-los inputs y outputs estaban en el rango de `1e4`. Así que cuando este entrenamiento se hizo con fp16 mixed precision, 
+los inputs y outputs estaban en el rango de `1e4`. Así que cuando este entrenamiento se hizo con fp16 mixed precision,
 el último paso sufrió overflow (ya que bajo `fp16` el mayor número antes de `inf` es `64e3`). Para evitar overflows en
 `fp16` las activations deben permanecer muy por debajo de `1e4`, porque `1e4 * 1e4 = 1e8` por lo que cualquier matrix multiplication con
 grandes activations va a llevar a una condición de overflow numérico.

@@ -5,6 +5,7 @@ Code to remove duplicate initializers to reduce ONNX model size.
 import os
 
 import numpy
+
 import onnx
 
 

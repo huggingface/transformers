@@ -34,10 +34,10 @@ limitations under the License.
 
 ## Connectionist Temporal Classification
 
-The script [`run_speech_recognition_ctc.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py) can be used to fine-tune any pretrained [Connectionist Temporal Classification Model](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForCTC) for automatic speech 
+The script [`run_speech_recognition_ctc.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-recognition/run_speech_recognition_ctc.py) can be used to fine-tune any pretrained [Connectionist Temporal Classification Model](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForCTC) for automatic speech
 recognition on one of the [official speech recognition datasets](https://huggingface.co/datasets?task_ids=task_ids:automatic-speech-recognition) or a custom dataset.
 
-Speech recognition models that have been pretrained in unsupervised fashion on audio data alone, *e.g.* [Wav2Vec2](https://huggingface.co/transformers/main/model_doc/wav2vec2.html), [HuBERT](https://huggingface.co/transformers/main/model_doc/hubert.html), [XLSR-Wav2Vec2](https://huggingface.co/transformers/main/model_doc/xlsr_wav2vec2.html), have shown to require only 
+Speech recognition models that have been pretrained in unsupervised fashion on audio data alone, *e.g.* [Wav2Vec2](https://huggingface.co/transformers/main/model_doc/wav2vec2.html), [HuBERT](https://huggingface.co/transformers/main/model_doc/hubert.html), [XLSR-Wav2Vec2](https://huggingface.co/transformers/main/model_doc/xlsr_wav2vec2.html), have shown to require only
 very little annotated data to yield good performance on automatic speech recognition datasets.
 
 In the script [`run_speech_recognition_ctc`], we first create a vocabulary from all unique characters of both the training data and evaluation data. Then, we preprocesses the speech recognition dataset, which includes correct resampling, normalization and padding. Finally, the pretrained speech recognition model is fine-tuned on the annotated speech recognition datasets using CTC loss.
@@ -45,7 +45,7 @@ In the script [`run_speech_recognition_ctc`], we first create a vocabulary from 
 ---
 **NOTE**
 
-If you encounter problems with data preprocessing by setting `--preprocessing_num_workers` > 1, 
+If you encounter problems with data preprocessing by setting `--preprocessing_num_workers` > 1,
 you might want to set the environment variable `OMP_NUM_THREADS` to 1 as follows:
 
 ```bash
@@ -85,7 +85,7 @@ python run_speech_recognition_ctc.py \
 	--fp16 \
 	--group_by_length \
 	--push_to_hub \
-	--do_train --do_eval 
+	--do_train --do_eval
 ```
 
 On a single V100 GPU, this script should run in *ca.* 1 hour 20 minutes and yield a CTC loss of **0.39** and word error rate
@@ -96,7 +96,7 @@ of **0.35**.
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/main/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using 8 GPUs in half-precision.
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
 	--nproc_per_node 8 run_speech_recognition_ctc.py \
 	--dataset_name="common_voice" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
@@ -131,19 +131,19 @@ of **0.36**.
 ### Multi GPU CTC with Dataset Streaming
 
 The following command shows how to use [Dataset Streaming mode](https://huggingface.co/docs/datasets/dataset_streaming.html)
-to fine-tune [XLS-R](https://huggingface.co/transformers/main/model_doc/xls_r.html) 
+to fine-tune [XLS-R](https://huggingface.co/transformers/main/model_doc/xls_r.html)
 on [Common Voice](https://huggingface.co/datasets/common_voice) using 4 GPUs in half-precision.
 
 Streaming mode imposes several constraints on training:
 1. We need to construct a tokenizer beforehand and define it via `--tokenizer_name_or_path`.
-2. `--num_train_epochs` has to be replaced by `--max_steps`. Similarly, all other epoch-based arguments have to be 
+2. `--num_train_epochs` has to be replaced by `--max_steps`. Similarly, all other epoch-based arguments have to be
 replaced by step-based ones.
-3. Full dataset shuffling on each epoch is not possible, since we don't have the whole dataset available at once. 
+3. Full dataset shuffling on each epoch is not possible, since we don't have the whole dataset available at once.
 However, the `--shuffle_buffer_size` argument controls how many examples we can pre-download before shuffling them.
 
 
 ```bash
-**python -m torch.distributed.launch \
+**torchrun \
 	--nproc_per_node 4 run_speech_recognition_ctc_streaming.py \
 	--dataset_name="common_voice" \
 	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
@@ -185,8 +185,8 @@ of **0.29**.
 
 ### Examples CTC
 
-The following tables present a couple of example runs on the most popular speech-recognition datasets. 
-The presented performances are by no means optimal as no hyper-parameter tuning was done. Nevertheless, 
+The following tables present a couple of example runs on the most popular speech-recognition datasets.
+The presented performances are by no means optimal as no hyper-parameter tuning was done. Nevertheless,
 they can serve as a baseline to improve upon.
 
 
@@ -245,7 +245,7 @@ they can serve as a baseline to improve upon.
 
 ## Sequence to Sequence
 
-The script [`run_speech_recognition_seq2seq.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-recognition/run_speech_recognition_seq2seq.py) can be used to fine-tune any [Speech Sequence-to-Sequence Model](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForSpeechSeq2Seq) for automatic speech 
+The script [`run_speech_recognition_seq2seq.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-recognition/run_speech_recognition_seq2seq.py) can be used to fine-tune any [Speech Sequence-to-Sequence Model](https://huggingface.co/docs/transformers/main/en/model_doc/auto#transformers.AutoModelForSpeechSeq2Seq) for automatic speech
 recognition on one of the [official speech recognition datasets](https://huggingface.co/datasets?task_ids=task_ids:automatic-speech-recognition) or a custom dataset. This includes the Whisper model from OpenAI or a warm-started Speech-Encoder-Decoder Model, examples for which are included below.
 
 ### Whisper Model
@@ -295,7 +295,7 @@ If training on a different language, you should be sure to change the `language`
 #### Multi GPU Whisper Training
 The following example shows how to fine-tune the [Whisper small](https://huggingface.co/openai/whisper-small) checkpoint on the Hindi subset of [Common Voice 11](https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0) using 2 GPU devices in half-precision:
 ```bash
-python -m torch.distributed.launch \
+torchrun \
  	--nproc_per_node 2 run_speech_recognition_seq2seq.py \
 	--model_name_or_path="openai/whisper-small" \
 	--dataset_name="mozilla-foundation/common_voice_11_0" \
@@ -382,31 +382,31 @@ ln -s $(realpath <path/to/transformers>/examples/pytorch/speech-recognition/run_
 ```
 
 Note that we have added a randomly initialized _adapter layer_ to `wav2vec2-base` with the argument
-`encoder_add_adapter=True`. This adapter sub-samples the output sequence of 
+`encoder_add_adapter=True`. This adapter sub-samples the output sequence of
 `wav2vec2-base` along the time dimension. By default, a single
-output vector of `wav2vec2-base` has a receptive field of *ca.* 25ms (*cf.* 
+output vector of `wav2vec2-base` has a receptive field of *ca.* 25ms (*cf.*
 Section *4.2* of the [official Wav2Vec2 paper](https://arxiv.org/pdf/2006.11477.pdf)), which represents a little less a single character. On the other hand, BART
-makes use of a sentence-piece tokenizer as an input processor, so that a single 
-hidden vector of `bart-base` represents *ca.* 4 characters. To better align the 
-receptive field of the *Wav2Vec2* output vectors with *BART*'s hidden-states in the cross-attention 
-mechanism, we further subsample *Wav2Vec2*'s output by a factor of 8 by 
+makes use of a sentence-piece tokenizer as an input processor, so that a single
+hidden vector of `bart-base` represents *ca.* 4 characters. To better align the
+receptive field of the *Wav2Vec2* output vectors with *BART*'s hidden-states in the cross-attention
+mechanism, we further subsample *Wav2Vec2*'s output by a factor of 8 by
 adding a convolution-based adapter.
 
 Having warm-started the speech-encoder-decoder model under `<your-user-name>/wav2vec2-2-bart`, we can now fine-tune it on the task of speech recognition.
 
-In the script [`run_speech_recognition_seq2seq`], we load the warm-started model, 
-feature extractor, and tokenizer, process a speech recognition dataset, 
+In the script [`run_speech_recognition_seq2seq`], we load the warm-started model,
+feature extractor, and tokenizer, process a speech recognition dataset,
 and subsequently make use of the [`Seq2SeqTrainer`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.Seq2SeqTrainer) to train our system.
 Note that it is important to align the target transcriptions with the decoder's vocabulary. For example, the [`Librispeech`](https://huggingface.co/datasets/librispeech_asr) dataset only contains captilized letters in the transcriptions,
-whereas BART was pretrained mostly on normalized text. Thus, it is recommended to add the argument 
-`--do_lower_case` to the fine-tuning script when using a warm-started `SpeechEncoderDecoderModel`. 
+whereas BART was pretrained mostly on normalized text. Thus, it is recommended to add the argument
+`--do_lower_case` to the fine-tuning script when using a warm-started `SpeechEncoderDecoderModel`.
 The model is fine-tuned on the standard cross-entropy language modeling
 loss for sequence-to-sequence (just like *T5* or *BART* in natural language processing).
 
 ---
 **NOTE**
 
-If you encounter problems with data preprocessing by setting `--preprocessing_num_workers` > 1, 
+If you encounter problems with data preprocessing by setting `--preprocessing_num_workers` > 1,
 you might want to set the environment variable `OMP_NUM_THREADS` to 1 as follows:
 
 ```bash
@@ -455,7 +455,7 @@ python run_speech_recognition_seq2seq.py \
 	--do_lower_case
 ```
 
-On a single V100 GPU, this script should run in *ca.* 5 hours and yield a 
+On a single V100 GPU, this script should run in *ca.* 5 hours and yield a
 cross-entropy loss of **0.405** and word error rate of **0.0728**.
 
 #### Multi GPU Seq2Seq
@@ -463,7 +463,7 @@ cross-entropy loss of **0.405** and word error rate of **0.0728**.
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/main/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using 8 GPUs in half-precision.
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
  	--nproc_per_node 8 run_speech_recognition_seq2seq.py \
 	--dataset_name="librispeech_asr" \
 	--model_name_or_path="./" \
