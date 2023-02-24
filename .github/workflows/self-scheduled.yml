@@ -186,6 +186,12 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
+      - name: Prepare test report directory
+        working-directory: /transformers
+        run: |
+          mkdir ${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
+          echo "" > ${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/error.txt
+
       - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}

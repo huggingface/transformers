@@ -303,15 +303,26 @@ class Message:
 
                     other_module_reports.append(report)
 
-        for key, value in failures.items():
-            device_report_values = [
-                value["PyTorch"]["single"],
-                value["PyTorch"]["multi"],
-                value["TensorFlow"]["single"],
-                value["TensorFlow"]["multi"],
-                sum(value["other"].values()),
-            ]
+        for key, model_result in model_results.items():
+            value = None
+            if key in failures:
+                value = failures[key]
 
+            a, b, c, d, e = 0
+            if model_result["error"]["single"]:
+                a, b, = 999, 999
+            elif value is not None:
+                a, b = value["PyTorch"]["single"], value["TensorFlow"]["single"]
+
+            if model_result["error"]["multi"]:
+                c, d = 999, 999
+            elif value is not None:
+                c, d = value["PyTorch"]["single"], value["TensorFlow"]["multi"]
+
+            if value is not None:
+                e = sum(value["other"].values()),
+
+            device_report_values = [a, c, b, d, e]
             if sum(device_report_values):
                 device_report = " | ".join([str(x).rjust(9) for x in device_report_values]) + " | "
                 report = f"{device_report}{key}"
@@ -797,6 +808,7 @@ if __name__ == "__main__":
             "time_spent": "",
             "failures": {},
             "job_link": {},
+            "error": {"unclassified": 0, "single": 0, "multi": 0},
         }
         for model in models
         if f"run_all_tests_gpu_{model}_test_reports" in available_artifacts
@@ -814,14 +826,17 @@ if __name__ == "__main__":
 
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
+            # Link to the GitHub Action job
+            # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
+            job_name = f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
+            if job_name_prefix:
+                job_name = f"{job_name_prefix} / {job_name}"
+            model_results[model]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(job_name)
+
             artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
-            if "stats" in artifact:
-                # Link to the GitHub Action job
-                # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
-                job_name = f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
-                if job_name_prefix:
-                    job_name = f"{job_name_prefix} / {job_name}"
-                model_results[model]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(job_name)
+            if len(artifact) == 0:
+                model_results[model]["error"][artifact_path["gpu"]] = True
+            elif "stats" in artifact:
                 failed, success, time_spent = handle_test_results(artifact["stats"])
                 model_results[model]["success"] += success
                 model_results[model]["time_spent"] += time_spent[1:-1] + ", "
