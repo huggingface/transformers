@@ -44,7 +44,7 @@ config_common_kwargs = {
     "torch_dtype": "float16",
     "use_bfloat16": True,
     "tf_legacy_loss": True,
-    "pruned_heads": {"a": 1},
+    "pruned_heads": {0: 1},
     "tie_word_embeddings": False,
     "is_decoder": True,
     "cross_attention_hidden_size": 128,

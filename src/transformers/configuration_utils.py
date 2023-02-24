@@ -272,6 +272,8 @@ class PretrainedConfig(PushToHubMixin):
         if self.pruned_heads and not isinstance(self.pruned_heads, dict):
             raise ValueError("Argument pruned_heads should be a dictionary.")
         if self.pruned_heads:
+            if not any([isinstance(key, int) for key in self.pruned_heads.keys()]):
+                raise ValueError("Argument pruned_heads keys should be of type int.")
             self.pruned_heads = {int(key): value for key, value in self.pruned_heads.items()}
 
         self.tie_word_embeddings = kwargs.pop(
