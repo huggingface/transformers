@@ -266,7 +266,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             truncation=truncation,
             return_special_tokens_mask=True,
             return_offsets_mapping=self.tokenizer.is_fast,
-            **tokenizer_params
+            **tokenizer_params,
         )
         num_chunks = len(inputs["input_ids"])
 
