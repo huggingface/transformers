@@ -666,9 +666,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             # add an extra bucket for padding tokens only
             num_buckets = num_buckets + 1
             # assign padding tokens extra bucket
-            buckets_mask = attention_mask.to(torch.bool)[:, None, None, :].expand(
-                buckets.shape
-            )  # previously `dtype=torch.uint8`, cf pytorch 1.2.0 compatibility
+            buckets_mask = attention_mask.to(torch.bool)[:, None, None, :].expand(buckets.shape)
             buckets = torch.where(
                 buckets_mask, buckets, torch.tensor(num_buckets - 1, dtype=torch.long, device=buckets.device)
             )
@@ -843,9 +841,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # attention mask for LSH
         if attention_mask is not None:
             # if chunked attention, the attention mask has to correspond to LSH order
-            attention_mask = attention_mask.to(torch.bool)[
-                :, None, :
-            ]  # previously `dtype=torch.uint8`, cf pytorch 1.2.0 compatibility
+            attention_mask = attention_mask.to(torch.bool)[:, None, :]
             if not do_standard_self_attention:
                 # expand attn_mask to fit with key_value_bucket_idx shape
                 attention_mask = attention_mask[:, None, :]
@@ -1229,9 +1225,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
     ):
         # chunk attention mask and look before and after
         if attention_mask is not None:
-            attention_mask = attention_mask.to(torch.bool)[
-                :, None, :
-            ]  # previously `dtype=torch.uint8`, cf pytorch 1.2.0 compatibility
+            attention_mask = attention_mask.to(torch.bool)[:, None, :]
 
             if not do_standard_self_attention:
                 attention_mask = self._split_seq_length_dim_to(attention_mask, -1, self.chunk_length, 1)
