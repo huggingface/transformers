@@ -197,6 +197,8 @@ class TokenClassificationPipeline(ChunkPipeline):
                         warnings.warn(
                             "`stride` cannot be a negative number, defaulted to" f" `stride={stride}` instead."
                         )
+                else:
+                    stride = 0
                 tokenizer_params = {
                     "return_overflowing_tokens": True,
                     "max_length": self.tokenizer.model_max_length,
