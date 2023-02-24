@@ -43,10 +43,7 @@ _CONFIG_FOR_DOC = "UdopConfig"
 _TOKENIZER_FOR_DOC = "UdopTokenizer"
 
 
-UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP = [
-    "udop-uni"
-    "udop-dual"
-]
+UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP = ["udop-uniudop-dual"]
 # _CHECKPOINT_FOR_DOC = "UDOP-small"
 UDOPDUAL_START_DOCSTRING = r"""
 
@@ -1927,15 +1924,19 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
 
         >>> # training
         >>> input_ids = tokenizer("The <extra_id_0> walks", return_tensors="pt").input_ids
-        >>> text_seg_data = torch.tensor([[0.11, 0.22, 0.43, 0.99], [0.13, 0.26, 0.33, 0.59], [0.09, 0.11, 0.29, 0.29]])
+        >>> text_seg_data = torch.tensor(
+        ...     [[0.11, 0.22, 0.43, 0.99], [0.13, 0.26, 0.33, 0.59], [0.09, 0.11, 0.29, 0.29]]
+        ... )
         >>> image_input = torch.randn([1, 224, 224, 3])
-        >>> image_seg_data = torch.randn([1,194,4])
+        >>> image_seg_data = torch.randn([1, 194, 4])
         >>> labels = torch.tensor([[8, 3, 238, 12394, 1]])
-        >>> outputs = model(input_ids=input_ids,
-                            image=image_output,
-                            seg_data=text_seg_data,
-                            visual_seg_data=visual_seg_data,
-                            labels=labels, )
+        >>> outputs = model(
+        ...     input_ids=input_ids,
+        ...     image=image_input,
+        ...     seg_data=text_seg_data,
+        ...     visual_seg_data=image_seg_data,
+        ...     labels=labels,
+        ... )
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
@@ -2435,7 +2436,40 @@ class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
         input_dict: Dict[str, Any] = None,
         **kwargs,
     ) -> Tuple[Tensor, ...]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for
+            labels in `[0, ..., config.vocab_size]`
 
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoTokenizer, UdopUnimodelForConditionalGeneration
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("udop-uni")
+        >>> model = UdopUnimodelForConditionalGeneration.from_pretrained("udop-uni")
+
+        >>> # training
+        >>> input_ids = tokenizer("The <extra_id_0> walks", return_tensors="pt").input_ids
+        >>> text_seg_data = torch.tensor(
+        ...     [[0.11, 0.22, 0.43, 0.99], [0.13, 0.26, 0.33, 0.59], [0.09, 0.11, 0.29, 0.29]]
+        ... )
+        >>> image_input = torch.randn([1, 224, 224, 3])
+        >>> image_seg_data = torch.randn([1, 194, 4])
+        >>> labels = torch.tensor([[8, 3, 238, 12394, 1]])
+        >>> outputs = model(
+        ...     input_ids=input_ids,
+        ...     image=image_input,
+        ...     seg_data=text_seg_data,
+        ...     visual_seg_data=image_seg_data,
+        ...     labels=labels,
+        ... )
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         if input_dict is not None:
             return_task_outputs = []
             for task in input_dict:
