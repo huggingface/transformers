@@ -1187,7 +1187,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features
-        generated_ids = model.generate(input_features, max_length=20)
+        generated_ids = model.generate(input_features, max_length=20, task="translate")
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
