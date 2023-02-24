@@ -2816,7 +2816,12 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
         return encoding_size
 
     def forward(
-        self, index_dims: List[int], batch_size: int, device, pos: torch.FloatTensor = None
+        self,
+        index_dims: List[int],
+        batch_size: int,
+        device: torch.device,
+        dtype: torch.dtype,
+        pos: torch.FloatTensor = None,
     ) -> torch.FloatTensor:
         pos = _check_or_build_spatial_positions(pos, index_dims, batch_size)
         fourier_pos_enc = generate_fourier_features(
@@ -2825,7 +2830,7 @@ class PerceiverFourierPositionEncoding(PerceiverAbstractPositionEncoding):
             max_resolution=self.max_resolution,
             concat_pos=self.concat_pos,
             sine_only=self.sine_only,
-        ).to(device)
+        ).to(device=device, dtype=dtype)
         return fourier_pos_enc
 
 
@@ -3156,7 +3161,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
         if self.position_encoding_type == "trainable":
             pos_enc = self.position_embeddings(batch_size)
         elif self.position_encoding_type == "fourier":
-            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device)
+            pos_enc = self.position_embeddings(index_dims, batch_size, device=inputs.device, dtype=inputs.dtype)
 
         # Optionally project them to a target dimension.
         pos_enc = self.positions_projection(pos_enc)
