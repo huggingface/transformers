@@ -261,10 +261,6 @@ class PretrainedConfig(PushToHubMixin):
 
     def __init__(self, **kwargs):
         # Attributes with defaults
-        kwargs = {
-            (self.attribute_map[key] if (key in self.attribute_map) else key): value for key, value in kwargs.items()
-        }
-
         self.return_dict = kwargs.pop("return_dict", True)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
@@ -701,14 +697,20 @@ class PretrainedConfig(PushToHubMixin):
         # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
-        kwargs = {
-            (cls.attribute_map[key] if (key != "attribute_map" and key in cls.attribute_map) else key): value for key, value in kwargs.items()
-        }
+
         config_dict = {key: value for key,value in config_dict.items() if key not in kwargs}
 
         config = cls(**config_dict, **kwargs)
 
         kwargs.pop("name_or_path", None)
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
+                if key != "torch_dtype":
+                    to_remove.append(key)
+        for key in to_remove:
+            kwargs.pop(key, None)
 
         logger.info(f"Model config {config}")
         if return_unused_kwargs:
@@ -953,3 +955,4 @@ if PretrainedConfig.push_to_hub.__doc__ is not None:
     PretrainedConfig.push_to_hub.__doc__ = PretrainedConfig.push_to_hub.__doc__.format(
         object="config", object_class="AutoConfig", object_files="configuration file"
     )
+
