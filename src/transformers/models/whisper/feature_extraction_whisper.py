@@ -307,6 +307,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
+            return_attention_mask=return_attention_mask,
         )
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
@@ -317,6 +318,10 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
         else:
             padded_inputs["input_features"] = input_features
+
+        if return_attention_mask:
+            # rescale from sample (48000) to feature (3000)
+            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
