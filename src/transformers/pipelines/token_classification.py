@@ -387,7 +387,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         offset_mapping = outputs.pop("offset_mapping", None)
 
         if offset_mapping is None:
-            offset_mapping = all_outputs[0].pop("offset_mapping", None)
+            offset_mapping = all_outputs[0]["offset_mapping"][0]
 
         pre_entities = self.gather_pre_entities(
             sentence,
