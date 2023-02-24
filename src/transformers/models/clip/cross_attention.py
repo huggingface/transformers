@@ -25,6 +25,28 @@ from ...utils import (
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
+_xformers_available = importlib.util.find_spec("xformers") is not None
+try:
+    _xformers_version = importlib_metadata.version("xformers")
+    if _torch_available:
+        import torch
+
+        if version.Version(torch.__version__) < version.Version("1.12"):
+            raise ValueError("PyTorch should be >= 1.12")
+    logger.debug(f"Successfully imported xformers version {_xformers_version}")
+except importlib_metadata.PackageNotFoundError:
+    _xformers_available = False
+
+def is_xformers_available():
+    return _xformers_available
+
+if is_xformers_available():
+    import xformers
+    import xformers.ops
+else:
+    xformers = None
+
+
 class CrossAttention(nn.Module):
     r"""
     A cross attention layer.
