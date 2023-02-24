@@ -21,7 +21,7 @@ from transformers import PreTrainedTokenizerBase, PreTrainedTokenizerFast
 from transformers.models.udop import UdopTokenizer
 from transformers.models.udop.tokenization_udop import convert_slow_udoptokenizer
 
-from ...utils import is_sentencepiece_available, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
