@@ -41,6 +41,12 @@ logger = logging.getLogger(__name__)
 
 _CONFIG_FOR_DOC = "UdopConfig"
 _TOKENIZER_FOR_DOC = "UdopTokenizer"
+
+
+UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP = [
+    "udop-uni"
+    "udop-dual"
+]
 # _CHECKPOINT_FOR_DOC = "UDOP-small"
 UDOPDUAL_START_DOCSTRING = r"""
 
@@ -288,7 +294,7 @@ class UdopDropPath(nn.Module):
         return f"drop_prob={round(self.drop_prob,3):0.3f}"
 
 
-class UdopPatchEmbed(nn.Module):
+class UdopPatchEmbedding(nn.Module):
     """2D Image to Patch Embedding"""
 
     def __init__(self, config):
@@ -434,7 +440,7 @@ class MaskedAutoencoderViT(nn.Module):
         # self.embed_dim = config.image_size
         self.decoder_embed_dim = 512
         embed_dim = config.mae_config["embed_dim"]
-        self.patch_embed = UdopPatchEmbed(config)
+        self.patch_embed = UdopPatchEmbedding(config)
         num_patches = self.patch_embed.num_patches
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
@@ -1903,7 +1909,36 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
         input_dict: Dict[str, Any] = None,
         **kwargs,
     ) -> Tuple[Tensor, Seq2SeqLMOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size - 1]`. All labels set to `-100` are ignored (masked), the loss is only computed for
+            labels in `[0, ..., config.vocab_size]`
 
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoTokenizer, UdopDualForConditionalGeneration
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("udop-uni")
+        >>> model = UdopDualForConditionalGeneration.from_pretrained("udop-uni")
+
+        >>> # training
+        >>> input_ids = tokenizer("The <extra_id_0> walks", return_tensors="pt").input_ids
+        >>> text_seg_data = torch.tensor([[0.11, 0.22, 0.43, 0.99], [0.13, 0.26, 0.33, 0.59], [0.09, 0.11, 0.29, 0.29]])
+        >>> image_input = torch.randn([1, 224, 224, 3])
+        >>> image_seg_data = torch.randn([1,194,4])
+        >>> labels = torch.tensor([[8, 3, 238, 12394, 1]])
+        >>> outputs = model(input_ids=input_ids,
+                            image=image_output,
+                            seg_data=text_seg_data,
+                            visual_seg_data=visual_seg_data,
+                            labels=labels, )
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         if seg_data is not None:
             seg_data = torch.clip(seg_data, 0.0, 1.0)
         if input_dict is not None:
