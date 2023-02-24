@@ -45,7 +45,7 @@ class ALIGNProcessor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
-    def __call__(self, text=None, images=None, max_seq_len=64, return_tensors=None, **kwargs):
+    def __call__(self, text=None, images=None, max_seq_len=None, return_tensors=None, **kwargs):
         """
         Main method to prepare text(s) and image(s) to be fed as input to the model. This method forwards the `text`
         and `kwargs` arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -110,28 +110,30 @@ class ALIGNProcessor(ProcessorMixin):
 
         keys = encoding.keys()
         for key in keys:
+            dtype = encoding[key].dtype
+
             if return_tensors == "np" or return_tensors is None:
-                dtype = encoding[key].dtype
                 padded_data = np.zeros((batch_size, max_seq_len))
+                padded_data[:, :seq_len] = encoding[key]
 
             elif return_tensors == "jax" and is_flax_available():
                 import jax.numpy as jnp
 
-                dtype = encoding[key].dtype
                 padded_data = jnp.zeros((batch_size, max_seq_len))
+                padded_data[:, :seq_len] = encoding[key]
 
             elif return_tensors == "pt" and is_torch_available():
                 import torch
 
-                dtype = encoding[key].dtype
                 padded_data = torch.zeros((batch_size, max_seq_len), dtype=dtype)
+                padded_data[:, :seq_len] = encoding[key]
 
             elif return_tensors == "tf" and is_tf_available():
                 import tensorflow as tf
 
-                padded_data = tf.zeros((batch_size, max_seq_len))
+                padding = tf.zeros((batch_size, max_seq_len - seq_len), dtype=dtype)
+                padded_data = tf.concat((encoding[key], padding), axis=1)
 
-            padded_data[:, :seq_len] = encoding[key]
             encoding[key] = padded_data
 
         return encoding

@@ -88,7 +88,8 @@ def get_processor():
 def rename_keys(original_param_names):
     # EfficientNet image encoder
     block_names = [v.split("_")[0].split("block")[1] for v in original_param_names if v.startswith("block")]
-    block_names = sorted(set(block_names))
+    block_names = list(set(block_names))
+    block_names = sorted(block_names)
     num_blocks = len(block_names)
     block_name_mapping = {b: str(i) for b, i in zip(block_names, range(num_blocks))}
 
@@ -227,7 +228,7 @@ def rename_keys(original_param_names):
             (f"{old}/encoder/layer_._{i}/output/dense/bias:0", f"{new}.encoder.layer.{i}.output.dense.bias")
         )
         rename_keys.append(
-            (f"{old}/encoder/layer_._{i}/output/LayerNorm/gamma:0", f"{new}.encoder.layer.{i}.output.LayerNorm.bias")
+            (f"{old}/encoder/layer_._{i}/output/LayerNorm/gamma:0", f"{new}.encoder.layer.{i}.output.LayerNorm.weight")
         )
         rename_keys.append(
             (f"{old}/encoder/layer_._{i}/output/LayerNorm/beta:0", f"{new}.encoder.layer.{i}.output.LayerNorm.bias")
@@ -257,6 +258,8 @@ def rename_keys(original_param_names):
 
 
 def replace_params(hf_params, tf_params, key_mapping):
+    list(hf_params.keys())
+
     for key, value in tf_params.items():
         if key not in key_mapping:
             continue
@@ -298,20 +301,21 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     tf_params = {param.name: param.numpy() for param in tf_params}
     for param in tf_non_train_params:
         tf_params[param.name] = param.numpy()
-    list(tf_params.keys())
+    tf_param_names = list(tf_params.keys())
 
     # Load HuggingFace model
     config = get_align_config()
     hf_model = ALIGNModel(config).eval()
-    hf_model.state_dict()
-    """
-    # Create src-to-dst parameter name mapping dictionary print("Converting parameters...") key_mapping =
-    rename_keys(tf_param_names) replace_params(hf_params, tf_params, key_mapping)
-    """
+    hf_params = hf_model.state_dict()
+
+    # Create src-to-dst parameter name mapping dictionary
+    print("Converting parameters...")
+    key_mapping = rename_keys(tf_param_names)
+    replace_params(hf_params, tf_params, key_mapping)
 
     # Initialize processor
     processor = get_processor()
-    inputs = processor(images=prepare_img(), text="A picture of a cat", return_tensors="pt")
+    inputs = processor(images=prepare_img(), text="A picture of a cat", max_seq_len=64, return_tensors="pt")
 
     # HF model inference
     hf_model.eval()
@@ -320,6 +324,7 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
 
     hf_image_features = outputs.image_embeds.detach().numpy()
     hf_text_features = outputs.text_embeds.detach().numpy()
+    # print(hf_text_features)
 
     # Original model inference
     original_model.trainable = False
