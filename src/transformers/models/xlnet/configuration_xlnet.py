@@ -57,7 +57,9 @@ class XLNetConfig(PretrainedConfig):
         untie_r (`bool`, *optional*, defaults to `True`):
             Whether or not to untie relative position biases
         attn_type (`str`, *optional*, defaults to `"bi"`):
-            The attention type used by the model. Set `"bi"` for XLNet, `"uni"` for Transformer-XL.
+            The attention type used by the model. Set `"bi"` for XLNet.`"uni"` is not longer supperted. If you want to
+            use Transformer-XL, use a
+            [`Transformer-XLModel`](https://huggingface.co/docs/transformers/model_doc/transfo-xl).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
