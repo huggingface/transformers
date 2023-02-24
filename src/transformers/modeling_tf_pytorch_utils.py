@@ -39,7 +39,9 @@ class TransposeType(ExplicitEnum):
     CONV2D = "conv2d"
 
 
-def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="", tf_weight_shape=None, name_scope=None):
+def convert_tf_weight_name_to_pt_weight_name(
+    tf_name, start_prefix_to_remove="", tf_weight_shape=None, name_scope=None
+):
     """
     Convert a TF 2.0 model variable name in a pytorch model weight name.
 
@@ -60,7 +62,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="",
                 f"Weight name {tf_name} does not start with name_scope {name_scope}. This is an internal error "
                 "in Transformers, so (unless you were doing something really evil) please open an issue to report it!"
             )
-        tf_name = tf_name[len(name_scope):]  # We can't use remove_prefix because we need to support older Python
+        tf_name = tf_name[len(name_scope) :]  # We can't use remove_prefix because we need to support older Python
         tf_name = tf_name.lstrip("/")
     tf_name = tf_name.replace(":0", "")  # device ids
     tf_name = re.sub(
@@ -152,7 +154,13 @@ def apply_transpose(transpose: TransposeType, weight, match_shape=None, pt_to_tf
 
 
 def load_pytorch_checkpoint_in_tf2_model(
-    tf_model, pytorch_checkpoint_path, tf_inputs=None, allow_missing_keys=False, output_loading_info=False, _prefix=None, tf_to_pt_weight_rename=None,
+    tf_model,
+    pytorch_checkpoint_path,
+    tf_inputs=None,
+    allow_missing_keys=False,
+    output_loading_info=False,
+    _prefix=None,
+    tf_to_pt_weight_rename=None,
 ):
     """Load pytorch checkpoints in a TF 2.0 model"""
     try:
@@ -199,7 +207,13 @@ def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_mi
 
 
 def load_pytorch_weights_in_tf2_model(
-    tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False, output_loading_info=False, _prefix=None, tf_to_pt_weight_rename=None,
+    tf_model,
+    pt_state_dict,
+    tf_inputs=None,
+    allow_missing_keys=False,
+    output_loading_info=False,
+    _prefix=None,
+    tf_to_pt_weight_rename=None,
 ):
     """Load pytorch state_dict in a TF 2.0 model."""
     try:
@@ -225,7 +239,13 @@ def load_pytorch_weights_in_tf2_model(
 
 
 def load_pytorch_state_dict_in_tf2_model(
-    tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False, output_loading_info=False, _prefix=None, tf_to_pt_weight_rename=None,
+    tf_model,
+    pt_state_dict,
+    tf_inputs=None,
+    allow_missing_keys=False,
+    output_loading_info=False,
+    _prefix=None,
+    tf_to_pt_weight_rename=None,
 ):
     """Load a pytorch state_dict in a TF 2.0 model."""
     import tensorflow as tf
@@ -280,7 +300,10 @@ def load_pytorch_state_dict_in_tf2_model(
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
-            sw_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=symbolic_weight.shape, name_scope=_prefix,
+            sw_name,
+            start_prefix_to_remove=start_prefix_to_remove,
+            tf_weight_shape=symbolic_weight.shape,
+            name_scope=_prefix,
         )
         if tf_to_pt_weight_rename is not None:
             name = tf_to_pt_weight_rename(name)
