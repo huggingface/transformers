@@ -136,6 +136,35 @@ class WhisperConfig(PretrainedConfig):
         begin_suppress_tokens (`List[int]`, *optional*, defaults to `[220,50256]`):
             A list containing tokens that will be supressed at the beginning of the sampling process. Initialized as
             the token for `" "` (`blank_token_id`) and the `eos_token_id`
+        apply_spec_augment (`bool`, *optional*, defaults to `False`):
+            Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
+            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
+            Recognition](https://arxiv.org/abs/1904.08779).
+        mask_time_prob (`float`, *optional*, defaults to 0.05):
+            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
+            procecure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If
+            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
+            masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
+            actual percentage of masked vectors. This is only relevant if `apply_spec_augment == True`.
+        mask_time_length (`int`, *optional*, defaults to 10):
+            Length of vector span along the time axis.
+        mask_time_min_masks (`int`, *optional*, defaults to 2),:
+            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
+            irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
+            mask_time_min_masks''
+        mask_feature_prob (`float`, *optional*, defaults to 0.0):
+            Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
+            masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
+            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
+            span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
+            may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
+            True`.
+        mask_feature_length (`int`, *optional*, defaults to 10):
+            Length of vector span along the feature axis.
+        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
+            The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
+            step, irrespectively of `mask_feature_prob`. Only relevant if
+            `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
 
 
     Example:
@@ -185,6 +214,13 @@ class WhisperConfig(PretrainedConfig):
         eos_token_id=50256,
         suppress_tokens=None,
         begin_suppress_tokens=[220, 50256],
+        apply_spec_augment=False,
+        mask_time_prob=0.05,
+        mask_time_length=10,
+        mask_time_min_masks=2,
+        mask_feature_prob=0.0,
+        mask_feature_length=10,
+        mask_feature_min_masks=0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -208,6 +244,14 @@ class WhisperConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
+        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        self.apply_spec_augment = apply_spec_augment
+        self.mask_time_prob = mask_time_prob
+        self.mask_time_length = mask_time_length
+        self.mask_time_min_masks = mask_time_min_masks
+        self.mask_feature_prob = mask_feature_prob
+        self.mask_feature_length = mask_feature_length
+        self.mask_feature_min_masks = mask_feature_min_masks
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

@@ -138,7 +138,7 @@ def get_alignment(music_tokens, labels, prior, config):
 
     hop_length = int(config.hop_fraction[-level - 1] * prior.n_ctx)
     alignment_head, alignment_layer = config.prior_alignment_head[0], config.prior_alignment_layer[0]
-    attn_layers = set([alignment_layer])
+    attn_layers = {alignment_layer}
     alignment_hops = {}
     indices_hops = {}
     for start in tqdm(get_starts(total_length, n_ctx, hop_length), desc="Computing lyric to music alignment "):
@@ -436,7 +436,7 @@ class JukeboxBottleneckBlock(nn.Module):
             used_curr = (_codebook_elem >= self.threshold).sum()
             usage = torch.sum(usage)
             dk = torch.norm(self.codebook - old_codebook) / np.sqrt(np.prod(old_codebook.shape))
-        return dict(entropy=entropy, used_curr=used_curr, usage=usage, dk=dk)
+        return {"entropy": entropy, "used_curr": used_curr, "usage": usage, "dk": dk}
 
     def preprocess(self, hidden_states):
         hidden_states = hidden_states.permute(0, 2, 1).contiguous()
@@ -2213,11 +2213,11 @@ class JukeboxPrior(PreTrainedModel):
         loss = self.encoder_loss_fraction * encoder_loss * self.nb_relevant_lyric_tokens / self.total_loss_dims
         loss += next_token_prediction_loss * self.next_token_prediction_loss_dims / self.total_loss_dims
 
-        metrics = dict(
-            bpd=next_token_prediction_loss.clone().detach(),
-            encoder_loss=encoder_loss.clone().detach(),
-            next_token_prediction_loss=next_token_prediction_loss.clone().detach(),
-        )
+        metrics = {
+            "bpd": next_token_prediction_loss.clone().detach(),
+            "encoder_loss": encoder_loss.clone().detach(),
+            "next_token_prediction_loss": next_token_prediction_loss.clone().detach(),
+        }
         if get_preds:
             metrics["preds"] = preds.clone().detach()
         if get_attn_weights:
@@ -2533,11 +2533,11 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # total length of the signal, might be bit different from the actual generated length
         self.total_length = total_length
         for level in sample_levels:
-            sampling_kwargs = dict(
-                temp=0.99 if level == len(self.priors) - 1 else sampling_temperature,
-                chunk_size=chunk_size,
-                sample_tokens=sample_tokens,
-            )
+            sampling_kwargs = {
+                "temp": 0.99 if level == len(self.priors) - 1 else sampling_temperature,
+                "chunk_size": chunk_size,
+                "sample_tokens": sample_tokens,
+            }
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
 
             total_token_to_sample = total_length // self.priors[level].raw_to_tokens
