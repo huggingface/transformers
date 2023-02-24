@@ -35,7 +35,7 @@ from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import ModelOutput, add_end_docstrings, is_tf_available, is_torch_available, logging
+from ..utils import ModelOutput, add_end_docstrings, is_flax_available, is_tf_available, is_torch_available, logging
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -53,6 +53,13 @@ if is_torch_available():
 
     # Re-export for backward compatibility
     from .pt_utils import KeyDataset
+
+if is_flax_available():
+    import jax
+    import jax.numpy as jnp
+
+    from ..models.auto.modeling_flax_auto import FlaxAutoModel
+
 else:
     Dataset = None
     KeyDataset = None
@@ -217,11 +224,14 @@ def infer_framework_load_model(
         class_tuple = ()
         look_pt = is_torch_available() and framework in {"pt", None}
         look_tf = is_tf_available() and framework in {"tf", None}
+        look_flax = is_flax_available() and framework in {"flax", None}
         if model_classes:
             if look_pt:
                 class_tuple = class_tuple + model_classes.get("pt", (AutoModel,))
             if look_tf:
                 class_tuple = class_tuple + model_classes.get("tf", (TFAutoModel,))
+            if look_flax:
+                class_tuple = class_tuple + model_classes.get("flax", (FlaxAutoModel,))
         if config.architectures:
             classes = []
             for architecture in config.architectures:
@@ -260,13 +270,18 @@ def infer_framework_load_model(
                     model = model.eval()
                 # Stop loading on the first successful load.
                 break
-            except (OSError, ValueError):
+            except (OSError, ValueError): 
                 continue
 
         if isinstance(model, str):
             raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
 
-    framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
+    if model.__class__.__name__.startswith("TF"):
+        framework = "tf" 
+    elif model.__class__.__name__.startswith("Flax"):
+        framework = "flax"
+    else:
+        framework = "pt"
     return framework, model
 
 
@@ -836,6 +851,7 @@ class Pipeline(_ScikitCompat):
                 info["impl"] = f"{last_module}.{info['impl'].__name__}"
                 info["pt"] = tuple(c.__name__ for c in info["pt"])
                 info["tf"] = tuple(c.__name__ for c in info["tf"])
+                info["flax"] = tuple(c.__name__ for c in info["flax"])
 
                 custom_pipelines[task] = info
             self.model.config.custom_pipelines = custom_pipelines
@@ -885,6 +901,8 @@ class Pipeline(_ScikitCompat):
         if self.framework == "tf":
             with tf.device("/CPU:0" if self.device == -1 else f"/device:GPU:{self.device}"):
                 yield
+        elif self.framework == "flax":
+            yield
         else:
             if self.device.type == "cuda":
                 torch.cuda.set_device(self.device)
@@ -1010,6 +1028,10 @@ class Pipeline(_ScikitCompat):
                     model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                     model_outputs = self._forward(model_inputs, **forward_params)
                     model_outputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
+            elif self.framework == "flax":
+                # model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
+                model_outputs = self._forward(model_inputs, **forward_params)
+                # model_outputs = self._ensure_tensor_on_device(model_outputs, device=torch.device("cpu"))
             else:
                 raise ValueError(f"Framework {self.framework} is not supported")
         return model_outputs

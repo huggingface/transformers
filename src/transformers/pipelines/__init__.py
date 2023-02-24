@@ -35,6 +35,7 @@ from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
 from ..utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    is_flax_available,
     is_kenlm_available,
     is_offline_mode,
     is_pyctcdecode_available,
@@ -136,6 +137,36 @@ if is_torch_available():
         AutoModelForVisualQuestionAnswering,
         AutoModelForZeroShotObjectDetection,
     )
+
+if is_flax_available():
+    import flax
+
+    from ..models.auto.modeling_flax_auto import (
+        FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+        FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
+        FLAX_MODEL_FOR_MASKED_LM_MAPPING,
+        FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+        FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+        FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+        FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
+        FlaxAutoModel,
+        FlaxAutoModelForCausalLM,
+        FlaxAutoModelForImageClassification,
+        FlaxAutoModelForMaskedLM,
+        FlaxAutoModelForMultipleChoice,
+        FlaxAutoModelForNextSentencePrediction,
+        FlaxAutoModelForQuestionAnswering,
+        FlaxAutoModelForSeq2SeqLM,
+        FlaxAutoModelForSequenceClassification,
+        FlaxAutoModelForSpeechSeq2Seq,
+        FlaxAutoModelForTokenClassification,
+        FlaxAutoModelForVision2Seq,
+    )
+
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
@@ -312,10 +343,12 @@ SUPPORTED_TASKS = {
         "impl": ImageClassificationPipeline,
         "tf": (TFAutoModelForImageClassification,) if is_tf_available() else (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
+        "flax" : (FlaxAutoModelForImageClassification,) if is_flax_available() else (),
         "default": {
             "model": {
                 "pt": ("google/vit-base-patch16-224", "5dca96d"),
                 "tf": ("google/vit-base-patch16-224", "5dca96d"),
+                "flax": ("google/vit-base-patch16-224", "5dca96d"),
             }
         },
         "type": "image",
@@ -474,6 +507,10 @@ def clean_custom_task(task_info):
     if isinstance(tf_class_names, str):
         tf_class_names = [tf_class_names]
     task_info["tf"] = tuple(getattr(transformers, c) for c in tf_class_names)
+    flax_class_names = task_info.get("flax", ())
+    if isinstance(flax_class_names, str):
+        flax_class_names = [flax_class_names]
+    task_info["flax"] = tuple(getattr(transformers, c) for c in flax_class_names)
     return task_info, None
 
 
@@ -569,7 +606,7 @@ def pipeline(
             is a string). However, if `config` is also not given or not a string, then the default feature extractor
             for the given `task` will be loaded.
         framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
+            The framework to use, either `"pt"` for PyTorch, `"tf"` for TensorFlow or `"flax"` for Flax. The specified framework must be
             installed.
 
             If no framework is specified, will default to the one currently installed. If no framework is specified and
@@ -757,7 +794,7 @@ def pipeline(
     # Infer the framework from the model
     # Forced if framework already defined, inferred if it's None
     # Will load the correct model if possible
-    model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"]}
+    model_classes = {"tf": targeted_task["tf"], "pt": targeted_task["pt"], "flax": targeted_task["flax"]}
     framework, model = infer_framework_load_model(
         model,
         model_classes=model_classes,

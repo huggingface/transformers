@@ -2,6 +2,7 @@ from typing import List, Union
 
 from ..utils import (
     add_end_docstrings,
+    is_flax_available,
     is_tf_available,
     is_torch_available,
     is_vision_available,
@@ -24,6 +25,12 @@ if is_tf_available():
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+
+if is_flax_available():
+    import flax.linen as nn
+    import jax
+
+    from ..models.auto.modeling_flax_auto import FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
 logger = logging.get_logger(__name__)
 
@@ -56,11 +63,12 @@ class ImageClassificationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
-        self.check_model_type(
-            TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
-            if self.framework == "tf"
-            else MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
-        )
+        if self.framework == "tf":
+            self.check_model_type(TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
+        elif self.framework == "flax":
+            self.check_model_type(FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
+        else:
+            self.check_model_type(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING)
 
     def _sanitize_parameters(self, top_k=None):
         postprocess_params = {}
@@ -101,7 +109,7 @@ class ImageClassificationPipeline(Pipeline):
 
     def preprocess(self, image):
         image = load_image(image)
-        model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+        model_inputs = self.image_processor(images=image, return_tensors=self.framework if self.framework != "flax" else "jax")
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -119,6 +127,9 @@ class ImageClassificationPipeline(Pipeline):
             probs = stable_softmax(model_outputs.logits, axis=-1)[0]
             topk = tf.math.top_k(probs, k=top_k)
             scores, ids = topk.values.numpy(), topk.indices.numpy()
+        elif self.framework == "flax":
+            probs = nn.softmax(model_outputs.logits)[0]
+            scores, ids = jax.lax.top_k(probs, top_k)
         else:
             raise ValueError(f"Unsupported framework: {self.framework}")
 
