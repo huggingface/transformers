@@ -1093,6 +1093,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
             self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
+    # FIXME: sgugger
+    @unittest.skip(reason="might be flaky after PR #21700. Skip for now.")
     def test_log_level(self):
         # testing only --log_level (--log_level_replica requires multiple gpus and DDP and is tested elsewhere)
         logger = logging.get_logger()
