@@ -395,6 +395,6 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
             if load_path is None:
                 raise ValueError(f"[deepspeed] failed to resume from checkpoint {resume_from_checkpoint}")
         else:
-            logger.info(f"{resume_from_checkpoint} doesn't have deepspeed checkpoints, doing nothing")
+            raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
     return deepspeed_engine, optimizer, lr_scheduler
