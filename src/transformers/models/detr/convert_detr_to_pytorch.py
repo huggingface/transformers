@@ -33,7 +33,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_detr_config(model_name):
-    config = DetrConfig(use_timm_backbone=False, backbone=None, dilation=None)
+    config = DetrConfig(use_timm_backbone=False, backbone=None, dilation=None, use_pretrained_backbone=None)
 
     # set backbone attributes
     if "resnet-50" in model_name:
