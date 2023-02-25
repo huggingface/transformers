@@ -57,6 +57,7 @@ if is_torch_available():
 if is_flax_available():
     import jax
     import jax.numpy as jnp
+    import jaxlib
 
     from ..models.auto.modeling_flax_auto import FlaxAutoModel
 
@@ -213,11 +214,12 @@ def infer_framework_load_model(
     Returns:
         `Tuple`: A tuple framework, model.
     """
-    if not is_tf_available() and not is_torch_available():
+    if not is_tf_available() and not is_torch_available() and not is_flax_available():
         raise RuntimeError(
             "At least one of TensorFlow 2.0 or PyTorch should be installed. "
             "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
             "To install PyTorch, read the instructions at https://pytorch.org/."
+            "To install Flax, read the instructions at https://flax.readthedocs.io/en/latest/installation.html"
         )
     if isinstance(model, str):
         model_kwargs["_from_pipeline"] = task
@@ -242,6 +244,10 @@ def infer_framework_load_model(
                         classes.append(_class)
                 if look_tf:
                     _class = getattr(transformers_module, f"TF{architecture}", None)
+                    if _class is not None:
+                        classes.append(_class)
+                if look_flax:
+                    _class = getattr(transformers_module, f"Flax{architecture}", None)
                     if _class is not None:
                         classes.append(_class)
             class_tuple = class_tuple + tuple(classes)
@@ -730,7 +736,7 @@ PIPELINE_INIT_ARGS = r"""
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` or a `str` too.
+            the associated CUDA device id. You can pass native `torch.device`, `jaxlib.xla_extension.Device` or a `str` too.
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
@@ -812,7 +818,9 @@ class Pipeline(_ScikitCompat):
             else:
                 self.device = torch.device(f"cuda:{device}")
         elif is_flax_available() and self.framework == "flax":
-            if isinstance(device, str):
+            if isinstance(device, jaxlib.xla_extension.Device):
+                self.device = device
+            elif isinstance(device, str):
                 self.device = device
             elif device < 0:
                 jax.config.update('jax_platform_name', 'cpu')
