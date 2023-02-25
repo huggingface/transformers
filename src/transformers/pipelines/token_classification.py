@@ -296,6 +296,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         stride = postprocess_params.pop("stride", 0)
         sentence = all_outputs[0]["sentence"]
         keys = ["input_ids", "logits", "special_tokens_mask"]
+        # Check whether offset_mapping come from tokenizer or manual input
         if "offset_mapping" in all_outputs[0].keys():
             x = all_outputs[0]["offset_mapping"]
             if self.framework == "tf":
@@ -312,12 +313,9 @@ class TokenClassificationPipeline(ChunkPipeline):
         shifted_exp = np.exp(logits - maxes)
         scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
-        outputs["scores"] = scores
-
         special_tokens_mask = outputs["special_tokens_mask"]
 
         # Update each token scores with the maximum scores in all overlapping parts
-        scores = outputs.pop("scores")
         for i in range(len(scores) - 1):
             # Get current and next chunks without special tokens
             current_mask = special_tokens_mask[i]
