@@ -387,8 +387,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         """Fuse various numpy arrays into dicts with all the information needed for aggregation"""
         pre_entities = []
         for idx, token_scores in enumerate(scores):
-            # Keep special_tokens_mask to avoid changing tests for gather_pre_entities()
-            # Special tokens are already removed
+            # Filter special_tokens
             if special_tokens_mask[idx]:
                 continue
             word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
