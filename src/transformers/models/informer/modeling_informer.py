@@ -44,7 +44,7 @@ _CONFIG_FOR_DOC = "InformerConfig"
 
 
 INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "kashif/informer-tourism-monthly",
+    "huggingface/informer-tourism-monthly",
     # See all Informer models at https://huggingface.co/models?filter=informer
 ]
 

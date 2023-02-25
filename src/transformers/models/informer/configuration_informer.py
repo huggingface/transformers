@@ -23,8 +23,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "kashif/informer-tourism-monthly": (
-        "https://huggingface.co/kashif/informer-tourism-monthly/resolve/main/config.json"
+    "huggingface/informer-tourism-monthly": (
+        "https://huggingface.co/huggingface/informer-tourism-monthly/resolve/main/config.json"
     ),
     # See all Informer models at https://huggingface.co/models?filter=informer
 }
