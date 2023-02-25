@@ -1449,7 +1449,7 @@ class InformerEncoder(InformerPreTrainedModel):
         self.layers = nn.ModuleList([InformerEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        if config.distil is not None:
+        if config.distil:
             self.conv_layers = nn.ModuleList([ConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)])
             self.conv_layers.append(None)
         else:
