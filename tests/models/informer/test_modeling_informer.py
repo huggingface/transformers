@@ -407,7 +407,7 @@ class InformerModelTest(ModelTesterMixin, unittest.TestCase):
                 [
                     self.model_tester.num_attention_heads,
                     decoder_seq_length,
-                    decoder_seq_length,
+                    encoder_seq_length,
                 ],
             )
 
