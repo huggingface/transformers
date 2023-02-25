@@ -340,13 +340,14 @@ class TokenClassificationPipeline(ChunkPipeline):
         outputs["scores"] = scores
 
         # Aggregate chunks
-        for k, v in outputs.items():
+        for k in outputs.keys():
             aggregated_outputs = []
             for i in range(len(outputs[k])):
                 mask = special_tokens_mask[i]
                 last_idx = [idx for idx in range(len(mask)) if mask[idx] == 0][-1]
-                aggregated_outputs.append(outputs[k][i][: last_idx - stride])
-            aggregated_outputs.append(outputs[k][-1][last_idx - stride :])
+                relative_stride = max(last_idx - stride, 0)
+                aggregated_outputs.append(outputs[k][i][:relative_stride])
+            aggregated_outputs.append(outputs[k][-1][relative_stride:])
             outputs[k] = np.concatenate(aggregated_outputs)
         input_ids = outputs.pop("input_ids")
         scores = outputs.pop("scores")
