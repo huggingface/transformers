@@ -898,7 +898,7 @@ class ProbSparseAttention(nn.Module):
         L_Q = query_states.size(1)
         log_L_Q = np.ceil(np.log1p(L_Q)).astype("int").item()
 
-        U_part = min(self.factor * log_L_K, L_K)
+        U_part = min(self.factor * L_Q * log_L_K, L_K)
         u = min(self.factor * log_L_Q, L_Q)
 
         if L_K > 0:
