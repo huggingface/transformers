@@ -780,7 +780,8 @@ class ProphetNetAttention(nn.Module):
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
                 batch_size, self.num_attn_heads, tgt_len, src_len
             )
-            attn_weights = attn_weights.view(batch_size * self.num_attn_heads, tgt_len, src_len)
+            #BUG: Remove because reshape is not neccesary
+            # attn_weights = attn_weights.view(batch_size * self.num_attn_heads, tgt_len, src_len)
 
             # apply head_mask also on attn_weights_reshaped which is used for n-gram attention inside the model
             attn_weights_reshaped = layer_head_mask.view(1, -1, 1, 1) * attn_weights_reshaped
@@ -1002,7 +1003,8 @@ class ProphetNetNgramSelfAttention(nn.Module):
             main_attn_probs = layer_head_mask.view(1, -1, 1, 1) * main_attn_probs.view(
                 batch_size, self.num_attn_heads, -1, sequence_length
             )
-            main_attn_probs = main_attn_probs.view(batch_size * self.num_attn_heads, -1, sequence_length)
+            # BUG: Remove view because it's no longer neccesary
+            # main_attn_probs = main_attn_probs.view(batch_size * self.num_attn_heads, -1, sequence_length)
 
         main_attn_probs = nn.functional.dropout(main_attn_probs, p=self.attention_dropout, training=self.training)
         # project to attn_output
@@ -1081,12 +1083,15 @@ class ProphetNetNgramSelfAttention(nn.Module):
                 f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is"
                 f" {layer_head_mask.size()}"
             )
-            predict_attn_probs = layer_head_mask.view(1, 1, -1, 1, 1) * predict_attn_probs.view(
-                self.ngram, batch_size, self.num_attn_heads, sequence_length, 2 * sequence_length
-            )
-            predict_attn_probs = predict_attn_probs.view(
-                self.ngram, batch_size * self.num_attn_heads, sequence_length, 2 * sequence_length
-            )
+            # BUG: Remove view because it's no longer neccesaryto put ngram first
+            # predict_attn_probs = layer_head_mask.view(1, 1, -1, 1, 1) * predict_attn_probs.view(
+            #     self.ngram, batch_size, self.num_attn_heads, sequence_length, 2 * sequence_length
+            # )
+            predict_attn_probs = layer_head_mask.view(1, 1, -1, 1, 1) * predict_attn_probs
+            # BUG: Remove view because it's no longer neccesary
+            # predict_attn_probs = predict_attn_probs.view(
+            #     self.ngram, batch_size * self.num_attn_heads, sequence_length, 2 * sequence_length
+            # )
 
         predict_attn_probs = nn.functional.dropout(
             predict_attn_probs, p=self.attention_dropout, training=self.training
