@@ -199,6 +199,7 @@ SUPPORTED_TASKS = {
         "impl": FeatureExtractionPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
+        "flax": (FlaxAutoModel,) if is_flax_available() else (),
         "default": {"model": {"pt": ("distilbert-base-cased", "935ac13"), "tf": ("distilbert-base-cased", "935ac13")}},
         "type": "multimodal",
     },

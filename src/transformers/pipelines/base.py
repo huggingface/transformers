@@ -929,7 +929,8 @@ class Pipeline(_ScikitCompat):
             with tf.device("/CPU:0" if self.device == -1 else f"/device:GPU:{self.device}"):
                 yield
         elif self.framework == "flax":
-            yield # TODO : find a way to do this in flax
+            # with jax.default_device(self.device): # Requires Jax>0.3.14 
+            yield
         else:
             if self.device.type == "cuda":
                 torch.cuda.set_device(self.device)
