@@ -56,7 +56,7 @@ COMPOSER_TO_FEATURE_TOKEN = {'composer1': 2052,
                              'composer21': 2072
 }
 
-# Copied from transformers.models.t5.configuration_t5.T5Config with T5->Pop2Piano,T5Model->Pop2PianoModel,t5->pop2piano,T5Block->Pop2PianoBlock
+# Adapted from transformers.models.t5.configuration_t5.T5Config with T5->Pop2Piano,T5Model->Pop2PianoModel,t5->pop2piano,T5Block->Pop2PianoBlock
 class Pop2PianoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Pop2PianoModel`]. It is used to instantiate a
@@ -105,7 +105,7 @@ class Pop2PianoConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32128,
+        vocab_size=2400, # for Pop2PianoModel(embedding)
         d_model=512,
         d_kv=64,
         d_ff=2048,
@@ -117,11 +117,34 @@ class Pop2PianoConfig(PretrainedConfig):
         dropout_rate=0.1,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
-        feed_forward_proj="relu",
+        feed_forward_proj="gated-gelu",
         is_encoder_decoder=True,
         use_cache=True,
+
+        # TODO
+        # docs not present for these variables below
         pad_token_id=0,
         eos_token_id=1,
+        n_positions = 1024,
+        tie_encoder_decoder = False,
+        tie_word_embeddings = False,
+        dense_act_fn = "relu",
+        is_gated_act = False,
+
+        # for dataset
+        dataset_target_length: int = 256,
+        dataset_input_length:int = 1024,
+        dataset_n_bars:int = 2,
+        dataset_sample_rate:int = 22050,
+        dataset_use_mel:bool = True,
+        dataset_mel_is_conditioned:bool = True,
+
+        # for tokenizer
+        vocab_size_special: int = 4, # for Pop2PianoTokenizer(post-processing)
+        vocab_size_note: int = 128, # for Pop2PianoTokenizer(post-processing)
+        vocab_size_velocity: int = 2, # for Pop2PianoTokenizer(post-processing)
+        vocab_size_time: int = 100, # for Pop2PianoTokenizer(post-processing)
+
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -141,16 +164,12 @@ class Pop2PianoConfig(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
 
-        act_info = self.feed_forward_proj.split("-")
-        self.dense_act_fn = act_info[-1]
-        self.is_gated_act = act_info[0] == "gated"
+        self.n_positions = n_positions
+        self.tie_encoder_decoder = tie_encoder_decoder
+        self.tie_word_embeddings = tie_word_embeddings
 
-        if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
-            raise ValueError(
-                f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer."
-                "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
-                "'gated-gelu' or 'relu'"
-            )
+        self.dense_act_fn = dense_act_fn
+        self.is_gated_act = is_gated_act
 
         # for backwards compatibility
         if feed_forward_proj == "gated-gelu":
@@ -163,22 +182,7 @@ class Pop2PianoConfig(PretrainedConfig):
             **kwargs,
         )
 
-class Pop2PianoProcessorConfig(PretrainedConfig):
-    """
-    This is the configuration class to store the configuration of a [`Pop2PianoProcessor`]
-    """
-    def __init__(self,
-                 vocab_size_special:int = 4,
-                 vocab_size_note:int = 128,
-                 vocab_size_velocity:int = 2,
-                 vocab_size_time: int = 100,
-                 dataset_target_length:int = 256,
-                 dataset_input_length:int = 1024,
-                 dataset_n_bars:int = 2,
-                 dataset_sample_rate:int = 22050,
-                 dataset_use_mel:bool = True,
-                 dataset_mel_is_conditioned:bool = True,
-                 **kwargs):
+        # for extractor
         self.composer_to_feature_token = COMPOSER_TO_FEATURE_TOKEN
         self.dataset = {'target_length': dataset_target_length,
                         'input_length': dataset_input_length,
@@ -187,11 +191,15 @@ class Pop2PianoProcessorConfig(PretrainedConfig):
                         'use_mel': dataset_use_mel,
                         'mel_is_conditioned': dataset_mel_is_conditioned
                         }
+
+        # for tokenizer(post-processing)
         self.tokenizer = {'vocab_size':
-                                    {'special': vocab_size_special,
-                                     'note': vocab_size_note,
-                                     'velocity': vocab_size_velocity,
-                                     'time': vocab_size_time
-                                     }
-                         }
+                                      {'special': vocab_size_special,
+                                       'note': vocab_size_note,
+                                       'velocity': vocab_size_velocity,
+                                       'time': vocab_size_time
+                                        }
+                           }
+
+
 
