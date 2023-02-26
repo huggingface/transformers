@@ -955,16 +955,15 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         # saved states are stored with shape (batch_size, num_attn_heads, seq_len, head_dim)
         if past_key_value is not None:
-            prev_main_key_states = past_key_value[0].view(batch_size * self.num_attn_heads, -1, self.head_dim)
-            main_key_states = torch.cat((prev_main_key_states, main_key_states), dim=1)
-            prev_main_value_states = past_key_value[1].view(batch_size * self.num_attn_heads, -1, self.head_dim)
-            main_value_states = torch.cat((prev_main_value_states, main_value_states), dim=1)
+            # prev_main_key_states = past_key_value[0].view(batch_size * self.num_attn_heads, -1, self.head_dim)
+            prev_main_key_states = past_key_value[0]
+            main_key_states = torch.cat((prev_main_key_states, main_key_states), dim=2)
+            # prev_main_value_states = past_key_value[1].view(batch_size * self.num_attn_heads, -1, self.head_dim)
+            prev_main_value_states = past_key_value[1]
+            main_value_states = torch.cat((prev_main_value_states, main_value_states), dim=2)
 
         # Update cache
-        past_key_value = (
-            main_key_states.view(batch_size, self.num_attn_heads, -1, self.head_dim),
-            main_value_states.view(batch_size, self.num_attn_heads, -1, self.head_dim),
-        )
+        past_key_value = (main_key_states, main_value_states)
 
         # get seq_length of main stream only
         sequence_length = ngram_sequence_length // (1 + self.ngram)
