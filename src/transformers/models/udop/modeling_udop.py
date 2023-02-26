@@ -366,6 +366,7 @@ class Attention(nn.Module):
         # x = self.proj_drop(x)
         return x
 
+
 class UdopMaeBlock(nn.Module):
     def __init__(
         self,
