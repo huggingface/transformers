@@ -1217,7 +1217,7 @@ class TFGenerationMixin:
                 # In this case, `input_ids` is moved to the `model_kwargs`, so a few automations (like the creation of
                 # the attention mask) can rely on the actual model input.
                 model_kwargs["input_ids"] = self._maybe_initialize_input_ids_for_generation(
-                    inputs, bos_token_id, batch_size=model_kwargs["inputs_embeds"].shape[0]
+                    inputs, bos_token_id, model_kwargs=model_kwargs
                 )
             else:
                 if inputs is not None:
@@ -1225,9 +1225,7 @@ class TFGenerationMixin:
             inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
 
         # 4. if `inputs` is still None, try to create `input_ids` from BOS token
-        inputs = self._maybe_initialize_input_ids_for_generation(
-            inputs, bos_token_id, model_kwargs.get("encoder_outputs")
-        )
+        inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
 
         return inputs, input_name, model_kwargs
 
@@ -1235,13 +1233,13 @@ class TFGenerationMixin:
         self,
         inputs: Optional[tf.Tensor] = None,
         bos_token_id: Optional[int] = None,
-        encoder_outputs: Optional[ModelOutput] = None,
-        batch_size: Optional[int] = None,
+        model_kwargs: Optional[Dict[str, tf.Tensor]] = None,
     ) -> tf.Tensor:
         """Initializes input ids for generation, if necessary."""
         if inputs is not None:
             return inputs
 
+        encoder_outputs = model_kwargs.get("encoder_outputs")
         if self.config.is_encoder_decoder and encoder_outputs is not None:
             # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
             shape = encoder_outputs.last_hidden_state.shape[:-1]
@@ -1250,7 +1248,13 @@ class TFGenerationMixin:
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
 
-        batch_size = batch_size if batch_size is not None else 1
+        # If there is some tensor in `model_kwargs`, we can infer the batch size from it. This is helpful with
+        # soft-prompting or in multimodal implementations built on top of decoder-only language models.
+        batch_size = 1
+        for value in model_kwargs.values():
+            if isinstance(value, tf.Tensor):
+                batch_size = value.shape[0]
+                break
         return tf.ones((batch_size, 1), dtype=tf.int32) * bos_token_id
 
     @staticmethod
