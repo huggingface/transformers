@@ -20,14 +20,11 @@ import os
 import tempfile
 import unittest
 
-import numpy as np
 import requests
 
-import transformers
-from transformers import ALIGNConfig, ALIGNTextConfig, ALIGNVisionConfig
+from transformers import ALIGNConfig, ALIGNProcessor, ALIGNTextConfig, ALIGNVisionConfig
 from transformers.testing_utils import (
     is_flax_available,
-    is_pt_flax_cross_test,
     require_torch,
     require_vision,
     slow,
@@ -47,7 +44,6 @@ from ...test_modeling_common import (
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import (
         ALIGNModel,
@@ -60,56 +56,43 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import CLIPProcessor
 
 
 if is_flax_available():
-    import jax.numpy as jnp
 
-    from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
-        load_flax_weights_in_pytorch_model,
-    )
+    pass
 
 
 class ALIGNVisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=12,
-        image_size=30,
-        patch_size=2,
+        batch_size=13,
+        image_size=32,
         num_channels=3,
+        kernel_sizes=[3, 3, 5],
+        in_channels=[32, 16, 24],
+        out_channels=[16, 24, 30],
+        hidden_dim=64,
+        strides=[1, 1, 2],
+        num_block_repeats=[1, 1, 2],
+        expand_ratios=[1, 6, 6],
         is_training=True,
-        hidden_size=32,
-        projection_dim=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
-        dropout=0.1,
-        attention_dropout=0.1,
-        initializer_range=0.02,
-        scope=None,
+        hidden_act="gelu",
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
-        self.patch_size = patch_size
         self.num_channels = num_channels
+        self.kernel_sizes = kernel_sizes
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.hidden_dim = hidden_dim
+        self.strides = strides
+        self.num_block_repeats = num_block_repeats
+        self.expand_ratios = expand_ratios
         self.is_training = is_training
-        self.hidden_size = hidden_size
-        self.projection_dim = projection_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.dropout = dropout
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.scope = scope
-
-        # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        self.hidden_act = hidden_act
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -119,17 +102,15 @@ class ALIGNVisionModelTester:
 
     def get_config(self):
         return ALIGNVisionConfig(
-            image_size=self.image_size,
-            patch_size=self.patch_size,
             num_channels=self.num_channels,
-            hidden_size=self.hidden_size,
-            projection_dim=self.projection_dim,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            dropout=self.dropout,
-            attention_dropout=self.attention_dropout,
-            initializer_range=self.initializer_range,
+            kernel_sizes=self.kernel_sizes,
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            hidden_dim=self.hidden_dim,
+            strides=self.strides,
+            num_block_repeats=self.num_block_repeats,
+            expand_ratios=self.expand_ratios,
+            hidden_act=self.hidden_act,
         )
 
     def create_and_check_model(self, config, pixel_values):
@@ -138,12 +119,12 @@ class ALIGNVisionModelTester:
         model.eval()
         with torch.no_grad():
             result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
+        patch_size = self.image_size // 4
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, config.hidden_dim, patch_size, patch_size)
+        )
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, config.hidden_dim))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -173,20 +154,24 @@ class ALIGNVisionModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+        self.config_tester.check_config_arguments_init()
 
-    @unittest.skip(reason="ALIGN does not use inputs_embeds")
+    def create_and_test_config_common_properties(self):
+        return
+
+    @unittest.skip(reason="ALIGNVisionModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(reason="ALIGNVisionModel does not support input and output embeddings")
     def test_model_common_attributes(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
+        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -204,18 +189,40 @@ class ALIGNVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            num_blocks = sum(config.num_block_repeats) * 4
+            self.assertEqual(len(hidden_states), num_blocks)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.image_size // 2, self.model_tester.image_size // 2],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
     def test_training(self):
         pass
 
     def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="ALIGNVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="ALIGNVisionModel has no base class and is not available in MODEL_MAPPING")
-    def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
@@ -378,22 +385,22 @@ class ALIGNModelTester:
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        test_config, input_ids, token_type_ids, input_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, pixel_values
+        return config, input_ids, token_type_ids, input_mask, pixel_values
 
     def get_config(self):
         return ALIGNConfig.from_text_vision_configs(
             self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
         )
 
-    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
+    def create_and_check_model(self, config, input_ids, token_type_ids, attention_mask, pixel_values):
         model = ALIGNModel(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
+            result = model(input_ids, pixel_values, attention_mask, token_type_ids)
         self.parent.assertEqual(
             result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
         )
@@ -403,10 +410,11 @@ class ALIGNModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        config, input_ids, token_type_ids, input_mask, pixel_values = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
             "pixel_values": pixel_values,
             "return_loss": True,
         }
@@ -445,7 +453,7 @@ class ALIGNModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for ALIGN
+    # override as the `temperature` parameter initilization is different for ALIGN
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -454,12 +462,17 @@ class ALIGNModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
+                    # check if `temperature` is initilized as per the original implementation
+                    if name == "temperature":
                         self.assertAlmostEqual(
                             param.data.item(),
-                            np.log(1 / 0.07),
+                            1.0,
                             delta=1e-3,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    elif name == "text_projection.weight":
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
@@ -535,124 +548,6 @@ class ALIGNModelTest(ModelTesterMixin, unittest.TestCase):
             text_config = ALIGNTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
-    # overwrite from common since FlaxALIGNModel returns nested output
-    # which is not supported in the common test
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                # load PyTorch class
-                pt_model = model_class(config).eval()
-                # Flax models don't use the `use_cache` option and cache is not returned as a default.
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    return
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                fx_state = convert_pytorch_state_dict_to_flax(pt_model.state_dict(), fx_model)
-                fx_model.params = fx_state
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-
-                # convert inputs to Flax
-                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-                fx_outputs = fx_model(**fx_inputs).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    pt_model.save_pretrained(tmpdirname)
-                    fx_model_loaded = fx_model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                fx_outputs_loaded = fx_model_loaded(**fx_inputs).to_tuple()
-                self.assertEqual(
-                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
-                )
-                for fx_output_loaded, pt_output in zip(fx_outputs_loaded[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 4e-2)
-
-    # overwrite from common since FlaxALIGNModel returns nested output
-    # which is not supported in the common test
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            with self.subTest(model_class.__name__):
-                # load corresponding PyTorch class
-                pt_model = model_class(config).eval()
-
-                # So we disable `use_cache` here for PyTorch model.
-                pt_model.config.use_cache = False
-
-                fx_model_class_name = "Flax" + model_class.__name__
-
-                if not hasattr(transformers, fx_model_class_name):
-                    # no flax model exists for this class
-                    return
-
-                fx_model_class = getattr(transformers, fx_model_class_name)
-
-                # load Flax class
-                fx_model = fx_model_class(config, dtype=jnp.float32)
-                # make sure only flax inputs are forward that actually exist in function args
-                fx_input_keys = inspect.signature(fx_model.__call__).parameters.keys()
-
-                pt_model = load_flax_weights_in_pytorch_model(pt_model, fx_model.params)
-
-                # make sure weights are tied in PyTorch
-                pt_model.tie_weights()
-
-                # prepare inputs
-                pt_inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                # remove function args that don't exist in Flax
-                pt_inputs = {k: v for k, v in pt_inputs.items() if k in fx_input_keys}
-
-                with torch.no_grad():
-                    pt_outputs = pt_model(**pt_inputs).to_tuple()
-
-                fx_inputs = {k: np.array(v) for k, v in pt_inputs.items() if torch.is_tensor(v)}
-
-                fx_outputs = fx_model(**fx_inputs).to_tuple()
-                self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
-
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
-
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = model_class.from_pretrained(tmpdirname, from_flax=True)
-
-                with torch.no_grad():
-                    pt_outputs_loaded = pt_model_loaded(**pt_inputs).to_tuple()
-
-                self.assertEqual(
-                    len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch"
-                )
-                for fx_output, pt_output in zip(fx_outputs[:4], pt_outputs_loaded[:4]):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 4e-2)
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -674,7 +569,7 @@ class ALIGNModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         model_name = "kakaobrain/align-base"
         model = ALIGNModel.from_pretrained(model_name).to(torch_device)
-        processor = CLIPProcessor.from_pretrained(model_name)
+        processor = ALIGNProcessor.from_pretrained(model_name)
 
         image = prepare_img()
         inputs = processor(
@@ -694,7 +589,6 @@ class ALIGNModelIntegrationTest(unittest.TestCase):
             outputs.logits_per_text.shape,
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
-
-        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
+        expected_logits = torch.tensor([[9.7093, 3.4679]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))

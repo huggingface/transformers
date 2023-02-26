@@ -316,8 +316,10 @@ class ALIGNConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`ALIGNVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original ALIGN implementation.
+        temperature_init_value (`float`, *optional*, defaults to 1.0):
+            The inital value of the *temperature* paramter. Default is used as per the original ALIGN implementation.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -348,7 +350,15 @@ class ALIGNConfig(PretrainedConfig):
     model_type = "align"
     is_composition = True
 
-    def __init__(self, text_config=None, vision_config=None, projection_dim=640, temperature_init_value=1.0, **kwargs):
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        projection_dim=640,
+        temperature_init_value=1.0,
+        initializer_range=0.02,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
 
         # If `_config_dict` exist, we use them for the backward compatibility.
@@ -372,7 +382,7 @@ class ALIGNConfig(PretrainedConfig):
 
         self.projection_dim = projection_dim
         self.temperature_init_value = temperature_init_value
-        self.initializer_factor = 0.879626
+        self.initializer_range = initializer_range
 
     @classmethod
     def from_text_vision_configs(cls, text_config: ALIGNTextConfig, vision_config: ALIGNVisionConfig, **kwargs):

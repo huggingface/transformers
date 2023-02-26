@@ -278,7 +278,7 @@ class ALIGNOutput(ModelOutput):
 # contrastive loss function, adapted from
 # https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/ALIGN.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), label_smoothing=0.1, device=logits.device))
+    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device), label_smoothing=0.1)
 
 
 def align_loss(similarity: torch.Tensor) -> torch.Tensor:
@@ -682,9 +682,10 @@ class ALIGNPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, ALIGNVisionEmbeddings):
-            factor = math.sqrt(2.0 / module.out_dim) / 0.879626
-            nn.init.trunc_normal_(module.convolution.weight, std=factor)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, ALIGNModel):
             nn.init.xavier_uniform_(module.text_projection.weight)
 
@@ -695,7 +696,7 @@ class ALIGNPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ALIGNTextModel):
+        if isinstance(module, (ALIGNTextModel, ALIGNVisionModel)):
             module.gradient_checkpointing = value
 
 
