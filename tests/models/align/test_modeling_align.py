@@ -57,9 +57,7 @@ if is_vision_available():
     from PIL import Image
 
 
-
 if is_flax_available():
-
     pass
 
 
