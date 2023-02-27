@@ -18,7 +18,7 @@ Traditionally, models used for the [object detection](object_detection) task req
 and are limited to detecting the set of classes from the training data.
 
 Zero-shot object detection task supported by the [OWL-ViT](./model_doc/owlvit) model uses a different approach. OWL-ViT
-is an open-vocabulary object detector. It means that it can detect objects in images based on free-text queries, without
+is an open-vocabulary object detector. It means that it can detect objects in images based on free-text queries without
 the need to fine-tune the model on labeled datasets.
 
 OWL-ViT leverages multi-modal representations to perform open-vocabulary detection. It combines [CLIP](./model_doc/clip) with
@@ -40,10 +40,10 @@ Before you begin, make sure you have all the necessary libraries installed:
 pip install -q transformers
 ```
 
-## Zero shot object detection pipeline
+## Zero-shot object detection pipeline
 
 The simplest way to try out inference with OWL-ViT is to use it in a [`Pipeline`]. Instantiate a pipeline
-for zero shot object detection from a [checkpoint on the Hugging Face Hub](https://huggingface.co/models?other=owlvit):
+for zero-shot object detection from a [checkpoint on the Hugging Face Hub](https://huggingface.co/models?other=owlvit):
 
 ```python
 >>> from transformers import pipeline
@@ -52,7 +52,7 @@ for zero shot object detection from a [checkpoint on the Hugging Face Hub](https
 >>> detector = pipeline(model=checkpoint, task="zero-shot-object-detection")
 ```
 
-Next, choose an image you'd like to detect objects in. Here we'll use the image of astronaut Eileen Collins, which is
+Next, choose an image you'd like to detect objects in. Here we'll use the image of astronaut Eileen Collins that is
 a part of the [NASA](https://www.nasa.gov/multimedia/imagegallery/index.html) Great Images dataset.
 
 ```py
@@ -71,7 +71,7 @@ a part of the [NASA](https://www.nasa.gov/multimedia/imagegallery/index.html) Gr
 </div>
 
 Pass the image and the candidate object labels to look for to the pipeline.
-Here we pass the image directly but you can also pass a local path to an image or a url.
+Here we pass the image directly; other suitable options include a local path to an image or an image url.
 
 ```py
 >>> predictions = detector(
@@ -122,9 +122,9 @@ Let's visualize the predictions:
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_2.png" alt="Visualized predictions on NASA image"/>
 </div>
 
-## Text-prompted zero shot object detection by hand
+## Text-prompted zero-shot object detection by hand
 
-Now that you've seen how you can use the zero shot object detection pipeline, let's replicate the same
+Now that you've seen how to use the zero-shot object detection pipeline, let's replicate the same
 result manually.
 
 Start by loading the model and associated processor from a [checkpoint on the Hugging Face Hub](https://huggingface.co/models?other=owlvit).
@@ -159,8 +159,8 @@ image for the model by resizing and normalizing it, and a [`CLIPTokenizer`] that
 >>> inputs = processor(text=text_queries, images=im, return_tensors="pt")
 ```
 
-Pass the inputs through the model, post process and visualize the results. As the images are resized by the image processor
-before being fed to the model, you need to use the `post_process_object_detection` method to make sure the predicted bounding
+Pass the inputs through the model, post-process, and visualize the results. As the image processor resized images before
+feeding them to the model, you need to use the `post_process_object_detection` method to make sure the predicted bounding
 boxes have the correct coordinates related to the original image:
 
 ```py
@@ -192,8 +192,8 @@ boxes have the correct coordinates related to the original image:
 ## Batch processing
 
 You can pass multiple sets of images and text queries to search for different (or same) objects in several images.
-Let's use both an astronaut image, and the beach image together.
-For batch processing, you need to pass text queries as a nested list to the processor and images as lists of PIL images,
+Let's use both an astronaut image and the beach image together.
+For batch processing, you should pass text queries as a nested list to the processor and images as lists of PIL images,
 or PyTorch tensors, or NumPy arrays.
 
 ```py
@@ -202,7 +202,7 @@ or PyTorch tensors, or NumPy arrays.
 >>> inputs = processor(text=text_queries, images=images, return_tensors="pt")
 ```
 
-Previously for post processing you passed the single image's size as a tensor, but you can also pass a tuple, or, in case
+Previously for post-processing you passed the single image's size as a tensor, but you can also pass a tuple, or, in case
 of several images, a list of tuples. Let's create predictions for the two examples, and visualize the second one (`image_idx = 1`).
 
 ```py
@@ -232,9 +232,9 @@ of several images, a list of tuples. Let's create predictions for the two exampl
 
 ## Image-guided object detection
 
-In addition to zero-shot object detection with text queries, OwlViT offers image guided object detection. In this case
+In addition to zero-shot object detection with text queries, OWL-ViT offers image-guided object detection. This means
 you can use an image query to find similar objects in the target image.
-Unlike, text queries, only single example image is allowed.
+Unlike text queries, only a single example image is allowed.
 
 Let's take an image with two cats on a couch as a target image, and an image of a single cat
 as a query:
