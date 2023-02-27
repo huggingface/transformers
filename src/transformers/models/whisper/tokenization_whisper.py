@@ -716,8 +716,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
 def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time_precision):
     """
-    Internal method meant to only be used by asr pipeline. Handles all the little quirks specific to whisper to
-    handle the various options not allowed in other seq2seq models
+    Internal method meant to only be used by asr pipeline. Handles all the little quirks specific to whisper to handle
+    the various options not allowed in other seq2seq models
     """
 
     # =========== Overview ============
