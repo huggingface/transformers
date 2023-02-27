@@ -17,19 +17,19 @@ specific language governing permissions and limitations under the License.
 Traditionally, models used for the [object detection](object_detection) task require labeled image datasets for training,
 and are limited to detecting the set of classes from the training data.
 
-Zero-shot object detection task supported by the [Owl-ViT](./model_doc/owlvit) model uses a different approach. OWL-ViT
+Zero-shot object detection task supported by the [OWL-ViT](./model_doc/owlvit) model uses a different approach. OWL-ViT
 is an open-vocabulary object detector. It means that it can detect objects in images based on free-text queries, without
 the need to fine-tune the model on labeled datasets.
 
 OWL-ViT leverages multi-modal representations to perform open-vocabulary detection. It combines [CLIP](./model_doc/clip) with
 a [ViT](./model_doc/vit)-like Transformer to get multi-modal visual and text features. CLIP learns to
 associate images and their corresponding textual descriptions, and ViT can process image patches as inputs. The authors
-of OWL-ViT first trained CLIP from scratch and then fine-tuned it end-to-end on standard object detection datasets using
+of OWL-ViT first trained CLIP from scratch and then fine-tuned OWL-ViT end to end on standard object detection datasets using
 a bipartite matching loss.
 
 With this approach, the model can detect objects based on textual descriptions without prior training on labeled datasets.
 
-In this guide, you will learn how to use Owl-ViT:
+In this guide, you will learn how to use OWL-ViT:
 - to detect objects based on text prompts
 - for batch object detection
 - for image-guided object detection
@@ -37,12 +37,12 @@ In this guide, you will learn how to use Owl-ViT:
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install -q datasets transformers
+pip install -q transformers
 ```
 
 ## Zero shot object detection pipeline
 
-The simplest way to try out inference with Owl-ViT is to use it in a [`Pipeline`]. Instantiate a pipeline
+The simplest way to try out inference with OWL-ViT is to use it in a [`Pipeline`]. Instantiate a pipeline
 for zero shot object detection from a [checkpoint on the Hugging Face Hub](https://huggingface.co/models?other=owlvit):
 
 ```python
@@ -53,7 +53,7 @@ for zero shot object detection from a [checkpoint on the Hugging Face Hub](https
 ```
 
 Next, choose an image you'd like to detect objects in. Here we'll use the image of astronaut Eileen Collins, which is
-part of the [NASA](https://www.nasa.gov/multimedia/imagegallery/index.html) Great Images dataset.
+a part of the [NASA](https://www.nasa.gov/multimedia/imagegallery/index.html) Great Images dataset.
 
 ```py
 >>> import skimage
@@ -66,7 +66,9 @@ part of the [NASA](https://www.nasa.gov/multimedia/imagegallery/index.html) Grea
 >>> image
 ```
 
-<!-- TODO: add the image -->
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_1.png" alt="Astronaut Eileen Collins"/>
+</div>
 
 Pass the image and the candidate object labels to look for to the pipeline.
 Here we pass the image directly but you can also pass a local path to an image or a url.
@@ -116,7 +118,9 @@ Let's visualize the predictions:
 >>> image
 ```
 
-<!-- TODO: Insert image-->
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_2.png" alt="Visualized predictions on NASA image"/>
+</div>
 
 ## Text-prompted zero shot object detection by hand
 
@@ -140,9 +144,12 @@ Let's take a different image to switch things up.
 
 >>> url = "https://unsplash.com/photos/oj0zeY2Ltk4/download?ixid=MnwxMjA3fDB8MXxzZWFyY2h8MTR8fHBpY25pY3xlbnwwfHx8fDE2Nzc0OTE1NDk&force=true&w=640"
 >>> im = Image.open(requests.get(url, stream=True).raw)
-im
+>>> im
 ```
-<!--  TODO: add the image-->
+
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_3.png" alt="Beach photo"/>
+</div>
 
 Use the processor to prepare the inputs for the model. The processor combines an image processor that prepares the
 image for the model by resizing and normalizing it, and a [`CLIPTokenizer`] that takes care of the text inputs.
@@ -177,7 +184,9 @@ boxes have the correct coordinates related to the original image:
 >>> im
 ```
 
-<!--  TODO: add the image with labels -->
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_4.png" alt="Beach photo with detected objects"/>
+</div>
 
 ## Batch processing
 
@@ -216,7 +225,72 @@ of several images, a list of tuples. Let's create predictions for the two exampl
 >>> images[image_idx]
 ```
 
-<!--  TODO: add the image with labels -->
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_4.png" alt="Beach photo with detected objects"/>
+</div>
 
 ## Image-guided object detection
 
+In addition to zero-shot object detection with text queries, OwlViT offers image guided object detection. In this case
+you can use an image query to find similar objects in the target image.
+Unlike, text queries, only single example image is allowed.
+
+Let's take an image with two cats on a couch as a target image, and an image of a single cat
+as a query:
+
+```py
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image_target = Image.open(requests.get(url, stream=True).raw)
+
+>>> query_url = "http://images.cocodataset.org/val2017/000000524280.jpg"
+>>> query_image = Image.open(requests.get(query_url, stream=True).raw)
+```
+
+Let's take a quick look at the images:
+
+```py
+>>> import matplotlib.pyplot as plt
+>>> from matplotlib import rcParams
+
+>>> %matplotlib inline
+>>> rcParams['figure.figsize'] = 11 ,8
+
+>>> fig, ax = plt.subplots(1,2)
+>>> ax[0].imshow(image_target)
+>>> ax[1].imshow(query_image)
+```
+
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_5.png" alt="Cats"/>
+</div>
+
+In the preprocessing step, instead of text queries, you now need to use `query_images`:
+
+```py
+>>> inputs = processor(images=image_target, query_images=query_image, return_tensors="pt")
+```
+
+For predictions, instead of passing the inputs to model, pass them to `model.image_guided_detection()`. Draw the predictions
+as before except now there are no labels.
+
+```py
+>>> with torch.no_grad():
+...   outputs = model.image_guided_detection(**inputs)
+...   target_sizes = torch.tensor([image_target.size[::-1]])
+...   results = processor.post_process_image_guided_detection(outputs=outputs, target_sizes=target_sizes)[0]
+
+>>> draw = ImageDraw.Draw(image_target)
+
+>>> scores = results["scores"].tolist()
+>>> boxes = results["boxes"].tolist()
+
+>>> for box, score, label in zip(boxes, scores, labels):
+...     xmin, ymin, xmax, ymax = box
+...     draw.rectangle((xmin, ymin, xmax, ymax), outline="white", width=4)
+
+>>> image_target
+```
+
+<div class="flex justify-center">
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/zero-sh-obj-detection_6.png" alt="Cats with bounding boxes"/>
+</div>
