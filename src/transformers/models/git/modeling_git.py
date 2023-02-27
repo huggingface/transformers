@@ -1459,6 +1459,7 @@ class GitForCausalLM(GitPreTrainedModel):
         ...             frames.append(frame)
         ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
+
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
         ...     converted_len = int(clip_len * frame_sample_rate)
         ...     end_idx = np.random.randint(converted_len, seg_len)

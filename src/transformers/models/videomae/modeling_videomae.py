@@ -623,9 +623,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> container = av.open(file_path)
 
         >>> # sample 16 frames
-        >>> indices = sample_frame_indices(
-        ...     clip_len=16, frame_sample_rate=1, seg_len=container.streams.video[0].frames
-        ... )
+        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
         >>> video = read_video_pyav(container, indices)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
@@ -1017,9 +1015,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         >>> container = av.open(file_path)
 
         >>> # sample 16 frames
-        >>> indices = sample_frame_indices(
-        ...     clip_len=16, frame_sample_rate=1, seg_len=container.streams.video[0].frames
-        ... )
+        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
         >>> video = read_video_pyav(container, indices)
 
         >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")

@@ -1113,9 +1113,7 @@ class XCLIPVisionModel(XCLIPPreTrainedModel):
         >>> container = av.open(file_path)
 
         >>> # sample 16 frames
-        >>> indices = sample_frame_indices(
-        ...     clip_len=8, frame_sample_rate=1, seg_len=container.streams.video[0].frames
-        ... )
+        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
         >>> video = read_video_pyav(container, indices)
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/xclip-base-patch32")
@@ -1434,9 +1432,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
         >>> container = av.open(file_path)
 
         >>> # sample 8 frames
-        >>> indices = sample_frame_indices(
-        ...     clip_len=8, frame_sample_rate=1, seg_len=container.streams.video[0].frames
-        ... )
+        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
         >>> video = read_video_pyav(container, indices)
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/xclip-base-patch32")
@@ -1506,6 +1502,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         >>> np.random.seed(0)
 
+
         >>> def read_video_pyav(container, indices):
         ...     '''
         ...     Decode the video with PyAV decoder.
@@ -1544,9 +1541,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
         >>> container = av.open(file_path)
 
         >>> # sample 8 frames
-        >>> indices = sample_frame_indices(
-        ...     clip_len=8, frame_sample_rate=1, seg_len=container.streams.video[0].frames
-        ... )
+        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=1, seg_len=container.streams.video[0].frames)
         >>> video = read_video_pyav(container, indices)
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/xclip-base-patch32")
