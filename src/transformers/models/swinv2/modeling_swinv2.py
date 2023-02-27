@@ -352,7 +352,7 @@ class Swinv2PatchEmbeddings(nn.Module):
         pixel_values = self.maybe_pad(pixel_values, height, width)
         embeddings = self.projection(pixel_values)
         _, _, height, width = embeddings.shape
-        output_dimensions = (height, width)
+        output_dimensions = (height.item() if torch.is_tensor(height) else height, width.item() if torch.is_tensor(width) else width)
         embeddings = embeddings.flatten(2).transpose(1, 2)
 
         return embeddings, output_dimensions
