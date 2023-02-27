@@ -277,7 +277,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         sentence = model_inputs.pop("sentence")
         is_last = model_inputs.pop("is_last")
         if self.framework == "tf":
-            logits = self.model(model_inputs.data)[0]
+            logits = self.model(**model_inputs)[0]
         else:
             output = self.model(**model_inputs)
             logits = output["logits"] if isinstance(output, dict) else output[0]
@@ -353,20 +353,24 @@ class TokenClassificationPipeline(ChunkPipeline):
         ]
         if self.tokenizer.is_fast:
             entities = self.aggregate_entities(entities)
+            entities = self.aggregate_entities(entities, forward=True)
         return entities
 
-    def aggregate_entities(self, entities):
-        entities = sorted(entities, key=lambda x: x["start"])
+    def aggregate_entities(self, entities, forward=False):
+        filter_key = "start" if forward else "end"
+        entities = sorted(entities, key=lambda x: x[filter_key])
         aggregated_entities = []
         previous_entity = entities.pop(0)
         for entity in entities:
-            if entity["start"] != previous_entity["start"]:
+            if entity[filter_key] != previous_entity[filter_key]:
                 aggregated_entities.append(previous_entity)
                 previous_entity = entity
             else:
                 current_length = entity["start"] - entity["end"]
                 previous_length = previous_entity["start"] - previous_entity["end"]
-                if current_length > previous_length or entity["score"] > previous_entity["score"]:
+                if current_length > previous_length:
+                    previous_entity = entity
+                elif entity["score"] > previous_entity["score"]:
                     previous_entity = entity
         aggregated_entities.append(entity)
         return aggregated_entities
