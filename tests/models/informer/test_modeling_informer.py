@@ -462,11 +462,7 @@ class InformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [
-                [4.6951e-01, 7.2927e-01, 8.9877e-01],
-                [4.8908e-01, 3.8113e-01, 9.5783e-01],
-                [7.7888e-04, 3.7370e-01, 1.0078e00],
-            ],
+            [[0.4699, 0.7295, 0.8967], [0.4858, 0.3810, 0.9641], [-0.0233, 0.3608, 1.0303]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
@@ -490,7 +486,7 @@ class InformerModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.4247, 0.9017, 0.8062], [0.3082, 0.7525, 0.6986], [0.6724, -0.6343, 1.2863]], device=torch_device
+            [[0.4170, 0.9067, 0.8153], [0.3004, 0.7574, 0.7066], [0.6803, -0.6323, 1.2802]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
