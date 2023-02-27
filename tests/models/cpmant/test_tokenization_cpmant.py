@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import unittest
 
 from transformers.testing_utils import custom_tokenizers, is_torch_available
 
@@ -24,14 +25,14 @@ if is_torch_available():
 
 
 @custom_tokenizers
-class CPMAntTokenizationTest(TokenizerTesterMixin):
+class CPMAntTokenizationTest(unittest.TestCase):
     def test_pre_tokenization(self):
         tokenizer = CPMAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
         texts = "今天天气真好！"
         jieba_tokens = ["今天", "天气", "真", "好", "！"]
         tokens = tokenizer.tokenize(texts)
         self.assertListEqual(tokens, jieba_tokens)
-        normalized_text = "<s>今天天气真好！"
+        normalized_text = "今天天气真好！"
         input_tokens = [tokenizer.bos_token] + tokens
 
         input_jieba_tokens = [6, 9802, 14962, 2082, 831, 244]

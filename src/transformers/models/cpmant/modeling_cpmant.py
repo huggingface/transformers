@@ -25,7 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_cpmant import CPMAntConfig
@@ -176,6 +176,7 @@ class CPMAntAttention(nn.Module):
         hidden_kv: torch.Tensor,
         attention_mask: torch.BoolTensor,
         position_bias: torch.Tensor,
+        output_attentions: Optional[bool] = False,
         past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
     ):
@@ -192,8 +193,8 @@ class CPMAntAttention(nn.Module):
             past_key_values (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+                `past_key_values`).
         """
         batch_size = hidden_q.size(0)
         len_q = hidden_q.size(1)
@@ -228,6 +229,10 @@ class CPMAntAttention(nn.Module):
             attention_mask.view(batch_size, 1, len_q, len_k) == torch.tensor(False),
             torch.scalar_tensor(0, device=score.device, dtype=score.dtype),
         )
+        if output_attentions:
+            attn_weights = score
+        else:
+            attn_weights = None
 
         if self.dropout is not None:
             score = self.dropout(score)
@@ -241,9 +246,9 @@ class CPMAntAttention(nn.Module):
         score = self.attention_out(score)
 
         if use_cache:
-            return score, (key, value)
+            return score, attn_weights, (key, value)
 
-        return score
+        return score, attn_weights
 
 
 class CPMAntSelfAttentionBlock(nn.Module):
@@ -261,6 +266,7 @@ class CPMAntSelfAttentionBlock(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
         past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
     ):
@@ -275,22 +281,24 @@ class CPMAntSelfAttentionBlock(nn.Module):
             past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+                `past_key_values`).
         """
         outputs = self.layernorm_before_attention(hidden_states)
-        outputs = self.self_attention(outputs, outputs, attention_mask, position_bias, past_key_values, use_cache)
+        outputs = self.self_attention(outputs, outputs, attention_mask, position_bias, output_attentions, past_key_values, use_cache)
         if use_cache:
-            outputs, current_key_value = outputs
+            outputs, attn_weights, current_key_value = outputs
+        else:
+            outputs, attn_weights = outputs
 
         if self.dropout is not None:
             outputs = self.dropout(outputs)
         hidden_states = hidden_states + outputs
 
         if use_cache:
-            return (hidden_states, current_key_value)
+            return (hidden_states, attn_weights, current_key_value)
 
-        return hidden_states
+        return hidden_states, attn_weights
 
 
 class DenseGatedACT(nn.Module):
@@ -377,6 +385,7 @@ class CPMAntTransformerBlock(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
         past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
     ):
@@ -391,25 +400,28 @@ class CPMAntTransformerBlock(nn.Module):
             past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+                `past_key_values`).
         """
         current_key_value = None
         hidden_states = self.self_att(
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
+            output_attentions=output_attentions,
             past_key_values=past_key_values,
             use_cache=use_cache,
         )
         if use_cache:
-            hidden_states, current_key_value = hidden_states
+            hidden_states, attn_weights, current_key_value = hidden_states
+        else:
+            hidden_states, attn_weights = hidden_states
         hidden_states = self.ffn(hidden_states)
 
         if use_cache:
-            return (hidden_states, current_key_value)
+            return (hidden_states, attn_weights, current_key_value)
 
-        return hidden_states
+        return hidden_states, attn_weights
 
 
 class CPMAntEncoder(nn.Module):
@@ -425,6 +437,8 @@ class CPMAntEncoder(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
     ):
@@ -439,28 +453,44 @@ class CPMAntEncoder(nn.Module):
             past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+                `past_key_values`).
         """
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
         if not use_cache:
             for layer in self.layers:
-                hidden_states = layer(hidden_states, attention_mask, position_bias, None, use_cache)
+                if output_hidden_states:
+                    all_hidden_states += (hidden_states,)
+                layer_outputs = layer(hidden_states, attention_mask, position_bias, output_attentions, None, use_cache)
+                hidden_states = layer_outputs[0]
+                if output_attentions:
+                    all_self_attns += (layer_outputs[1],)
             hidden_states = self.output_layernorm(hidden_states)
-            return hidden_states
+            if output_attentions:
+                all_hidden_states += (hidden_states,)
+            return hidden_states, None, all_hidden_states, all_self_attns
 
         current_key_values = []
         for i, module in enumerate(self.layers):
-            hidden_states = module(
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+            module_outputs = module(
                 hidden_states,
                 attention_mask,
                 position_bias,
+                output_attentions=output_attentions,
                 past_key_values=past_key_values[i] if past_key_values else None,
                 use_cache=use_cache,
             )
-            current_key_values.append(hidden_states[1])
-            hidden_states = hidden_states[0]
+            hidden_states = module_outputs[0]
+            if output_attentions:
+                all_self_attns += (module_outputs[1],)
+            current_key_values.append(module_outputs[-1])
         hidden_states = self.output_layernorm(hidden_states)
-        return hidden_states, current_key_values
+        if output_attentions:
+            all_hidden_states += (hidden_states,)
+        return hidden_states, current_key_values, all_hidden_states, all_self_attns
 
 
 # Copied from BertIntermediate
@@ -513,9 +543,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
             querylen = query_pos.size(1)
 
             assert key_pos.size(0) == query_pos.size(0), "key_pos.size(0) != query_pos.size(0)"
-            assert keylen == key_segment.size(1) and querylen == query_segment.size(
-                1
-            ), "keylen != key_segment.size(1) or querylen != query_segment.size(1)"
+            assert keylen == key_segment.size(1) and querylen == query_segment.size(1), "keylen != key_segment.size(1) or querylen != query_segment.size(1)"
 
             key_pos = key_pos.view(batch, -1, keylen)
             query_pos = query_pos.view(batch, querylen, -1)
@@ -678,6 +706,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
         )
         self.position_bias = CPMAntSegmentPositionEmbedding()
         self.prompt_length = config.prompt_length
+        self.vocab_size = config.vocab_size
 
     def get_input_embeddings(self):
         embeddings = {
@@ -692,17 +721,18 @@ class CPMAntModel(CPMAntPreTrainedModel):
         self.input_embedding = embeddings["input_ids"]
         self.position_bias = embeddings["position"]
 
-    def _prepare_attention_mask(self, input, span, context, length):
-        batch = input.size(0)
-        device = input.device
-        seqlen = input.size(1)
+    def _prepare_attention_mask(self, input_ids, span, context, length):
+        batch = input_ids.size(0)
+        seqlen = input_ids.size(1)
+        device = input_ids.device
         directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(-1, 1)
         attention_mask = context[:, None, :] | (
             context[:, :, None].logical_not() & directional_mask_2d.view(1, seqlen, seqlen)
         )
         attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
-        # mask for left paddding
-        mask_1d = torch.tensor(list(range(seqlen))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
+        # mask for left padding
+        mask_1d = torch.tensor(list(range(seqlen - self.prompt_length))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
+        mask_1d = torch.cat((torch.ones(batch, self.prompt_length).bool(), mask_1d), dim=1)
         attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
         return attention_mask
 
@@ -710,22 +740,19 @@ class CPMAntModel(CPMAntPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
+        output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        length: Optional[torch.Tensor] = None,
-        context: Optional[torch.Tensor] = None,
-        position: Optional[torch.Tensor] = None,
-        segment: Optional[torch.Tensor] = None,
-        span: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = False,
-        output_attentions: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = False,
-        **kwargs,
+        return_dict: Optional[bool] = True,
+        # attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
+        **kwargs
     ):
         r"""
         Args:
@@ -751,8 +778,8 @@ class CPMAntModel(CPMAntPreTrainedModel):
             span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 A contiguous sequence of tokens within the input text.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+                `past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -760,24 +787,60 @@ class CPMAntModel(CPMAntPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        all_attentions = () if output_attentions else None
-        all_hidden_states = () if output_hidden_states else None
-        input_ids = input_ids.contiguous()
-        hidden_states = self.input_embedding(input_ids)
-        segment_states = self.segment_embedding(segment)
-        hidden_states = hidden_states + segment_states
+        
+        # add prompts ahead
+        if input_ids.dtype != torch.int32:
+            input_ids = input_ids.int()
+        dtype, device = input_ids.dtype, input_ids.device
+        segment = torch.where(input_ids != 0, 2, 0).to(dtype=dtype, device=device)
+        length = (segment != 0).sum(-1).to(dtype=dtype, device=device)
+        input_ids = torch.cat(
+            (
+                torch.arange(self.prompt_length * 2 + self.vocab_size, self.prompt_length * 3 + self.vocab_size, dtype=dtype, device=device).repeat(input_ids.size(0), 1),
+                input_ids,
+            ),
+            dim=1,
+        )
+        batch, seq_length = input_ids.size()
+        segment = torch.cat(
+            (torch.zeros(batch, self.prompt_length, dtype=dtype, device=device), segment), dim=1
+        )
+        context = torch.full((batch, seq_length), 1, dtype=dtype, device=device)
+        position = torch.arange(seq_length, dtype=dtype, device=device).repeat(batch, 1)
+        span = torch.full((batch, seq_length), 0, dtype=dtype, device=device)
+
+        if past_key_values is None:
+            past_length = 0
+            past_key_values = tuple([None] * self.encoder.num_layers)
+            input_ids = input_ids.contiguous()
+            hidden_states = self.input_embedding(input_ids)
+            segment_states = self.segment_embedding(segment)
+            hidden_states = hidden_states + segment_states
+        else:
+            past_length = past_key_values[0][0].size(-2)
+            segment_states = self.segment_embedding(segment)
+            hidden_states = self.input_embedding(input_ids) + segment_states[:, -1:, :]
 
         attention_mask = self._prepare_attention_mask(input_ids, span, context, length)
         position_bias = self.position_bias(position, position, segment, segment)
 
-        hidden_states = self.encoder(hidden_states, attention_mask, position_bias, None, use_cache)
-        logits = F.linear(hidden_states, self.input_embedding.weight)
+        attention_mask = attention_mask[:, past_length:, :]
+        position_bias = position_bias[:, :, past_length:, :]
+        hidden_states = hidden_states[:, past_length:, :]
+
+        hidden_states, present_key_values, all_hidden_states, all_attentions = self.encoder(
+            hidden_states, attention_mask, position_bias, output_attentions, output_hidden_states, past_key_values, use_cache
+        )
+
+        if past_length == 0:
+            hidden_states = hidden_states[:, self.prompt_length:, :]
 
         if not return_dict:
-            return tuple(v for v in [logits, hidden_states] if v is not None)
+            return tuple(v for v in [hidden_states, present_key_values, all_hidden_states, all_attentions] if v is not None)
 
-        return BaseModelOutput(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
+            past_key_values=present_key_values,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
@@ -790,16 +853,15 @@ class CPMAntModel(CPMAntPreTrainedModel):
     CPMANT_START_DOCSTRING,
 )
 class CPMAntForCausalLM(CPMAntPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
+    
     def __init__(self, config: CPMAntConfig):
         super().__init__(config)
-        self.encoder = CPMAntEncoder(config)
-        self.segment_embedding = nn.Embedding(config.segment_types, config.dim_model)
-        self.input_embedding = nn.Embedding(
-            config.vocab_size + config.prompt_types * config.prompt_length, config.dim_model
-        )
-        self.position_bias = CPMAntSegmentPositionEmbedding()
-        self.prompt_length = config.prompt_length
+        self.cpmant = CPMAntModel(config)
+        
+        # lm_head.weight is tied to cpmant.input_embedding.weight
         self.lm_head = nn.Linear(config.dim_model, config.vocab_size, bias=False)
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -808,20 +870,16 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
+
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        length: Optional[torch.Tensor] = None,
-        context: Optional[torch.Tensor] = None,
-        position: Optional[torch.Tensor] = None,
-        segment: Optional[torch.Tensor] = None,
-        span: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
         use_cache: Optional[bool] = True,
         output_attentions: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = True,
-        **kwargs,
+        attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -847,107 +905,54 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
             span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
                 A contiguous sequence of tokens within the input text.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+                `past_key_values`).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        if past_key_values is None:
-            past_length = 0
-            past_key_values = tuple([None] * self.encoder.num_layers)
-            input_ids = input_ids.contiguous()
-            hidden_states = self.input_embedding(input_ids)
-            segment_states = self.segment_embedding(segment)
-            hidden_states = hidden_states + segment_states
-
-        else:
-            past_length = past_key_values[0][0].size(-2)
-            segment_states = self.segment_embedding(segment)
-            hidden_states = self.input_embedding(input_ids) + segment_states[:, -1:, :]
-
-        attention_mask = self._prepare_attention_mask(input_ids, span, context, length)
-        position_bias = self.position_bias(position, position, segment, segment)
-
-        attention_mask = attention_mask[:, past_length:, :]
-        position_bias = position_bias[:, :, past_length:, :]
-        hidden_states = hidden_states[:, past_length:, :]
-
-        hidden_states, present_key_values = self.encoder(
-            hidden_states, attention_mask, position_bias, past_key_values, use_cache
-        )
+        
+        model_output = self.cpmant(input_ids, output_attentions, output_hidden_states, past_key_values, use_cache, return_dict)
+        hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
+        
         logits = self.lm_head(hidden_states)
 
         if not return_dict:
-            return tuple(v for v in [logits, hidden_states, present_key_values] if v is not None)
+            output = (logits,) + model_output
+            return output
 
         return CausalLMOutputWithPast(
             logits=logits,
-            hidden_states=hidden_states,
-            past_key_values=present_key_values,
+            past_key_values=model_output.past_key_values,
+            hidden_states=model_output.hidden_states,
+            attentions=model_output.attentions,
         )
-
-    def _prepare_attention_mask(self, input_ids, span, context, length):
-        batch = input_ids.size(0)
-        seqlen = input_ids.size(1)
-        device = input_ids.device
-        directional_mask_2d = torch.arange(seqlen, device=device) <= torch.arange(seqlen, device=device).view(-1, 1)
-        attention_mask = context[:, None, :] | (
-            context[:, :, None].logical_not() & directional_mask_2d.view(1, seqlen, seqlen)
-        )
-        attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
-        mask_1d = torch.tensor(list(range(seqlen))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
-        attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
-        return attention_mask
 
     def get_input_embeddings(self):
+        return self.cpmant.input_embedding
+
+    def set_input_embeddings(self, embeddings):
+        self.cpmant.input_embedding = embeddings
+    
+    def get_output_embeddings(self):
         return self.lm_head
 
-    def set_input_embeddings(self, embeddings, **kwargs):
-        self.lm_head = embeddings
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        batch, length = input_ids.shape
-        cur_length = max(kwargs["length"].tolist())
-        if cur_length != length:
-            difference = length - cur_length
-            kwargs["length"] = torch.tensor(length).repeat(batch).int()
-            context = torch.tensor([1] * difference).repeat(batch).reshape(batch, -1).int()
-            kwargs["context"] = torch.cat((kwargs["context"], context), dim=1).int()
-            position = torch.tensor([x for x in range(cur_length, length)]).repeat(batch).reshape(batch, -1)
-            kwargs["position"] = torch.cat((kwargs["position"], position), dim=1).int()
-            span = torch.tensor([0] * difference).repeat(batch).reshape(batch, -1)
-            kwargs["span"] = torch.cat((kwargs["span"], span), dim=1).int()
-        cur_length = kwargs["segment"].size(1)
-        if cur_length != length:
-            difference = length - cur_length
-            segment = torch.tensor([2] * difference).repeat(batch).reshape(batch, -1)
-            kwargs["segment"] = torch.cat((kwargs["segment"], segment), dim=1).int()
+        input_ids = input_ids.int()
+        # save the memory usage of dummy attention mask
+        if "attention_mask" in kwargs:
+            kwargs["attention_mask"] = torch.zeros(1, 1)
 
         return {
             "input_ids": input_ids,
-            "length": kwargs["length"],
-            "context": kwargs["context"],
-            "position": kwargs["position"],
-            "span": kwargs["span"],
-            "segment": kwargs["segment"],
             "use_cache": kwargs["use_cache"],
             "past_key_values": kwargs.get("past_key_values", None),
         }
 
-    def _expand_inputs_for_generation(self, input_ids, expand_size, **kwargs):
-        input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-        for key in ["length", "context", "position", "span", "segment"]:
-            kwargs[key] = kwargs[key].repeat_interleave(expand_size, dim=0).int()
-        return input_ids, kwargs
-
     def _reorder_cache(self, past_key_values, beam_idx):
         past_key_values = [list(each) if each is not None else each for each in past_key_values]
         for key_value_layer in past_key_values:
-            if key_value_layer is not None:
-                key_value_layer[0] = key_value_layer[0][beam_idx]
-                key_value_layer[1] = key_value_layer[1][beam_idx]
+            key_value_layer[0] = key_value_layer[0][beam_idx]
+            key_value_layer[1] = key_value_layer[1][beam_idx]
         return past_key_values
