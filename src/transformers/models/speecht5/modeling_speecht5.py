@@ -22,7 +22,7 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
@@ -72,12 +72,17 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
-def shift_spectrograms_right(input_values: torch.Tensor):
+def shift_spectrograms_right(input_values: torch.Tensor, reduction_factor: int = 1):
     """
     Shift input spectrograms one timestep to the right.
     """
     shifted_input_values = input_values.new_zeros(input_values.shape)
     shifted_input_values[:, 1:] = input_values[:, :-1].clone()
+
+    # thin out frames for reduction factor
+    if reduction_factor > 1:
+        shifted_input_values = shifted_input_values[:, reduction_factor - 1 :: reduction_factor]
+
     return shifted_input_values
 
 
@@ -2541,6 +2546,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         speaker_embeddings: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         stop_labels: Optional[torch.Tensor] = None,
+        target_lengths: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2566,6 +2572,8 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             become 1.0. The sequence length of this tensor is `config.reduction_factor` times larger than the length of
             the target mel spectrogram. Labels can be obtained using [`SpeechT5Processor`]. See
             [`SpeechT5Processor.__call__`] for details.
+        target_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Original sequence lengths of the target mel spectrograms before padding.
 
         Returns:
 
@@ -2594,7 +2602,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         if labels is not None:
             if decoder_input_values is None:
-                decoder_input_values = shift_spectrograms_right(labels)
+                decoder_input_values = shift_spectrograms_right(labels, self.config.reduction_factor)
 
         outputs = self.speecht5(
             input_values=input_ids,
@@ -2615,7 +2623,19 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         _, spectrogram, logits = self.speech_decoder_postnet(outputs[0])
 
+        #outputs_before_postnet, outputs_after_postnet, logits
+        # TODO: the loss calculation is more complicated than this
+        # TODO: also add the reduction factor thing
+
         loss = None
+        if labels is not None and stop_labels is not None:
+            mse_criterion = MSELoss()
+            mse_loss = mse_criterion(spectrogram, labels)
+
+            bce_criterion = BCEWithLogitsLoss(pos_weight=torch.tensor(20.0))
+            bce_loss = bce_criterion(logits.view(-1), stop_labels.view(-1))
+
+            loss = mse_loss + bce_loss
 
         if not return_dict:
             output = (spectrogram,) + outputs[1:]
@@ -2624,6 +2644,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return Seq2SeqSpectrogramOutput(
             loss=loss,
             spectrogram=spectrogram,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
@@ -2799,7 +2820,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
 
         if labels is not None:
             if decoder_input_values is None:
-                decoder_input_values = shift_spectrograms_right(labels)
+                decoder_input_values = shift_spectrograms_right(labels, self.config.reduction_factor)
 
         outputs = self.speecht5(
             input_values=input_values,

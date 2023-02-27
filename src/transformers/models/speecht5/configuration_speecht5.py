@@ -161,7 +161,7 @@ class SpeechT5Config(PretrainedConfig):
         speech_decoder_postnet_dropout (`float`, *optional*, defaults to 0.5):
             The dropout probability for the speech decoder post-net layers.
         reduction_factor (`int`, *optional*, defaults to 2):
-            Spectrogram length reduction factor for the speech decoder post-net.
+            Spectrogram length reduction factor for the speech decoder inputs.
         max_speech_positions (`int`, *optional*, defaults to 4000):
             The maximum sequence length of speech features that this model might ever be used with.
         max_text_positions (`int`, *optional*, defaults to 450):

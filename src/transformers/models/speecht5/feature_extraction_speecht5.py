@@ -67,8 +67,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
             Maximum mel frequency in Hz.
         mel_floor (`float`, *optional*, defaults to 1e-10):
             Minimum value of mel frequency banks.
-        reduction_factor (`int`, *optional*, defaults to 2):
-            Spectrogram length reduction factor.
         return_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether or not [`~SpeechT5FeatureExtractor.__call__`] should return `attention_mask`.
     """
@@ -89,7 +87,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         fmin: float = 80,
         fmax: float = 7600,
         mel_floor: float = 1e-10,
-        reduction_factor: int = 2,
         return_attention_mask: bool = True,
         **kwargs,
     ):
@@ -105,7 +102,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         self.fmin = fmin
         self.fmax = fmax
         self.mel_floor = mel_floor
-        self.reduction_factor = reduction_factor
 
         self.sample_size = win_length * sampling_rate // 1000
         self.sample_stride = hop_length * sampling_rate // 1000
@@ -224,12 +220,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         fbanks = fbanks.numpy()
 
         return np.log10(np.maximum(self.mel_floor, np.dot(dft_out, fbanks)))
-
-    def _reduce(self, inputs):
-        reduced = []
-        for i in range(len(inputs)):
-            reduced.append(inputs[i][self.reduction_factor - 1 :: self.reduction_factor])
-        return reduced
 
     def __call__(
         self,
@@ -437,12 +427,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 labels[l - 1 :] = 1.0
                 stop_labels.append(labels)
             padded_inputs["stop_labels"] = stop_labels
-
-            # thin out frames for reduction factor
-            if self.reduction_factor > 1:
-                padded_inputs["input_values"] = self._reduce(padded_inputs["input_values"])
-                if attention_mask is not None:
-                    padded_inputs["attention_mask"] = self._reduce(padded_inputs["attention_mask"])
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
