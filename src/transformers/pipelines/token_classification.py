@@ -357,10 +357,12 @@ class TokenClassificationPipeline(ChunkPipeline):
         return entities
 
     def aggregate_entities(self, entities, forward=False):
+        if len(entities) == 0:
+            return entities
         filter_key = "start" if forward else "end"
         entities = sorted(entities, key=lambda x: x[filter_key])
         aggregated_entities = []
-        previous_entity = entities.pop(0)
+        previous_entity = entities[0]
         for entity in entities:
             if entity[filter_key] != previous_entity[filter_key]:
                 aggregated_entities.append(previous_entity)
