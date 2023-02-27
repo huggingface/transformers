@@ -16,6 +16,7 @@ if is_torch_available():
 if is_flax_available():
     from ..models.auto.modeling_flax_auto import FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
+
 def sigmoid(_outputs):
     return 1.0 / (1.0 + np.exp(-_outputs))
 

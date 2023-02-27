@@ -2,7 +2,7 @@ from typing import Dict
 
 import numpy as np
 
-from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
+from ..utils import add_end_docstrings, is_flax_available, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline, PipelineException
 
 
@@ -15,6 +15,10 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
+if is_flax_available():
+    import flax.linen as nn
+    import jax
+    import jax.numpy as jnp
 
 logger = logging.get_logger(__name__)
 
@@ -68,6 +72,8 @@ class FillMaskPipeline(Pipeline):
             masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
         elif self.framework == "pt":
             masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
+        elif self.framework == "flax":
+            masked_index = jnp.asarray(jnp.nonzero(input_ids == self.tokenizer.mask_token_id))
         else:
             raise ValueError("Unsupported framework")
         return masked_index
@@ -92,7 +98,7 @@ class FillMaskPipeline(Pipeline):
 
     def preprocess(self, inputs, return_tensors=None, **preprocess_parameters) -> Dict[str, GenericTensor]:
         if return_tensors is None:
-            return_tensors = self.framework
+            return_tensors = self.framework if self.framework != "flax" else "jax"
         model_inputs = self.tokenizer(inputs, return_tensors=return_tensors)
         self.ensure_exactly_one_mask_token(model_inputs)
         return model_inputs
@@ -122,6 +128,15 @@ class FillMaskPipeline(Pipeline):
 
             topk = tf.math.top_k(probs, k=top_k)
             values, predictions = topk.values.numpy(), topk.indices.numpy()
+        elif self.framework == "flax":
+            masked_index = np.asarray(jnp.nonzero(input_ids == self.tokenizer.mask_token_id))[:, 0]
+
+            logits = outputs[0, masked_index, :]
+            probs = nn.softmax(logits)
+            if target_ids is not None:
+                probs = probs[..., target_ids]
+
+            values, predictions = jax.lax.top_k(probs, top_k)
         else:
             masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False).squeeze(-1)
             # Fill mask pipeline supports only one ${mask_token} per sample
@@ -139,11 +154,17 @@ class FillMaskPipeline(Pipeline):
             row = []
             for v, p in zip(_values, _predictions):
                 # Copy is important since we're going to modify this array in place
-                tokens = input_ids.numpy().copy()
+                if self.framework != "flax":
+                    tokens = input_ids.numpy().copy()
+                else:
+                    tokens = input_ids.copy()
                 if target_ids is not None:
                     p = target_ids[p].tolist()
 
-                tokens[masked_index[i]] = p
+                if self.framework != "flax":
+                    tokens[masked_index[i]] = p
+                else:
+                    tokens.at[masked_index[i]].set(p)
                 # Filter padding out:
                 tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
                 # Originally we skip special tokens to give readable output.

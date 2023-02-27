@@ -1,7 +1,7 @@
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
-from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
+from ..utils import add_end_docstrings, is_flax_available, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -11,6 +11,8 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
+if is_flax_available():
+    import jax.numpy as jnp
 
 logger = logging.get_logger(__name__)
 
@@ -263,6 +265,8 @@ class ConversationalPipeline(Pipeline):
             input_ids = torch.LongTensor([input_ids])
         elif self.framework == "tf":
             input_ids = tf.constant([input_ids])
+        elif self.framework == "flax":
+            input_ids = jnp.array([input_ids])
         return {"input_ids": input_ids, "conversation": conversation}
 
     def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):
@@ -278,6 +282,8 @@ class ConversationalPipeline(Pipeline):
         conversation = model_inputs.pop("conversation")
         generate_kwargs["max_length"] = max_length
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
+        if self.framework == "flax":
+            output_ids = output_ids.sequences
         if self.model.config.is_encoder_decoder:
             start_position = 1
         else:

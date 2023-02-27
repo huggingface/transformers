@@ -54,6 +54,10 @@ if is_torch_available():
     # Re-export for backward compatibility
     from .pt_utils import KeyDataset
 
+else:
+    Dataset = None
+    KeyDataset = None
+
 if is_flax_available():
     import jax
     import jax.numpy as jnp
@@ -61,11 +65,9 @@ if is_flax_available():
 
     from ..models.auto.modeling_flax_auto import FlaxAutoModel
 
-else:
-    Dataset = None
-    KeyDataset = None
 
 if TYPE_CHECKING:
+    from ..modeling_flax_utils import FlaxPreTrainedModel
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
 
@@ -190,7 +192,7 @@ def infer_framework_load_model(
     **model_kwargs,
 ):
     """
-    Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
+    Select framework (TensorFlow, PyTorch or Flax) to use from the `model` passed. Returns a tuple (framework, model).
 
     If `model` is instantiated, this function will just infer the framework from the model class. Otherwise `model` is
     actually a checkpoint name and this method will try to instantiate it using `model_classes`. Since we don't want to
@@ -199,7 +201,7 @@ def infer_framework_load_model(
     If both frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model (`str`, [`PreTrainedModel`], [`TFPreTrainedModel`] or [`FlaxPreTrainedModel`]):
             The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok from.
         config ([`AutoConfig`]):
             The config associated with the model to help using the correct class
@@ -269,6 +271,12 @@ def infer_framework_load_model(
                     "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
                     "Trying to load the model with Tensorflow."
                 )
+            elif framework == "flax" and model.endswith(".bin"):
+                kwargs["from_pt"] = True
+                logger.warning(
+                    "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
+                    "Trying to load the model with Flax."
+                )
 
             try:
                 model = model_class.from_pretrained(model, **kwargs)
@@ -276,14 +284,14 @@ def infer_framework_load_model(
                     model = model.eval()
                 # Stop loading on the first successful load.
                 break
-            except (OSError, ValueError): 
+            except (OSError, ValueError):
                 continue
 
         if isinstance(model, str):
             raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
 
     if model.__class__.__name__.startswith("TF"):
-        framework = "tf" 
+        framework = "tf"
     elif model.__class__.__name__.startswith("Flax"):
         framework = "flax"
     else:
@@ -299,16 +307,16 @@ def infer_framework_from_model(
     **model_kwargs,
 ):
     """
-    Select framework (TensorFlow or PyTorch) to use from the `model` passed. Returns a tuple (framework, model).
+    Select framework (TensorFlow, PyTorch or Flax) to use from the `model` passed. Returns a tuple (framework, model).
 
     If `model` is instantiated, this function will just infer the framework from the model class. Otherwise `model` is
     actually a checkpoint name and this method will try to instantiate it using `model_classes`. Since we don't want to
     instantiate the model twice, this model is returned for use by the pipeline.
 
-    If both frameworks are installed and available for `model`, PyTorch is selected.
+    If multiple frameworks are installed and available for `model`, PyTorch is selected.
 
     Args:
-        model (`str`, [`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model (`str`, [`PreTrainedModel`], [`TFPreTrainedModel`] or [`FlaxPreTrainedModel`]):
             The model to infer the framework from. If `str`, a checkpoint name. The model to infer the framewrok from.
         model_classes (dictionary `str` to `type`, *optional*):
             A mapping framework to class.
@@ -336,14 +344,14 @@ def get_framework(model, revision: Optional[str] = None):
 
     Args:
         model (`str`, [`PreTrainedModel`], [`TFPreTrainedModel`] or [`FlaxPreTrainedModel`]):
-            If multiple frameworks are installed, picks the one corresponding to the model passed (either a model class or
-            the model name). If no specific model is provided, defaults to using PyTorch.
+            If multiple frameworks are installed, picks the one corresponding to the model passed (either a model class
+            or the model name). If no specific model is provided, defaults to using PyTorch.
     """
     warnings.warn(
         "`get_framework` is deprecated and will be removed in v5, use `infer_framework_from_model` instead.",
         FutureWarning,
     )
-    if not is_tf_available() and not ( is_torch_available() or is_flax_available()):
+    if not is_tf_available() and not (is_torch_available() or is_flax_available()):
         raise RuntimeError(
             "At least one of TensorFlow 2.0, PyTorch or Flax should be installed. "
             "To install TensorFlow 2.0, read the instructions at https://www.tensorflow.org/install/ "
@@ -364,7 +372,7 @@ def get_framework(model, revision: Optional[str] = None):
                 model = TFAutoModel.from_pretrained(model, revision=revision)
 
     if model.__class__.__name__.startswith("TF"):
-        framework = "tf"  
+        framework = "tf"
     elif model.__class__.__name__.startswith("Flax"):
         framework = "flax"
     else:
@@ -383,7 +391,8 @@ def get_default_model_and_revision(
            Dictionary representing the given task, that should contain default models
 
         framework (`str`, None)
-           "pt", "tf" or None, representing a specific framework if it was specified, or None if we don't know yet.
+           "pt", "tf", "flax or None, representing a specific framework if it was specified, or None if we don't know
+           yet.
 
         task_options (`Any`, None)
            Any further value required by the task to get fully specified, for instance (SRC, TGT) languages for
@@ -708,17 +717,17 @@ class _ScikitCompat(ABC):
 
 PIPELINE_INIT_ARGS = r"""
     Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+        model ([`PreTrainedModel`], [`TFPreTrainedModel`] or [`FlaxPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
+            [`PreTrainedModel`] for PyTorch, [`TFPreTrainedModel`] for TensorFlow and [`FlaxPreTrainedModel`] for Flax.
         tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
             [`PreTrainedTokenizer`].
         modelcard (`str` or [`ModelCard`], *optional*):
             Model card attributed to the model for this pipeline.
         framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
-            installed.
+            The framework to use, `"pt"` for PyTorch, `"tf"` for TensorFlow or `flax` for Flax. The specified framework
+            must be installed.
 
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
@@ -736,7 +745,8 @@ PIPELINE_INIT_ARGS = r"""
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device`, `jaxlib.xla_extension.Device` or a `str` too.
+            the associated CUDA device id. You can pass native `torch.device`, `jaxlib.xla_extension.Device` or a `str`
+            too.
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
@@ -761,7 +771,8 @@ class Pipeline(_ScikitCompat):
 
         Input -> Tokenization -> Model Inference -> Post-Processing (task dependent) -> Output
 
-    Pipeline supports running on CPU or GPU through the device argument (see below).
+    Pipeline supports running on CPU, GPU or TPU (only supported in Flax framework) through the device argument (see
+    below).
 
     Some pipeline, like for instance [`FeatureExtractionPipeline`] (`'feature-extraction'`) output large tensor object
     as nested-lists. In order to avoid dumping such large structure as textual data we provide the `binary_output`
@@ -772,7 +783,7 @@ class Pipeline(_ScikitCompat):
 
     def __init__(
         self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        model: Union["PreTrainedModel", "TFPreTrainedModel", "FlaxPreTrainedModel"],
         tokenizer: Optional[PreTrainedTokenizer] = None,
         feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
         image_processor: Optional[BaseImageProcessor] = None,
@@ -780,7 +791,7 @@ class Pipeline(_ScikitCompat):
         framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
-        device: Union[int, str, "torch.device"] = None,
+        device: Union[int, str, "torch.device", "jaxlib.xla_extension.Device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
@@ -821,13 +832,23 @@ class Pipeline(_ScikitCompat):
             if isinstance(device, jaxlib.xla_extension.Device):
                 self.device = device
             elif isinstance(device, str):
-                self.device = device
+                # default to 0th index
+                device_index = 0
+                # cpu:0, cuda:1 or tpu:3
+                if ":" in device:
+                    device, device_index = device.split(":")
+                self.device = jax.devices(device)[int(device_index)]
+            elif device is None:
+                # Use default device, "cuda" is GPU available,
+                # "tpu" if TPU available, "cpu" otherwise
+                self.device = jax.devices(jax.default_backend())[0]
             elif device < 0:
-                jax.config.update('jax_platform_name', 'cpu')
                 self.device = jax.devices("cpu")[0]
-            else:
-                jax.config.update('jax_platform_name', 'cuda')
+            elif device >= 0:
                 self.device = jax.devices("cuda")[device]
+            else:
+                raise ValueError(f"Device {device} is not supported for Flax.")
+
         else:
             self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
@@ -929,7 +950,7 @@ class Pipeline(_ScikitCompat):
             with tf.device("/CPU:0" if self.device == -1 else f"/device:GPU:{self.device}"):
                 yield
         elif self.framework == "flax":
-            # with jax.default_device(self.device): # Requires Jax>0.3.14 
+            # with jax.default_device(self.device): # Requires Jax>0.3.14
             yield
         else:
             if self.device.type == "cuda":
@@ -939,15 +960,15 @@ class Pipeline(_ScikitCompat):
 
     def ensure_tensor_on_device(self, **inputs):
         """
-        Ensure PyTorch tensors are on the specified device.
+        Ensure PyTorch/Flax inputs are on the specified device.
 
         Args:
-            inputs (keyword arguments that should be `torch.Tensor`, the rest is ignored):
+            inputs (keyword arguments that should be `torch.Tensor` or `jax.numpy.ndarray`, the rest is ignored):
                 The tensors to place on `self.device`.
             Recursive on lists **only**.
 
         Return:
-            `Dict[str, torch.Tensor]`: The same as `inputs` but on the proper device.
+            `Dict[str, torch.Tensor, jax.numpy.ndarray]`: The same as `inputs` but on the proper device.
         """
         return self._ensure_tensor_on_device(inputs, self.device)
 

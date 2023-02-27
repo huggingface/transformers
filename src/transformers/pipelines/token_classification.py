@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 from ..models.bert.tokenization_bert import BasicTokenizer
-from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
+from ..utils import ExplicitEnum, add_end_docstrings, is_flax_available, is_tf_available, is_torch_available
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Dataset, Pipeline
 
 
@@ -14,6 +14,9 @@ if is_tf_available():
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+
+if is_flax_available():
+    from ..models.auto.modeling_flax_auto import FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
 
 class TokenClassificationArgumentHandler(ArgumentHandler):
@@ -123,11 +126,12 @@ class TokenClassificationPipeline(Pipeline):
 
     def __init__(self, args_parser=TokenClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.check_model_type(
-            TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
-            if self.framework == "tf"
-            else MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
-        )
+        if self.framework == "tf":
+            self.check_model_type(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING)
+        elif self.framework == "flax":
+            self.check_model_type(FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING)
+        else:
+            self.check_model_type(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING)
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self._args_parser = args_parser
@@ -217,7 +221,7 @@ class TokenClassificationPipeline(Pipeline):
         truncation = True if self.tokenizer.model_max_length and self.tokenizer.model_max_length > 0 else False
         model_inputs = self.tokenizer(
             sentence,
-            return_tensors=self.framework,
+            return_tensors=self.framework if self.framework != "flax" else "jax",
             truncation=truncation,
             return_special_tokens_mask=True,
             return_offsets_mapping=self.tokenizer.is_fast,
@@ -236,6 +240,8 @@ class TokenClassificationPipeline(Pipeline):
         sentence = model_inputs.pop("sentence")
         if self.framework == "tf":
             logits = self.model(model_inputs.data)[0]
+        elif self.framework == "flax":
+            logits = self.model(**model_inputs)[0]
         else:
             output = self.model(**model_inputs)
             logits = output["logits"] if isinstance(output, dict) else output[0]
@@ -251,11 +257,16 @@ class TokenClassificationPipeline(Pipeline):
     def postprocess(self, model_outputs, aggregation_strategy=AggregationStrategy.NONE, ignore_labels=None):
         if ignore_labels is None:
             ignore_labels = ["O"]
-        logits = model_outputs["logits"][0].numpy()
+
+        if self.framework != "flax":
+            logits = model_outputs["logits"][0].numpy()
+            special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
+        else:
+            logits = model_outputs["logits"][0]
+            special_tokens_mask = model_outputs["special_tokens_mask"][0]
         sentence = model_outputs["sentence"]
         input_ids = model_outputs["input_ids"][0]
         offset_mapping = model_outputs["offset_mapping"][0] if model_outputs["offset_mapping"] is not None else None
-        special_tokens_mask = model_outputs["special_tokens_mask"][0].numpy()
 
         maxes = np.max(logits, axis=-1, keepdims=True)
         shifted_exp = np.exp(logits - maxes)

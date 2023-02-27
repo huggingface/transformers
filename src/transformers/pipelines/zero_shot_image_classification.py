@@ -2,6 +2,7 @@ from typing import List, Union
 
 from ..utils import (
     add_end_docstrings,
+    is_flax_available,
     is_tf_available,
     is_torch_available,
     is_vision_available,
@@ -23,6 +24,10 @@ if is_tf_available():
     import tensorflow as tf
 
     from ..tf_utils import stable_softmax
+
+if is_flax_available():
+    import flax.linen as nn
+    import jax.numpy as jnp
 
 logger = logging.get_logger(__name__)
 
@@ -110,9 +115,11 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
         n = len(candidate_labels)
         for i, candidate_label in enumerate(candidate_labels):
             image = load_image(image)
-            images = self.image_processor(images=[image], return_tensors=self.framework)
+            images = self.image_processor(
+                images=[image], return_tensors=self.framework if self.framework != "flax" else "jax"
+            )
             sequence = hypothesis_template.format(candidate_label)
-            inputs = self.tokenizer(sequence, return_tensors=self.framework)
+            inputs = self.tokenizer(sequence, return_tensors=self.framework if self.framework != "flax" else "jax")
             inputs["pixel_values"] = images.pixel_values
             yield {"is_last": i == n - 1, "candidate_label": candidate_label, **inputs}
 
@@ -124,8 +131,12 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
         # Clip does crossproduct scoring by default, so we're only
         # interested in the results where image and text and in the same
         # batch position.
-        diag = torch.diagonal if self.framework == "pt" else tf.linalg.diag_part
-        logits_per_image = diag(outputs.logits_per_image)
+        if self.framework == "pt":
+            logits_per_image = torch.diagonal(outputs.logits_per_image)
+        elif self.framework == "flax":
+            logits_per_image = jnp.diagonal(outputs.logits_per_image)
+        else:
+            logits_per_image = tf.linalg.diag_part(outputs.logits_per_image)
 
         model_outputs = {
             "is_last": is_last,
@@ -139,6 +150,10 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
         if self.framework == "pt":
             logits = torch.cat([output["logits_per_image"] for output in model_outputs])
             probs = logits.softmax(dim=0)
+            scores = probs.tolist()
+        elif self.framework == "flax":
+            logits = jnp.concatenate([output["logits_per_image"] for output in model_outputs])
+            probs = nn.softmax(logits, axis=0)
             scores = probs.tolist()
         else:
             logits = tf.concat([output["logits_per_image"] for output in model_outputs], axis=0)

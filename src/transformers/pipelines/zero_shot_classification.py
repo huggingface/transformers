@@ -105,7 +105,7 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
-        return_tensors = self.framework
+        return_tensors = self.framework if self.framework != "flax" else "jax"
         if self.tokenizer.pad_token is None:
             # Override for tokenizers not supporting padding
             logger.error(
@@ -234,7 +234,11 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
     def postprocess(self, model_outputs, multi_label=False):
         candidate_labels = [outputs["candidate_label"] for outputs in model_outputs]
         sequences = [outputs["sequence"] for outputs in model_outputs]
-        logits = np.concatenate([output["logits"].numpy() for output in model_outputs])
+        if self.framework == "flax":
+            logits = np.concatenate([output["logits"] for output in model_outputs])
+        else:
+            logits = np.concatenate([output["logits"].numpy() for output in model_outputs])
+
         N = logits.shape[0]
         n = len(candidate_labels)
         num_sequences = N // n

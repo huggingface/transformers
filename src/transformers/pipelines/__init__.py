@@ -139,7 +139,8 @@ if is_torch_available():
     )
 
 if is_flax_available():
-    import flax
+    import jax
+    import jaxlib
 
     from ..models.auto.modeling_flax_auto import (
         FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -185,6 +186,7 @@ SUPPORTED_TASKS = {
         "impl": AudioClassificationPipeline,
         "tf": (),
         "pt": (AutoModelForAudioClassification,) if is_torch_available() else (),
+        "flax": (),
         "default": {"model": {"pt": ("superb/wav2vec2-base-superb-ks", "372e048")}},
         "type": "audio",
     },
@@ -192,6 +194,7 @@ SUPPORTED_TASKS = {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),
         "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
+        "flax": (),
         "default": {"model": {"pt": ("facebook/wav2vec2-base-960h", "55bb623")}},
         "type": "multimodal",
     },
@@ -200,7 +203,13 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
         "flax": (FlaxAutoModel,) if is_flax_available() else (),
-        "default": {"model": {"pt": ("distilbert-base-cased", "935ac13"), "tf": ("distilbert-base-cased", "935ac13")}},
+        "default": {
+            "model": {
+                "pt": ("distilbert-base-cased", "935ac13"),
+                "tf": ("distilbert-base-cased", "935ac13"),
+                "flax": ("bert-base-cased", "5532cc5"),
+            }
+        },  # NOTE: Convert to distilled in flax
         "type": "multimodal",
     },
     "text-classification": {
@@ -212,7 +221,10 @@ SUPPORTED_TASKS = {
             "model": {
                 "pt": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
                 "tf": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
-                "flax": ("Shubhamai/distilbert-base-uncased-finetuned-sst-2-english", "1dd3802"), # NOTE: Add flax model
+                "flax": (
+                    "Shubhamai/distilbert-base-uncased-finetuned-sst-2-english",
+                    "1dd3802",
+                ),  # NOTE: Add flax model
             },
         },
         "type": "text",
@@ -221,10 +233,12 @@ SUPPORTED_TASKS = {
         "impl": TokenClassificationPipeline,
         "tf": (TFAutoModelForTokenClassification,) if is_tf_available() else (),
         "pt": (AutoModelForTokenClassification,) if is_torch_available() else (),
+        "flax": (FlaxAutoModelForTokenClassification,) if is_flax_available() else (),
         "default": {
             "model": {
                 "pt": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
                 "tf": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
+                "flax": ("dbmdz/bert-large-cased-finetuned-conll03-english", "1dd3802"),
             },
         },
         "type": "text",
@@ -233,10 +247,12 @@ SUPPORTED_TASKS = {
         "impl": QuestionAnsweringPipeline,
         "tf": (TFAutoModelForQuestionAnswering,) if is_tf_available() else (),
         "pt": (AutoModelForQuestionAnswering,) if is_torch_available() else (),
+        "flax": (FlaxAutoModelForQuestionAnswering,) if is_flax_available() else (),
         "default": {
             "model": {
                 "pt": ("distilbert-base-cased-distilled-squad", "626af31"),
                 "tf": ("distilbert-base-cased-distilled-squad", "626af31"),
+                "flax": ("deepset/bert-base-cased-squad2", "68ffb81"),  # Update to distilbert and original
             },
         },
         "type": "text",
@@ -245,6 +261,7 @@ SUPPORTED_TASKS = {
         "impl": TableQuestionAnsweringPipeline,
         "pt": (AutoModelForTableQuestionAnswering,) if is_torch_available() else (),
         "tf": (TFAutoModelForTableQuestionAnswering,) if is_tf_available() else (),
+        "flax": (),
         "default": {
             "model": {
                 "pt": ("google/tapas-base-finetuned-wtq", "69ceee2"),
@@ -257,6 +274,7 @@ SUPPORTED_TASKS = {
         "impl": VisualQuestionAnsweringPipeline,
         "pt": (AutoModelForVisualQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
+        "flax": (),
         "default": {
             "model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "4355f59")},
         },
@@ -266,6 +284,7 @@ SUPPORTED_TASKS = {
         "impl": DocumentQuestionAnsweringPipeline,
         "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
+        "flax": (),  # NOTE: Probably is possible with https://huggingface.co/deepset/roberta-base-squad2
         "default": {
             "model": {"pt": ("impira/layoutlm-document-qa", "52e01b3")},
         },
@@ -275,14 +294,28 @@ SUPPORTED_TASKS = {
         "impl": FillMaskPipeline,
         "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("distilroberta-base", "ec58a5b"), "tf": ("distilroberta-base", "ec58a5b")}},
+        "flax": (FlaxAutoModelForMaskedLM,) if is_flax_available() else (),
+        "default": {
+            "model": {
+                "pt": ("distilroberta-base", "ec58a5b"),
+                "tf": ("distilroberta-base", "ec58a5b"),
+                "flax": ("distilroberta-base", "ec58a5b"),
+            }
+        },
         "type": "text",
     },
     "summarization": {
         "impl": SummarizationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("t5-small", "d769bba")}},
+        "flax": (FlaxAutoModelForSeq2SeqLM,) if is_flax_available() else (),
+        "default": {
+            "model": {
+                "pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"),
+                "tf": ("t5-small", "d769bba"),
+                "flax": ("t5-small", "3479082"),
+            }
+        },
         "type": "text",
     },
     # This task is a special case as it's parametrized by SRC, TGT languages.
@@ -290,10 +323,17 @@ SUPPORTED_TASKS = {
         "impl": TranslationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
+        "flax": (FlaxAutoModelForSeq2SeqLM,) if is_flax_available() else (),
         "default": {
-            ("en", "fr"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
-            ("en", "de"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
-            ("en", "ro"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+            ("en", "fr"): {
+                "model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db"), "flax": ("t5-base", "686f1db")}
+            },
+            ("en", "de"): {
+                "model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db"), "flax": ("t5-base", "686f1db")}
+            },
+            ("en", "ro"): {
+                "model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db"), "flax": ("t5-base", "686f1db")}
+            },
         },
         "type": "text",
     },
@@ -301,23 +341,36 @@ SUPPORTED_TASKS = {
         "impl": Text2TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+        "flax": (FlaxAutoModelForSeq2SeqLM,) if is_flax_available() else (),
+        "default": {
+            "model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db"), "flax": ("t5-base", "686f1db")}
+        },
         "type": "text",
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
         "tf": (TFAutoModelForCausalLM,) if is_tf_available() else (),
         "pt": (AutoModelForCausalLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("gpt2", "6c0e608"), "tf": ("gpt2", "6c0e608")}},
+        "flax": (FlaxAutoModelForCausalLM,) if is_flax_available() else (),
+        "default": {"model": {"pt": ("gpt2", "6c0e608"), "tf": ("gpt2", "6c0e608"), "flax": ("gpt2", "6c0e608")}},
         "type": "text",
     },
     "zero-shot-classification": {
         "impl": ZeroShotClassificationPipeline,
         "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
+        "flax": (FlaxAutoModelForSequenceClassification,) if is_flax_available() else (),
         "default": {
-            "model": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
-            "config": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
+            "model": {
+                "pt": ("facebook/bart-large-mnli", "c626438"),
+                "tf": ("roberta-large-mnli", "130fb28"),
+                "flax": ("roberta-large-mnli", "130fb28"),
+            },
+            "config": {
+                "pt": ("facebook/bart-large-mnli", "c626438"),
+                "tf": ("roberta-large-mnli", "130fb28"),
+                "flax": ("roberta-large-mnli", "130fb28"),
+            },
         },
         "type": "text",
     },
@@ -325,10 +378,12 @@ SUPPORTED_TASKS = {
         "impl": ZeroShotImageClassificationPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
+        "flax": (FlaxAutoModel,) if is_flax_available() else (),
         "default": {
             "model": {
                 "pt": ("openai/clip-vit-base-patch32", "f4881ba"),
                 "tf": ("openai/clip-vit-base-patch32", "f4881ba"),
+                "flax": ("openai/clip-vit-base-patch32", "f4881ba"),
             }
         },
         "type": "multimodal",
@@ -337,8 +392,13 @@ SUPPORTED_TASKS = {
         "impl": ConversationalPipeline,
         "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM) if is_torch_available() else (),
+        "flax": (FlaxAutoModelForSeq2SeqLM, FlaxAutoModelForCausalLM) if is_flax_available() else (),
         "default": {
-            "model": {"pt": ("microsoft/DialoGPT-medium", "8bada3b"), "tf": ("microsoft/DialoGPT-medium", "8bada3b")}
+            "model": {
+                "pt": ("microsoft/DialoGPT-medium", "8bada3b"),
+                "tf": ("microsoft/DialoGPT-medium", "8bada3b"),
+                "flax": ("microsoft/DialoGPT-medium", "8bada3b"),
+            }
         },
         "type": "text",
     },
@@ -346,7 +406,7 @@ SUPPORTED_TASKS = {
         "impl": ImageClassificationPipeline,
         "tf": (TFAutoModelForImageClassification,) if is_tf_available() else (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
-        "flax" : (FlaxAutoModelForImageClassification,) if is_flax_available() else (),
+        "flax": (FlaxAutoModelForImageClassification,) if is_flax_available() else (),
         "default": {
             "model": {
                 "pt": ("google/vit-base-patch16-224", "5dca96d"),
@@ -360,6 +420,7 @@ SUPPORTED_TASKS = {
         "impl": ImageSegmentationPipeline,
         "tf": (),
         "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
+        "flax": (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "fc15262")}},
         "type": "multimodal",
     },
@@ -367,10 +428,12 @@ SUPPORTED_TASKS = {
         "impl": ImageToTextPipeline,
         "tf": (TFAutoModelForVision2Seq,) if is_tf_available() else (),
         "pt": (AutoModelForVision2Seq,) if is_torch_available() else (),
+        "flax": (FlaxAutoModelForVision2Seq,) if is_flax_available() else (),
         "default": {
             "model": {
                 "pt": ("ydshieh/vit-gpt2-coco-en", "65636df"),
                 "tf": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+                "flax": ("ydshieh/vit-gpt2-coco-en", "65636df"),
             }
         },
         "type": "multimodal",
@@ -379,6 +442,7 @@ SUPPORTED_TASKS = {
         "impl": ObjectDetectionPipeline,
         "tf": (),
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
+        "flax": (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
         "type": "multimodal",
     },
@@ -386,6 +450,7 @@ SUPPORTED_TASKS = {
         "impl": ZeroShotObjectDetectionPipeline,
         "tf": (),
         "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
+        "flax": (),
         "default": {"model": {"pt": ("google/owlvit-base-patch32", "17740e1")}},
         "type": "multimodal",
     },
@@ -393,6 +458,7 @@ SUPPORTED_TASKS = {
         "impl": DepthEstimationPipeline,
         "tf": (),
         "pt": (AutoModelForDepthEstimation,) if is_torch_available() else (),
+        "flax": (),
         "default": {"model": {"pt": ("Intel/dpt-large", "e93beec")}},
         "type": "image",
     },
@@ -400,6 +466,7 @@ SUPPORTED_TASKS = {
         "impl": VideoClassificationPipeline,
         "tf": (),
         "pt": (AutoModelForVideoClassification,) if is_torch_available() else (),
+        "flax": (),
         "default": {"model": {"pt": ("MCG-NJU/videomae-base-finetuned-kinetics", "4800870")}},
         "type": "video",
     },
@@ -576,10 +643,10 @@ def pipeline(
             - `"zero-shot-image-classification"`: will return a [`ZeroShotImageClassificationPipeline`].
             - `"zero-shot-object-detection"`: will return a [`ZeroShotObjectDetectionPipeline`].
 
-        model (`str` or [`PreTrainedModel`] or [`TFPreTrainedModel`], *optional*):
+        model (`str` or [`PreTrainedModel`], [`TFPreTrainedModel`] or [`FlaxPreTrainedModel`], *optional*):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
-            actual instance of a pretrained model inheriting from [`PreTrainedModel`] (for PyTorch) or
-            [`TFPreTrainedModel`] (for TensorFlow).
+            actual instance of a pretrained model inheriting from [`PreTrainedModel`] (for PyTorch),
+            [`TFPreTrainedModel`] (for TensorFlow) or [`FlaxPreTrainedModel`] (for Flax).
 
             If not provided, the default for the `task` will be loaded.
         config (`str` or [`PretrainedConfig`], *optional*):
@@ -609,8 +676,8 @@ def pipeline(
             is a string). However, if `config` is also not given or not a string, then the default feature extractor
             for the given `task` will be loaded.
         framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch, `"tf"` for TensorFlow or `"flax"` for Flax. The specified framework must be
-            installed.
+            The framework to use, either `"pt"` for PyTorch, `"tf"` for TensorFlow or `"flax"` for Flax. The specified
+            framework must be installed.
 
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
@@ -625,8 +692,8 @@ def pipeline(
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `huggingface-cli login` (stored in `~/.huggingface`).
         device (`int` or `str`, `torch.device` or `jaxlib.xla_extension.Device`):
-            Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank like `1`) on which this
-            pipeline will be allocated.
+            Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, `tpu:0` (for Flax framework), or a GPU ordinal
+            rank like `1`) on which this pipeline will be allocated.
         device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
             `device_map="auto"` to compute the most optimized `device_map` automatically (see
@@ -793,6 +860,26 @@ def pipeline(
         model_kwargs["torch_dtype"] = torch_dtype
 
     model_name = model if isinstance(model, str) else None
+
+    # Globally setting the device for flax
+    if is_flax_available() and framework == "flax":
+        if isinstance(device, jaxlib.xla_extension.Device):
+            device_name = device.device_kind
+        elif isinstance(device, str):
+            # cpu:0, cuda:1 or tpu:3
+            if ":" in device:
+                device_name = device.split(":")[0]
+            else:
+                device_name = device
+        elif device is None:
+            device_name = jax.default_backend()
+        elif device < 0:
+            device_name = "cpu"
+        elif device >= 0:
+            device_name = "cuda"
+        else:
+            raise ValueError(f"Device {device} is not supported for Flax.")
+        jax.config.update("jax_platform_name", device_name)
 
     # Infer the framework from the model
     # Forced if framework already defined, inferred if it's None

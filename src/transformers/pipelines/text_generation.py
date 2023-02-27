@@ -1,7 +1,7 @@
 import enum
 import warnings
 
-from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
+from transformers import FLAX_MODEL_FOR_CAUSAL_LM_MAPPING, MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
 from ..utils import add_end_docstrings, is_tf_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
@@ -62,10 +62,13 @@ class TextGenerationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.check_model_type(
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING
-        )
-        if "prefix" not in self._preprocess_params:
+        if self.framework == "tf":
+            self.check_model_type(TF_MODEL_FOR_CAUSAL_LM_MAPPING)
+        elif self.framework == "flax":
+            self.check_model_type(FLAX_MODEL_FOR_CAUSAL_LM_MAPPING)
+        else:
+            self.check_model_type(MODEL_FOR_CAUSAL_LM_MAPPING)
+        if "prefix" not in self._preprocess_params and self.framework != "flax":
             # This is very specific. The logic is quite complex and needs to be done
             # as a "default".
             # It also defines both some preprocess_kwargs and generate_kwargs
@@ -86,6 +89,8 @@ class TextGenerationPipeline(Pipeline):
                 preprocess_params, forward_params, _ = self._sanitize_parameters(prefix=prefix, **self._forward_params)
                 self._preprocess_params = {**self._preprocess_params, **preprocess_params}
                 self._forward_params = {**self._forward_params, **forward_params}
+        else:
+            raise ValueError("XLNet and TransformerXL models are not supported by this pipeline in flax.")
 
     def _sanitize_parameters(
         self,
@@ -211,7 +216,10 @@ class TextGenerationPipeline(Pipeline):
 
     def preprocess(self, prompt_text, prefix="", handle_long_generation=None, **generate_kwargs):
         inputs = self.tokenizer(
-            prefix + prompt_text, padding=False, add_special_tokens=False, return_tensors=self.framework
+            prefix + prompt_text,
+            padding=False,
+            add_special_tokens=False,
+            return_tensors=self.framework if self.framework != "flax" else "jax",
         )
         inputs["prompt_text"] = prompt_text
 
@@ -250,8 +258,10 @@ class TextGenerationPipeline(Pipeline):
         prompt_text = model_inputs.pop("prompt_text")
         # BS x SL
         generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
+        if self.framework == "flax":
+            generated_sequence = generated_sequence.sequences
         out_b = generated_sequence.shape[0]
-        if self.framework == "pt":
+        if self.framework == "pt" or self.framework == "flax":
             generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
         elif self.framework == "tf":
             generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
@@ -261,7 +271,10 @@ class TextGenerationPipeline(Pipeline):
         generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
-        generated_sequence = generated_sequence.numpy().tolist()
+        if self.framework != "flax":
+            generated_sequence = generated_sequence.numpy().tolist()
+        else:
+            generated_sequence = generated_sequence.tolist()
         records = []
         for sequence in generated_sequence:
             if return_type == ReturnType.TENSORS:

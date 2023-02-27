@@ -109,7 +109,9 @@ class ImageClassificationPipeline(Pipeline):
 
     def preprocess(self, image):
         image = load_image(image)
-        model_inputs = self.image_processor(images=image, return_tensors=self.framework if self.framework != "flax" else "jax")
+        model_inputs = self.image_processor(
+            images=image, return_tensors=self.framework if self.framework != "flax" else "jax"
+        )
         return model_inputs
 
     def _forward(self, model_inputs):

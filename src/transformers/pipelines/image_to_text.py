@@ -2,6 +2,7 @@ from typing import List, Union
 
 from ..utils import (
     add_end_docstrings,
+    is_flax_available,
     is_tf_available,
     is_torch_available,
     is_vision_available,
@@ -21,6 +22,9 @@ if is_tf_available():
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_VISION_2_SEQ_MAPPING
+
+if is_flax_available():
+    from ..models.auto.modeling_flax_auto import FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING
 
 logger = logging.get_logger(__name__)
 
@@ -52,9 +56,12 @@ class ImageToTextPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
-        self.check_model_type(
-            TF_MODEL_FOR_VISION_2_SEQ_MAPPING if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING
-        )
+        if self.framework == "tf":
+            self.check_model_type(TF_MODEL_FOR_VISION_2_SEQ_MAPPING)
+        elif self.framework == "flax":
+            self.check_model_type(FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING)
+        else:
+            self.check_model_type(MODEL_FOR_VISION_2_SEQ_MAPPING)
 
     def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None):
         forward_kwargs = {}
@@ -100,7 +107,9 @@ class ImageToTextPipeline(Pipeline):
 
     def preprocess(self, image):
         image = load_image(image)
-        model_inputs = self.image_processor(images=image, return_tensors=self.framework)
+        model_inputs = self.image_processor(
+            images=image, return_tensors=self.framework if self.framework != "flax" else "jax"
+        )
         return model_inputs
 
     def _forward(self, model_inputs, generate_kwargs=None):
@@ -112,6 +121,8 @@ class ImageToTextPipeline(Pipeline):
         #  in the `_prepare_model_inputs` method.
         inputs = model_inputs.pop(self.model.main_input_name)
         model_outputs = self.model.generate(inputs, **model_inputs, **generate_kwargs)
+        if self.framework == "flax":
+            model_outputs = model_outputs.sequences
         return model_outputs
 
     def postprocess(self, model_outputs):

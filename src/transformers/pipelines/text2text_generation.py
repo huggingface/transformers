@@ -2,7 +2,7 @@ import enum
 import warnings
 
 from ..tokenization_utils import TruncationStrategy
-from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
+from ..utils import add_end_docstrings, is_flax_available, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -13,6 +13,9 @@ if is_tf_available():
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+
+if is_flax_available():
+    from ..models.auto.modeling_flax_auto import FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
 logger = logging.get_logger(__name__)
 
@@ -64,11 +67,12 @@ class Text2TextGenerationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.check_model_type(
-            TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
-            if self.framework == "tf"
-            else MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
-        )
+        if self.framework == "tf":
+            self.check_model_type(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING)
+        elif self.framework == "flax":
+            self.check_model_type(FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING)
+        else:
+            self.check_model_type(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING)
 
     def _sanitize_parameters(
         self,
@@ -127,7 +131,12 @@ class Text2TextGenerationPipeline(Pipeline):
             raise ValueError(
                 f" `args[0]`: {args[0]} have the wrong format. The should be either of type `str` or type `list`"
             )
-        inputs = self.tokenizer(*args, padding=padding, truncation=truncation, return_tensors=self.framework)
+        inputs = self.tokenizer(
+            *args,
+            padding=padding,
+            truncation=truncation,
+            return_tensors=self.framework if self.framework != "flax" else "jax",
+        )
         # This is produced by tokenizers but is an invalid generate kwargs
         if "token_type_ids" in inputs:
             del inputs["token_type_ids"]
@@ -176,7 +185,7 @@ class Text2TextGenerationPipeline(Pipeline):
         return inputs
 
     def _forward(self, model_inputs, **generate_kwargs):
-        if self.framework == "pt":
+        if self.framework == "pt" or self.framework == "flax":
             in_b, input_length = model_inputs["input_ids"].shape
         elif self.framework == "tf":
             in_b, input_length = tf.shape(model_inputs["input_ids"]).numpy()
@@ -185,8 +194,10 @@ class Text2TextGenerationPipeline(Pipeline):
         generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
         self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
+        if self.framework == "flax":
+            output_ids = output_ids.sequences
         out_b = output_ids.shape[0]
-        if self.framework == "pt":
+        if self.framework == "pt" or self.framework == "flax":
             output_ids = output_ids.reshape(in_b, out_b // in_b, *output_ids.shape[1:])
         elif self.framework == "tf":
             output_ids = tf.reshape(output_ids, (in_b, out_b // in_b, *output_ids.shape[1:]))
@@ -312,7 +323,11 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     def preprocess(self, *args, truncation=TruncationStrategy.DO_NOT_TRUNCATE, src_lang=None, tgt_lang=None):
         if getattr(self.tokenizer, "_build_translation_inputs", None):
             return self.tokenizer._build_translation_inputs(
-                *args, return_tensors=self.framework, truncation=truncation, src_lang=src_lang, tgt_lang=tgt_lang
+                *args,
+                return_tensors=self.framework if self.framework != "flax" else "jax",
+                truncation=truncation,
+                src_lang=src_lang,
+                tgt_lang=tgt_lang,
             )
         else:
             return super()._parse_and_tokenize(*args, truncation=truncation)
