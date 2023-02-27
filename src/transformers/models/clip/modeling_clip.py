@@ -15,9 +15,10 @@
 """ PyTorch CLIP model."""
 
 
+import warnings
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
-import warnings
+
 import torch
 import torch.utils.checkpoint
 from torch import nn
