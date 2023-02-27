@@ -363,7 +363,7 @@ for more information.
 
 ### Develop on Windows
 
-On Windows (unless you're working in [Windows Subsytem for Linux](https://learn.microsoft.com/en-us/windows/wsl/) or WSL), you need to configure git to transform Windows `CRLF` line endings to Linux `LF` line endings:
+On Windows (unless you're working in [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/) or WSL), you need to configure git to transform Windows `CRLF` line endings to Linux `LF` line endings:
 
 ```bash
 git config core.autocrlf input
