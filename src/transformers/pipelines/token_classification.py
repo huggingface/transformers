@@ -300,6 +300,7 @@ class TokenClassificationPipeline(ChunkPipeline):
     ):
         if ignore_labels is None:
             ignore_labels = ["O"]
+        num_chunks = len(all_outputs)
         postprocess_params.pop("stride", 0)
         sentence = all_outputs[0]["sentence"]
         keys = ["input_ids", "logits", "special_tokens_mask"]
@@ -351,7 +352,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             if entity.get("entity", None) not in ignore_labels
             and entity.get("entity_group", None) not in ignore_labels
         ]
-        if self.tokenizer.is_fast:
+        if self.tokenizer.is_fast and num_chunks > 1:
             entities = self.aggregate_entities(entities)
             entities = self.aggregate_entities(entities, forward=True)
         return entities
