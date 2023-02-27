@@ -206,6 +206,11 @@ class Message:
 
     @property
     def warnings(self) -> Dict:
+        # If something goes wrong, let's avoid the CI report failing to be sent.
+        job_link = "job link not found due to some error"
+        if 'Extract warnings in CI artifacts' in github_actions_job_links:
+            job_link = f"{github_actions_job_links['Extract warnings in CI artifacts']}"
+
         return {
             "type": "section",
             "text": {
@@ -216,7 +221,7 @@ class Message:
             "accessory": {
                 "type": "button",
                 "text": {"type": "plain_text", "text": "Check warnings", "emoji": True},
-                "url": f"{github_actions_job_links['Extract warnings in CI artifacts']}",
+                "url": job_link,
             },
         }
 
