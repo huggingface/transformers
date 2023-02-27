@@ -29,6 +29,8 @@ if is_tf_available():
 
     from transformers import TFAutoModelForSeq2SeqLM, TFBlenderbotForConditionalGeneration, TFBlenderbotModel
 
+    tf.config.experimental.enable_tensor_float_32_execution(False)
+
 
 @require_tf
 class TFBlenderbotModelTester:
