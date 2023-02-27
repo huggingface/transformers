@@ -22,7 +22,7 @@ import os
 
 import tensorflow as tf
 
-from transformers import AutoTokenizer, AutoConfig, TFAutoModelForMaskedLM, create_optimizer
+from transformers import AutoTokenizer, AutoConfig, TFAutoModelForMaskedLM, create_optimizer, PushToHubCallback
 
 
 logger = logging.getLogger(__name__)
@@ -130,7 +130,15 @@ def parse_args():
         help="Weight decay rate to use for training.",
     )
 
+    parser.add_argument(
+        "--max_length",
+        type=int,
+        default=128,
+        help="Maximum length of tokenized sequences. Should match the setting used in prepare_tfrecord_shards.py"
+    )
 
+    parser.add_argument("--output_dir", type=str, required=True, help="Path to save model checkpoints to.")
+    parser.add_argument("--hub_model_id", type=str, help="Model ID to upload to on the Hugging Face Hub.")
 
     args = parser.parse_args()
     return args
@@ -166,21 +174,15 @@ def main(args):
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
     config = AutoConfig.from_pretrained(args.pretrained_config)
     config.vocab_size = tokenizer.vocab_size
-    # TODO Get max_seq_len and padding token id from tokenizer
-    #      and use them in the dataset creation/padding
 
     with strategy.scope():
         model = TFAutoModelForMaskedLM.from_config(config)
         model(model.dummy_inputs)  # Pass some dummy inputs through the model to ensure all the weights are built
 
-    # TODO Add collate function - We can mostly use the existing data collator but we can't call tokenizer.pad()
-    # TODO Add training loop and any metrics
-    # TODO Add model saving
-
     def decode_fn(example):
         features = {
-            "input_ids": tf.io.VarLenFeature(dtype=tf.int64),
-            "attention_mask": tf.io.VarLenFeature(dtype=tf.int64)
+            "input_ids": tf.io.FixedLenFeature(dtype=tf.int64, shape=(args.max_length,)),
+            "attention_mask": tf.io.FixedLenFeature(dtype=tf.int64, shape=(args.max_length,))
         }
         return tf.io.parse_single_example(example, features)
 
@@ -192,12 +194,7 @@ def main(args):
     train_dataset = tf.data.TFRecordDataset(training_records, num_parallel_reads=tf.data.experimental.AUTOTUNE)
     train_dataset = train_dataset.shuffle(args.shuffle_buffer_size)
     train_dataset = train_dataset.map(decode_fn)
-    train_dataset = train_dataset.padded_batch(
-        batch_size,
-        padded_shapes={"input_ids": (batch_size, 128), "attention_mask": (batch_size, 128)},
-        padding_values={"input_ids": tokenizer.pad_token_id, "attention_mask": 0},
-        drop_remainder=True
-    )
+    train_dataset = train_dataset.batch(batch_size, drop_remainder=True)
 
     eval_records = tf.io.gfile.glob(os.path.join(args.eval_dataset, "*.tfrecord"))
     if not eval_records:
@@ -213,15 +210,16 @@ def main(args):
         weight_decay_rate=args.weight_decay_rate
     )
 
-    model.compile(optimizer=optimizer)
+    model.compile(optimizer=optimizer, metrics=["accuracy"])
+    callbacks = []
+    if args.hub_model_id:
+        callbacks.append(
+            PushToHubCallback(output_dir=args.output_dir, hub_model_id=args.hub_model_id, tokenizer=tokenizer)
+        )
 
+    model.fit(train_dataset, validation_data=eval_dataset, epochs=args.num_epochs, callbacks=callbacks)
 
-
-
-
-
-
-
+    model.save_pretrained(args.output_dir)
 
 
 if __name__ == "__main__":
