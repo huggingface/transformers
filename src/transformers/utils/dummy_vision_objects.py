@@ -401,6 +401,20 @@ class PoolFormerImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class SeaformerFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class SeaformerImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class SegformerFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 

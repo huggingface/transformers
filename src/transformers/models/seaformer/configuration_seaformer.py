@@ -32,7 +32,6 @@ SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class SeaformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SeaformerModel`]. It is used to instantiate an

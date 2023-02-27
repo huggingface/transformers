@@ -57,7 +57,6 @@ SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 # Copied from transformers.models.segformer.modeling_segformer.SegFormerImageClassifierOutput with SegFormer->Seaformer
 class SeaformerImageClassifierOutput(ImageClassifierOutput):
     """
