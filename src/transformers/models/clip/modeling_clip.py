@@ -17,7 +17,7 @@
 
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
-
+import warnings
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -682,7 +682,16 @@ class CLIPTextTransformer(nn.Module):
         self.encoder = CLIPEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
         # For now, assume that the below value is the eos token id as the config's eos_token_id isn't guaranteed to be correct
-        self.eos_token_id = self.config.vocab_size-1
+        self.eos_token_id = config.eos_token_id
+        if self.eos_token_id != (self.config.vocab_size-1):
+            warnings.warn(
+                f"UserWarning: In your config, you have eos_token_id={self.eos_token_id}."
+                f" while the vocab size is {self.config.vocab_size}."
+                f"Setting current eos_token_id to {self.config.vocab_size-1}",
+                UserWarning,
+                stacklevel=2,
+            )
+            self.eos_token_id = self.config.vocab_size-1
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPTextConfig)
     def forward(
