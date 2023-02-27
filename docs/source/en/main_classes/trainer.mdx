@@ -564,27 +564,27 @@ as the model saving with FSDP activated is only available with recent fixes.
 
 - **Sharding Strategy**: 
   - FULL_SHARD : Shards optimizer states + gradients + model parameters across data parallel workers/GPUs.
-  For this, add `--fsdp full_shard` to the command line arguments. 
+    For this, add `--fsdp full_shard` to the command line arguments. 
   - SHARD_GRAD_OP : Shards optimizer states + gradients across data parallel workers/GPUs.
     For this, add `--fsdp shard_grad_op` to the command line arguments.
   - NO_SHARD : No sharding. For this, add `--fsdp no_shard` to the command line arguments.
 - To offload the parameters and gradients to the CPU, 
-add `--fsdp "full_shard offload"` or `--fsdp "shard_grad_op offload"` to the command line arguments.
--  To automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`, 
-add `--fsdp "full_shard auto_wrap"` or `--fsdp "shard_grad_op auto_wrap"` to the command line arguments.
+  add `--fsdp "full_shard offload"` or `--fsdp "shard_grad_op offload"` to the command line arguments.
+- To automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`, 
+  add `--fsdp "full_shard auto_wrap"` or `--fsdp "shard_grad_op auto_wrap"` to the command line arguments.
 - To enable both CPU offloading and auto wrapping, 
-add `--fsdp "full_shard offload auto_wrap"` or `--fsdp "shard_grad_op offload auto_wrap"` to the command line arguments.
+  add `--fsdp "full_shard offload auto_wrap"` or `--fsdp "shard_grad_op offload auto_wrap"` to the command line arguments.
 - Remaining FSDP config is passed via `--fsdp_config <path_to_fsdp_config.json>`. It is either a location of
-FSDP json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`. 
+  FSDP json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`. 
   - If auto wrapping is enabled, you can either use transformer based auto wrap policy or size based auto wrap policy.
     - For transformer based auto wrap policy, please specify `fsdp_transformer_layer_cls_to_wrap` in the config file. 
-    This specifies the list of transformer layer class name (case-sensitive) to wrap ,e.g, [`BertLayer`], [`GPTJBlock`], [`T5Block`] ....
-    This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
-    Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
-    Remaining layers including the shared embeddings are conveniently wrapped in same outermost FSDP unit.
-    Therefore, use this for transformer based models.
-  - For size based auto wrap policy, please add `fsdp_min_num_params` in the config file. 
-    It specifies FSDP's minimum number of parameters for auto wrapping.
+      This specifies the list of transformer layer class name (case-sensitive) to wrap ,e.g, [`BertLayer`], [`GPTJBlock`], [`T5Block`] ....
+      This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
+      Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
+      Remaining layers including the shared embeddings are conveniently wrapped in same outermost FSDP unit.
+      Therefore, use this for transformer based models.
+    - For size based auto wrap policy, please add `fsdp_min_num_params` in the config file. 
+      It specifies FSDP's minimum number of parameters for auto wrapping.
   - `fsdp_backward_prefetch` can be specified in the config file. It controls when to prefetch next set of parameters. 
     `backward_pre` and `backward_pos` are available options. 
     For more information refer `torch.distributed.fsdp.fully_sharded_data_parallel.BackwardPrefetch`
@@ -594,9 +594,9 @@ FSDP json config file (e.g., `fsdp_config.json`) or an already loaded json file 
     If `"True"`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight all-gathers.
 
 **Few caveats to be aware of**
-- This feature is incompatible with `--predict_with_generate` in the _run_translation.py_ script.
-This feature is incompatible with `generate()` method of `PreTrainedModel` class. 
-Please refer issue [#21667](https://github.com/huggingface/transformers/issues/21667)
+- it is incompatible with `generate`, thus is incompatible with `--predict_with_generate` 
+  in all seq2seq/clm scripts (translation/summarization/clm etc.) and 
+  Please refer issue [#21667](https://github.com/huggingface/transformers/issues/21667)
 
 ### PyTorch/XLA Fully Sharded Data parallel
 
@@ -614,9 +614,9 @@ Pass `--fsdp True` along with following changes to be made in `--fsdp_config <pa
 - `xla_fsdp_settings` The value is a dictionary which stores the XLA FSDP wrapping parameters.
   For a complete list of options, please see [here](
   https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py).
-- `xla_fsdp_grad_ckpt`. When `True`, uses gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
-used when the xla flag is set to true, and an auto wrapping policy is specified through
-`fsdp_min_num_params` or `fsdp_transformer_layer_cls_to_wrap`. 
+- `xla_fsdp_grad_ckpt`. When `True`, uses gradient checkpointing over each nested XLA FSDP wrapped layer. 
+  This setting can only be used when the xla flag is set to true, and an auto wrapping policy is specified through
+  `fsdp_min_num_params` or `fsdp_transformer_layer_cls_to_wrap`. 
 - You can either use transformer based auto wrap policy or size based auto wrap policy.
   - For transformer based auto wrap policy, please specify `fsdp_transformer_layer_cls_to_wrap` in the config file. 
     This specifies the list of transformer layer class name (case-sensitive) to wrap ,e.g, [`BertLayer`], [`GPTJBlock`], [`T5Block`] ....
@@ -626,7 +626,7 @@ used when the xla flag is set to true, and an auto wrapping policy is specified 
     Therefore, use this for transformer based models.
   - For size based auto wrap policy, please add `fsdp_min_num_params` in the config file. 
     It specifies FSDP's minimum number of parameters for auto wrapping.
-    
+
 
 ### Using Trainer for accelerated PyTorch Training on Mac 
 
