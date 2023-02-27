@@ -165,10 +165,11 @@ boxes have the correct coordinates related to the original image:
 
 ```py
 >>> import torch
+
 >>> with torch.no_grad():
-...   outputs = model(**inputs)
-...   target_sizes = torch.tensor([im.size[::-1]])
-...   results = processor.post_process_object_detection(outputs, threshold=0.1, target_sizes=target_sizes)[0]
+...     outputs = model(**inputs)
+...     target_sizes = torch.tensor([im.size[::-1]])
+...     results = processor.post_process_object_detection(outputs, threshold=0.1, target_sizes=target_sizes)[0]
 
 >>> draw = ImageDraw.Draw(im)
 
@@ -206,9 +207,9 @@ of several images, a list of tuples. Let's create predictions for the two exampl
 
 ```py
 >>> with torch.no_grad():
-...   outputs = model(**inputs)
-...   target_sizes = [x.size[::-1] for x in images]
-...   results = processor.post_process_object_detection(outputs, threshold=0.1, target_sizes=target_sizes)
+...     outputs = model(**inputs)
+...     target_sizes = [x.size[::-1] for x in images]
+...     results = processor.post_process_object_detection(outputs, threshold=0.1, target_sizes=target_sizes)
 
 >>> image_idx = 1
 >>> draw = ImageDraw.Draw(images[image_idx])
@@ -250,12 +251,8 @@ Let's take a quick look at the images:
 
 ```py
 >>> import matplotlib.pyplot as plt
->>> from matplotlib import rcParams
 
->>> %matplotlib inline
->>> rcParams['figure.figsize'] = 11 ,8
-
->>> fig, ax = plt.subplots(1,2)
+>>> fig, ax = plt.subplots(1, 2)
 >>> ax[0].imshow(image_target)
 >>> ax[1].imshow(query_image)
 ```
@@ -275,9 +272,9 @@ as before except now there are no labels.
 
 ```py
 >>> with torch.no_grad():
-...   outputs = model.image_guided_detection(**inputs)
-...   target_sizes = torch.tensor([image_target.size[::-1]])
-...   results = processor.post_process_image_guided_detection(outputs=outputs, target_sizes=target_sizes)[0]
+...     outputs = model.image_guided_detection(**inputs)
+...     target_sizes = torch.tensor([image_target.size[::-1]])
+...     results = processor.post_process_image_guided_detection(outputs=outputs, target_sizes=target_sizes)[0]
 
 >>> draw = ImageDraw.Draw(image_target)
 
