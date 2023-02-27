@@ -352,8 +352,10 @@ class Swinv2PatchEmbeddings(nn.Module):
         pixel_values = self.maybe_pad(pixel_values, height, width)
         embeddings = self.projection(pixel_values)
         _, _, height, width = embeddings.shape
-        output_dimensions = (height.item() if torch.is_tensor(height) else height,
-                             width.item() if torch.is_tensor(width) else width)
+        output_dimensions = (
+            height.item() if torch.is_tensor(height) else height,
+            width.item() if torch.is_tensor(width) else width,
+        )
         embeddings = embeddings.flatten(2).transpose(1, 2)
 
         return embeddings, output_dimensions
@@ -1167,7 +1169,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
         >>> model = Swinv2ForMaskedImageModeling.from_pretrained("microsoft/swinv2-tiny-patch4-window8-256")
 
-        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
+        >>> num_patches = (model.config.image_size // model.config.patch_size)**2
         >>> pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
