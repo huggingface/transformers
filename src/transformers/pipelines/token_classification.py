@@ -40,6 +40,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
             return inputs, None
         else:
             raise ValueError("At least one input is required.")
+
         offset_mapping = kwargs.get("offset_mapping")
         if offset_mapping:
             if isinstance(offset_mapping, list) and isinstance(offset_mapping[0], tuple):
@@ -67,6 +68,10 @@ class AggregationStrategy(ExplicitEnum):
         grouped_entities (`bool`, *optional*, defaults to `False`):
             DEPRECATED, use `aggregation_strategy` instead. Whether or not to group the tokens corresponding to the
             same entity together in the predictions or not.
+        stride (`int`, *optional*, defaults to `None`):
+            If stride is provided, the pipeline is applied on the whole text. The text is split into chunks of size
+            model_max_length and for each token the returned predictions is the highest score among the chunks.
+            Works only with fast tokenizers.
         aggregation_strategy (`str`, *optional*, defaults to `"none"`):
             The strategy to fuse (or not) tokens based on the model prediction.
 
@@ -152,6 +157,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         preprocess_params = {}
         if offset_mapping is not None:
             preprocess_params["offset_mapping"] = offset_mapping
+
         postprocess_params = {}
         if grouped_entities is not None or ignore_subwords is not None:
             if grouped_entities and ignore_subwords:
@@ -160,6 +166,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                 aggregation_strategy = AggregationStrategy.SIMPLE
             else:
                 aggregation_strategy = AggregationStrategy.NONE
+
             if grouped_entities is not None:
                 warnings.warn(
                     "`grouped_entities` is deprecated and will be removed in version v5.0.0, defaulted to"
@@ -170,6 +177,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                     "`ignore_subwords` is deprecated and will be removed in version v5.0.0, defaulted to"
                     f' `aggregation_strategy="{aggregation_strategy}"` instead.'
                 )
+
         if aggregation_strategy is not None:
             if isinstance(aggregation_strategy, str):
                 aggregation_strategy = AggregationStrategy[aggregation_strategy.upper()]
@@ -189,9 +197,9 @@ class TokenClassificationPipeline(ChunkPipeline):
             postprocess_params["aggregation_strategy"] = aggregation_strategy
         if ignore_labels is not None:
             postprocess_params["ignore_labels"] = ignore_labels
-        if process_all is True:
+        if stride is not None:
             if self.tokenizer.is_fast:
-                if stride is None:
+                if stride < 0:
                     stride = 0
                 tokenizer_params = {
                     "return_overflowing_tokens": True,
@@ -202,10 +210,9 @@ class TokenClassificationPipeline(ChunkPipeline):
                 preprocess_params["tokenizer_params"] = tokenizer_params
                 postprocess_params["stride"] = stride
             else:
-                process_all = False
                 warnings.warn(
-                    "`process_all` cannot be used with Slow tokenizers, defaulted to"
-                    f" `process_all={process_all}` instead."
+                    "`stride` was provided to process all text but you're using Slow tokenizers."
+                    ' The pipeline will be applied on the truncated text.'
                 )
         return preprocess_params, {}, postprocess_params
 
@@ -238,6 +245,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         _inputs, offset_mapping = self._args_parser(inputs, **kwargs)
         if offset_mapping:
             kwargs["offset_mapping"] = offset_mapping
+
         return super().__call__(inputs, **kwargs)
 
     def preprocess(self, sentence, offset_mapping=None, **preprocess_params):
@@ -382,6 +390,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             # Filter special_tokens
             if special_tokens_mask[idx]:
                 continue
+
             word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
             if offset_mapping is not None:
                 start_ind, end_ind = offset_mapping[idx]
@@ -406,6 +415,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                             UserWarning,
                         )
                     is_subword = start_ind > 0 and " " not in sentence[start_ind - 1 : start_ind + 1]
+
                 if int(input_ids[idx]) == self.tokenizer.unk_token_id:
                     word = word_ref
                     is_subword = False
@@ -413,6 +423,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                 start_ind = None
                 end_ind = None
                 is_subword = False
+
             pre_entity = {
                 "word": word,
                 "scores": token_scores,
@@ -444,6 +455,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                 entities.append(entity)
         else:
             entities = self.aggregate_words(pre_entities, aggregation_strategy)
+
         if aggregation_strategy == AggregationStrategy.NONE:
             return entities
         return self.group_entities(entities)
@@ -490,6 +502,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             AggregationStrategy.SIMPLE,
         }:
             raise ValueError("NONE and SIMPLE strategies are invalid for word aggregation")
+
         word_entities = []
         word_group = None
         for entity in entities:
@@ -554,6 +567,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             if not entity_group_disagg:
                 entity_group_disagg.append(entity)
                 continue
+
             # If the current entity is similar and adjacent to the previous entity,
             # append it to the disaggregated entity group
             # The split is meant to account for the "B" and "I" prefixes
@@ -572,6 +586,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         if entity_group_disagg:
             # it's the last entity, add it to the entity groups
             entity_groups.append(self.group_sub_entities(entity_group_disagg))
+
         return entity_groups
 
 
