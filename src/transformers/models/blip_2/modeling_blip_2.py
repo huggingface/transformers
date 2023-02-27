@@ -39,7 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoModel
+from ..auto import AutoModelForCausalLM, AutoModelForSeq2SeqLM
 from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 
 
@@ -332,6 +332,30 @@ BLIP_2_VISION_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`Blip2Processor`]. See [`Blip2Processor.__call__`] for
             details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+BLIP_2_TEXT_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it. Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`. [What are position IDs?](../glossary#position-ids)
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1173,11 +1197,11 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 
 @add_start_docstrings(
     """
-    BLIP-2 Model for generating text given an image and an optional text prompt. The model consists of a vision
-    encoder, Querying Transformer (Q-Former) and a language model.
+    BLIP-2 Model for generating text and image features. The model consists of a vision encoder, Querying Transformer
+    (Q-Former) and a language model.
 
     One can optionally pass `input_ids` to the model, which serve as a text prompt, to make the language model continue
-    the prompt. Otherwise, the language model starts generating text from the [BOS] (beginning-of-sequence) token.
+    the prompt. Otherwise, the language model will get the text features from the [BOS] (beginning-of-sequence) token.
     """,
     BLIP_2_START_DOCSTRING,
 )
@@ -1194,13 +1218,173 @@ class Blip2Model(Blip2PreTrainedModel):
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
-        self.language_model = AutoModel.from_config(config.text_config)
+        if config.use_decoder_only_language_model:
+            language_model = AutoModelForCausalLM.from_config(config.text_config)
+        else:
+            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
+        self.language_model = language_model
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
+
+    @add_start_docstrings_to_model_forward(BLIP_2_TEXT_INPUTS_DOCSTRING)
+    def get_text_features(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.Tensor] = None,
+        decoder_attention_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        r"""
+        Returns:
+            text_outputs (`CausalLMOutputWithPast`, or `tuple(torch.FloatTensor)` if `return_dict=False`):
+                The language model outputs. If `return_dict=True`, the output is a [`CausalLMOutputWithPast`] that
+                contains the language model logits, the past key values and the hidden states if
+                `output_hidden_states=True`.
+        Examples:
+        ```python
+        >>> from transformers import AutoTokenizer, Blip2Model
+
+        >>> model = Blip2Model.from_pretrained("openai/clip-vit-base-patch32")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> text_features = model.get_text_features(**inputs)
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if self.config.use_decoder_only_language_model:
+            text_outputs = self.language_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        else:
+            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+
+            text_outputs = self.language_model(
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                labels=labels,
+            )
+
+        return text_outputs
+
+    @add_start_docstrings_to_model_forward(BLIP_2_VISION_INPUTS_DOCSTRING)
+    def get_image_features(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        r"""
+        Returns:
+            vision_outputs (`BaseModelOutputWithPooling` or tuple of `torch.FloatTensor`):
+                The vision model outputs. If `return_dict=True`, the output is a [`BaseModelOutputWithPooling`] that
+                contains the image features, the pooled image features and the hidden states if
+                `output_hidden_states=True`.
+        Examples:
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Blip2Model
+
+        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> image_outputs = model.get_image_features(**inputs)
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        return vision_outputs
+
+    @add_start_docstrings_to_model_forward(BLIP_2_INPUTS_DOCSTRING)
+    def get_qformer_features(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        r"""
+        Returns:
+            vision_outputs (`BaseModelOutputWithPooling` or tuple of `torch.FloatTensor`):
+                The vision model outputs. If `return_dict=True`, the output is a [`BaseModelOutputWithPooling`] that
+                contains the image features, the pooled image features and the hidden states if
+                `output_hidden_states=True`.
+        Examples:
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Blip2Model
+
+        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
+        >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> qformer_outputs = model.get_qformer_features(**inputs)
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        image_embeds = vision_outputs[0]
+
+        # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+
+        query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+        query_outputs = self.qformer(
+            query_embeds=query_tokens,
+            encoder_hidden_states=image_embeds,
+            encoder_attention_mask=image_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        return query_outputs
 
     @add_start_docstrings_to_model_forward(BLIP_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Blip2ForConditionalGenerationModelOutput, config_class=Blip2VisionConfig)
@@ -1221,47 +1405,16 @@ class Blip2Model(Blip2PreTrainedModel):
 
         Examples:
 
-        Image captioning (without providing a text prompt):
-
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import Blip2Processor, Blip2ForConditionalGeneration
+        >>> from transformers import Blip2Processor, Blip2Model
         >>> import torch
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
         >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        >>> model = Blip2ForConditionalGeneration.from_pretrained(
-        ...     "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ... )
-        >>> model.to(device)  # doctest: +IGNORE_RESULT
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt").to(device, torch.float16)
-
-        >>> generated_ids = model.generate(**inputs)
-        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-        >>> print(generated_text)
-        two cats laying on a couch
-        ```
-
-        Visual question answering (prompt = question):
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import Blip2Processor, Blip2ForConditionalGeneration
-        >>> import torch
-
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        >>> model = Blip2ForConditionalGeneration.from_pretrained(
-        ...     "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ... )
+        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1270,10 +1423,7 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> prompt = "Question: how many cats are there? Answer:"
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device, torch.float16)
 
-        >>> generated_ids = model.generate(**inputs)
-        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-        >>> print(generated_text)
-        two
+        >>> outputs = model(**inputs)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
