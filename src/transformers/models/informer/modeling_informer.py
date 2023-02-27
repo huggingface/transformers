@@ -1846,7 +1846,7 @@ class InformerModel(InformerPreTrainedModel):
         return self.config.context_length + max(self.config.lags_sequence)
 
     def get_lagged_subsequences(
-        self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
+        self, sequence: torch.Tensor, subsequences_length: int, shift: int = 1
     ) -> torch.Tensor:
         """
         Returns lagged subsequences of a given sequence. Returns a tensor of shape (N, S, C, I),
