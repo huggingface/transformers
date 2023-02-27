@@ -27,7 +27,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST,
         CPMAntConfig,
         CPMAntForCausalLM,
         CPMAntModel,
@@ -99,7 +98,7 @@ class CPMAntModelTester:
         self.pad_token_id = vocab_size - 1
 
     def prepare_config_and_inputs(self):
-        input_ids = dict()
+        input_ids = {}
         input_ids["input_ids"] = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).type(torch.int32)
 
         config = self.get_config()
@@ -126,7 +125,10 @@ class CPMAntModelTester:
         model.eval()
 
         model_output = model(**input_ids)
-        self.parent.assertEqual(model_output.logits.shape, (self.batch_size, self.seq_length, config.vocab_size + config.prompt_types * config.prompt_length))
+        self.parent.assertEqual(
+            model_output.logits.shape,
+            (self.batch_size, self.seq_length, config.vocab_size + config.prompt_types * config.prompt_length),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config, input_ids = self.prepare_config_and_inputs()
@@ -210,7 +212,7 @@ class CPMAntModelIntegrationTest(unittest.TestCase):
         hidden_states = model(**inputs).last_hidden_state
 
         expected_slice = torch.tensor(
-            [[[  6.1708,   5.9244,   1.0835], [  6.5207,   6.2893, -11.3324], [ -1.0107,  -0.0576,  -5.9577]]],
+            [[[6.1708, 5.9244, 1.0835], [6.5207, 6.2893, -11.3324], [-1.0107, -0.0576, -5.9577]]],
         )
         self.assertTrue(torch.allclose(hidden_states[:, :3, :3], expected_slice, atol=1e-2))
 

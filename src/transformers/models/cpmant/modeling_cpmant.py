@@ -190,11 +190,13 @@ class CPMAntAttention(nn.Module):
                 Avoid invalid areas to participate in the calculation of self-attention.
             position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers.
             past_key_values (`Tuple[torch.Tensor, torch.Tensor]`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
         """
         batch_size = hidden_q.size(0)
         len_q = hidden_q.size(1)
@@ -278,14 +280,18 @@ class CPMAntSelfAttentionBlock(nn.Module):
                 Avoid invalid areas to participate in the calculation of self-attention.
             position_bias (`torch.Tensor` of shape `(batch, len_seq, len_seq)`):
                 Provide positional information to self-attention block.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers.
             past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
         """
         outputs = self.layernorm_before_attention(hidden_states)
-        outputs = self.self_attention(outputs, outputs, attention_mask, position_bias, output_attentions, past_key_values, use_cache)
+        outputs = self.self_attention(
+            outputs, outputs, attention_mask, position_bias, output_attentions, past_key_values, use_cache
+        )
         if use_cache:
             outputs, attn_weights, current_key_value = outputs
         else:
@@ -397,11 +403,13 @@ class CPMAntTransformerBlock(nn.Module):
                 Avoid invalid areas to participate in the calculation of shape `(batch, seq_len, seq_len)`
             position_bias (`torch.Tensor`):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers.
             past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
         """
         current_key_value = None
         hidden_states = self.self_att(
@@ -450,11 +458,15 @@ class CPMAntEncoder(nn.Module):
                 Avoid invalid areas to participate in the calculation of shape `(batch, seq_len, seq_len)`
             position_bias (`torch.Tensor`):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers.
             past_key_values (`Tuple[torch.Tensor, torch.Tensor])`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
         """
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -543,7 +555,9 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
             querylen = query_pos.size(1)
 
             assert key_pos.size(0) == query_pos.size(0), "key_pos.size(0) != query_pos.size(0)"
-            assert keylen == key_segment.size(1) and querylen == query_segment.size(1), "keylen != key_segment.size(1) or querylen != query_segment.size(1)"
+            assert keylen == key_segment.size(1) and querylen == query_segment.size(
+                1
+            ), "keylen != key_segment.size(1) or querylen != query_segment.size(1)"
 
             key_pos = key_pos.view(batch, -1, keylen)
             query_pos = query_pos.view(batch, querylen, -1)
@@ -551,7 +565,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
             query_segment = query_segment.view(batch, querylen, -1)
 
             relative_position_bucket = self._segment_relative_position_bucket(query_segment, key_segment)
-            relative_position_bucket = relative_position_bucket + self.num_buckets  # 与相对位置编码区间不重叠
+            relative_position_bucket = relative_position_bucket + self.num_buckets
 
             # (batch, len_q, len_k)
             absolute_position_bucket = self._position_bucket(
@@ -665,30 +679,18 @@ CPMANT_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        length (`torch.Tensor` of shape `(batch)`, *optional*):
-            The: length of input tokens.
-        context (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-            The Boolean value determines whether the model makes a prediction for that position
-        position (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-            Indices of position of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        segment (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-            A sequence of tokens that is processed together as a unit.
-        span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-            A contiguous sequence of tokens within the input text.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
         output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
+            Whether or not to return the attentions tensors of all attention layers.
         output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
+            Whether or not to return the hidden states of all layers.
         return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
 
@@ -731,7 +733,10 @@ class CPMAntModel(CPMAntPreTrainedModel):
         )
         attention_mask = attention_mask & (span[:, None, :] == span[:, :, None])
         # mask for left padding
-        mask_1d = torch.tensor(list(range(seqlen - self.prompt_length))[::-1], device=device)[None, :].repeat(batch, 1) < length[:, None]
+        mask_1d = (
+            torch.tensor(list(range(seqlen - self.prompt_length))[::-1], device=device)[None, :].repeat(batch, 1)
+            < length[:, None]
+        )
         mask_1d = torch.cat((torch.ones(batch, self.prompt_length).bool(), mask_1d), dim=1)
         attention_mask = mask_1d.view(batch, seqlen, 1) & mask_1d.view(batch, 1, seqlen) & attention_mask
         return attention_mask
@@ -751,43 +756,15 @@ class CPMAntModel(CPMAntPreTrainedModel):
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-        # attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
-        **kwargs
+        **kwargs,
     ):
-        r"""
-        Args:
-            input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
-                Indices of input sequence tokens in the vocabulary.
-
-                Indices can be obtained using [`CPMAntTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
-
-            length (`torch.Tensor` of shape `(batch)`, *optional*):
-                The length of input tokens.
-            context (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-                The Boolean value determines whether the model makes a prediction for that position
-            position (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-                Indices of position of each input sequence tokens in the position embeddings. Selected in the range
-                `[0, config.max_position_embeddings - 1]`.
-
-                [What are position IDs?](../glossary#position-ids)
-            segment (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-                A sequence of tokens that is processed together as a unit.
-            span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-                A contiguous sequence of tokens within the input text.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        
+
         # add prompts ahead
         if input_ids.dtype != torch.int32:
             input_ids = input_ids.int()
@@ -796,15 +773,18 @@ class CPMAntModel(CPMAntPreTrainedModel):
         length = (segment != 0).sum(-1).to(dtype=dtype, device=device)
         input_ids = torch.cat(
             (
-                torch.arange(self.prompt_length * 2 + self.vocab_size, self.prompt_length * 3 + self.vocab_size, dtype=dtype, device=device).repeat(input_ids.size(0), 1),
+                torch.arange(
+                    self.prompt_length * 2 + self.vocab_size,
+                    self.prompt_length * 3 + self.vocab_size,
+                    dtype=dtype,
+                    device=device,
+                ).repeat(input_ids.size(0), 1),
                 input_ids,
             ),
             dim=1,
         )
         batch, seq_length = input_ids.size()
-        segment = torch.cat(
-            (torch.zeros(batch, self.prompt_length, dtype=dtype, device=device), segment), dim=1
-        )
+        segment = torch.cat((torch.zeros(batch, self.prompt_length, dtype=dtype, device=device), segment), dim=1)
         context = torch.full((batch, seq_length), 1, dtype=dtype, device=device)
         position = torch.arange(seq_length, dtype=dtype, device=device).repeat(batch, 1)
         span = torch.full((batch, seq_length), 0, dtype=dtype, device=device)
@@ -829,14 +809,22 @@ class CPMAntModel(CPMAntPreTrainedModel):
         hidden_states = hidden_states[:, past_length:, :]
 
         hidden_states, present_key_values, all_hidden_states, all_attentions = self.encoder(
-            hidden_states, attention_mask, position_bias, output_attentions, output_hidden_states, past_key_values, use_cache
+            hidden_states,
+            attention_mask,
+            position_bias,
+            output_attentions,
+            output_hidden_states,
+            past_key_values,
+            use_cache,
         )
 
         if past_length == 0:
-            hidden_states = hidden_states[:, self.prompt_length:, :]
+            hidden_states = hidden_states[:, self.prompt_length :, :]
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, present_key_values, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v for v in [hidden_states, present_key_values, all_hidden_states, all_attentions] if v is not None
+            )
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -854,11 +842,11 @@ class CPMAntModel(CPMAntPreTrainedModel):
 )
 class CPMAntForCausalLM(CPMAntPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
-    
+
     def __init__(self, config: CPMAntConfig):
         super().__init__(config)
         self.cpmant = CPMAntModel(config)
-        
+
         # lm_head.weight is tied to cpmant.input_embedding.weight
         self.lm_head = nn.Linear(config.dim_model, config.vocab_size, bias=False)
         self.post_init()
@@ -870,7 +858,6 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
-
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -890,29 +877,29 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
-
-            length (`torch.Tensor` of shape `(batch)`, *optional*):
-                The length of input tokens.
-            context (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-                The Boolean value determines whether the model makes a prediction for that position
-            position (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-                Indices of position of each input sequence tokens in the position embeddings. Selected in the range
-                `[0, config.max_position_embeddings - 1]`.
-
-                [What are position IDs?](../glossary#position-ids)
-            segment (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-                A sequence of tokens that is processed together as a unit.
-            span (`torch.Tensor` of shape `(batch_size, seq_len)`, *optional*):
-                A contiguous sequence of tokens within the input text.
+            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
+                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                CPMAnt will process attention mask automatically, this parameter is a dummy parameter for
+                text-generation pipeline.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
-        model_output = self.cpmant(input_ids, output_attentions, output_hidden_states, past_key_values, use_cache, return_dict)
+
+        model_output = self.cpmant(
+            input_ids, output_attentions, output_hidden_states, past_key_values, use_cache, return_dict
+        )
         hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
-        
+
         logits = self.lm_head(hidden_states)
 
         if not return_dict:
@@ -931,7 +918,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
 
     def set_input_embeddings(self, embeddings):
         self.cpmant.input_embedding = embeddings
-    
+
     def get_output_embeddings(self):
         return self.lm_head
 
