@@ -927,9 +927,7 @@ class TFViT2GPT2ModelIntegrationTest(unittest.TestCase):
         self.assertLessEqual(max_diff, 1e-4)
 
         def generate_step(pixel_values):
-            outputs = model.generate(
-                pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
-            )
+            outputs = model.generate(pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True)
             output_ids = outputs.sequences
             preds = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
             preds = [pred.strip() for pred in preds]

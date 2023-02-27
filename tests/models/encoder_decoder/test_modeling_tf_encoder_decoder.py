@@ -60,7 +60,6 @@ if is_torch_available():
     from transformers import BertLMHeadModel, BertModel, EncoderDecoderModel
 
 
-
 @require_tf
 class TFEncoderDecoderMixin:
     def get_encoder_decoder_model(self, config, decoder_config):
