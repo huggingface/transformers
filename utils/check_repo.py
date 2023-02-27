@@ -23,6 +23,13 @@ from pathlib import Path
 
 from transformers import is_flax_available, is_tf_available, is_torch_available
 from transformers.models.auto import get_values
+from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING_NAMES
+from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
+from transformers.models.auto.modeling_flax_auto import FLAX_MODEL_MAPPING_NAMES
+from transformers.models.auto.modeling_tf_auto import TF_MODEL_MAPPING_NAMES
+from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING_NAMES
 from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
@@ -68,6 +75,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "DeformableDetrEncoder",  # Building part of bigger (tested) model.
     "DeformableDetrDecoder",  # Building part of bigger (tested) model.
     "OPTDecoder",  # Building part of bigger (tested) model.
+    "FlaxWhisperDecoder",  # Building part of bigger (tested) model.
+    "FlaxWhisperEncoder",  # Building part of bigger (tested) model.
     "WhisperDecoder",  # Building part of bigger (tested) model.
     "WhisperEncoder",  # Building part of bigger (tested) model.
     "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
@@ -196,6 +205,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CLIPSegVisionModel",
     "CLIPSegTextModel",
     "EsmForProteinFolding",
+    "GPTSanJapaneseModel",
     "TimeSeriesTransformerForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
@@ -325,7 +335,7 @@ def check_model_list():
     # Get the models from the directory structure of `src/transformers/models/`
     models = [model for model in dir(transformers.models) if not model.startswith("__")]
 
-    missing_models = sorted(list(set(_models).difference(models)))
+    missing_models = sorted(set(_models).difference(models))
     if missing_models:
         raise Exception(
             f"The following models should be included in {models_dir}/__init__.py: {','.join(missing_models)}."
@@ -537,7 +547,7 @@ def get_all_auto_configured_models():
         for attr_name in dir(transformers.models.auto.modeling_flax_auto):
             if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING_NAMES"):
                 result = result | set(get_values(getattr(transformers.models.auto.modeling_flax_auto, attr_name)))
-    return [cls for cls in result]
+    return list(result)
 
 
 def ignore_unautoclassed(model_name):
@@ -595,6 +605,40 @@ def check_all_models_are_auto_configured():
         new_failures = check_models_are_auto_configured(module, all_auto_models)
         if new_failures is not None:
             failures += new_failures
+    if len(failures) > 0:
+        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
+
+
+def check_all_auto_object_names_being_defined():
+    """Check all names defined in auto (name) mappings exist in the library."""
+    failures = []
+
+    mapping_to_check = {
+        "TOKENIZER_MAPPING_NAMES": TOKENIZER_MAPPING_NAMES,
+        "IMAGE_PROCESSOR_MAPPING_NAMES": IMAGE_PROCESSOR_MAPPING_NAMES,
+        "FEATURE_EXTRACTOR_MAPPING_NAMES": FEATURE_EXTRACTOR_MAPPING_NAMES,
+        "PROCESSOR_MAPPING_NAMES": PROCESSOR_MAPPING_NAMES,
+        "MODEL_MAPPING_NAMES": MODEL_MAPPING_NAMES,
+        "TF_MODEL_MAPPING_NAMES": TF_MODEL_MAPPING_NAMES,
+        "FLAX_MODEL_MAPPING_NAMES": FLAX_MODEL_MAPPING_NAMES,
+    }
+
+    for name, mapping in mapping_to_check.items():
+        for model_type, class_names in mapping.items():
+            if not isinstance(class_names, tuple):
+                class_names = (class_names,)
+                for class_name in class_names:
+                    if class_name is None:
+                        continue
+                    # dummy object is accepted
+                    if not hasattr(transformers, class_name):
+                        # If the class name is in a model name mapping, let's not check if there is a definition in any modeling
+                        # module, if it's a private model defined in this file.
+                        if name.endswith("MODEL_MAPPING_NAMES") and is_a_private_model(class_name):
+                            continue
+                        failures.append(
+                            f"`{class_name}` appears in the mapping `{name}` but it is not defined in the library."
+                        )
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
@@ -873,6 +917,8 @@ def check_repo_quality():
     check_all_objects_are_documented()
     print("Checking all models are in at least one auto class.")
     check_all_models_are_auto_configured()
+    print("Checking all names in auto name mappings are defined.")
+    check_all_auto_object_names_being_defined()
 
 
 if __name__ == "__main__":

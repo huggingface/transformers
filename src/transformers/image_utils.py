@@ -115,7 +115,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> List[ImageInput]:
     if is_valid_image(images):
         if images.ndim == expected_ndims + 1:
             # Batch of images
-            images = [image for image in images]
+            images = list(images)
         elif images.ndim == expected_ndims:
             # Single image
             images = [images]

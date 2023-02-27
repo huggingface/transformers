@@ -957,9 +957,10 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
 
         text_preprocessor = PerceiverTextPreprocessor(config)
 
-        trainable_position_encoding_kwargs_decoder = dict(
-            num_channels=text_preprocessor.num_channels, index_dims=config.max_position_embeddings
-        )
+        trainable_position_encoding_kwargs_decoder = {
+            "num_channels": text_preprocessor.num_channels,
+            "index_dims": config.max_position_embeddings,
+        }
 
         self.perceiver = PerceiverModel(
             config,
@@ -1089,7 +1090,7 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1214,8 +1215,8 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        trainable_position_encoding_kwargs_preprocessor = dict(num_channels=256, index_dims=config.image_size**2)
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        trainable_position_encoding_kwargs_preprocessor = {"num_channels": 256, "index_dims": config.image_size**2}
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1357,10 +1358,13 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        fourier_position_encoding_kwargs_preprocessor = dict(
-            concat_pos=True, max_resolution=(224, 224), num_bands=64, sine_only=False
-        )
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        fourier_position_encoding_kwargs_preprocessor = {
+            "concat_pos": True,
+            "max_resolution": (224, 224),
+            "num_bands": 64,
+            "sine_only": False,
+        }
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1497,10 +1501,13 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        fourier_position_encoding_kwargs_preprocessor = dict(
-            concat_pos=True, max_resolution=(56, 56), num_bands=64, sine_only=False
-        )
-        trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
+        fourier_position_encoding_kwargs_preprocessor = {
+            "concat_pos": True,
+            "max_resolution": (56, 56),
+            "num_bands": 64,
+            "sine_only": False,
+        }
+        trainable_position_encoding_kwargs_decoder = {"num_channels": config.d_latents, "index_dims": 1}
 
         self.num_labels = config.num_labels
         self.perceiver = PerceiverModel(
@@ -1638,15 +1645,18 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        fourier_position_encoding_kwargs_preprocessor = dict(
-            num_bands=64,
-            max_resolution=config.train_size,
-            sine_only=False,
-            concat_pos=True,
-        )
-        fourier_position_encoding_kwargs_decoder = dict(
-            concat_pos=True, max_resolution=config.train_size, num_bands=64, sine_only=False
-        )
+        fourier_position_encoding_kwargs_preprocessor = {
+            "num_bands": 64,
+            "max_resolution": config.train_size,
+            "sine_only": False,
+            "concat_pos": True,
+        }
+        fourier_position_encoding_kwargs_decoder = {
+            "concat_pos": True,
+            "max_resolution": config.train_size,
+            "num_bands": 64,
+            "sine_only": False,
+        }
 
         image_preprocessor = PerceiverImagePreprocessor(
             config,
@@ -1788,24 +1798,24 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                 "audio": PerceiverAudioPreprocessor(
                     config,
                     position_encoding_type="fourier",
-                    fourier_position_encoding_kwargs=dict(
-                        num_bands=192,
-                        max_resolution=(n_audio_samples,),
-                        sine_only=False,
-                        concat_pos=True,
-                    ),
+                    fourier_position_encoding_kwargs={
+                        "num_bands": 192,
+                        "max_resolution": (n_audio_samples,),
+                        "sine_only": False,
+                        "concat_pos": True,
+                    },
                     prep_type="patches",
                     samples_per_patch=config.samples_per_patch,
                 ),
                 "image": PerceiverImagePreprocessor(
                     config,
                     position_encoding_type="fourier",
-                    fourier_position_encoding_kwargs=dict(
-                        num_bands=32,
-                        max_resolution=(config.num_frames, config.image_size, config.image_size),
-                        sine_only=False,
-                        concat_pos=True,
-                    ),
+                    fourier_position_encoding_kwargs={
+                        "num_bands": 32,
+                        "max_resolution": (config.num_frames, config.image_size, config.image_size),
+                        "sine_only": False,
+                        "concat_pos": True,
+                    },
                     prep_type="patches",
                     spatial_downsample=4,
                     temporal_downsample=1,
@@ -1824,12 +1834,12 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
             use_query_residual=False,
             position_encoding_only=True,
             position_encoding_type="fourier",
-            fourier_position_encoding_kwargs=dict(
-                num_bands=32,
-                max_resolution=(config.num_frames, config.image_size, config.image_size),
-                sine_only=False,
-                concat_pos=True,
-            ),
+            fourier_position_encoding_kwargs={
+                "num_bands": 32,
+                "max_resolution": (config.num_frames, config.image_size, config.image_size),
+                "sine_only": False,
+                "concat_pos": True,
+            },
         )
 
         decoder = PerceiverMultimodalDecoder(
@@ -1848,12 +1858,12 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     use_query_residual=False,
                     position_encoding_only=True,
                     position_encoding_type="fourier",
-                    fourier_position_encoding_kwargs=dict(
-                        num_bands=192,
-                        max_resolution=(n_audio_samples,),
-                        sine_only=False,
-                        concat_pos=True,
-                    ),
+                    fourier_position_encoding_kwargs={
+                        "num_bands": 192,
+                        "max_resolution": (n_audio_samples,),
+                        "sine_only": False,
+                        "concat_pos": True,
+                    },
                 ),
                 "image": image_decoder,
                 "label": PerceiverClassificationDecoder(
@@ -1863,10 +1873,10 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     use_query_residual=False,
                     position_encoding_only=True,
                     position_encoding_type="trainable",
-                    trainable_position_encoding_kwargs=dict(
-                        num_channels=1024,
-                        index_dims=1,
-                    ),
+                    trainable_position_encoding_kwargs={
+                        "num_channels": 1024,
+                        "index_dims": 1,
+                    },
                 ),
             },
             num_outputs=None,
@@ -2180,9 +2190,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             # to get the indices for the unflattened array
             # unravel_index returns a tuple (x_idx, y_idx, ...)
             # stack to get the [n, d] tensor of coordinates
-            indices = list(
-                torch.from_numpy(x) for x in np.unravel_index(subsampled_points.cpu(), self.output_index_dims)
-            )
+            indices = [torch.from_numpy(x) for x in np.unravel_index(subsampled_points.cpu(), self.output_index_dims)]
             pos = torch.stack(indices, dim=1)
             batch_size = inputs.shape[0]
             # Map these coordinates to [-1, 1]
@@ -2476,9 +2484,9 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
         inputs = restructure(modality_sizes, inputs)
 
         # Obtain modality-specific decoders' queries
-        subsampled_points = subsampled_points or dict()
+        subsampled_points = subsampled_points or {}
 
-        decoder_queries = dict()
+        decoder_queries = {}
         for modality, decoder in self.modalities.items():
             # Get input_without_pos for this modality if it exists.
             input_without_pos = None
@@ -3363,7 +3371,7 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         super().__init__()
         self.modalities = nn.ModuleDict(modalities)
         self.min_padding_size = min_padding_size
-        self.mask_probs = mask_probs if mask_probs is not None else dict()
+        self.mask_probs = mask_probs if mask_probs is not None else {}
         self.padding = nn.ParameterDict(
             {
                 modality: nn.Parameter(torch.randn(1, self.num_channels - preprocessor.num_channels))
