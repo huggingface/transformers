@@ -58,9 +58,7 @@ generation works in general in encoder-decoder models.
 >>> model = UdopDualForConditionalGeneration.from_pretrained("udop-uni")
 
 >>> input_ids = tokenizer("The <extra_id_0> walks", return_tensors="pt").input_ids
->>> text_seg_data = torch.tensor(
-...     [[0.11, 0.22, 0.43, 0.99], [0.13, 0.26, 0.33, 0.59], [0.09, 0.11, 0.29, 0.29]]
-... )
+>>> text_seg_data = torch.tensor([[0.11, 0.22, 0.43, 0.99], [0.13, 0.26, 0.33, 0.59], [0.09, 0.11, 0.29, 0.29]])
 >>> image_input = torch.randn([1, 224, 224, 3])
 >>> image_seg_data = torch.randn([1, 194, 4])
 >>> labels = torch.tensor([[8, 3, 238, 12394, 1]])
@@ -73,6 +71,7 @@ generation works in general in encoder-decoder models.
 ... )
 >>> loss = outputs.loss
 >>> logits = outputs.logits
+```
 
 ## Performance
 
