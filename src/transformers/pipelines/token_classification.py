@@ -303,7 +303,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         postprocess_params.pop("stride", 0)
         sentence = all_outputs[0]["sentence"]
         keys = ["input_ids", "logits", "special_tokens_mask"]
-        # Check whether offset_mapping come from tokenizer or manual input
+        # Check whether offset_mapping comes from tokenizer or manual input
         if "offset_mapping" in all_outputs[0].keys():
             x = all_outputs[0]["offset_mapping"]
             if self.framework == "tf":
