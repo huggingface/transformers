@@ -707,7 +707,7 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
     return shards, index
 
 
-def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, strict=True):
+def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, strict=False, _prefix=None):
     """
     This is the same as `load_tf_weights` but for a sharded checkpoint. Detect missing and unexpected layers and load
     the TF weights from the shard file accordingly to their names and shapes.
@@ -749,7 +749,7 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
     for shard_file in shard_files:
         state_dict = tf.io.read_file(shard_file)
         saved_weight_names_set, unexpected_keys_set, missmatched_keys_set = load_tf_shard(
-            model, model_layer_map, shard_file, ignore_mismatched_sizes=ignore_mismatched_sizes
+            model, model_layer_map, shard_file, ignore_mismatched_sizes=ignore_mismatched_sizes, _prefix=_prefix,
         )
         saved_keys.update(saved_weight_names_set)
         unexpected_keys.update(unexpected_keys_set)
@@ -771,7 +771,7 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
     return missing_keys, unexpected_keys, missmatched_keys
 
 
-def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False):
+def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     """
     Loads a shard from a sharded checkpoint file. Handles the missing keys and unexpected keys.
 
@@ -2458,6 +2458,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
+            tf_to_pt_weight_rename (`Callable`, *optional*):
+                A function that is called to transform the names of weights during the PyTorch to TensorFlow
+                crossloading process. This is not necessary for most models, but is useful to allow composite
+                models to be crossloaded correctly.
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
@@ -2785,6 +2789,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     model,
                     resolved_archive_file,
                     ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    _prefix=load_weight_prefix,
                 )
             else:
                 missing_keys, unexpected_keys, mismatched_keys = load_tf_weights(
