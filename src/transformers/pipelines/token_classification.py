@@ -151,7 +151,6 @@ class TokenClassificationPipeline(ChunkPipeline):
         ignore_subwords: Optional[bool] = None,
         aggregation_strategy: Optional[AggregationStrategy] = None,
         offset_mapping: Optional[List[Tuple[int, int]]] = None,
-        process_all: Optional[bool] = None,
         stride: Optional[int] = None,
     ):
         preprocess_params = {}
@@ -199,8 +198,6 @@ class TokenClassificationPipeline(ChunkPipeline):
             postprocess_params["ignore_labels"] = ignore_labels
         if stride is not None:
             if self.tokenizer.is_fast:
-                if stride < 0:
-                    stride = 0
                 tokenizer_params = {
                     "return_overflowing_tokens": True,
                     "max_length": self.tokenizer.model_max_length,
@@ -208,7 +205,6 @@ class TokenClassificationPipeline(ChunkPipeline):
                     "stride": stride,
                 }
                 preprocess_params["tokenizer_params"] = tokenizer_params
-                postprocess_params["stride"] = stride
             else:
                 warnings.warn(
                     "`stride` was provided to process all text but you're using Slow tokenizers."
@@ -275,16 +271,25 @@ class TokenClassificationPipeline(ChunkPipeline):
 
     def _forward(self, model_inputs):
         # Forward
-        model_outputs = model_inputs
-        model_inputs = {k: model_inputs[k] for k in self.tokenizer.model_input_names}
+        special_tokens_mask = model_inputs.pop("special_tokens_mask")
+        offset_mapping = model_inputs.pop("offset_mapping", None)
+        model_inputs.pop("overflow_to_sample_mapping", None)
+        sentence = model_inputs.pop("sentence")
+        is_last = model_inputs.pop("is_last")
         if self.framework == "tf":
-            logits = self.model(**model_inputs)[0]
+            logits = self.model(model_inputs.data)[0]
         else:
             output = self.model(**model_inputs)
             logits = output["logits"] if isinstance(output, dict) else output[0]
-        model_outputs["logits"] = logits
 
-        return model_outputs
+        return {
+            "logits": logits,
+            "special_tokens_mask": special_tokens_mask,
+            "offset_mapping": offset_mapping,
+            "sentence": sentence,
+            "is_last": is_last,
+            **model_inputs,
+        }
 
     def postprocess(
         self,
@@ -295,7 +300,7 @@ class TokenClassificationPipeline(ChunkPipeline):
     ):
         if ignore_labels is None:
             ignore_labels = ["O"]
-        stride = postprocess_params.pop("stride", 0)
+        postprocess_params.pop("stride", 0)
         sentence = all_outputs[0]["sentence"]
         keys = ["input_ids", "logits", "special_tokens_mask"]
         # Check whether offset_mapping come from tokenizer or manual input
@@ -315,38 +320,11 @@ class TokenClassificationPipeline(ChunkPipeline):
         shifted_exp = np.exp(logits - maxes)
         scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
-        special_tokens_mask = outputs["special_tokens_mask"]
-
-        # Update each token scores with the maximum scores in all overlapping parts
-        for i in range(len(scores) - 1):
-            # Get current and next chunks without special tokens
-            current_mask = special_tokens_mask[i]
-            next_mask = special_tokens_mask[i + 1]
-
-            current_scores = scores[i][current_mask == 0]
-            next_scores = scores[i + 1][next_mask == 0]
-
-            chunk_length = len(current_scores)
-            # Stack the ovelapping part between the current and the next chunk
-            overlapping_scores = np.stack((current_scores[chunk_length - stride :], next_scores[:stride]))
-            # Get the highest score for each token in each chunk
-            tokens_max_scores = np.max(overlapping_scores, axis=-1)
-            # Get the chunk id of the highest score for each token
-            chunk_idx = np.argmax(tokens_max_scores, axis=0)
-            # Update scores
-            idx_to_update = [idx for idx in range(len(next_mask)) if next_mask[idx] == 0]
-            for idx, (chunk_idx, j) in enumerate(zip(chunk_idx, idx_to_update)):
-                scores[i + 1][j] = overlapping_scores[chunk_idx][idx]
         outputs["scores"] = scores
 
         # Aggregate chunks
         for k in outputs.keys():
-            aggregated_outputs = []
-            for i in range(len(outputs[k]) - 1):
-                mask = special_tokens_mask[i]
-                last_idx = [idx for idx in range(len(mask)) if mask[idx] == 0][-1]
-                aggregated_outputs.append(outputs[k][i][: last_idx - stride + 1])
-            aggregated_outputs.append(outputs[k][-1])
+            aggregated_outputs = [outputs[k][i] for i in range(len(outputs[k]))]
             outputs[k] = np.concatenate(aggregated_outputs)
 
         input_ids = outputs.pop("input_ids")
@@ -373,7 +351,25 @@ class TokenClassificationPipeline(ChunkPipeline):
             if entity.get("entity", None) not in ignore_labels
             and entity.get("entity_group", None) not in ignore_labels
         ]
+        if self.tokenizer.is_fast:
+            entities = self.aggregate_entities(entities)
         return entities
+
+    def aggregate_entities(self, entities):
+        entities = sorted(entities, key=lambda x: x["start"])
+        aggregated_entities = []
+        previous_entity = entities.pop(0)
+        for entity in entities:
+            if entity["start"] != previous_entity["start"]:
+                aggregated_entities.append(previous_entity)
+                previous_entity = entity
+            else:
+                current_length = entity["start"] - entity["end"]
+                previous_length = previous_entity["start"] - previous_entity["end"]
+                if current_length > previous_length or entity["score"] > previous_entity["score"]:
+                    previous_entity = entity
+        aggregated_entities.append(entity)
+        return aggregated_entities
 
     def gather_pre_entities(
         self,
