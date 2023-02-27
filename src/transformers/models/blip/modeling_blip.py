@@ -990,7 +990,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
         >>> outputs = model(**inputs)
         ```"""
-        pixel_values.shape[0]
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_outputs = self.vision_model(
