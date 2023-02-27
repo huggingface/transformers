@@ -33,15 +33,15 @@ logger = logging.get_logger(__name__)
 
 
 def get_detr_config(model_name):
-    config = DetrConfig(use_timm_backbone=False, backbone=None, dilation=None, use_pretrained_backbone=None)
-
-    # set backbone attributes
+    # initialize config
     if "resnet-50" in model_name:
-        pass
+        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-50")
     elif "resnet-101" in model_name:
-        config.backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101")
+        backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-101")
     else:
         raise ValueError("Model name should include either resnet50 or resnet101")
+
+    config = DetrConfig(use_timm_backbone=False, backbone_config=backbone_config)
 
     # set label attributes
     is_panoptic = "panoptic" in model_name
