@@ -353,9 +353,22 @@ BLIP_2_TEXT_INPUTS_DOCSTRING = r"""
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
             [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`. [What are position IDs?](../glossary#position-ids)
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
+
+            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [T5
+            Training](./t5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1199,9 +1212,6 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
     """
     BLIP-2 Model for generating text and image features. The model consists of a vision encoder, Querying Transformer
     (Q-Former) and a language model.
-
-    One can optionally pass `input_ids` to the model, which serve as a text prompt, to make the language model continue
-    the prompt. Otherwise, the language model will get the text features from the [BOS] (beginning-of-sequence) token.
     """,
     BLIP_2_START_DOCSTRING,
 )
@@ -1250,10 +1260,15 @@ class Blip2Model(Blip2PreTrainedModel):
                 `output_hidden_states=True`.
         Examples:
         ```python
+        >>> import torch
         >>> from transformers import AutoTokenizer, Blip2Model
 
-        >>> model = Blip2Model.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
+        >>> model.to(device)  # doctest: +IGNORE_RESULT
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
@@ -1303,11 +1318,16 @@ class Blip2Model(Blip2PreTrainedModel):
                 `output_hidden_states=True`.
         Examples:
         ```python
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, Blip2Model
 
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
         >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
+        >>> model.to(device)  # doctest: +IGNORE_RESULT
+
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1345,11 +1365,16 @@ class Blip2Model(Blip2PreTrainedModel):
                 `output_hidden_states=True`.
         Examples:
         ```python
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, Blip2Model
 
+        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
+
         >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
+        >>> model.to(device)  # doctest: +IGNORE_RESULT
+
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
