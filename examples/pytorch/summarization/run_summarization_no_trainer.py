@@ -162,15 +162,6 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--max_length",
-        type=int,
-        default=128,
-        help=(
-            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
-        ),
-    )
-    parser.add_argument(
         "--num_beams",
         type=int,
         default=None,
@@ -473,6 +464,9 @@ def main():
                 f"--summary_column' value '{args.summary_column}' needs to be one of: {', '.join(column_names)}"
             )
 
+    if args.val_max_target_length is None:
+        args.val_max_target_length = args.max_target_length
+
     # Temporarily set max_target_length for training.
     max_target_length = args.max_target_length
     padding = "max_length" if args.pad_to_max_length else False
@@ -497,7 +491,7 @@ def main():
         return model_inputs
 
     with accelerator.main_process_first():
-        processed_datasets = raw_datasets.map(
+        train_dataset = raw_datasets["train"].map(
             preprocess_function,
             batched=True,
             num_proc=args.preprocessing_num_workers,
@@ -506,8 +500,16 @@ def main():
             desc="Running tokenizer on dataset",
         )
 
-    train_dataset = processed_datasets["train"]
-    eval_dataset = processed_datasets["validation"]
+        # Temporarily set max_target_length for validation.
+        max_target_length = args.val_max_target_length
+        eval_dataset = raw_datasets["validation"].map(
+            preprocess_function,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on dataset",
+        )
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 1):
@@ -667,11 +669,9 @@ def main():
                 break
 
         model.eval()
-        if args.val_max_target_length is None:
-            args.val_max_target_length = args.max_target_length
 
         gen_kwargs = {
-            "max_length": args.val_max_target_length if args is not None else config.max_length,
+            "max_length": args.val_max_target_length,
             "num_beams": args.num_beams,
         }
         for step, batch in enumerate(eval_dataloader):
