@@ -151,6 +151,7 @@ from . import (
     roc_bert,
     roformer,
     segformer,
+    seaformer,
     sew,
     sew_d,
     speech_encoder_decoder,

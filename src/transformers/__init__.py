@@ -408,6 +408,7 @@ _import_structure = {
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
     "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
+    "models.seaformer": ["SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeaformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
@@ -850,6 +851,7 @@ else:
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
+    _import_structure["models.seaformer"].extend(["SeaformerFeatureExtractor", "SeaformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
@@ -2242,6 +2244,17 @@ else:
             "SegformerLayer",
             "SegformerModel",
             "SegformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.seaformer"].extend(
+        [
+            "SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SeaformerDecodeHead",
+            "SeaformerForImageClassification",
+            "SeaformerForSemanticSegmentation",
+            "SeaformerLayer",
+            "SeaformerModel",
+            "SeaformerPreTrainedModel",
         ]
     )
     _import_structure["models.sew"].extend(
@@ -3975,6 +3988,7 @@ if TYPE_CHECKING:
     from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig, RoCBertTokenizer
     from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
+    from .models.seaformer import SEAFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SeaformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
@@ -4361,6 +4375,7 @@ if TYPE_CHECKING:
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
+        from .models.seaformer import SeaformerFeatureExtractor, SeaformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
@@ -5501,6 +5516,15 @@ if TYPE_CHECKING:
             SegformerLayer,
             SegformerModel,
             SegformerPreTrainedModel,
+        )
+        from .models.seaformer import (
+            SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SeaformerDecodeHead,
+            SeaformerForImageClassification,
+            SeaformerForSemanticSegmentation,
+            SeaformerLayer,
+            SeaformerModel,
+            SeaformerPreTrainedModel,
         )
         from .models.sew import (
             SEW_PRETRAINED_MODEL_ARCHIVE_LIST,
