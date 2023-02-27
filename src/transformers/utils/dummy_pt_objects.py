@@ -2135,6 +2135,37 @@ class DetaPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DetrForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DetrForSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DetrModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DetrPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 DINAT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

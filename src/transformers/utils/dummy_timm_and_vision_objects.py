@@ -57,37 +57,6 @@ class DeformableDetrPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["timm", "vision"])
 
 
-DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class DetrForObjectDetection(metaclass=DummyObject):
-    _backends = ["timm", "vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["timm", "vision"])
-
-
-class DetrForSegmentation(metaclass=DummyObject):
-    _backends = ["timm", "vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["timm", "vision"])
-
-
-class DetrModel(metaclass=DummyObject):
-    _backends = ["timm", "vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["timm", "vision"])
-
-
-class DetrPreTrainedModel(metaclass=DummyObject):
-    _backends = ["timm", "vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["timm", "vision"])
-
-
 TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

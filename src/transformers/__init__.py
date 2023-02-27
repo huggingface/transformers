@@ -885,15 +885,6 @@ else:
             "DeformableDetrPreTrainedModel",
         ]
     )
-    _import_structure["models.detr"].extend(
-        [
-            "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "DetrForObjectDetection",
-            "DetrForSegmentation",
-            "DetrModel",
-            "DetrPreTrainedModel",
-        ]
-    )
     _import_structure["models.table_transformer"].extend(
         [
             "TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1422,6 +1413,15 @@ else:
             "DetaForObjectDetection",
             "DetaModel",
             "DetaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.detr"].extend(
+        [
+            "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DetrForObjectDetection",
+            "DetrForSegmentation",
+            "DetrModel",
+            "DetrPreTrainedModel",
         ]
     )
     _import_structure["models.dinat"].extend(
@@ -4417,13 +4417,6 @@ if TYPE_CHECKING:
             DeformableDetrModel,
             DeformableDetrPreTrainedModel,
         )
-        from .models.detr import (
-            DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DetrForObjectDetection,
-            DetrForSegmentation,
-            DetrModel,
-            DetrPreTrainedModel,
-        )
         from .models.table_transformer import (
             TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TableTransformerForObjectDetection,
@@ -4861,6 +4854,13 @@ if TYPE_CHECKING:
             DetaForObjectDetection,
             DetaModel,
             DetaPreTrainedModel,
+        )
+        from .models.detr import (
+            DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DetrForObjectDetection,
+            DetrForSegmentation,
+            DetrModel,
+            DetrPreTrainedModel,
         )
         from .models.dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
