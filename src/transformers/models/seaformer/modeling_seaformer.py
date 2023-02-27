@@ -53,7 +53,7 @@ _IMAGE_CLASS_CHECKPOINT = "seaformer-large"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 SEAFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "seaformer-large",
+    "Inderpreet01/seaformer-semantic-segmentation-large",
     # See all Seaformer models at https://huggingface.co/models?filter=seaformer
 ]
 

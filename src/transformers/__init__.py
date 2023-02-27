@@ -871,7 +871,7 @@ else:
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
-    _import_structure["models.seaformer"].extend(["SeaformerFeatureExtractor", "SeaformerImageProcessor"])
+    _import_structure["models.seaformer"].extend(["SeaformerImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
@@ -4459,7 +4459,7 @@ if TYPE_CHECKING:
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
-        from .models.seaformer import SeaformerFeatureExtractor, SeaformerImageProcessor
+        from .models.seaformer import SeaformerImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor

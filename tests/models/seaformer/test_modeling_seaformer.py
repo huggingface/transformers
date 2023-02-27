@@ -31,7 +31,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_MAPPING,
-        SeaformerForImageClassification,
         SeaformerForSemanticSegmentation,
         SeaformerModel,
     )
@@ -41,7 +40,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import SeaformerFeatureExtractor
+    from transformers import SeaformerImageProcessor
 
 
 class SeaformerConfigTester(ConfigTester):
@@ -49,49 +48,80 @@ class SeaformerConfigTester(ConfigTester):
         config = self.config_class(**self.inputs_dict)
         self.parent.assertTrue(hasattr(config, "hidden_sizes"))
         self.parent.assertTrue(hasattr(config, "num_attention_heads"))
-        self.parent.assertTrue(hasattr(config, "num_encoder_blocks"))
-
+        for block_cfg in config.mv2_blocks_cfgs:
+            for layer_cfg in block_cfg:
+                self.parent.assertTrue(layer_cfg[-1] in [1,2])
 
 class SeaformerModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
-        image_size=64,
+        batch_size=1,
+        image_size=512,
         num_channels=3,
-        num_encoder_blocks=4,
-        depths=[2, 2, 2, 2],
-        sr_ratios=[8, 4, 2, 1],
-        hidden_sizes=[16, 32, 64, 128],
-        downsampling_rates=[1, 4, 8, 16],
-        num_attention_heads=[1, 2, 4, 8],
+        num_encoder_blocks=3,
+        depths=[3, 3, 3],
+        num_labels = 150,
+        channels = [32, 64, 128, 192, 256, 320],
+        mv2_blocks_cfgs = [
+                [   [3, 3, 32, 1],  
+                    [3, 4, 64, 2], 
+                    [3, 4, 64, 1]],  
+                [
+                    [5, 4, 128, 2],  
+                    [5, 4, 128, 1]],  
+                [
+                    [3, 4, 192, 2],  
+                    [3, 4, 192, 1]],
+                [
+                    [5, 4, 256, 2]],  
+                [
+                    [3, 6, 320, 2]]
+            ],
+        drop_path_rate = 0.1,
+        emb_dims = [192, 256, 320],
+        key_dims = [16, 20, 24],
+        num_attention_heads=8,
+        mlp_ratios=[2,4,6],
+        attn_ratios = 2,
+        in_channels = [128, 192, 256, 320],
+        in_index = [0, 1, 2, 3],
+        decoder_channels = 192,
+        embed_dims = [128, 160, 192],
+        is_depthwise = True,
+        align_corners = False,
+        semantic_loss_ignore_index=255,
+        hidden_sizes = [128],
+        hidden_act = 'relu',
         is_training=True,
-        use_labels=True,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        initializer_range=0.02,
-        num_labels=3,
-        scope=None,
+        use_labels=True
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
-        self.sr_ratios = sr_ratios
         self.depths = depths
+        self.channels = channels
+        self.mv2_blocks_cfgs = mv2_blocks_cfgs
+        self.drop_path_rate = drop_path_rate
+        self.emb_dims = emb_dims
+        self.key_dims = key_dims
         self.hidden_sizes = hidden_sizes
-        self.downsampling_rates = downsampling_rates
         self.num_attention_heads = num_attention_heads
         self.is_training = is_training
         self.use_labels = use_labels
         self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
         self.num_labels = num_labels
-        self.scope = scope
+        self.mlp_ratios = mlp_ratios
+        self.attn_ratios = attn_ratios
+        self.in_channels = in_channels
+        self.in_index = in_index
+        self.decoder_channels = decoder_channels
+        self.embed_dims = embed_dims
+        self.is_depthwise = is_depthwise
+        self.align_corners = align_corners
+        self.semantic_loss_ignore_index=semantic_loss_ignore_index
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -111,10 +141,7 @@ class SeaformerModelTester:
             depths=self.depths,
             hidden_sizes=self.hidden_sizes,
             num_attention_heads=self.num_attention_heads,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            initializer_range=self.initializer_range,
+            hidden_act=self.hidden_act
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -134,11 +161,11 @@ class SeaformerModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 4, self.image_size // 4)
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 8, self.image_size // 8)
         )
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 4, self.image_size // 4)
+            result.logits.shape, (self.batch_size, self.num_labels, self.image_size // 8, self.image_size // 8)
         )
         self.parent.assertGreater(result.loss, 0.0)
 
@@ -164,7 +191,6 @@ class SeaformerModelTest(ModelTesterMixin, unittest.TestCase):
         (
             SeaformerModel,
             SeaformerForSemanticSegmentation,
-            SeaformerForImageClassification,
         )
         if is_torch_available()
         else ()
@@ -228,6 +254,7 @@ class SeaformerModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
+            print('attentions', attentions)
 
             expected_num_attentions = sum(self.model_tester.depths)
             self.assertEqual(len(attentions), expected_num_attentions)
@@ -294,16 +321,17 @@ class SeaformerModelTest(ModelTesterMixin, unittest.TestCase):
 
             hidden_states = outputs.hidden_states
 
-            expected_num_layers = self.model_tester.num_encoder_blocks
-            self.assertEqual(len(hidden_states), expected_num_layers)
+            # expected_num_layers = self.model_tester.num_encoder_blocks
+            in_index = self.model_tester.in_index
+            self.assertEqual(len(hidden_states), len(in_index))
 
             # verify the first hidden states (first block)
             self.assertListEqual(
                 list(hidden_states[0].shape[-3:]),
                 [
                     self.model_tester.hidden_sizes[0],
-                    self.model_tester.image_size // 4,
-                    self.model_tester.image_size // 4,
+                    self.model_tester.image_size // 8,
+                    self.model_tester.image_size // 8,
                 ],
             )
 
@@ -355,10 +383,10 @@ class SeaformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_segmentation_ade(self):
         # only resize + normalize
-        feature_extractor = SeaformerFeatureExtractor(
+        feature_extractor = SeaformerImageProcessor(
             image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
         )
-        model = SeaformerForSemanticSegmentation.from_pretrained("nvidia/seaformer-b0-finetuned-ade-512-512").to(
+        model = SeaformerForSemanticSegmentation.from_pretrained("Inderpreet01/seaformer-semantic-segmentation-large").to(
             torch_device
         )
 
@@ -369,54 +397,25 @@ class SeaformerModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values)
 
-        expected_shape = torch.Size((1, model.config.num_labels, 128, 128))
+        expected_shape = torch.Size((1, model.config.num_labels, 64, 64))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [
-                [[-4.6310, -5.5232, -6.2356], [-5.1921, -6.1444, -6.5996], [-5.4424, -6.2790, -6.7574]],
-                [[-12.1391, -13.3122, -13.9554], [-12.8732, -13.9352, -14.3563], [-12.9438, -13.8226, -14.2513]],
-                [[-12.5134, -13.4686, -14.4915], [-12.8669, -14.4343, -14.7758], [-13.2523, -14.5819, -15.0694]],
+            [   
+                [[ -2.0818,  -4.6320,  -5.9963], [ -3.2360,  -7.2340,  -8.7455], [ -2.9308,  -8.1080, -9.9713]],
+                [[ -5.4941,  -7.2591,  -8.4649], [ -6.2536,  -8.9669, -10.4255], [ -6.1386,  -9.4373, -11.4133]],
+                [[ -9.2548, -11.4705, -13.2432], [-10.3784, -13.9842, -16.0520], [-10.4125, -14.8483, -17.2390]],
             ]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-4))
 
     @slow
-    def test_inference_image_segmentation_city(self):
-        # only resize + normalize
-        feature_extractor = SeaformerFeatureExtractor(
-            image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
-        )
-        model = SeaformerForSemanticSegmentation.from_pretrained(
-            "nvidia/seaformer-b1-finetuned-cityscapes-1024-1024"
-        ).to(torch_device)
-
-        image = prepare_img()
-        encoded_inputs = feature_extractor(images=image, return_tensors="pt")
-        pixel_values = encoded_inputs.pixel_values.to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(pixel_values)
-
-        expected_shape = torch.Size((1, model.config.num_labels, 128, 128))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor(
-            [
-                [[-13.5748, -13.9111, -12.6500], [-14.3500, -15.3683, -14.2328], [-14.7532, -16.0424, -15.6087]],
-                [[-17.1651, -15.8725, -12.9653], [-17.2580, -17.3718, -14.8223], [-16.6058, -16.8783, -16.7452]],
-                [[-3.6456, -3.0209, -1.4203], [-3.0797, -3.1959, -2.0000], [-1.8757, -1.9217, -1.6997]],
-            ]
-        ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-1))
-
-    @slow
     def test_post_processing_semantic_segmentation(self):
         # only resize + normalize
-        feature_extractor = SeaformerFeatureExtractor(
+        feature_extractor = SeaformerImageProcessor(
             image_scale=(512, 512), keep_ratio=False, align=False, do_random_crop=False
         )
-        model = SeaformerForSemanticSegmentation.from_pretrained("nvidia/seaformer-b0-finetuned-ade-512-512").to(
+        model = SeaformerForSemanticSegmentation.from_pretrained("Inderpreet01/seaformer-semantic-segmentation-large").to(
             torch_device
         )
 
@@ -434,5 +433,5 @@ class SeaformerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(segmentation[0].shape, expected_shape)
 
         segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs)
-        expected_shape = torch.Size((128, 128))
+        expected_shape = torch.Size((64, 64))
         self.assertEqual(segmentation[0].shape, expected_shape)
