@@ -3,6 +3,7 @@ import math
 
 import dateutil.parser as date_parser
 import requests
+import traceback
 
 
 def extract_time_from_single_job(job):
@@ -46,7 +47,7 @@ def get_job_time(workflow_run_id, token=None):
 
         return job_time
     except Exception as e:
-        print("Unknown error, could not fetch links.", e)
+        print(f"Unknown error, could not fetch links:\n{traceback.format_exc()}")
 
     return {}
 
