@@ -810,7 +810,6 @@ def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time
                         chunks.append(chunk)
 
                         # Flush all our temporary context
-                        print("Flushing previous tokens (LANGUAGE)")
                         previous_tokens = []
                         current_tokens = []
                         chunk = new_chunk()
