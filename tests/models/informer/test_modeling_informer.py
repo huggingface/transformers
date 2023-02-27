@@ -445,7 +445,7 @@ def prepare_batch(filename="train-batch.pt"):
 @slow
 class InformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        model = InformerModel.from_pretrained("kashif/informer-tourism-monthly").to(torch_device)
+        model = InformerModel.from_pretrained("huggingface/informer-tourism-monthly").to(torch_device)
         batch = prepare_batch()
 
         torch.manual_seed(0)
@@ -468,7 +468,7 @@ class InformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = InformerForPrediction.from_pretrained("kashif/informer-tourism-monthly").to(torch_device)
+        model = InformerForPrediction.from_pretrained("huggingface/informer-tourism-monthly").to(torch_device)
         batch = prepare_batch("val-batch.pt")
 
         torch.manual_seed(0)
@@ -491,7 +491,7 @@ class InformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        model = InformerForPrediction.from_pretrained("kashif/informer-tourism-monthly").to(torch_device)
+        model = InformerForPrediction.from_pretrained("huggingface/informer-tourism-monthly").to(torch_device)
         batch = prepare_batch("val-batch.pt")
 
         torch.manual_seed(0)
