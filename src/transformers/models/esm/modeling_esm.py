@@ -597,7 +597,7 @@ class EsmEncoder(nn.Module):
 
             if self.gradient_checkpointing and self.training:
                 if use_cache:
-                    logger.warning(
+                    logger.warning_once(
                         "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
                         "`use_cache=False`..."
                     )
