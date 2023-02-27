@@ -52,10 +52,13 @@ if is_tf_available():
     )
     from transformers.modeling_tf_outputs import TFBaseModelOutput
 
+    tf.config.experimental.enable_tensor_float_32_execution(False)
+
 if is_torch_available():
     import torch
 
     from transformers import BertLMHeadModel, BertModel, EncoderDecoderModel
+
 
 
 @require_tf
