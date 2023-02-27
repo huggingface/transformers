@@ -352,7 +352,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             if entity.get("entity", None) not in ignore_labels
             and entity.get("entity_group", None) not in ignore_labels
         ]
-        if self.tokenizer.is_fast and num_chunks > 1:
+        if num_chunks > 1:
             entities = self.aggregate_entities(entities)
             entities = self.aggregate_entities(entities, forward=True)
         return entities
