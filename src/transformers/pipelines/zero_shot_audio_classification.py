@@ -50,14 +50,11 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
         # No specific FOR_XXX available yet
 
-    def __call__(
-        self,
-        audios: Union[np.ndarray, bytes, str],
-        **kwargs,
-    ):
+    def __call__(self, audios: Union[np.ndarray, bytes, str], **kwargs):
         """
-        Args:
         Assign labels to the audio(s) passed as inputs.
+
+        Args:
             audios (`str`, `List[str]`, `np.array` or `List[np.array]`):
                 The pipeline handles three types of inputs:
                 - A string containing a http link pointing to an audio
