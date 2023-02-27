@@ -64,7 +64,6 @@ def _generate_supported_model_class_names(
     model_name: Type[PretrainedConfig],
     supported_tasks: Optional[Union[str, List[str]]] = None,
 ) -> List[str]:
-
     task_mapping = {
         "default": MODEL_MAPPING_NAMES,
         "pretraining": MODEL_FOR_PRETRAINING_MAPPING_NAMES,
@@ -692,7 +691,6 @@ class HFTracer(Tracer):
     ]
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
-
         super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
 
         if not is_torch_fx_available():
@@ -713,7 +711,6 @@ class HFTracer(Tracer):
         inputs_dict = {}
 
         if input_name in ["labels", "start_positions", "end_positions"]:
-
             batch_size = shape[0]
             if model_class_name in [
                 *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
@@ -1147,7 +1144,6 @@ def symbolic_trace(
     input_names: Optional[List[str]] = None,
     disable_check: bool = False,
 ) -> GraphModule:
-
     """
     Performs symbolic tracing on the model.
 

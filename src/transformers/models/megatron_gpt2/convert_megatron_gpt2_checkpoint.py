@@ -179,7 +179,6 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
 
         # For layernorm(s), simply store the layer norm.
         if op_name.endswith("layernorm"):
-
             ln_name = "ln_1" if op_name.startswith("input") else "ln_2"
             output_state_dict[layer_name + "." + ln_name + "." + weight_or_bias] = val
 
@@ -187,7 +186,6 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
         elif (
             op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
         ) and weight_or_bias == "weight":
-
             # Insert a tensor of 1x1xDxD bias.
             causal_mask = torch.tril(torch.ones((n_positions, n_positions), dtype=torch.float16)).view(
                 1, 1, n_positions, n_positions
@@ -208,20 +206,17 @@ def convert_megatron_checkpoint(args, input_state_dict, config):
         elif (
             op_name == "attention.query_key_value" or op_name == "self_attention.query_key_value"
         ) and weight_or_bias == "bias":
-
             out_val = fix_query_key_value_ordering(val, checkpoint_version, 3, heads, hidden_size_per_head)
             # Store. No change of shape.
             output_state_dict[layer_name + ".attn.c_attn.bias"] = out_val
 
         # Transpose the weights.
         elif weight_or_bias == "weight":
-
             out_name = megatron_to_transformers[op_name]
             output_state_dict[layer_name + out_name + "weight"] = val.transpose(0, 1)
 
         # Copy the bias.
         elif weight_or_bias == "bias":
-
             out_name = megatron_to_transformers[op_name]
             output_state_dict[layer_name + out_name + "bias"] = val
 
@@ -276,7 +271,6 @@ def main():
 
     # Read the config, or default to the model released by NVIDIA.
     if args.config_file == "":
-
         if ds_args is not None:
             if ds_args.bias_gelu_fusion:
                 activation_function = "gelu_fast"

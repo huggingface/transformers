@@ -499,7 +499,7 @@ def main():
         # region TF Dataset preparation
         num_replicas = training_args.strategy.num_replicas_in_sync
         data_collator = DataCollatorForLanguageModeling(
-            tokenizer=tokenizer, mlm_probability=data_args.mlm_probability, return_tensors="tf"
+            tokenizer=tokenizer, mlm_probability=data_args.mlm_probability, return_tensors="np"
         )
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
@@ -623,7 +623,7 @@ def main():
 
     if training_args.output_dir is not None:
         output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
-        results_dict = dict()
+        results_dict = {}
         results_dict["train_loss"] = train_loss
         results_dict["train_perplexity"] = train_perplexity
         results_dict["eval_loss"] = validation_loss

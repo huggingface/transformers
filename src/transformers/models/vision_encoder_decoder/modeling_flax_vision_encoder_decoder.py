@@ -87,7 +87,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`jnp.ndarray` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using the vision model's image processor. For example, using
-            [`ViTImageProcessor`]. See [`ViTImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`] for details.
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -115,7 +115,7 @@ VISION_ENCODER_DECODER_ENCODE_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`jnp.ndarray` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using the vision model's image processor. For example, using
-            [`ViTImageProcessor`]. See [`ViTImageProcessor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -284,7 +284,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         if not _do_init:
             raise ValueError(
@@ -409,14 +409,14 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import ViTImageProcessor, FlaxVisionEncoderDecoderModel
+        >>> from transformers import AutoImageProcessor, FlaxVisionEncoderDecoderModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
         >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -487,7 +487,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import ViTImageProcessor, FlaxVisionEncoderDecoderModel
+        >>> from transformers import AutoImageProcessor, FlaxVisionEncoderDecoderModel
         >>> import jax.numpy as jnp
         >>> from PIL import Image
         >>> import requests
@@ -495,7 +495,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
         >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -553,7 +553,6 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         def _decoder_forward(
             module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, encoder_hidden_states, **kwargs
         ):
-
             projection_module = module._get_projection_module()
             decoder_module = module._get_decoder_module()
 
@@ -617,17 +616,17 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import FlaxVisionEncoderDecoderModel, ViTImageProcessor, GPT2Tokenizer
+        >>> from transformers import FlaxVisionEncoderDecoderModel, AutoImageProcessor, AutoTokenizer
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> # load output tokenizer
-        >>> tokenizer_output = GPT2Tokenizer.from_pretrained("gpt2")
+        >>> tokenizer_output = AutoTokenizer.from_pretrained("gpt2")
 
         >>> # initialize a vit-gpt2 from pretrained ViT and GPT2 models. Note that the cross-attention layers will be randomly initialized
         >>> model = FlaxVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -691,7 +690,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         max_length,
         decoder_attention_mask: Optional[jnp.DeviceArray] = None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # initializing the cache
         batch_size, seq_length = decoder_input_ids.shape
@@ -727,7 +726,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         encoder_pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = None,
         decoder_pretrained_model_name_or_path: Optional[Union[str, os.PathLike]] = None,
         *model_args,
-        **kwargs
+        **kwargs,
     ) -> FlaxPreTrainedModel:
         r"""
         Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model

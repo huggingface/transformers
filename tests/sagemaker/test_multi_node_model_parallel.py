@@ -5,7 +5,6 @@ import unittest
 from ast import literal_eval
 
 import pytest
-
 from parameterized import parameterized, parameterized_class
 
 from . import is_sagemaker_available
@@ -50,7 +49,6 @@ class MultiNodeTest(unittest.TestCase):
         assert hasattr(self, "env")
 
     def create_estimator(self, instance_count):
-
         # configuration for running training on smdistributed Model Parallel
         mpi_options = {
             "enabled": True,

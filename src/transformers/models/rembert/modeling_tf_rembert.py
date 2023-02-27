@@ -60,7 +60,6 @@ from .configuration_rembert import RemBertConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "RemBertConfig"
-_TOKENIZER_FOR_DOC = "RemBertTokenizer"
 
 TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/rembert",
@@ -74,8 +73,7 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
-        self.type_vocab_size = config.type_vocab_size
+        self.config = config
         self.input_embedding_size = config.input_embedding_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
@@ -86,14 +84,14 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.input_embedding_size],
+                shape=[self.config.vocab_size, self.input_embedding_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
         with tf.name_scope("token_type_embeddings"):
             self.token_type_embeddings = self.add_weight(
                 name="embeddings",
-                shape=[self.type_vocab_size, self.input_embedding_size],
+                shape=[self.config.type_vocab_size, self.input_embedding_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
@@ -128,10 +126,10 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
                 input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
+                tf.cast(self.config.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.config.vocab_size})"
                 ),
             )
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -561,7 +559,7 @@ class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.initializer_range = config.initializer_range
         self.output_embedding_size = config.output_embedding_size
         self.dense = tf.keras.layers.Dense(
@@ -576,11 +574,11 @@ class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
     def build(self, input_shape: tf.TensorShape):
         self.decoder = self.add_weight(
             name="decoder/weight",
-            shape=[self.vocab_size, self.output_embedding_size],
+            shape=[self.config.vocab_size, self.output_embedding_size],
             initializer=get_initializer(self.initializer_range),
         )
         self.decoder_bias = self.add_weight(
-            shape=(self.vocab_size,), initializer="zeros", trainable=True, name="decoder/bias"
+            shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="decoder/bias"
         )
 
         super().build(input_shape)
@@ -597,7 +595,7 @@ class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
 
     def set_bias(self, value: tf.Variable):
         self.decoder_bias = value["decoder_bias"]
-        self.vocab_size = shape_list(value["decoder_bias"])[0]
+        self.config.vocab_size = shape_list(value["decoder_bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -606,7 +604,7 @@ class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.output_embedding_size])
         hidden_states = self.LayerNorm(hidden_states)
         hidden_states = tf.matmul(a=hidden_states, b=self.decoder, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.decoder_bias)
         return hidden_states
 
@@ -671,7 +669,6 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
-
         if not self.config.is_decoder:
             use_cache = False
 
@@ -888,7 +885,7 @@ REMBERT_INPUTS_DOCSTRING = r"""
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -952,7 +949,6 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=TFBaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1055,7 +1051,6 @@ class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLos
     @unpack_inputs
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1145,7 +1140,6 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
 
     @unpack_inputs
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=TFCausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1268,7 +1262,6 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
     @unpack_inputs
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1358,7 +1351,6 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
     @unpack_inputs
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1477,7 +1469,6 @@ class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassific
     @unpack_inputs
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1556,7 +1547,6 @@ class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnswerin
     @unpack_inputs
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/rembert",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

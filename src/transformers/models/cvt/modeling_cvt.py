@@ -35,7 +35,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "CvtConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/cvt-13"
@@ -213,7 +212,7 @@ class CvtSelfAttention(nn.Module):
         qkv_bias,
         attention_drop_rate,
         with_cls_token=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         self.scale = embed_dim**-0.5
@@ -574,7 +573,7 @@ CVT_START_DOCSTRING = r"""
 CVT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`CvtImageProcessor`]. See [`CvtImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`CvtImageProcessor.__call__`]
             for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -605,7 +604,6 @@ class CvtModel(CvtPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CVT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithCLSToken,
         config_class=_CONFIG_FOR_DOC,
@@ -618,7 +616,6 @@ class CvtModel(CvtPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithCLSToken]:
-
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -668,7 +665,6 @@ class CvtForImageClassification(CvtPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CVT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,

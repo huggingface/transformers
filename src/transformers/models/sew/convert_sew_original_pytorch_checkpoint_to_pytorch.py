@@ -25,6 +25,7 @@ from fairseq.data import Dictionary
 
 # Register SEW's fairseq modules
 from sew_asapp import tasks  # noqa: F401
+
 from transformers import (
     SEWConfig,
     SEWForCTC,

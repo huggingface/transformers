@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers.models.whisper import WhisperTokenizer
+from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.testing_utils import slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -31,7 +31,8 @@ NOTIMESTAMPS = 50363
 
 class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = WhisperTokenizer
-    test_rust_tokenizer = False
+    rust_tokenizer_class = WhisperTokenizerFast
+    test_rust_tokenizer = True
     test_sentencepiece = False
     test_seq2seq = False
 
@@ -59,7 +60,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(len(vocab_keys), 50364)
 
     def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 50257)
+        self.assertEqual(self.get_tokenizer().vocab_size, 50258)
 
     def test_full_tokenizer(self):
         tokenizer = WhisperTokenizer.from_pretrained(self.tmpdirname)
@@ -91,6 +92,17 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_tokenizer_slow_store_full_signature(self):
+        pass
+
+    def test_tokenizer_fast_store_full_signature(self):
+        pass
+
+    def test_special_tokens_initialization(self):
+        # Whisper relies on specific additional special tokens, so we skip this
+        # general test. In particular, this test loads fast tokenizer from slow
+        # tokenizer, and the conversion uses prefix_tokens, where we reference
+        # additional special tokens by specific indices, hence overriding the
+        # list with less tokens leads to out of index error
         pass
 
     @slow
@@ -265,7 +277,15 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
                 },
             ],
         )
-
+        # test `decode_with_offsets`
+        output = multilingual_tokenizer.decode(INPUT_TOKENS, decode_with_timestamps=True)
+        self.assertEqual(
+            output,
+            "<|startoftranscript|><|en|><|transcribe|><|0.00|> Lennils, pictures are a sort of upguards and atom"
+            " paintings, and Mason's exquisite idles<|7.20|><|7.20|> are as national as a jingo poem. Mr. Birkut"
+            " Foster's landscapes smile at one much in the<|15.16|><|15.16|> same way that Mr. Carker used to flash"
+            " his teeth. And Mr. John Colier gives his<|21.70|><|21.70|><|endoftext|>",
+        )
         # test a single sequence with timestamps
         # fmt: off
         INPUT_TOKENS = [

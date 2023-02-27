@@ -15,7 +15,6 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Union
 
 import numpy as np
-
 import requests
 
 from ..utils import is_torch_available, logging
@@ -31,8 +30,6 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 if is_torch_available():
-    from transformers.generation.logits_process import WhisperTimeStampLogitsProcessor
-
     from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 
 
@@ -56,24 +53,33 @@ def rescale_stride(stride, ratio):
     return new_strides
 
 
-def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, ratio, dtype=None):
+def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, rescale=True, dtype=None):
     inputs_len = inputs.shape[0]
     step = chunk_len - stride_left - stride_right
-    for i in range(0, inputs_len, step):
-        # add start and end paddings to the chunk
-        chunk = inputs[i : i + chunk_len]
+    for chunk_start_idx in range(0, inputs_len, step):
+        chunk_end_idx = chunk_start_idx + chunk_len
+        chunk = inputs[chunk_start_idx:chunk_end_idx]
         processed = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
         if dtype is not None:
             processed = processed.to(dtype=dtype)
-        _stride_left = 0 if i == 0 else stride_left
-        is_last = i + step + stride_left >= inputs_len
+        _stride_left = 0 if chunk_start_idx == 0 else stride_left
+        # all right strides must be full, otherwise it is the last item
+        is_last = chunk_end_idx > inputs_len if stride_right > 0 else chunk_end_idx >= inputs_len
         _stride_right = 0 if is_last else stride_right
+
         chunk_len = chunk.shape[0]
         stride = (chunk_len, _stride_left, _stride_right)
-        if ratio != 1:
+        if "input_features" in processed:
+            processed_len = processed["input_features"].shape[-1]
+        elif "input_values" in processed:
+            processed_len = processed["input_values"].shape[-1]
+        if processed_len != chunk.shape[-1] and rescale:
+            ratio = processed_len / chunk_len
             stride = rescale_stride([stride], ratio)[0]
         if chunk.shape[0] > _stride_left:
             yield {"is_last": is_last, "stride": stride, **processed}
+        if is_last:
+            break
 
 
 def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source_positions):
@@ -97,14 +103,14 @@ def _find_timestamp_sequence(sequences, tokenizer, feature_extractor, max_source
         chunk_len, stride_left, stride_right = stride
         sequence = sequence.squeeze(0)
         # get rid of the `forced_decoder_idx` that are use to parametrize the generation
-        begin_idx = np.where(sequence == timestamp_begin)[0].item() if timestamp_begin in sequence else 0
+        begin_idx = np.where(sequence == timestamp_begin)[0][0] if timestamp_begin in sequence else 0
         sequence = sequence[begin_idx:]
 
         timestamp_tokens = sequence >= timestamp_begin
-        consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
-        last_timestamp = np.where(timestamp_tokens)[0][-1]
-        consecutive = np.append(consecutive, last_timestamp) if last_timestamp not in consecutive else consecutive
-        if seq_idx != 0:
+        if seq_idx != 0 and sum(timestamp_tokens) > 0:
+            consecutive = np.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0] + 1
+            last_timestamp = np.where(timestamp_tokens)[0][-1]
+            consecutive = np.append(consecutive, last_timestamp) if last_timestamp not in consecutive else consecutive
             time -= stride_left + stride_right
             offset = int((time / feature_extractor.sampling_rate) / time_precision)
             overlap_time = int((stride_left / feature_extractor.sampling_rate) / time_precision)
@@ -283,9 +289,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             installed. If no framework is specified, will default to the one currently installed. If no framework is
             specified and both frameworks are installed, will default to the framework of the `model`, or to PyTorch if
             no model is provided.
-        device (`int`, *optional*, defaults to -1):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id.
+        device (Union[`int`, `torch.device`], *optional*):
+            Device ordinal for CPU/GPU supports. Setting this to `None` will leverage CPU, a positive will run the
+            model on the associated CUDA device id.
         decoder (`pyctcdecode.BeamSearchDecoderCTC`, *optional*):
             [PyCTCDecode's
             BeamSearchDecoderCTC](https://github.com/kensho-technologies/pyctcdecode/blob/2fd33dc37c4111417e08d89ccd23d28e9b308d19/pyctcdecode/decoder.py#L180)
@@ -298,7 +304,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         feature_extractor: Union["SequenceFeatureExtractor", str],
         *,
         decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.feature_extractor = feature_extractor
@@ -405,14 +411,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if decoder_kwargs is not None:
             postprocess_params["decoder_kwargs"] = decoder_kwargs
         if return_timestamps is not None:
+            forward_params["return_timestamps"] = return_timestamps
             postprocess_params["return_timestamps"] = return_timestamps
-            if self.model.config.model_type == "whisper":
-                # Whisper is highly specific, if we want timestamps, we need to
-                # force whisper to output timestamp tokens, which means we need
-                # to set this variable to prevent `no_timestamp_token` to be
-                # used in the decoder.
-                if "forced_decoder_ids" not in forward_params.get("generate_kwargs", {}):
-                    forward_params["generate_kwargs"]["forced_decoder_ids"] = None
 
         return preprocess_params, forward_params, postprocess_params
 
@@ -500,9 +500,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if chunk_len < stride_left + stride_right:
                 raise ValueError("Chunk length must be superior to stride length")
 
+            rescale = self.type != "seq2seq_whisper"
             # make sure that
             for item in chunk_iter(
-                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, align_to, self.torch_dtype
+                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, rescale, self.torch_dtype
             ):
                 yield item
         else:
@@ -512,18 +513,20 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
             if stride is not None:
-                if self.model.__class__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.values():
-                    raise ValueError("Stride is only usable with CTC models, try removing it")
+                if self.type == "seq2seq":
+                    raise ValueError("Stride is only usable with CTC models, try removing it !")
 
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, generate_kwargs=None):
+    def _forward(self, model_inputs, return_timestamps=False, generate_kwargs=None):
         if generate_kwargs is None:
             generate_kwargs = {}
-
+        if return_timestamps and self.type == "seq2seq_whisper":
+            generate_kwargs["return_timestamps"] = return_timestamps
         is_last = model_inputs.pop("is_last")
-        if self.type == "seq2seq":
+
+        if self.type in {"seq2seq", "seq2seq_whisper"}:
             encoder = self.model.get_encoder()
             # Consume values so we can let extra information flow freely through
             # the pipeline (important for `partial` in microphone)
@@ -548,16 +551,10 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 **generate_kwargs,
             )
             out = {"tokens": tokens}
-        elif self.type == "seq2seq_whisper":
-            stride = model_inputs.pop("stride", None)
-            tokens = self.model.generate(
-                input_features=model_inputs.pop("input_features"),
-                logits_processor=[WhisperTimeStampLogitsProcessor()],
-                **generate_kwargs,
-            )
-            out = {"tokens": tokens}
-            if stride is not None:
-                out["stride"] = stride
+            if self.type == "seq2seq_whisper":
+                stride = model_inputs.pop("stride", None)
+                if stride is not None:
+                    out["stride"] = stride
 
         else:
             stride = model_inputs.pop("stride", None)
@@ -631,9 +628,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # Simply cast from pyctcdecode format to wav2vec2 format to leverage
                 # pre-existing code later
                 chunk_offset = beams[0][2]
-                word_offsets = []
+                offsets = []
                 for word, (start_offset, end_offset) in chunk_offset:
-                    word_offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
+                    offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
         else:
             skip_special_tokens = self.type != "ctc"
             text = self.tokenizer.decode(items, skip_special_tokens=skip_special_tokens)

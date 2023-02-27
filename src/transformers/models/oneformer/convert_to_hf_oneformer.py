@@ -23,12 +23,11 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any, Dict, Iterator, List, Set, Tuple
 
+import requests
 import torch
 import torchvision.transforms as T
 from PIL import Image
 from torch import Tensor, nn
-
-import requests
 
 
 try:
@@ -83,7 +82,7 @@ class TrackedStateDict:
         Returns:
             List[str]: List of keys not yet updated
         """
-        return set(list(self.to_track.keys())) - self._seen
+        return set(self.to_track.keys()) - self._seen
 
     def copy(self) -> Dict:
         # proxy the call to the internal dictionary

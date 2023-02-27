@@ -145,7 +145,7 @@ def export_pytorch(
             device = torch.device(device)
             if device.type == "cuda" and torch.cuda.is_available():
                 model.to(device)
-                model_inputs_device = dict()
+                model_inputs_device = {}
                 for k, v in model_inputs.items():
                     if isinstance(v, Tuple):
                         model_inputs_device[k] = tuple(
@@ -246,9 +246,8 @@ def export_tensorflow(
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
-    import tensorflow as tf
-
     import onnx
+    import tensorflow as tf
     import tf2onnx
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:

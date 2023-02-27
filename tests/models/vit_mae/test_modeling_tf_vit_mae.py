@@ -266,7 +266,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
-
         # make masks reproducible
         np.random.seed(2)
 
@@ -334,7 +333,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        tf_main_layer_classes = set(
+        tf_main_layer_classes = {
             module_member
             for model_class in self.all_model_classes
             for module in (import_module(model_class.__module__),)
@@ -346,7 +345,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             if isinstance(module_member, type)
             and tf.keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
-        )
+        }
 
         num_patches = int((config.image_size // config.patch_size) ** 2)
         noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
@@ -453,7 +452,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-
         model = TFViTMAEModel.from_pretrained("google/vit-base-patch16-224")
         self.assertIsNotNone(model)
 

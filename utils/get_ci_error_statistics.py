@@ -166,7 +166,7 @@ def reduce_by_model(logs, error_filter=None):
 
     logs = [(x[0], x[1], get_model(x[2])) for x in logs]
     logs = [x for x in logs if x[2] is not None]
-    tests = set([x[2] for x in logs])
+    tests = {x[2] for x in logs}
 
     r = {}
     for test in tests:
@@ -209,7 +209,6 @@ def make_github_table_per_model(reduced_by_model):
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(

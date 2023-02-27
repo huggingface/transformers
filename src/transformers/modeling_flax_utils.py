@@ -440,7 +440,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         """
 
         # Load the index
-        state_sharded_dict = dict()
+        state_sharded_dict = {}
 
         for shard_file in shard_files:
             # load using msgpack utils
@@ -484,9 +484,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         pretrained_model_name_or_path: Union[str, os.PathLike],
         dtype: jnp.dtype = jnp.float32,
         *model_args,
-        **kwargs
+        **kwargs,
     ):
-
         r"""
         Instantiate a pretrained flax model from a pre-trained model configuration.
 
@@ -654,7 +653,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 **kwargs,
             )
         else:
-            model_kwargs = kwargs
+            model_kwargs = kwargs.copy()
 
         if commit_hash is None:
             commit_hash = getattr(config, "_commit_hash", None)
@@ -709,19 +708,19 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 filename = WEIGHTS_NAME if from_pt else FLAX_WEIGHTS_NAME
                 try:
                     # Load from URL or cache if already cached
-                    cached_file_kwargs = dict(
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        proxies=proxies,
-                        resume_download=resume_download,
-                        local_files_only=local_files_only,
-                        use_auth_token=use_auth_token,
-                        user_agent=user_agent,
-                        revision=revision,
-                        subfolder=subfolder,
-                        _raise_exceptions_for_missing_entries=False,
-                        _commit_hash=commit_hash,
-                    )
+                    cached_file_kwargs = {
+                        "cache_dir": cache_dir,
+                        "force_download": force_download,
+                        "proxies": proxies,
+                        "resume_download": resume_download,
+                        "local_files_only": local_files_only,
+                        "use_auth_token": use_auth_token,
+                        "user_agent": user_agent,
+                        "revision": revision,
+                        "subfolder": subfolder,
+                        "_raise_exceptions_for_missing_entries": False,
+                        "_commit_hash": commit_hash,
+                    }
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
                     # Since we set _raise_exceptions_for_missing_entries=False, we don't get an expection but a None
@@ -810,7 +809,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if from_pt:
             state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file, is_sharded)
         else:
-
             if is_sharded:
                 state = cls.load_flax_sharded_weights(resolved_archive_file)
             else:
@@ -839,14 +837,35 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 # keep the params on CPU if we don't want to initialize
                 state = jax.tree_util.tree_map(lambda x: jax.device_put(x, jax.devices("cpu")[0]), state)
 
-        # if model is base model only use model_prefix key
-        if cls.base_model_prefix not in dict(model.params_shape_tree) and cls.base_model_prefix in state:
-            state = state[cls.base_model_prefix]
+        if "batch_stats" in state:  # if flax model contains batch norm layers
+            # if model is base model only use model_prefix key
+            if (
+                cls.base_model_prefix not in dict(model.params_shape_tree["params"])
+                and cls.base_model_prefix in state["params"]
+            ):
+                state["params"] = state["params"][cls.base_model_prefix]
+                state["batch_stats"] = state["batch_stats"][cls.base_model_prefix]
 
-        # if model is head model and we are loading weights from base model
-        # we initialize new params dict with base_model_prefix
-        if cls.base_model_prefix in dict(model.params_shape_tree) and cls.base_model_prefix not in state:
-            state = {cls.base_model_prefix: state}
+            # if model is head model and we are loading weights from base model
+            # we initialize new params dict with base_model_prefix
+            if (
+                cls.base_model_prefix in dict(model.params_shape_tree["params"])
+                and cls.base_model_prefix not in state["params"]
+            ):
+                state = {
+                    "params": {cls.base_model_prefix: state["params"]},
+                    "batch_stats": {cls.base_model_prefix: state["batch_stats"]},
+                }
+
+        else:
+            # if model is base model only use model_prefix key
+            if cls.base_model_prefix not in dict(model.params_shape_tree) and cls.base_model_prefix in state:
+                state = state[cls.base_model_prefix]
+
+            # if model is head model and we are loading weights from base model
+            # we initialize new params dict with base_model_prefix
+            if cls.base_model_prefix in dict(model.params_shape_tree) and cls.base_model_prefix not in state:
+                state = {cls.base_model_prefix: state}
 
         # flatten dicts
         state = flatten_dict(state)
@@ -855,6 +874,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         missing_keys = model.required_params - set(state.keys())
         unexpected_keys = set(state.keys()) - model.required_params
+
+        # Disabling warning when porting pytorch weights to flax, flax does not uses num_batches_tracked
+        for unexpected_key in unexpected_keys.copy():
+            if "num_batches_tracked" in unexpected_key[-1]:
+                unexpected_keys.remove(unexpected_key)
 
         if missing_keys and not _do_init:
             logger.warning(
@@ -1018,7 +1042,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id, token = self._create_repo(repo_id, **kwargs)
+            repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # get abs dir
@@ -1032,6 +1056,8 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             custom_object_save(self, save_directory, config=self.config)
 
         self.config.save_pretrained(save_directory)
+        if self.can_generate():
+            self.generation_config.save_pretrained(save_directory)
 
         # save model
         output_model_file = os.path.join(save_directory, FLAX_WEIGHTS_NAME)
@@ -1075,7 +1101,11 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
         if push_to_hub:
             self._upload_modified_files(
-                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+                save_directory,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=kwargs.get("use_auth_token"),
             )
 
     @classmethod
@@ -1122,10 +1152,9 @@ def overwrite_call_docstring(model_class, docstring):
     model_class.__call__ = add_start_docstrings_to_model_forward(docstring)(model_class.__call__)
 
 
-def append_call_sample_docstring(model_class, tokenizer_class, checkpoint, output_type, config_class, mask=None):
+def append_call_sample_docstring(model_class, checkpoint, output_type, config_class, mask=None):
     model_class.__call__ = copy_func(model_class.__call__)
     model_class.__call__ = add_code_sample_docstrings(
-        processor_class=tokenizer_class,
         checkpoint=checkpoint,
         output_type=output_type,
         config_class=config_class,

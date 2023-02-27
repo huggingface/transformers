@@ -538,7 +538,6 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
 
         for i, (block, layer_past) in enumerate(zip(self.blocks, past_key_values)):
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
