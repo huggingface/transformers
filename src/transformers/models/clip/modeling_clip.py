@@ -682,7 +682,7 @@ class CLIPTextTransformer(nn.Module):
         self.embeddings = CLIPTextEmbeddings(config)
         self.encoder = CLIPEncoder(config)
         self.eos_token_id = config.eos_token_id
-        if self.eos_token_id != (self.config.vocab_size-1):
+        if self.eos_token_id != (self.config.vocab_size - 1):
             warnings.warn(
                 f"UserWarning: In your config, you have eos_token_id={self.eos_token_id}."
                 f" while the vocab size is {self.config.vocab_size}."
@@ -690,7 +690,7 @@ class CLIPTextTransformer(nn.Module):
                 UserWarning,
                 stacklevel=2,
             )
-            self.eos_token_id = self.config.vocab_size-1
+            self.eos_token_id = self.config.vocab_size - 1
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
@@ -750,7 +750,9 @@ class CLIPTextTransformer(nn.Module):
         # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
         pooled_output = last_hidden_state[
             torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device),
-            (input_ids.to(dtype=torch.int, device=last_hidden_state.device)== self.eos_token_id).nonzero(as_tuple=True)[-1][0],
+            (input_ids.to(dtype=torch.int, device=last_hidden_state.device) == self.eos_token_id).nonzero(
+                as_tuple=True
+            )[-1][0],
         ]
 
         if not return_dict:
