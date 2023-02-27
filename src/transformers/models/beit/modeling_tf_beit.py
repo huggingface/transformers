@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "BeitConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "BeitFeatureExtractor"
+_IMAGE_PROCESSOR_FOR_DOC = "BeitImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/beit-base-patch16-224-pt22k"
@@ -833,8 +833,8 @@ BEIT_START_DOCSTRING = r"""
 BEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`BeitFeatureExtractor`]. See
-            [`BeitFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`BeitImageProcessor`]. See
+            [`BeitImageProcessor.__call__`] for details.
         head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
             - 1 indicates the head is **not masked**,
@@ -871,7 +871,7 @@ class TFBeitModel(TFBeitPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBeitModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -938,7 +938,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1024,7 +1024,7 @@ class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificati
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1056,8 +1056,9 @@ class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificati
             return_dict=return_dict,
             training=training,
         )
-
+        breakpoint()
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
+        
         logits = self.classifier(pooled_output)
         loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 

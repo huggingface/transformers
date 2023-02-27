@@ -879,9 +879,10 @@ class BeitForImageClassification(BeitPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
+        breakpoint()
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
+        
+                
         logits = self.classifier(pooled_output)
 
         loss = None
