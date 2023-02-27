@@ -191,13 +191,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             postprocess_params["ignore_labels"] = ignore_labels
         if process_all is True:
             if self.tokenizer.is_fast:
-                if stride is not None:
-                    if stride < 0:
-                        stride = 0
-                        warnings.warn(
-                            "`stride` cannot be a negative number, defaulted to" f" `stride={stride}` instead."
-                        )
-                else:
+                if stride is None:
                     stride = 0
                 tokenizer_params = {
                     "return_overflowing_tokens": True,
