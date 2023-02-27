@@ -666,7 +666,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             # add an extra bucket for padding tokens only
             num_buckets = num_buckets + 1
             # assign padding tokens extra bucket
-            buckets_mask = attention_mask.to(torch.uint8)[:, None, None, :].expand(buckets.shape)
+            buckets_mask = attention_mask.to(torch.bool)[:, None, None, :].expand(buckets.shape)
             buckets = torch.where(
                 buckets_mask, buckets, torch.tensor(num_buckets - 1, dtype=torch.long, device=buckets.device)
             )
@@ -841,7 +841,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # attention mask for LSH
         if attention_mask is not None:
             # if chunked attention, the attention mask has to correspond to LSH order
-            attention_mask = attention_mask.to(torch.uint8)[:, None, :]
+            attention_mask = attention_mask.to(torch.bool)[:, None, :]
             if not do_standard_self_attention:
                 # expand attn_mask to fit with key_value_bucket_idx shape
                 attention_mask = attention_mask[:, None, :]
@@ -1225,7 +1225,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
     ):
         # chunk attention mask and look before and after
         if attention_mask is not None:
-            attention_mask = attention_mask.to(torch.uint8)[:, None, :]
+            attention_mask = attention_mask.to(torch.bool)[:, None, :]
 
             if not do_standard_self_attention:
                 attention_mask = self._split_seq_length_dim_to(attention_mask, -1, self.chunk_length, 1)
@@ -2159,8 +2159,8 @@ class ReformerModel(ReformerPreTrainedModel):
         else:
             attention_mask = torch.cat(
                 [
-                    torch.ones(input_shape, device=device, dtype=torch.uint8),
-                    torch.zeros((input_shape[0], padding_length), device=device, dtype=torch.uint8),
+                    torch.ones(input_shape, device=device, dtype=torch.bool),
+                    torch.zeros((input_shape[0], padding_length), device=device, dtype=torch.bool),
                 ],
                 dim=-1,
             )
