@@ -108,8 +108,8 @@ class TrainerCallbackTest(unittest.TestCase):
         self.assertEqual(len(cbs1), len(cbs2))
 
         # Order doesn't matter
-        cbs1 = list(sorted(cbs1, key=lambda cb: cb.__name__ if isinstance(cb, type) else cb.__class__.__name__))
-        cbs2 = list(sorted(cbs2, key=lambda cb: cb.__name__ if isinstance(cb, type) else cb.__class__.__name__))
+        cbs1 = sorted(cbs1, key=lambda cb: cb.__name__ if isinstance(cb, type) else cb.__class__.__name__)
+        cbs2 = sorted(cbs2, key=lambda cb: cb.__name__ if isinstance(cb, type) else cb.__class__.__name__)
 
         for cb1, cb2 in zip(cbs1, cbs2):
             if isinstance(cb1, type) and isinstance(cb2, type):

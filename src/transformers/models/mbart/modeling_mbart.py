@@ -1055,7 +1055,7 @@ class MBartDecoder(MBartPreTrainedModel):
                 if attn_mask.size()[0] != len(self.layers):
                     raise ValueError(
                         f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
-                        f" {head_mask.size()[0]}."
+                        f" {attn_mask.size()[0]}."
                     )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1069,7 +1069,7 @@ class MBartDecoder(MBartPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 if use_cache:
-                    logger.warning(
+                    logger.warning_once(
                         "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
                     )
                     use_cache = False

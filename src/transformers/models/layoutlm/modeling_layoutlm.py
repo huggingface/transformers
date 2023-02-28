@@ -479,7 +479,7 @@ class LayoutLMEncoder(nn.Module):
 
             if self.gradient_checkpointing and self.training:
                 if use_cache:
-                    logger.warning(
+                    logger.warning_once(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False

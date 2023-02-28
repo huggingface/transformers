@@ -367,13 +367,13 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
 
-    kwargs = dict(
-        model=model,
-        model_parameters=model_parameters,
-        config_params=config,
-        optimizer=optimizer,
-        lr_scheduler=lr_scheduler,
-    )
+    kwargs = {
+        "model": model,
+        "model_parameters": model_parameters,
+        "config_params": config,
+        "optimizer": optimizer,
+        "lr_scheduler": lr_scheduler,
+    }
 
     deepspeed_engine, optimizer, _, lr_scheduler = deepspeed.initialize(**kwargs)
 
@@ -395,6 +395,6 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None, inf
             if load_path is None:
                 raise ValueError(f"[deepspeed] failed to resume from checkpoint {resume_from_checkpoint}")
         else:
-            logger.info(f"{resume_from_checkpoint} doesn't have deepspeed checkpoints, doing nothing")
+            raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
 
     return deepspeed_engine, optimizer, lr_scheduler

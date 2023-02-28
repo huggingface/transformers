@@ -78,7 +78,7 @@ def duplicate_interleave(m):
 
 
 def apply_rotary_pos_emb(x, sincos, offset=0):
-    sin, cos = map(lambda t: duplicate_interleave(t)[None, offset : x.shape[1] + offset, None, :], sincos)
+    sin, cos = (duplicate_interleave(t)[None, offset : x.shape[1] + offset, None, :] for t in sincos)
     # einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
     return (x * cos) + (rotate_every_two(x) * sin)
 
@@ -90,7 +90,7 @@ class GPTJAttention(nn.Module):
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
         )
@@ -155,7 +155,7 @@ class GPTJAttention(nn.Module):
     ):
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].to(torch.bool)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
 
         # Keep the attention weights computation in fp32 to avoid overflow issues
         query = query.to(torch.float32)
@@ -653,7 +653,7 @@ class GPTJModel(GPTJPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 if use_cache:
-                    logger.warning(
+                    logger.warning_once(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
