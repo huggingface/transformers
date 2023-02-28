@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, require_torch_gpu, slow, t
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -245,7 +246,7 @@ class ConvBertModelTester:
 
 
 @require_torch
-class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
+class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ConvBertModel,
@@ -257,6 +258,18 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": ConvBertModel,
+            "fill-mask": ConvBertForMaskedLM,
+            "question-answering": ConvBertForQuestionAnswering,
+            "text-classification": ConvBertForSequenceClassification,
+            "token-classification": ConvBertForTokenClassification,
+            "zero-shot": ConvBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_head_masking = False

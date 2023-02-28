@@ -27,6 +27,11 @@ from git import Repo
 # This script is intended to be run from the root of the repo but you can adapt this constant if you need to.
 PATH_TO_TRANFORMERS = "."
 
+# A temporary way to trigger all pipeline tests contained in model test files after PR #21516
+all_model_test_files = [str(x) for x in Path("tests/models/").glob("**/**/test_modeling_*.py")]
+
+all_pipeline_test_files = [str(x) for x in Path("tests/pipelines/").glob("**/test_pipelines_*.py")]
+
 
 @contextmanager
 def checkout_commit(repo, commit_id):
@@ -381,8 +386,8 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     ],
     "optimization.py": "optimization/test_optimization.py",
     "optimization_tf.py": "optimization/test_optimization_tf.py",
-    "pipelines/__init__.py": "pipelines/test_pipelines_*.py",
-    "pipelines/base.py": "pipelines/test_pipelines_*.py",
+    "pipelines/__init__.py": all_pipeline_test_files + all_model_test_files,
+    "pipelines/base.py": all_pipeline_test_files + all_model_test_files,
     "pipelines/text2text_generation.py": [
         "pipelines/test_pipelines_text2text_generation.py",
         "pipelines/test_pipelines_summarization.py",
@@ -430,6 +435,7 @@ def module_to_test_file(module_fname):
     # Special case for pipelines submodules
     if len(splits) >= 2 and splits[-2] == "pipelines":
         default_test_file = f"tests/pipelines/test_pipelines_{module_name}"
+        return [default_test_file] + all_model_test_files
     # Special case for benchmarks submodules
     elif len(splits) >= 2 and splits[-2] == "benchmark":
         return ["tests/benchmark/test_benchmark.py", "tests/benchmark/test_benchmark_tf.py"]
@@ -470,6 +476,7 @@ EXPECTED_TEST_FILES_NEVER_TOUCHED = [
     "tests/sagemaker/test_single_node_gpu.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_model_parallel.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_data_parallel.py",  # SageMaker test
+    "tests/test_pipeline_mixin.py",  # Contains no test of its own (only the common tester class)
     "tests/utils/test_doc_samples.py",  # Doc tests
 ]
 

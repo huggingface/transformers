@@ -31,6 +31,7 @@ from transformers.utils.import_utils import is_datasets_available
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_datasets_available():
@@ -271,9 +272,14 @@ class WhisperModelTester:
 
 
 @require_torch
-class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (WhisperForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"automatic-speech-recognition": WhisperForConditionalGeneration, "feature-extraction": WhisperModel}
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = False
     test_pruning = False

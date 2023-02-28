@@ -24,13 +24,13 @@ from transformers import (
 from transformers.testing_utils import get_gpu_count, require_tf, require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 
 
-class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class SummarizationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
