@@ -24,7 +24,7 @@ import numpy as np
 import requests
 
 from transformers import BlipConfig, BlipTextConfig, BlipVisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -1111,6 +1111,7 @@ class BlipModelIntegrationTest(unittest.TestCase):
             [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102],
         )
 
+    @require_torch_gpu
     def test_inference_image_captioning_fp16(self):
         model = BlipForConditionalGeneration.from_pretrained(
             "Salesforce/blip-image-captioning-base", torch_dtype=torch.float16
