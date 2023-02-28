@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -67,6 +67,14 @@ class FlaxConvNextDropPath(nn.Module):
         return output
 
 
+class Identity(nn.Module):
+    """Identity function."""
+
+    @nn.compact
+    def __call__(self, x):
+        return x
+
+
 class FlaxConvNextEmbeddings(nn.Module):
     """This class is comparable to (and inspired by) the SwinEmbeddings class
     found in src/transformers/models/swin/modeling_swin.py.
@@ -81,6 +89,7 @@ class FlaxConvNextEmbeddings(nn.Module):
             kernel_size=(self.config.patch_size, self.config.patch_size),
             strides=(self.config.patch_size, self.config.patch_size),
             dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
         self.layernorm = nn.LayerNorm(epsilon=1e-6, dtype=self.dtype)
 
@@ -117,19 +126,22 @@ class FlaxConvNextLayer(nn.Module):
 
     def setup(self):
         self.dwconv = nn.Conv(
-            self.dim, kernel_size=(7, 7), padding=((3, 3), (3, 3)), feature_group_count=self.dim, dtype=self.dtype
+            self.dim,
+            kernel_size=(7, 7),
+            padding=((3, 3), (3, 3)),
+            feature_group_count=self.dim,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+            dtype=self.dtype,
         )  # depthwise conv
         self.layernorm = nn.LayerNorm(epsilon=1e-6, dtype=self.dtype)
         self.pwconv1 = nn.Dense(4 * self.dim, dtype=self.dtype)  # pointwise/1x1 convs, implemented with linear layers
         self.act = ACT2FN[self.config.hidden_act]
         self.pwconv2 = nn.Dense(self.dim, dtype=self.dtype)
 
-        layer_scale_parameter_init = jax.nn.initializers.constant(self.config.layer_scale_init_value)
-        self.layer_scale_parameter = (
-            self.param("layer_scale_parameter", layer_scale_parameter_init, (self.dim))
-            if self.config.layer_scale_init_value > 0
-            else None
-        )
+        layer_scale_init_value = self.config.layer_scale_init_value if self.config.layer_scale_init_value > 0 else 1
+        layer_scale_parameter_init = jax.nn.initializers.constant(layer_scale_init_value)
+        self.layer_scale_parameter = self.param("layer_scale_parameter", layer_scale_parameter_init, (self.dim))
+
         self.drop_path_func = FlaxConvNextDropPath(self.drop_path, dtype=self.dtype) if self.drop_path > 0.0 else None
 
     def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
@@ -139,8 +151,7 @@ class FlaxConvNextLayer(nn.Module):
         x = self.pwconv1(x)
         x = self.act(x)
         x = self.pwconv2(x)
-        if self.layer_scale_parameter is not None:
-            x = self.layer_scale_parameter * x
+        x = self.layer_scale_parameter * x
 
         x = input + (self.drop_path_func(x) if self.drop_path_func is not None else x)
         return x
@@ -183,6 +194,7 @@ class FlaxDownsamplingLayerCollection(nn.Module):
                 kernel_size=[self.kernel_size, self.kernel_size],
                 strides=[self.stride, self.stride],
                 dtype=self.dtype,
+                kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
                 name="1",
             ),
         ]
@@ -220,7 +232,7 @@ class FlaxConvNextStage(nn.Module):
                 config=self.config, out_channels=self.out_channels, kernel_size=self.kernel_size, stride=self.stride
             )
         else:
-            self.downsampling_layer = None
+            self.downsampling_layer = Identity()
 
         self.layers = FlaxNextLayerCollection(
             self.config,
@@ -231,8 +243,7 @@ class FlaxConvNextStage(nn.Module):
         )
 
     def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
-        if self.downsampling_layer is not None:
-            hidden_states = self.downsampling_layer(hidden_states)
+        hidden_states = self.downsampling_layer(hidden_states)
         hidden_states = self.layers(hidden_states)
         return hidden_states
 
@@ -282,9 +293,7 @@ class FlaxStageCollection(nn.Module):
 
         for i, layer_module in enumerate(self.stages):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (
-                    hidden_states.transpose(0, 3, 1, 2),
-                )  # transpose to fix pytorch equivalence tests
+                all_hidden_states = all_hidden_states + (hidden_states.transpose(0, 3, 1, 2),)
 
             hidden_states = layer_module(hidden_states)
 
@@ -307,9 +316,7 @@ class FlaxConvNextEncoder(nn.Module):
         hidden_states, all_hidden_states = self.stages(hidden_states, output_hidden_states, return_dict)
 
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (
-                hidden_states.transpose(0, 3, 1, 2),
-            )  # transpose to fix pytorch equivalence tests
+            all_hidden_states = all_hidden_states + (hidden_states.transpose(0, 3, 1, 2),)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
@@ -374,7 +381,6 @@ class FlaxConvNextPreTrainedModel(FlaxPreTrainedModel):
         self,
         pixel_values,
         params: dict = None,
-        train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -393,7 +399,6 @@ class FlaxConvNextPreTrainedModel(FlaxPreTrainedModel):
         return self.module.apply(
             {"params": params or self.params},
             jnp.array(pixel_values, dtype=jnp.float32),
-            not train,
             output_hidden_states,
             return_dict,
             rngs=rngs,
@@ -463,7 +468,6 @@ class FlaxConvNextModule(nn.Module):
     def __call__(
         self,
         pixel_values: jnp.ndarray = None,
-        train: bool = False,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, FlaxBaseModelOutputWithPoolingAndNoAttention]:
@@ -550,13 +554,12 @@ class FlaxConvNextForImageClassificationModule(nn.Module):
                 dtype=self.dtype,
             )
         else:
-            self.classifier = None
+            self.classifier = Identity()
 
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     def __call__(
         self,
         pixel_values=None,
-        train: bool = False,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -566,10 +569,7 @@ class FlaxConvNextForImageClassificationModule(nn.Module):
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
-        if self.classifier is not None:
-            logits = self.classifier(pooled_output)
-        else:
-            logits = pooled_output
+        logits = self.classifier(pooled_output)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
