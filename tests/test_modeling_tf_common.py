@@ -108,6 +108,8 @@ if is_tf_available():
     from transformers.modeling_tf_utils import tf_shard_checkpoint, unpack_inputs
     from transformers.tf_utils import stable_softmax
 
+    tf.config.experimental.enable_tensor_float_32_execution(False)
+
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
         for gpu in gpus:
