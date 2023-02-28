@@ -3164,6 +3164,11 @@ class Trainer:
             delattr(self, "_past")
 
         # Gather all remaining tensors and put them back on the CPU
+        # First, move the tensors to the CPU
+        losses_host = losses_host.cpu() if losses_host is not None else None
+        preds_host = preds_host.cpu() if preds_host is not None else None
+        inputs_host = inputs_host.cpu() if inputs_host is not None else None
+        labels_host = labels_host.cpu() if labels_host is not None else None
         if losses_host is not None:
             losses = nested_numpify(losses_host)
             all_losses = losses if all_losses is None else np.concatenate((all_losses, losses), axis=0)
