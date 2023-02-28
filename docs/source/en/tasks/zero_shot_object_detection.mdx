@@ -14,16 +14,16 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Traditionally, models used for the [object detection](object_detection) task require labeled image datasets for training,
+Traditionally, models used for [object detection](object_detection) require labeled image datasets for training,
 and are limited to detecting the set of classes from the training data.
 
-Zero-shot object detection task supported by the [OWL-ViT](./model_doc/owlvit) model uses a different approach. OWL-ViT
+Zero-shot object detection is supported by the [OWL-ViT](./model_doc/owlvit) model which uses a different approach. OWL-ViT
 is an open-vocabulary object detector. It means that it can detect objects in images based on free-text queries without
 the need to fine-tune the model on labeled datasets.
 
 OWL-ViT leverages multi-modal representations to perform open-vocabulary detection. It combines [CLIP](./model_doc/clip) with
-a [ViT](./model_doc/vit)-like Transformer to get multi-modal visual and text features. CLIP learns to
-associate images and their corresponding textual descriptions, and ViT can process image patches as inputs. The authors
+lightweight object classification and localization heads. Open-vocabulary detection is achieved by embedding free-text queries with the text encoder of CLIP and using them as input to the object classification and localization heads.
+associate images and their corresponding textual descriptions, and ViT processes image patches as inputs. The authors
 of OWL-ViT first trained CLIP from scratch and then fine-tuned OWL-ViT end to end on standard object detection datasets using
 a bipartite matching loss.
 
@@ -71,7 +71,7 @@ a part of the [NASA](https://www.nasa.gov/multimedia/imagegallery/index.html) Gr
 </div>
 
 Pass the image and the candidate object labels to look for to the pipeline.
-Here we pass the image directly; other suitable options include a local path to an image or an image url.
+Here we pass the image directly; other suitable options include a local path to an image or an image url. We also pass text descriptions for all items we want to query the image for. 
 
 ```py
 >>> predictions = detector(
@@ -159,9 +159,9 @@ image for the model by resizing and normalizing it, and a [`CLIPTokenizer`] that
 >>> inputs = processor(text=text_queries, images=im, return_tensors="pt")
 ```
 
-Pass the inputs through the model, post-process, and visualize the results. As the image processor resized images before
-feeding them to the model, you need to use the `post_process_object_detection` method to make sure the predicted bounding
-boxes have the correct coordinates related to the original image:
+Pass the inputs through the model, post-process, and visualize the results. Since the image processor resized images before
+feeding them to the model, you need to use the [`~OwlViTImageProcessor.post_process_object_detection`] method to make sure the predicted bounding
+boxes have the correct coordinates relative to the original image:
 
 ```py
 >>> import torch
@@ -194,7 +194,7 @@ boxes have the correct coordinates related to the original image:
 You can pass multiple sets of images and text queries to search for different (or same) objects in several images.
 Let's use both an astronaut image and the beach image together.
 For batch processing, you should pass text queries as a nested list to the processor and images as lists of PIL images,
-or PyTorch tensors, or NumPy arrays.
+PyTorch tensors, or NumPy arrays.
 
 ```py
 >>> images = [image, im]
@@ -267,7 +267,7 @@ In the preprocessing step, instead of text queries, you now need to use `query_i
 >>> inputs = processor(images=image_target, query_images=query_image, return_tensors="pt")
 ```
 
-For predictions, instead of passing the inputs to model, pass them to `model.image_guided_detection()`. Draw the predictions
+For predictions, instead of passing the inputs to the model, pass them to [`~OwlViTForObjectDetection.image_guided_detection`]. Draw the predictions
 as before except now there are no labels.
 
 ```py
