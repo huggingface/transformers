@@ -136,8 +136,10 @@ past_versions_testing = {
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("Choose the framework and version to install")
-    parser.add_argument("--framework", help="The framework to install. Should be `torch` or `tensorflow`", type=str)
-    parser.add_argument("--version", help="The version of the framework to install.", type=str)
+    parser.add_argument(
+        "--framework", help="The framework to install. Should be `torch` or `tensorflow`", type=str, required=True
+    )
+    parser.add_argument("--version", help="The version of the framework to install.", type=str, required=True)
     args = parser.parse_args()
 
     info = past_versions_testing[args.framework][args.version]
