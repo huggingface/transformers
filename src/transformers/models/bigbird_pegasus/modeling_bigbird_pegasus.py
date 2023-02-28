@@ -18,6 +18,7 @@
 import copy
 import math
 import random
+from itertools import permutations
 from typing import List, Optional, Tuple, Union
 
 import numpy as np

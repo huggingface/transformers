@@ -451,7 +451,8 @@ class BigBirdBlockSparseAttention(nn.Module):
         ]
 
     def generate_one_table(self, o_table, start_i, end_i, num_rand_blocks):
-        """Generate a list of permutations. Each element in this list is a num_rand_blocks length permutation of o_table[start_i:end_i]."""
+        """Generate a list of permutations. Each element in this list is a num_rand_blocks length permutation of
+o_table[start_i:end_i]."""
         return list(permutations(o_table[start_i:end_i], num_rand_blocks))
 
     def generate_rand_attn_tables(
