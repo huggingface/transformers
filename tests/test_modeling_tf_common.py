@@ -2164,6 +2164,16 @@ class UtilsFunctionsTest(unittest.TestCase):
                 assert np.allclose(p1.numpy(), p2.numpy())
 
     @is_pt_tf_cross_test
+    def test_checkpoint_loading_with_prefix_from_pt(self):
+        model = TFBertModel.from_pretrained(
+            "hf-internal-testing/tiny-random-bert", from_pt=True, load_weight_prefix="a/b"
+        )
+        ref_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert", from_pt=True)
+        for p1, p2 in zip(model.weights, ref_model.weights):
+            self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+            self.assertTrue(p1.name.startswith("a/b/"))
+
+    @is_pt_tf_cross_test
     def test_checkpoint_sharding_hub_from_pt(self):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded", from_pt=True)
         # the model above is the same as the model below, just a sharded pytorch version.
