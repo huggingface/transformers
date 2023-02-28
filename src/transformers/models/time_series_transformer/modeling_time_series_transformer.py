@@ -1176,6 +1176,8 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
+        if config.prediction_length is None:
+            raise ValueError("The `prediction_length` config needs to be specified.")
 
         self.value_embedding = ValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
         self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
@@ -1311,6 +1313,8 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
+        if config.prediction_length is None:
+            raise ValueError("The `prediction_length` config needs to be specified.")
 
         self.value_embedding = ValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
         self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
@@ -1467,7 +1471,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
                 if use_cache:
-                    logger.warning(
+                    logger.warning_once(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
