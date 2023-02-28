@@ -748,7 +748,7 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
         model_layer_map[layer_name] = i
 
     for shard_file in shard_files:
-        saved_weight_names_set, unexpected_keys_set, missmatched_keys_set = load_tf_shard(
+        saved_weight_names_set, unexpected_keys_set, mismatched_keys_set = load_tf_shard(
             model,
             model_layer_map,
             shard_file,
@@ -757,7 +757,7 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
         )
         saved_keys.update(saved_weight_names_set)
         unexpected_keys.update(unexpected_keys_set)
-        mismatched_keys.update(missmatched_keys_set)
+        mismatched_keys.update(mismatched_keys_set)
         gc.collect()
 
     missing_keys = model_keys - saved_keys
@@ -786,7 +786,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
 
     Returns:
         `tf.keras.models.Model`: Three lists, one for the layers that were found and succesfully restored (from the
-        shard file), one for the missmatched layers, and another one for the unexpected layers.
+        shard file), one for the mismatched layers, and another one for the unexpected layers.
     """
     saved_weight_names_set = set()
     saved_weights = {}
