@@ -1237,9 +1237,11 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         if len(hf_device_map) > 1 and "language_model" not in hf_device_map and torch.cuda.device_count() > 1:
             # warn users about unexpected behavior when using multi-GPU + BLIP-2 + `accelerate`.
             logger.warning(
-                "The `language_model` is not in the `hf_device_map` dictionary and you are running your script in a multi-GPU environment. "
-                " this may lead to unexpected behavior when using `accelerate`. Please pass a `device_map` that contains `language_model` to remove this warning. "
-                " Please refer to https://github.com/huggingface/blog/blob/main/accelerate-large-models.md for more details on creating a `device_map` for large models."
+                "The `language_model` is not in the `hf_device_map` dictionary and you are running your script"
+                " in a multi-GPU environment. this may lead to unexpected behavior when using `accelerate`."
+                " Please pass a `device_map` that contains `language_model` to remove this warning."
+                " Please refer to https://github.com/huggingface/blog/blob/main/accelerate-large-models.md for",
+                " more details on creating a `device_map` for large models.",
             )
 
         if hasattr(self.language_model, "_hf_hook"):
