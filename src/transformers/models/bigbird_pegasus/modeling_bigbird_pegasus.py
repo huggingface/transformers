@@ -25,6 +25,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from transformers.pytorch_utils import torch_int_div
+
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -46,7 +48,6 @@ from ...utils import (
 )
 from .configuration_bigbird_pegasus import BigBirdPegasusConfig
 
-from transformers.pytorch_utils import torch_int_div
 
 logger = logging.get_logger(__name__)
 
