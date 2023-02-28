@@ -536,7 +536,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         self.bidirectional = bidirectional
 
         self.relative_attention_bias = torch.nn.parameter.Parameter(
-            torch.empty(num_segments * num_segments + num_buckets, num_heads)
+            torch.empty(config.num_segments * config.num_segments + config.num_buckets, config.num_heads)
         )
 
     def forward(
