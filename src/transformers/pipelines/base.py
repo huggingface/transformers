@@ -15,6 +15,7 @@
 import collections
 import csv
 import importlib
+import inspect
 import json
 import os
 import pickle
@@ -91,6 +92,9 @@ def _pad(items, key, padding_value, padding_side):
             # This is probable image so padding shouldn't be necessary
             # B, C, H, W
             return torch.cat([item[key] for item in items], dim=0)
+        elif dim == 4 and key == "input_features":
+            # this is probably a mel spectrogram batched
+            return torch.cat([item[key] for item in items], dim=0)
         max_length = max(item[key].shape[1] for item in items)
         min_length = min(item[key].shape[1] for item in items)
         dtype = items[0][key].dtype
@@ -164,7 +168,7 @@ def pad_collate_fn(tokenizer, feature_extractor):
         for key in keys:
             if key in {"input_ids"}:
                 # ImageGPT uses a feature extractor
-                if feature_extractor is not None:
+                if tokenizer is None and feature_extractor is not None:
                     _padding_value = f_padding_value
                 else:
                     _padding_value = t_padding_value
@@ -290,7 +294,7 @@ def infer_framework_load_model(
         if isinstance(model, str):
             raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
 
-    if model.__class__.__name__.startswith("TF"):
+    if "keras.engine.training.Model" in str(inspect.getmro(model.__class__)):
         framework = "tf"
     elif model.__class__.__name__.startswith("Flax"):
         framework = "flax"
@@ -371,7 +375,7 @@ def get_framework(model, revision: Optional[str] = None):
             except OSError:
                 model = TFAutoModel.from_pretrained(model, revision=revision)
 
-    if model.__class__.__name__.startswith("TF"):
+    if "keras.engine.training.Model" in str(inspect.getmro(model.__class__)):
         framework = "tf"
     elif model.__class__.__name__.startswith("Flax"):
         framework = "flax"
