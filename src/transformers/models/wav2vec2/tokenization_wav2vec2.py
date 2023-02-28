@@ -88,7 +88,7 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
                 length (like XLNet) truncation/padding to a maximum length will be deactivated.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -168,7 +168,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         word_delimiter_token="|",
         replace_word_delimiter_char=" ",
         do_lower_case=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,
@@ -424,7 +424,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces: bool = True,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
-        **kwargs
+        **kwargs,
     ) -> List[str]:
         """
         Convert a list of lists of token ids into a list of strings by calling decode.
@@ -494,7 +494,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces: bool = True,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
@@ -648,7 +648,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 if self.verbose:
                     logger.info(f"Adding {token} to the vocabulary")
 
-        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
+        added_tok_encoder = {tok: len(self) + i for i, tok in enumerate(tokens_to_add)}
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.added_tokens_decoder.update(added_tok_decoder)
@@ -735,7 +735,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         do_lower_case=False,
         do_normalize=False,
         return_attention_mask=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             unk_token=unk_token,
@@ -803,7 +803,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -888,7 +888,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         token_ids: List[int],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         special _decode function is needed for Wav2Vec2Tokenizer because added tokens should be treated exactly the

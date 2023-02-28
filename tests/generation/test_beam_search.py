@@ -59,7 +59,7 @@ class BeamSearchTester:
         self.do_early_stopping = do_early_stopping
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
 
-        # cannot be randomely generated
+        # cannot be randomly generated
         self.eos_token_id = vocab_size + 1
 
     def prepare_beam_scorer(self, **kwargs):
@@ -283,7 +283,7 @@ class ConstrainedBeamSearchTester:
 
             constraints = [PhrasalConstraint(force_tokens), DisjunctiveConstraint(disjunctive_tokens)]
             self.constraints = constraints
-        # cannot be randomely generated
+        # cannot be randomly generated
         self.eos_token_id = vocab_size + 1
 
     def prepare_constrained_beam_scorer(self, **kwargs):

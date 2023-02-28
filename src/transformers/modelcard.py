@@ -559,8 +559,8 @@ class TrainingSummary:
         dataset_args=None,
     ):
         # Infer default from dataset
-        one_dataset = trainer.train_dataset if trainer.train_dataset is not None else trainer.eval_dataset
-        if is_hf_dataset(one_dataset) and (dataset_tags is None or dataset_args is None):
+        one_dataset = trainer.eval_dataset if trainer.eval_dataset is not None else trainer.train_dataset
+        if is_hf_dataset(one_dataset) and (dataset_tags is None or dataset_args is None or dataset_metadata is None):
             default_tag = one_dataset.builder_name
             # Those are not real datasets from the Hub so we exclude them.
             if default_tag not in ["csv", "json", "pandas", "parquet", "text"]:
@@ -677,7 +677,7 @@ class TrainingSummary:
             _, eval_lines, eval_results = parse_keras_history(keras_history)
         else:
             eval_lines = []
-            eval_results = dict()
+            eval_results = {}
         hyperparameters = extract_hyperparameters_from_keras(model)
 
         return cls(
@@ -706,7 +706,7 @@ def parse_keras_history(logs):
         # This looks like a `History` object
         if not hasattr(logs, "epoch"):
             # This history looks empty, return empty results
-            return None, [], dict()
+            return None, [], {}
         logs.history["epoch"] = logs.epoch
         logs = logs.history
     else:
@@ -716,7 +716,7 @@ def parse_keras_history(logs):
     lines = []
     for i in range(len(logs["epoch"])):
         epoch_dict = {log_key: log_value_list[i] for log_key, log_value_list in logs.items()}
-        values = dict()
+        values = {}
         for k, v in epoch_dict.items():
             if k.startswith("val_"):
                 k = "validation_" + k[4:]
@@ -766,6 +766,7 @@ def parse_log_history(log_history):
             _ = metrics.pop("eval_runtime", None)
             _ = metrics.pop("eval_samples_per_second", None)
             _ = metrics.pop("eval_steps_per_second", None)
+            _ = metrics.pop("eval_jit_compilation_time", None)
             values = {"Training Loss": training_loss, "Epoch": epoch, "Step": step}
             for k, v in metrics.items():
                 if k == "eval_loss":
@@ -796,7 +797,7 @@ def parse_log_history(log_history):
 def extract_hyperparameters_from_keras(model):
     import tensorflow as tf
 
-    hyperparameters = dict()
+    hyperparameters = {}
     if hasattr(model, "optimizer") and model.optimizer is not None:
         hyperparameters["optimizer"] = model.optimizer.get_config()
     else:

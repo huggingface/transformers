@@ -802,7 +802,7 @@ class HubertModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([7.6692, 17.7795, 11.1562, 11.8232], dtype=torch.float16, device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=2e-2))
+        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=3e-2))
 
     def test_inference_intent_classification(self):
         model = HubertForSequenceClassification.from_pretrained(

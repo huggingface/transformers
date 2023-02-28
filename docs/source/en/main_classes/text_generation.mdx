@@ -12,24 +12,32 @@ specific language governing permissions and limitations under the License.
 
 # Generation
 
-Each framework has a generate method for auto-regressive text generation implemented in their respective `GenerationMixin` class:
+Each framework has a generate method for text generation implemented in their respective `GenerationMixin` class:
 
 - PyTorch [`~generation.GenerationMixin.generate`] is implemented in [`~generation.GenerationMixin`].
 - TensorFlow [`~generation.TFGenerationMixin.generate`] is implemented in [`~generation.TFGenerationMixin`].
 - Flax/JAX [`~generation.FlaxGenerationMixin.generate`] is implemented in [`~generation.FlaxGenerationMixin`].
 
-<!--- TODO: add a brief description of GenerationConfig (with examples) when it becomes usable with generate --->
+Regardless of your framework of choice, you can parameterize the generate method with a [`~generation.GenerationConfig`]
+class instance. Please refer to this class for the complete list of generation parameters, which control the behavior
+of the generation method.
+
+To learn how to inspect a model's generation configuration, what are the defaults, how to change the parameters ad hoc,
+and how to create and save a customized generation configuration, refer to the
+[text generation strategies guide](../generation_strategies).
 
 ## GenerationConfig
 
 [[autodoc]] generation.GenerationConfig
 	- from_pretrained
+	- from_model_config
 	- save_pretrained
 
 ## GenerationMixin
 
 [[autodoc]] generation.GenerationMixin
 	- generate
+	- compute_transition_scores
 	- greedy_search
 	- sample
 	- beam_search
@@ -42,6 +50,7 @@ Each framework has a generate method for auto-regressive text generation impleme
 
 [[autodoc]] generation.TFGenerationMixin
 	- generate
+	- compute_transition_scores
 
 ## FlaxGenerationMixin
 

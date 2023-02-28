@@ -34,7 +34,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     get_image_size,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -102,7 +102,7 @@ class DonutImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
 
@@ -207,10 +207,11 @@ class DonutImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
-        Resize the image to the specified size using thumbnail method.
+        Resize the image to make a thumbnail. The image is resized so that no dimension is larger than any
+        corresponding dimension of the specified size.
 
         Args:
             image (`np.ndarray`):
@@ -222,8 +223,24 @@ class DonutImageProcessor(BaseImageProcessor):
             data_format (`Optional[Union[str, ChannelDimension]]`, *optional*):
                 The data format of the output image. If unset, the same format as the input image is used.
         """
-        output_size = (size["height"], size["width"])
-        return resize(image, size=output_size, resample=resample, reducing_gap=2.0, data_format=data_format, **kwargs)
+        input_height, input_width = get_image_size(image)
+        output_height, output_width = size["height"], size["width"]
+
+        # We always resize to the smallest of either the input or output size.
+        height = min(input_height, output_height)
+        width = min(input_width, output_width)
+
+        if height == input_height and width == input_width:
+            return image
+
+        if input_height > input_width:
+            width = int(input_width * height / input_height)
+        elif input_width > input_height:
+            height = int(input_height * width / input_width)
+
+        return resize(
+            image, size=(height, width), resample=resample, reducing_gap=2.0, data_format=data_format, **kwargs
+        )
 
     def resize(
         self,
@@ -231,7 +248,7 @@ class DonutImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
@@ -250,14 +267,15 @@ class DonutImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         shortest_edge = min(size["height"], size["width"])
         output_size = get_resize_output_image_size(image, size=shortest_edge, default_to_square=False)
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        resized_image = resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        return resized_image
 
     def rescale(
         self,
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -278,7 +296,7 @@ class DonutImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
@@ -312,7 +330,7 @@ class DonutImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        **kwargs
+        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -378,8 +396,7 @@ class DonutImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -403,7 +420,7 @@ class DonutImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(image) for image in images]
 
         if do_align_long_axis:
-            images = [self.align_long_axis(image) for image in images]
+            images = [self.align_long_axis(image, size=size) for image in images]
 
         if do_resize:
             images = [self.resize(image=image, size=size, resample=resample) for image in images]
@@ -412,7 +429,7 @@ class DonutImageProcessor(BaseImageProcessor):
             images = [self.thumbnail(image=image, size=size) for image in images]
 
         if do_pad:
-            images = [self.pad(image=image, size=size, random_padding=random_padding) for image in images]
+            images = [self.pad_image(image=image, size=size, random_padding=random_padding) for image in images]
 
         if do_rescale:
             images = [self.rescale(image=image, scale=rescale_factor) for image in images]

@@ -24,16 +24,16 @@ from ...processing_utils import ProcessorMixin
 
 class DonutProcessor(ProcessorMixin):
     r"""
-    Constructs a Donut processor which wraps a Donut feature extractor and an XLMRoBERTa tokenizer into a single
+    Constructs a Donut processor which wraps a Donut image processor and an XLMRoBERTa tokenizer into a single
     processor.
 
-    [`DonutProcessor`] offers all the functionalities of [`DonutFeatureExtractor`] and
+    [`DonutProcessor`] offers all the functionalities of [`DonutImageProcessor`] and
     [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. See the [`~DonutProcessor.__call__`] and
     [`~DonutProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`DonutFeatureExtractor`]):
-            An instance of [`DonutFeatureExtractor`]. The feature extractor is a required input.
+        image_processor ([`DonutImageProcessor`]):
+            An instance of [`DonutImageProcessor`]. The image processor is a required input.
         tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]):
             An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
     """
@@ -44,7 +44,7 @@ class DonutProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         if "feature_extractor" in kwargs:
             warnings.warn(
-                "The `feature_extractor` argument is deprecated and will be removed in v4.27, use `image_processor`"
+                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
                 " instead.",
                 FutureWarning,
             )
@@ -62,8 +62,8 @@ class DonutProcessor(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to AutoFeatureExtractor's
-        [`~AutoFeatureExtractor.__call__`] and returns its output. If used in the context
+        When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
+        [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
         [`~DonutProcessor.as_target_processor`] this method forwards all its arguments to DonutTokenizer's
         [`~DonutTokenizer.__call__`]. Please refer to the doctsring of the above two methods for more information.
         """
@@ -130,7 +130,7 @@ class DonutProcessor(ProcessorMixin):
         if added_vocab is None:
             added_vocab = self.tokenizer.get_added_vocab()
 
-        output = dict()
+        output = {}
 
         while tokens:
             start_token = re.search(r"<s_(.*?)>", tokens, re.IGNORECASE)
@@ -176,8 +176,15 @@ class DonutProcessor(ProcessorMixin):
     @property
     def feature_extractor_class(self):
         warnings.warn(
-            "`feature_extractor_class` is deprecated and will be removed in v4.27. Use `image_processor_class`"
-            " instead.",
+            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
             FutureWarning,
         )
         return self.image_processor_class
+
+    @property
+    def feature_extractor(self):
+        warnings.warn(
+            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
+            FutureWarning,
+        )
+        return self.image_processor

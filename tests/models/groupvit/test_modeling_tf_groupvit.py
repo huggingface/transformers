@@ -23,8 +23,8 @@ import unittest
 from importlib import import_module
 
 import numpy as np
-
 import requests
+
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 from transformers.testing_utils import (
     is_pt_tf_cross_test,
@@ -96,7 +96,6 @@ class TFGroupViTVisionModelTester:
         self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
-
         rng = random.Random(0)
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size], rng=rng)
         config = self.get_config()
@@ -452,7 +451,6 @@ class TFGroupViTTextModelTester:
 
 @require_tf
 class TFGroupViTTextModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (TFGroupViTTextModel,) if is_tf_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -630,7 +628,7 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
         if self.__class__.__name__ == "TFGroupViTModelTest":
             inputs_dict.pop("return_loss", None)
 
-        tf_main_layer_classes = set(
+        tf_main_layer_classes = {
             module_member
             for model_class in self.all_model_classes
             for module in (import_module(model_class.__module__),)
@@ -642,7 +640,7 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
             if isinstance(module_member, type)
             and tf.keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
-        )
+        }
         for main_layer_class in tf_main_layer_classes:
             # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
             if "T5" in main_layer_class.__name__:

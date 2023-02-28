@@ -24,7 +24,7 @@ from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import rescale, resize, to_channel_dimension_format
-from ...image_utils import ChannelDimension, get_image_size, is_batched, to_numpy_array, valid_images
+from ...image_utils import ChannelDimension, get_image_size, make_list_of_images, to_numpy_array, valid_images
 from ...utils import logging
 
 
@@ -57,7 +57,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor: int = 32,
         resample=PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.do_resize = do_resize
         self.do_rescale = do_rescale
@@ -166,8 +166,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         if do_resize and size_divisor is None:
             raise ValueError("size_divisor is required for resizing")
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError("Invalid image(s)")

@@ -20,6 +20,7 @@ import sys
 from collections import OrderedDict
 
 from run_eval import datetime_now, run_generate
+
 from utils import ROUGE_KEYS
 
 
@@ -35,7 +36,7 @@ def parse_search_arg(search):
     groups = search.split()
     entries = {k: vs for k, vs in (g.split("=") for g in groups)}
     entry_names = list(entries.keys())
-    sets = [list(f"--{k} {v}" for v in vs.split(":")) for k, vs in entries.items()]
+    sets = [[f"--{k} {v}" for v in vs.split(":")] for k, vs in entries.items()]
     matrix = [list(x) for x in itertools.product(*sets)]
     return matrix, entry_names
 

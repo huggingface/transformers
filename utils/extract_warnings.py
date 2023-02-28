@@ -5,6 +5,7 @@ import time
 import zipfile
 
 from get_ci_error_statistics import download_artifact, get_artifacts_links
+
 from transformers import logging
 
 
@@ -112,7 +113,7 @@ if __name__ == "__main__":
 
     from_gh = args.from_gh
     if from_gh:
-        # The artifacts have to be downloaded using `actions/download-artifact@v2`
+        # The artifacts have to be downloaded using `actions/download-artifact@v3`
         pass
     else:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -133,6 +134,6 @@ if __name__ == "__main__":
 
     # extract warnings from artifacts
     selected_warnings = extract_warnings(args.output_dir, args.targets)
-    selected_warnings = sorted(list(selected_warnings))
+    selected_warnings = sorted(selected_warnings)
     with open(os.path.join(args.output_dir, "selected_warnings.json"), "w", encoding="UTF-8") as fp:
         json.dump(selected_warnings, fp, ensure_ascii=False, indent=4)

@@ -135,7 +135,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         return_dict,
         pixel_values=None,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
@@ -226,7 +226,7 @@ class EncoderDecoderMixin:
         decoder_attention_mask,
         labels=None,
         pixel_values=None,
-        **kwargs
+        **kwargs,
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
@@ -402,7 +402,7 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
         decoder_attention_mask,
         labels=None,
         pixel_values=None,
-        **kwargs
+        **kwargs,
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
@@ -590,7 +590,7 @@ class Swin2BartModelTest(EncoderDecoderMixin, unittest.TestCase):
         decoder_attention_mask,
         labels=None,
         pixel_values=None,
-        **kwargs
+        **kwargs,
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
@@ -747,7 +747,6 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
 class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_coco_en(self):
-
         loc = "ydshieh/vit-gpt2-coco-en"
 
         feature_extractor = ViTFeatureExtractor.from_pretrained(loc)
@@ -787,7 +786,6 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
         self.assertLessEqual(max_diff, 1e-4)
 
         def generate_step(pixel_values):
-
             outputs = model.generate(
                 pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True, output_scores=True
             )
@@ -836,7 +834,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size([1, 1, 57532])
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([24.2731, -6.4522, 32.4130]).to(torch_device)
+        expected_slice = torch.tensor([24.3873, -6.4491, 32.5394]).to(torch_device)
         self.assertTrue(torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-4))
 
         # step 2: generation
@@ -872,7 +870,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertEqual(len(outputs.scores), 11)
         self.assertTrue(
             torch.allclose(
-                outputs.scores[0][0, :3], torch.tensor([5.3153, -3.5276, 13.4781], device=torch_device), atol=1e-4
+                outputs.scores[0][0, :3], torch.tensor([5.6019, -3.5070, 13.7123], device=torch_device), atol=1e-4
             )
         )
 

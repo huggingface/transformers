@@ -24,8 +24,8 @@ import datasets
 import numpy as np
 from datasets import load_dataset
 from packaging import version
-
 from parameterized import parameterized
+
 from transformers import AutoProcessor
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
@@ -38,6 +38,7 @@ from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
 if is_pyctcdecode_available():
     from huggingface_hub import snapshot_download
     from pyctcdecode import BeamSearchDecoderCTC
+
     from transformers.models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from transformers.models.wav2vec2_with_lm.processing_wav2vec2_with_lm import Wav2Vec2DecoderWithLMOutput
 
@@ -214,7 +215,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
             with get_context(pool_context).Pool() as pool:
                 decoded_processor = processor.batch_decode(logits, pool)
 
-        logits_list = [array for array in logits]
+        logits_list = list(logits)
 
         with get_context("fork").Pool() as p:
             decoded_beams = decoder.decode_beams_batch(p, logits_list)
@@ -239,7 +240,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         logits = self._get_dummy_logits()
 
-        beam_width = 20
+        beam_width = 15
         beam_prune_logp = -20.0
         token_min_logp = -4.0
 
@@ -251,7 +252,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         )
         decoded_processor = decoded_processor_out.text
 
-        logits_list = [array for array in logits]
+        logits_list = list(logits)
 
         with get_context("fork").Pool() as pool:
             decoded_decoder_out = decoder.decode_beams_batch(
@@ -263,9 +264,17 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
             )
 
         decoded_decoder = [d[0][0] for d in decoded_decoder_out]
+        logit_scores = [d[0][2] for d in decoded_decoder_out]
+        lm_scores = [d[0][3] for d in decoded_decoder_out]
 
         self.assertListEqual(decoded_decoder, decoded_processor)
-        self.assertListEqual(["<s> </s> </s>", "<s> <s> </s>"], decoded_processor)
+        self.assertListEqual(["</s> <s> <s>", "<s> <s> <s>"], decoded_processor)
+
+        self.assertTrue(np.array_equal(logit_scores, decoded_processor_out.logit_score))
+        self.assertTrue(np.allclose([-20.054, -18.447], logit_scores, atol=1e-3))
+
+        self.assertTrue(np.array_equal(lm_scores, decoded_processor_out.lm_score))
+        self.assertTrue(np.allclose([-15.554, -13.9474], lm_scores, atol=1e-3))
 
     def test_decoder_with_params_of_lm(self):
         feature_extractor = self.get_feature_extractor()
@@ -290,7 +299,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         )
         decoded_processor = decoded_processor_out.text
 
-        logits_list = [array for array in logits]
+        logits_list = list(logits)
         decoder.reset_params(
             alpha=alpha,
             beta=beta,

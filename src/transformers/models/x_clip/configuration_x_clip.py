@@ -62,8 +62,6 @@ class XCLIPTextConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float``, *optional*, defaults to 1):
@@ -95,22 +93,20 @@ class XCLIPTextConfig(PretrainedConfig):
         num_attention_heads=8,
         max_position_embeddings=77,
         hidden_act="quick_gelu",
-        layer_norm_eps=0.00001,
-        dropout=0.0,
+        layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.max_position_embeddings = max_position_embeddings
@@ -122,7 +118,6 @@ class XCLIPTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from XCLIPConfig
@@ -176,8 +171,6 @@ class XCLIPVisionConfig(PretrainedConfig):
             `"relu"`, `"selu"`, `"gelu_new"` and ``"quick_gelu"` are supported.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -220,19 +213,17 @@ class XCLIPVisionConfig(PretrainedConfig):
         patch_size=32,
         num_frames=8,
         hidden_act="quick_gelu",
-        layer_norm_eps=0.00001,
-        dropout=0.0,
+        layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
         drop_path_rate=0.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.mit_hidden_size = mit_hidden_size
@@ -252,7 +243,6 @@ class XCLIPVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from XCLIPConfig
@@ -319,7 +309,7 @@ class XCLIPConfig(PretrainedConfig):
         prompt_attention_dropout=0.0,
         prompt_projection_dropout=0.0,
         logit_scale_init_value=2.6592,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

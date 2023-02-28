@@ -14,10 +14,20 @@
 # limitations under the License.
 """Feature extractor class for Conditional DETR."""
 
+import warnings
+
 from ...utils import logging
 from .image_processing_conditional_detr import ConditionalDetrImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
-ConditionalDetrFeatureExtractor = ConditionalDetrImageProcessor
+
+class ConditionalDetrFeatureExtractor(ConditionalDetrImageProcessor):
+    def __init__(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "The class ConditionalDetrFeatureExtractor is deprecated and will be removed in version 5 of Transformers."
+            " Please use ConditionalDetrImageProcessor instead.",
+            FutureWarning,
+        )
+        super().__init__(*args, **kwargs)

@@ -14,6 +14,8 @@
 # limitations under the License.
 """Feature extractor class for MaskFormer."""
 
+import warnings
+
 from transformers.utils import logging
 
 from .image_processing_maskformer import MaskFormerImageProcessor
@@ -21,4 +23,12 @@ from .image_processing_maskformer import MaskFormerImageProcessor
 
 logger = logging.get_logger(__name__)
 
-MaskFormerFeatureExtractor = MaskFormerImageProcessor
+
+class MaskFormerFeatureExtractor(MaskFormerImageProcessor):
+    def __init__(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "The class MaskFormerFeatureExtractor is deprecated and will be removed in version 5 of Transformers."
+            " Please use MaskFormerImageProcessor instead.",
+            FutureWarning,
+        )
+        super().__init__(*args, **kwargs)

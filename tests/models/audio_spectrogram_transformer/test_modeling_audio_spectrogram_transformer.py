@@ -18,6 +18,7 @@ import inspect
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import ASTConfig
 from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
@@ -225,7 +226,6 @@ class ASTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_audio_classification(self):
-
         feature_extractor = self.default_feature_extractor
         model = ASTForAudioClassification.from_pretrained("MIT/ast-finetuned-audioset-10-10-0.4593").to(torch_device)
 
