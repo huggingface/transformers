@@ -63,7 +63,7 @@ from ...utils.generic import ExplicitEnum, TensorType
 if is_torch_available():
     import torch
 
-    from transformers.pytorch_utils import torch_int_div
+    from ...pytorch_utils import torch_int_div
 
 if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms

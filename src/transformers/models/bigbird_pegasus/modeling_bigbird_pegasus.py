@@ -25,8 +25,6 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.pytorch_utils import torch_int_div
-
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -38,6 +36,7 @@ from ...modeling_outputs import (
     Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import torch_int_div
 from ...utils import (
     add_code_sample_docstrings,
     add_end_docstrings,

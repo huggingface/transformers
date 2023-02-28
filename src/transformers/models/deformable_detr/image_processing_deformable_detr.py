@@ -67,7 +67,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers.pytorch_utils import torch_int_div
+    from ...pytorch_utils import torch_int_div
 
 
 if is_vision_available():
