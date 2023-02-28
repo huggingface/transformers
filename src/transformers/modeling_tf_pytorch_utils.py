@@ -39,7 +39,9 @@ class TransposeType(ExplicitEnum):
     CONV2D = "conv2d"
 
 
-def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="", tf_weight_shape=None):
+def convert_tf_weight_name_to_pt_weight_name(
+    tf_name, start_prefix_to_remove="", tf_weight_shape=None, name_scope=None
+):
     """
     Convert a TF 2.0 model variable name in a pytorch model weight name.
 
@@ -54,6 +56,14 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="",
         - transpose: `TransposeType` member indicating whether and how TF2.0 and PyTorch weights matrices should be
           transposed with regards to each other
     """
+    if name_scope is not None:
+        if not tf_name.startswith(name_scope):
+            raise ValueError(
+                f"Weight name {tf_name} does not start with name_scope {name_scope}. This is an internal error "
+                "in Transformers, so (unless you were doing something really evil) please open an issue to report it!"
+            )
+        tf_name = tf_name[len(name_scope) :]
+        tf_name = tf_name.lstrip("/")
     tf_name = tf_name.replace(":0", "")  # device ids
     tf_name = re.sub(
         r"/[^/]*___([^/]*)/", r"/\1/", tf_name
@@ -144,7 +154,13 @@ def apply_transpose(transpose: TransposeType, weight, match_shape=None, pt_to_tf
 
 
 def load_pytorch_checkpoint_in_tf2_model(
-    tf_model, pytorch_checkpoint_path, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+    tf_model,
+    pytorch_checkpoint_path,
+    tf_inputs=None,
+    allow_missing_keys=False,
+    output_loading_info=False,
+    _prefix=None,
+    tf_to_pt_weight_rename=None,
 ):
     """Load pytorch checkpoints in a TF 2.0 model"""
     try:
@@ -176,6 +192,8 @@ def load_pytorch_checkpoint_in_tf2_model(
         tf_inputs=tf_inputs,
         allow_missing_keys=allow_missing_keys,
         output_loading_info=output_loading_info,
+        _prefix=_prefix,
+        tf_to_pt_weight_rename=tf_to_pt_weight_rename,
     )
 
 
@@ -189,7 +207,13 @@ def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_mi
 
 
 def load_pytorch_weights_in_tf2_model(
-    tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+    tf_model,
+    pt_state_dict,
+    tf_inputs=None,
+    allow_missing_keys=False,
+    output_loading_info=False,
+    _prefix=None,
+    tf_to_pt_weight_rename=None,
 ):
     """Load pytorch state_dict in a TF 2.0 model."""
     try:
@@ -209,11 +233,19 @@ def load_pytorch_weights_in_tf2_model(
         tf_inputs=tf_inputs,
         allow_missing_keys=allow_missing_keys,
         output_loading_info=output_loading_info,
+        _prefix=_prefix,
+        tf_to_pt_weight_rename=tf_to_pt_weight_rename,
     )
 
 
 def load_pytorch_state_dict_in_tf2_model(
-    tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+    tf_model,
+    pt_state_dict,
+    tf_inputs=None,
+    allow_missing_keys=False,
+    output_loading_info=False,
+    _prefix=None,
+    tf_to_pt_weight_rename=None,
 ):
     """Load a pytorch state_dict in a TF 2.0 model."""
     import tensorflow as tf
@@ -227,8 +259,11 @@ def load_pytorch_state_dict_in_tf2_model(
     if tf_inputs is None:
         tf_inputs = tf_model.dummy_inputs
 
+    if _prefix is None:
+        _prefix = ""
     if tf_inputs is not None:
-        tf_model(tf_inputs, training=False)  # Make sure model is built
+        with tf.name_scope(_prefix):
+            tf_model(tf_inputs, training=False)  # Make sure model is built
     # Adapt state dict - TODO remove this and update the AWS weights files instead
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
@@ -249,8 +284,10 @@ def load_pytorch_state_dict_in_tf2_model(
     for old_key, new_key in zip(old_keys, new_keys):
         pt_state_dict[new_key] = pt_state_dict.pop(old_key)
 
-    # Make sure we are able to load PyTorch base models as well as derived models (with heads)
-    # TF models always have a prefix, some of PyTorch models (base ones) don't
+    # Matt: All TF models store the actual model stem in a MainLayer class, including the base model.
+    # In PT, the derived models (with heads) use the base model class as the stem instead, and the base model
+    # just contains the stem itself, and there is no MainLayer class. This means that TF base classes have one
+    # extra layer in their weight names, corresponding to the MainLayer class. This code block compensates for that.
     start_prefix_to_remove = ""
     if not any(s.startswith(tf_model.base_model_prefix) for s in pt_state_dict.keys()):
         start_prefix_to_remove = tf_model.base_model_prefix + "."
@@ -263,8 +300,13 @@ def load_pytorch_state_dict_in_tf2_model(
     for symbolic_weight in symbolic_weights:
         sw_name = symbolic_weight.name
         name, transpose = convert_tf_weight_name_to_pt_weight_name(
-            sw_name, start_prefix_to_remove=start_prefix_to_remove, tf_weight_shape=symbolic_weight.shape
+            sw_name,
+            start_prefix_to_remove=start_prefix_to_remove,
+            tf_weight_shape=symbolic_weight.shape,
+            name_scope=_prefix,
         )
+        if tf_to_pt_weight_rename is not None:
+            name = tf_to_pt_weight_rename(name)
 
         # Find associated numpy array in pytorch model state dict
         if name not in pt_state_dict:

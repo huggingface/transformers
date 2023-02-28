@@ -707,7 +707,7 @@ def tf_shard_checkpoint(weights, max_shard_size="10GB"):
     return shards, index
 
 
-def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, strict=True):
+def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, strict=False, _prefix=None):
     """
     This is the same as `load_tf_weights` but for a sharded checkpoint. Detect missing and unexpected layers and load
     the TF weights from the shard file accordingly to their names and shapes.
@@ -729,32 +729,35 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
     """
 
     # Load the index
-    missing_keys = []
     unexpected_keys = set()
     saved_keys = set()
-    missmatched_keys = set()
+    mismatched_keys = set()
 
     # Since TF adds the name of the class to its weights, and uses the index and not the name of the layer to load
     # the weight, we have to get rid of the first prefix of the name of the layer.
     model_keys = set()
     model_layer_map = {}
     for i, k in enumerate(model.weights):
-        if "model." in k.name or len(k.name.split("/")) == 1:
-            layer_name = k.name
-        else:
-            layer_name = "/".join(k.name.split("/")[1:])
+        layer_name = k.name
+        if _prefix is not None and layer_name.startswith(_prefix):
+            layer_name = layer_name[len(_prefix) :]
+            layer_name = layer_name.lstrip("/")
+        if not ("model." in layer_name or len(layer_name.split("/")) == 1):
+            layer_name = "/".join(layer_name.split("/")[1:])
         model_keys.add(layer_name)
         model_layer_map[layer_name] = i
 
     for shard_file in shard_files:
-        state_dict = tf.io.read_file(shard_file)
-        saved_weight_names_set, unexpected_keys_set, missmatched_keys_set = load_tf_shard(
-            model, model_layer_map, shard_file, ignore_mismatched_sizes=ignore_mismatched_sizes
+        saved_weight_names_set, unexpected_keys_set, mismatched_keys_set = load_tf_shard(
+            model,
+            model_layer_map,
+            shard_file,
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
+            _prefix=_prefix,
         )
         saved_keys.update(saved_weight_names_set)
         unexpected_keys.update(unexpected_keys_set)
-        missmatched_keys.update(missmatched_keys_set)
-        del state_dict
+        mismatched_keys.update(mismatched_keys_set)
         gc.collect()
 
     missing_keys = model_keys - saved_keys
@@ -768,10 +771,10 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    return missing_keys, unexpected_keys, missmatched_keys
+    return missing_keys, unexpected_keys, mismatched_keys
 
 
-def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False):
+def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     """
     Loads a shard from a sharded checkpoint file. Handles the missing keys and unexpected keys.
 
@@ -783,11 +786,11 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
 
     Returns:
         `tf.keras.models.Model`: Three lists, one for the layers that were found and succesfully restored (from the
-        shard file), one for the missmatched layers, and another one for the unexpected layers.
+        shard file), one for the mismatched layers, and another one for the unexpected layers.
     """
     saved_weight_names_set = set()
     saved_weights = {}
-    missmatched_keys = set()
+    mismatched_keys = set()
     unexpected_keys = set()
     # Read the H5 file
     try:
@@ -822,7 +825,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
                                 array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
                             except ValueError as e:
                                 if ignore_mismatched_sizes:
-                                    missmatched_keys.add(
+                                    mismatched_keys.add(
                                         (layer_name, saved_weight_value.shape, K.int_shape(symbolic_weight))
                                     )
                                     continue
@@ -836,7 +839,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
 
         K.batch_set_value(weight_value_tuples)
 
-        return saved_weight_names_set, unexpected_keys, missmatched_keys
+        return saved_weight_names_set, unexpected_keys, mismatched_keys
 
     except Exception as e:
         try:
@@ -2458,6 +2461,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
+            tf_to_pt_weight_rename (`Callable`, *optional*):
+                A function that is called to transform the names of weights during the PyTorch to TensorFlow
+                crossloading process. This is not necessary for most models, but is useful to allow composite models to
+                be crossloaded correctly.
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
@@ -2506,6 +2513,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         from_auto_class = kwargs.pop("_from_auto", False)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
+        tf_to_pt_weight_rename = kwargs.pop("tf_to_pt_weight_rename", None)
 
         if trust_remote_code is True:
             logger.warning(
@@ -2745,7 +2753,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(
-                model, resolved_archive_file, allow_missing_keys=True, output_loading_info=output_loading_info
+                model,
+                resolved_archive_file,
+                allow_missing_keys=True,
+                output_loading_info=output_loading_info,
+                _prefix=load_weight_prefix,
+                tf_to_pt_weight_rename=tf_to_pt_weight_rename,
             )
 
         # we might need to extend the variable scope for composite models
@@ -2761,7 +2774,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             state_dict = safe_load_file(resolved_archive_file)
             # Load from a PyTorch checkpoint
             return load_pytorch_state_dict_in_tf2_model(
-                model, state_dict, allow_missing_keys=True, output_loading_info=output_loading_info
+                model,
+                state_dict,
+                allow_missing_keys=True,
+                output_loading_info=output_loading_info,
+                _prefix=load_weight_prefix,
             )
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
@@ -2775,6 +2792,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     model,
                     resolved_archive_file,
                     ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    _prefix=load_weight_prefix,
                 )
             else:
                 missing_keys, unexpected_keys, mismatched_keys = load_tf_weights(
