@@ -21,6 +21,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -191,7 +192,7 @@ class TFOpenAIGPTModelTester:
 
 
 @require_tf
-class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFOpenAIGPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel, TFOpenAIGPTDoubleHeadsModel, TFOpenAIGPTForSequenceClassification)
         if is_tf_available()
@@ -200,6 +201,16 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (TFOpenAIGPTLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFOpenAIGPTModel,
+            "text-classification": TFOpenAIGPTForSequenceClassification,
+            "text-generation": TFOpenAIGPTLMHeadModel,
+            "zero-shot": TFOpenAIGPTForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
 

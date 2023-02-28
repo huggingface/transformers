@@ -31,6 +31,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -308,11 +309,20 @@ class WavLMModelTester:
 
 
 @require_torch
-class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
+class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (WavLMForCTC, WavLMModel, WavLMForAudioFrameClassification, WavLMForSequenceClassification, WavLMForXVector)
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "audio-classification": WavLMForSequenceClassification,
+            "automatic-speech-recognition": WavLMForCTC,
+            "feature-extraction": WavLMModel,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_headmasking = False

@@ -24,6 +24,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -223,9 +224,20 @@ class BlenderbotModelTester:
 
 
 @require_torch
-class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotModel, BlenderbotForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": BlenderbotForConditionalGeneration,
+            "feature-extraction": BlenderbotModel,
+            "summarization": BlenderbotForConditionalGeneration,
+            "text2text-generation": BlenderbotForConditionalGeneration,
+            "text-generation": BlenderbotForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = True
     test_pruning = False

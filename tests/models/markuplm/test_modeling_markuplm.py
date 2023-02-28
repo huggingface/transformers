@@ -22,6 +22,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -275,7 +276,7 @@ class MarkupLMModelTester:
 
 
 @require_torch
-class MarkupLMModelTest(ModelTesterMixin, unittest.TestCase):
+class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MarkupLMModel,
@@ -285,6 +286,17 @@ class MarkupLMModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else None
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MarkupLMModel,
+            "question-answering": MarkupLMForQuestionAnswering,
+            "text-classification": MarkupLMForSequenceClassification,
+            "token-classification": MarkupLMForTokenClassification,
+            "zero-shot": MarkupLMForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):

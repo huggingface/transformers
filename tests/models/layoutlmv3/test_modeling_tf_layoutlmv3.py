@@ -27,6 +27,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -263,7 +264,7 @@ class TFLayoutLMv3ModelTester:
 
 
 @require_tf
-class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFLayoutLMv3Model,
@@ -273,6 +274,17 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFLayoutLMv3Model,
+            "question-answering": TFLayoutLMv3ForQuestionAnswering,
+            "text-classification": TFLayoutLMv3ForSequenceClassification,
+            "token-classification": TFLayoutLMv3ForTokenClassification,
+            "zero-shot": TFLayoutLMv3ForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
 
     test_pruning = False

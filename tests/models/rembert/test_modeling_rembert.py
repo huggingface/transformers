@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -360,7 +361,7 @@ class RemBertModelTester:
 
 
 @require_torch
-class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
+class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RemBertModel,
@@ -375,6 +376,19 @@ class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (RemBertForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": RemBertModel,
+            "fill-mask": RemBertForMaskedLM,
+            "question-answering": RemBertForQuestionAnswering,
+            "text-classification": RemBertForSequenceClassification,
+            "text-generation": RemBertForCausalLM,
+            "token-classification": RemBertForTokenClassification,
+            "zero-shot": RemBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = RemBertModelTester(self)

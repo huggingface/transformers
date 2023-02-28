@@ -21,6 +21,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -239,10 +240,20 @@ class TFT5ModelTester:
 
 
 @require_tf
-class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFT5ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": TFT5ForConditionalGeneration,
+            "feature-extraction": TFT5Model,
+            "summarization": TFT5ForConditionalGeneration,
+            "text2text-generation": TFT5ForConditionalGeneration,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_onnx = False
 
     def setUp(self):

@@ -21,6 +21,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -487,7 +488,7 @@ class TFElectraModelTester:
 
 
 @require_tf
-class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFElectraModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFElectraModel,
@@ -500,6 +501,18 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFElectraModel,
+            "fill-mask": TFElectraForMaskedLM,
+            "question-answering": TFElectraForQuestionAnswering,
+            "text-classification": TFElectraForSequenceClassification,
+            "token-classification": TFElectraForTokenClassification,
+            "zero-shot": TFElectraForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
     test_head_masking = False
     test_onnx = False

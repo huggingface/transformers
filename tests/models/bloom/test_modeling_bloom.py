@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, require_torch_gpu, slow, t
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -319,7 +320,7 @@ class BloomModelTester:
 
 
 @require_torch
-class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             BloomModel,
@@ -333,6 +334,18 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     )
 
     all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": BloomModel,
+            "question-answering": BloomForQuestionAnswering,
+            "text-classification": BloomForSequenceClassification,
+            "text-generation": BloomForCausalLM,
+            "token-classification": BloomForTokenClassification,
+            "zero-shot": BloomForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
     test_missing_keys = False
     test_pruning = False

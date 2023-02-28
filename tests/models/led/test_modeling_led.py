@@ -27,6 +27,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -268,13 +269,26 @@ class LEDModelTester:
 
 
 @require_torch
-class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (LEDModel, LEDForConditionalGeneration, LEDForSequenceClassification, LEDForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (LEDForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": LEDForConditionalGeneration,
+            "feature-extraction": LEDModel,
+            "question-answering": LEDForQuestionAnswering,
+            "summarization": LEDForConditionalGeneration,
+            "text2text-generation": LEDForConditionalGeneration,
+            "text-classification": LEDForSequenceClassification,
+            "zero-shot": LEDForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False

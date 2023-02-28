@@ -37,6 +37,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -408,7 +409,7 @@ class TapasModelTester:
 
 
 @require_torch
-class TapasModelTest(ModelTesterMixin, unittest.TestCase):
+class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TapasModel,
@@ -418,6 +419,17 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else None
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TapasModel,
+            "fill-mask": TapasForMaskedLM,
+            "table-question-answering": TapasForQuestionAnswering,
+            "text-classification": TapasForSequenceClassification,
+            "zero-shot": TapasForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_resize_embeddings = True

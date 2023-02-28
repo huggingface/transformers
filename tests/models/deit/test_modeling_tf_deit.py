@@ -26,6 +26,7 @@ from transformers.utils import cached_property, is_tf_available, is_vision_avail
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -162,7 +163,7 @@ class TFDeiTModelTester:
 
 
 @require_tf
-class TFDeiTModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFDeiTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_tf_common.py, as DeiT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -177,6 +178,14 @@ class TFDeiTModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFDeiTModel,
+            "image-classification": (TFDeiTForImageClassification, TFDeiTForImageClassificationWithTeacher),
+        }
+        if is_tf_available()
+        else {}
     )
 
     test_pruning = False

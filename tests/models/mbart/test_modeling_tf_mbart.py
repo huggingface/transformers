@@ -22,6 +22,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -180,9 +181,19 @@ def prepare_mbart_inputs_dict(
 
 
 @require_tf
-class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFMBartModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFMBartForConditionalGeneration, TFMBartModel) if is_tf_available() else ()
     all_generative_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": TFMBartForConditionalGeneration,
+            "feature-extraction": TFMBartModel,
+            "summarization": TFMBartForConditionalGeneration,
+            "text2text-generation": TFMBartForConditionalGeneration,
+        }
+        if is_tf_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = False

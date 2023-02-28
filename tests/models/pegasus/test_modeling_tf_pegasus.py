@@ -22,6 +22,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -175,9 +176,19 @@ def prepare_pegasus_inputs_dict(
 
 
 @require_tf
-class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFPegasusModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFPegasusForConditionalGeneration, TFPegasusModel) if is_tf_available() else ()
     all_generative_model_classes = (TFPegasusForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": TFPegasusForConditionalGeneration,
+            "feature-extraction": TFPegasusModel,
+            "summarization": TFPegasusForConditionalGeneration,
+            "text2text-generation": TFPegasusForConditionalGeneration,
+        }
+        if is_tf_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = False

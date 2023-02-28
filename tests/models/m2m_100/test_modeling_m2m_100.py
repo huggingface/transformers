@@ -26,6 +26,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -220,7 +221,7 @@ class M2M100ModelTester:
 
 
 @require_torch
-class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             M2M100Model,
@@ -230,6 +231,16 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         else ()
     )
     all_generative_model_classes = (M2M100ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": M2M100ForConditionalGeneration,
+            "feature-extraction": M2M100Model,
+            "summarization": M2M100ForConditionalGeneration,
+            "text2text-generation": M2M100ForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = True
     test_pruning = False

@@ -22,6 +22,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -227,7 +228,7 @@ class TFAlbertModelTester:
 
 
 @require_tf
-class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFAlbertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFAlbertModel,
@@ -240,6 +241,18 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFAlbertModel,
+            "fill-mask": TFAlbertForMaskedLM,
+            "question-answering": TFAlbertForQuestionAnswering,
+            "text-classification": TFAlbertForSequenceClassification,
+            "token-classification": TFAlbertForTokenClassification,
+            "zero-shot": TFAlbertForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
     test_head_masking = False
     test_onnx = False

@@ -21,6 +21,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -296,7 +297,7 @@ class LongformerModelTester:
 
 
 @require_torch
-class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
+class LongformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False  # pruning is not supported
     test_torchscript = False
 
@@ -311,6 +312,18 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": LongformerModel,
+            "fill-mask": LongformerForMaskedLM,
+            "question-answering": LongformerForQuestionAnswering,
+            "text-classification": LongformerForSequenceClassification,
+            "token-classification": LongformerForTokenClassification,
+            "zero-shot": LongformerForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):

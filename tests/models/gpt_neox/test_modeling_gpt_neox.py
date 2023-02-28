@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -185,9 +186,12 @@ class GPTNeoXModelTester:
 
 
 @require_torch
-class GPTNeoXModelTest(ModelTesterMixin, unittest.TestCase):
+class GPTNeoXModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GPTNeoXModel, GPTNeoXForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GPTNeoXForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": GPTNeoXModel, "text-generation": GPTNeoXForCausalLM} if is_torch_available() else {}
+    )
     test_pruning = False
     test_missing_keys = False
     test_model_parallel = False

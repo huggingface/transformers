@@ -22,6 +22,7 @@ from transformers.testing_utils import require_sentencepiece, require_tf, slow, 
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -146,9 +147,12 @@ class TFOPTModelTester:
 
 
 @require_tf
-class TFOPTModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFOPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFOPTModel, TFOPTForCausalLM) if is_tf_available() else ()
     all_generative_model_classes = (TFOPTForCausalLM,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": TFOPTModel, "text-generation": TFOPTForCausalLM} if is_tf_available() else {}
+    )
     is_encoder_decoder = False
     test_pruning = False
     test_onnx = False

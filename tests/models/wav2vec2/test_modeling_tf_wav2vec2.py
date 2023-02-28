@@ -41,6 +41,7 @@ from transformers.utils import is_librosa_available, is_pyctcdecode_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -281,8 +282,9 @@ class TFWav2Vec2ModelTester:
 
 
 @require_tf
-class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFWav2Vec2Model, TFWav2Vec2ForCTC) if is_tf_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TFWav2Vec2Model} if is_tf_available() else {}
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False

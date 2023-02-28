@@ -35,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -477,8 +478,9 @@ class ClapModelTester:
 
 
 @require_torch
-class ClapModelTest(ModelTesterMixin, unittest.TestCase):
+class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ClapModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": ClapModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

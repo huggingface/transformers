@@ -26,6 +26,7 @@ from transformers.utils import cached_property, is_tf_available, is_vision_avail
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -176,7 +177,7 @@ class TFSwinModelTester:
 
 
 @require_tf
-class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFSwinModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFSwinModel,
@@ -185,6 +186,11 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": TFSwinModel, "image-classification": TFSwinForImageClassification}
+        if is_tf_available()
+        else {}
     )
 
     test_pruning = False

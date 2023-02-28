@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, slow, tooslow, torch_devic
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -360,13 +361,24 @@ class GPTJModelTester:
 
 
 @require_torch
-class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification, GPTJForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": GPTJModel,
+            "question-answering": GPTJForQuestionAnswering,
+            "text-classification": GPTJForSequenceClassification,
+            "text-generation": GPTJForCausalLM,
+            "zero-shot": GPTJForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
     test_pruning = False
     test_missing_keys = False

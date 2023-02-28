@@ -25,6 +25,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -232,7 +233,7 @@ class BigBirdPegasusModelTester:
 
 
 @require_torch
-class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             BigBirdPegasusModel,
@@ -244,6 +245,20 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         else ()
     )
     all_generative_model_classes = (BigBirdPegasusForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": BigBirdPegasusForConditionalGeneration,
+            "feature-extraction": BigBirdPegasusModel,
+            "question-answering": BigBirdPegasusForQuestionAnswering,
+            "summarization": BigBirdPegasusForConditionalGeneration,
+            "text2text-generation": BigBirdPegasusForConditionalGeneration,
+            "text-classification": BigBirdPegasusForSequenceClassification,
+            "text-generation": BigBirdPegasusForCausalLM,
+            "zero-shot": BigBirdPegasusForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_missing_keys = False
     test_pruning = False

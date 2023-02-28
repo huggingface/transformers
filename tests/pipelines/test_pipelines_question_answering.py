@@ -24,10 +24,10 @@ from transformers.data.processors.squad import SquadExample
 from transformers.pipelines import QuestionAnsweringArgumentHandler, pipeline
 from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_torch_or_tf, slow
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
-class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class QAPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_QUESTION_ANSWERING_MAPPING
     tf_model_mapping = TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 

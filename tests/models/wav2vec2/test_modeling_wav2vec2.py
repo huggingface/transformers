@@ -49,6 +49,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -467,11 +468,21 @@ class Wav2Vec2ModelTester:
 
 
 @require_torch
-class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
+class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "audio-classification": Wav2Vec2ForSequenceClassification,
+            "automatic-speech-recognition": Wav2Vec2ForCTC,
+            "feature-extraction": Wav2Vec2Model,
+            "fill-mask": Wav2Vec2ForMaskedLM,
+        }
+        if is_torch_available()
+        else {}
     )
     fx_compatible = True
     test_pruning = False

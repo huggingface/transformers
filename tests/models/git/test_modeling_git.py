@@ -25,6 +25,7 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -378,9 +379,12 @@ class GitModelTester:
 
 
 @require_torch
-class GitModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GitModel, GitForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GitForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": GitModel, "text-generation": GitForCausalLM} if is_torch_available() else {}
+    )
     fx_compatible = False
     test_torchscript = False
 

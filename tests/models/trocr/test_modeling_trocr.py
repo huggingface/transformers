@@ -22,6 +22,7 @@ from transformers.testing_utils import is_torch_available, require_torch, torch_
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -158,9 +159,10 @@ class TrOCRStandaloneDecoderModelTester:
 
 
 @require_torch
-class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class TrOCRStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TrOCRDecoder, TrOCRForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (TrOCRForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = {"text-generation": TrOCRForCausalLM} if is_torch_available() else {}
     fx_compatible = True
     test_pruning = False
 

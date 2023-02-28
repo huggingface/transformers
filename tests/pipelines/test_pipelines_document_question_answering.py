@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -54,7 +54,7 @@ INVOICE_URL = (
 
 @require_torch
 @require_vision
-class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING
 
     @require_pytesseract

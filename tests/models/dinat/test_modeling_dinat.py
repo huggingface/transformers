@@ -24,6 +24,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -192,7 +193,7 @@ class DinatModelTester:
 
 @require_natten
 @require_torch
-class DinatModelTest(ModelTesterMixin, unittest.TestCase):
+class DinatModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DinatModel,
@@ -201,6 +202,11 @@ class DinatModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": DinatModel, "image-classification": DinatForImageClassification}
+        if is_torch_available()
+        else {}
     )
     fx_compatible = False
 

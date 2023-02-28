@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, global_rng, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -207,7 +208,7 @@ class CanineModelTester:
 
 
 @require_torch
-class CanineModelTest(ModelTesterMixin, unittest.TestCase):
+class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             CanineModel,
@@ -218,6 +219,17 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": CanineModel,
+            "question-answering": CanineForQuestionAnswering,
+            "text-classification": CanineForSequenceClassification,
+            "token-classification": CanineForTokenClassification,
+            "zero-shot": CanineForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     test_mismatched_shapes = False
