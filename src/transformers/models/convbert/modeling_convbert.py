@@ -413,7 +413,7 @@ class ConvBertSelfAttention(nn.Module):
         conv_out = torch.reshape(conv_out_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size])
         context_layer = torch.cat([context_layer, conv_out], 2)
 
-        new_context_layer_shape = context_layer.size()[:-2] + (self.head_ratio * self.all_head_size,)
+        new_context_layer_shape = context_layer.size()[:-2] + (self.num_attention_heads * self.attention_head_size * 2,)  # conv and context
         context_layer = context_layer.view(*new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
