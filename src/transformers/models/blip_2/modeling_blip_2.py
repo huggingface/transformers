@@ -1426,8 +1426,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         Returns:
             captions (list): A list of strings of length batch_size * num_captions.
         """
-        # preprocess for `accelerate`
-        self._preprocess_accelerate()
+        if hasattr(self, "hf_device_map"):
+            # preprocess for `accelerate`
+            self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
         image_embeds = self.vision_model(pixel_values, return_dict=True).last_hidden_state
