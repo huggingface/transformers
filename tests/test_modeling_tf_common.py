@@ -90,6 +90,7 @@ if is_tf_available():
         TFAutoModel,
         TFAutoModelForSequenceClassification,
         TFBertForMaskedLM,
+        TFBertForSequenceClassification,
         TFBertModel,
         TFRagModel,
         TFSharedEmbeddings,
@@ -2142,11 +2143,15 @@ class UtilsFunctionsTest(unittest.TestCase):
 
     def test_sharded_checkpoint_with_prefix(self):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert", load_weight_prefix="a/b")
-        model_with_prefix = TFBertModel.from_pretrained("ArthurZ/tiny-random-bert-sharded", load_weight_prefix="a/b")
-        for p1, p2 in zip(model.weights, model_with_prefix.weights):
-            assert np.allclose(p1.numpy(), p2.numpy())
-            assert p1.name.startswith("a/b/")
-            assert p2.name.startswith("a/b/")
+        sharded_model = TFBertModel.from_pretrained("ArthurZ/tiny-random-bert-sharded", load_weight_prefix="a/b")
+        for p1, p2 in zip(model.weights, sharded_model.weights):
+            self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
+            self.assertTrue(p1.name.startswith("a/b/"))
+            self.assertTrue(p2.name.startswith("a/b/"))
+
+    def test_sharded_checkpoint_transfer(self):
+        # If this doesn't throw an error then the test passes
+        model = TFBertForSequenceClassification.from_pretrained("ArthurZ/tiny-random-bert-sharded")
 
     @is_pt_tf_cross_test
     def test_checkpoint_sharding_local_from_pt(self):
