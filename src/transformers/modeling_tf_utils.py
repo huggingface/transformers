@@ -740,8 +740,8 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
     for i, k in enumerate(model.weights):
         layer_name = k.name
         if _prefix is not None and layer_name.startswith(_prefix):
-            layer_name = layer_name[len(_prefix):]
-            layer_name = layer_name.lstrip('/')
+            layer_name = layer_name[len(_prefix) :]
+            layer_name = layer_name.lstrip("/")
         if not ("model." in layer_name or len(layer_name.split("/")) == 1):
             layer_name = "/".join(layer_name.split("/")[1:])
         model_keys.add(layer_name)
@@ -749,7 +749,11 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
 
     for shard_file in shard_files:
         saved_weight_names_set, unexpected_keys_set, missmatched_keys_set = load_tf_shard(
-            model, model_layer_map, shard_file, ignore_mismatched_sizes=ignore_mismatched_sizes, _prefix=_prefix,
+            model,
+            model_layer_map,
+            shard_file,
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
+            _prefix=_prefix,
         )
         saved_keys.update(saved_weight_names_set)
         unexpected_keys.update(unexpected_keys_set)
@@ -2459,8 +2463,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 specify the folder name here.
             tf_to_pt_weight_rename (`Callable`, *optional*):
                 A function that is called to transform the names of weights during the PyTorch to TensorFlow
-                crossloading process. This is not necessary for most models, but is useful to allow composite
-                models to be crossloaded correctly.
+                crossloading process. This is not necessary for most models, but is useful to allow composite models to
+                be crossloaded correctly.
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
