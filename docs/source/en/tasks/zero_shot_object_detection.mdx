@@ -198,7 +198,10 @@ PyTorch tensors, or NumPy arrays.
 
 ```py
 >>> images = [image, im]
->>> text_queries = [["human face", "rocket", "nasa badge", "star-spangled banner"], ["hat", "book", "sunglasses", "camera"]]
+>>> text_queries = [
+...     ["human face", "rocket", "nasa badge", "star-spangled banner"],
+...     ["hat", "book", "sunglasses", "camera"],
+... ]
 >>> inputs = processor(text=text_queries, images=images, return_tensors="pt")
 ```
 
