@@ -22,7 +22,7 @@ import os
 
 import tensorflow as tf
 
-from transformers import AutoTokenizer, AutoConfig, TFAutoModelForMaskedLM, create_optimizer, PushToHubCallback
+from transformers import AutoConfig, AutoTokenizer, PushToHubCallback, TFAutoModelForMaskedLM, create_optimizer
 
 
 logger = logging.getLogger(__name__)
@@ -54,31 +54,29 @@ def parse_args():
     parser.add_argument(
         "--no_tpu",
         action="store_true",
-        help="If set, run on CPU and don't try to initialize a TPU. Useful for debugging on non-TPU instances."
+        help="If set, run on CPU and don't try to initialize a TPU. Useful for debugging on non-TPU instances.",
     )
 
     parser.add_argument(
         "--tpu_name",
         type=str,
-        help="Name of TPU resource to initialize. Should be blank on Colab, and 'local' on TPU VMs."
+        help="Name of TPU resource to initialize. Should be blank on Colab, and 'local' on TPU VMs.",
     )
 
     parser.add_argument(
         "--tpu_zone",
         type=str,
-        help="Google cloud zone that TPU resource is located in. Only used for non-Colab TPU nodes."
+        help="Google cloud zone that TPU resource is located in. Only used for non-Colab TPU nodes.",
     )
 
     parser.add_argument(
-        "--gcp_project",
-        type=str,
-        help="Google cloud project name. Only used for non-Colab TPU nodes."
+        "--gcp_project", type=str, help="Google cloud project name. Only used for non-Colab TPU nodes."
     )
 
     parser.add_argument(
         "--bfloat16",
         action="store_true",
-        help="Use mixed-precision bfloat16 for training. This is the recommended lower-precision format for TPU."
+        help="Use mixed-precision bfloat16 for training. This is the recommended lower-precision format for TPU.",
     )
 
     parser.add_argument(
@@ -91,7 +89,7 @@ def parse_args():
     parser.add_argument(
         "--shuffle_buffer_size",
         type=int,
-        default=2 ** 17,
+        default=2**17,
         help="Size of the shuffle buffer to use for the training dataset.",
     )
 
@@ -134,7 +132,7 @@ def parse_args():
         "--max_length",
         type=int,
         default=128,
-        help="Maximum length of tokenized sequences. Should match the setting used in prepare_tfrecord_shards.py"
+        help="Maximum length of tokenized sequences. Should match the setting used in prepare_tfrecord_shards.py",
     )
 
     parser.add_argument("--output_dir", type=str, required=True, help="Path to save model checkpoints to.")
@@ -153,7 +151,7 @@ def initialize_tpu(args):
         else:
             tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
     except ValueError:
-        raise RuntimeError(f"Couldn't connect to TPU!")
+        raise RuntimeError("Couldn't connect to TPU!")
 
     tf.config.experimental_connect_to_cluster(tpu)
     tf.tpu.experimental.initialize_tpu_system(tpu)
@@ -182,7 +180,7 @@ def main(args):
     def decode_fn(example):
         features = {
             "input_ids": tf.io.FixedLenFeature(dtype=tf.int64, shape=(args.max_length,)),
-            "attention_mask": tf.io.FixedLenFeature(dtype=tf.int64, shape=(args.max_length,))
+            "attention_mask": tf.io.FixedLenFeature(dtype=tf.int64, shape=(args.max_length,)),
         }
         return tf.io.parse_single_example(example, features)
 
@@ -207,7 +205,7 @@ def main(args):
         init_lr=args.learning_rate,
         num_train_steps=len(train_dataset) * args.num_epochs,
         num_warmup_steps=int(len(train_dataset) * args.num_epochs * args.warmup_fraction),
-        weight_decay_rate=args.weight_decay_rate
+        weight_decay_rate=args.weight_decay_rate,
     )
 
     model.compile(optimizer=optimizer, metrics=["accuracy"])

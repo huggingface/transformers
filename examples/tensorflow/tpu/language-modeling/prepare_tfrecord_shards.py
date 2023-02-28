@@ -72,30 +72,45 @@ def parse_args():
     return args
 
 
-def get_serialized_examples(tokenizer):
-    def fn(examples, max_length=128):
-        tokenized_data = tokenizer(
-            examples,
-            padding="max_length",
-            truncation=True,
-            max_length=max_length,
-            return_tensors="np",
-        )
-        records = []
-        for i in range(len(examples)):
-            features = {
-                "input_ids": tf.train.Feature(int64_list=tf.train.Int64List(value=tokenized_data["input_ids"][i])),
-                "attention_mask": tf.train.Feature(
-                    int64_list=tf.train.Int64List(value=tokenized_data["attention_mask"][i])
-                ),
-            }
-            features = tf.train.Features(feature=features)
-            example = tf.train.Example(features=features)
-            record_bytes = example.SerializeToString()
-            records.append(record_bytes)
-        return records
+def tokenize_function(tokenizer):
+    def fn(examples):
+        return tokenizer(examples["text"])
 
     return fn
+
+
+def group_texts(block_size=128):
+    def fn(examples):
+        # Concatenate all texts.
+        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+        total_length = len(concatenated_examples[list(examples.keys())[0]])
+        # We drop the small remainder, though you could add padding instead if the model supports it
+        # In this, as in all things, we advise you to follow your heart 🫀
+        total_length = (total_length // block_size) * block_size
+        # Split by chunks of max_len.
+        result = {
+            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+            for k, t in concatenated_examples.items()
+        }
+        return result
+
+    return fn
+
+
+def get_serialized_examples(tokenized_data):
+    records = []
+    for i in range(len(tokenized_data)):
+        features = {
+            "input_ids": tf.train.Feature(int64_list=tf.train.Int64List(value=tokenized_data["input_ids"][i])),
+            "attention_mask": tf.train.Feature(
+                int64_list=tf.train.Int64List(value=tokenized_data["attention_mask"][i])
+            ),
+        }
+        features = tf.train.Features(feature=features)
+        example = tf.train.Example(features=features)
+        record_bytes = example.SerializeToString()
+        records.append(record_bytes)
+    return records
 
 
 def main(args):
@@ -104,7 +119,7 @@ def main(args):
     if args.limit is not None:
         max_samples = min(len(wikitext), args.limit)
         wikitext = wikitext.select(range(max_samples))
-        logger.info(f"Limiting the dataset to {args.limit} entries.")
+        print(f"Limiting the dataset to {args.limit} entries.")
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path)
 
@@ -120,19 +135,33 @@ def main(args):
     else:
         split_dir = os.path.join(args.output_dir, args.split)
 
+    # Tokenize the whole dataset at once.
+    tokenize_fn = tokenize_function(tokenizer)
+    wikitext_tokenized = wikitext.map(tokenize_fn, batched=True, num_proc=4, remove_columns=["text"])
+
+    # We need to concatenate all our texts together, and then split the result
+    # into chunks of a fixed size, which we will call block_size. To do this, we
+    # will use the map method again, with the option batched=True. When we use batched=True,
+    # the function we pass to map() will be passed multiple inputs at once, allowing us
+    # to group them into more or fewer examples than we had in the input.
+    # This allows us to create our new fixed-length samples. The advantage of this
+    # method is that we don't lose a whole lot of content from the dataset compared to the
+    # case where we simply tokenize with a pre-defined max_length.
+    group_texts_fn = group_texts(block_size=args.max_length)
+    grouped_dataset = wikitext_tokenized.map(group_texts_fn, batched=True, batch_size=1000, num_proc=4)
+
     shard_count = 0
-    get_serialized_examples_fn = get_serialized_examples(tokenizer)
-    for shard in range(0, len(wikitext), args.shard_size):
-        dataset_snapshot = wikitext[shard : shard + args.shard_size]["text"]
+    for shard in range(0, len(grouped_dataset), args.shard_size):
+        dataset_snapshot = grouped_dataset[shard : shard + args.shard_size]
         shard_size = len(dataset_snapshot)
-        filename = os.path.join(split_dir, f"wikitext-{shard_count}-{shard_size}.tfrecord")
-        serialized_examples = get_serialized_examples_fn(dataset_snapshot)
+        filename = os.path.join(split_dir, f"wikitext-{args.limit}-{shard_count}-{shard_size}.tfrecord")
+        serialized_examples = get_serialized_examples(dataset_snapshot)
 
         with tf.io.TFRecordWriter(filename) as out_file:
             for i in range(shard_size):
                 example = serialized_examples[i]
                 out_file.write(example)
-            logger.info("Wrote file {} containing {} records".format(filename, shard_size))
+            print("Wrote file {} containing {} records".format(filename, shard_size))
 
         shard_count += 1
 
