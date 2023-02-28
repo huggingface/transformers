@@ -229,55 +229,22 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         from_pt = kwargs.pop("from_pt", False)
         if from_pt:
-            import torch
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+            encoder_model_type = config.encoder.model_type
 
-            from transformers import VisionTextDualEncoderModel
+            # Matt: The TF and PT weights don't align because our TF base classes have an extra layer compared to PT models
+            # (the main model stem is in the MainLayer class). If we remove that layer, then weight names sync up as normal.
+            # However, the name of that extra layer is the name of the MainLayer in the base model. We make the assumption
+            # here that the config model_type is the same as the name of the MainLayer. I don't know of anywhere that's
+            # not the case, and I wasn't sure how else to go from the config to the correct MainLayer name!
+            def tf_to_pt_weight_rename(tf_weight):
+                if "encoder" in tf_weight and "decoder" not in tf_weight:
+                    return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
+                else:
+                    return tf_weight
 
-            # a workaround to load from pytorch checkpoint, adapted from TFVisionEncoderDecoderModel
-            _model = VisionTextDualEncoderModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-            config = _model.config
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                vision_model_dir = os.path.join(tmpdirname, "vision_model")
-                text_model_dir = os.path.join(tmpdirname, "text_model")
-                _model.vision_model.save_pretrained(vision_model_dir)
-                _model.text_model.save_pretrained(text_model_dir)
-
-                extra_weights = False
-                if hasattr(_model, "visual_projection"):
-                    visual_projection_kernel = tf.transpose(
-                        tf.constant(_model.visual_projection.weight.detach().to("cpu").numpy()), perm=(1, 0)
-                    )
-                    extra_weights = True
-                if hasattr(_model, "text_projection"):
-                    text_projection_kernel = tf.transpose(
-                        tf.constant(_model.text_projection.weight.detach().to("cpu").numpy()), perm=(1, 0)
-                    )
-                    extra_weights = True
-                if hasattr(_model, "logit_scale"):
-                    logit_scale = tf.constant(_model.logit_scale.detach().to("cpu").numpy())
-                    extra_weights = True
-
-                del _model
-                gc.collect()
-                torch.cuda.empty_cache()
-
-                model = cls.from_vision_text_pretrained(
-                    vision_model_dir, text_model_dir, vision_from_pt=True, text_from_pt=True
-                )
-                # This is only for copying some specific attributes of this particular model.
-                model.config = config
-
-                if extra_weights:
-                    model(model.dummy_inputs)  # Make sure it's built
-                    if hasattr(model, "visual_projection"):
-                        model.visual_projection.kernel = visual_projection_kernel
-                    if hasattr(model, "text_projection"):
-                        model.text_projection.kernel = text_projection_kernel
-                    if hasattr(model, "logit_scale"):
-                        model.logit_scale = logit_scale
-
-                return model
+            if kwargs.get("from_pt", False):
+                kwargs["tf_to_pt_weight_rename"] = tf_to_pt_weight_rename
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
@@ -583,15 +550,6 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
                 vision_class = TFAutoModel
             vision_model = vision_class.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
 
-            # Necessary to make `save_pretrained -> from_pretrained` work correctly for the converted PT -> TF model.
-            # See https://github.com/huggingface/transformers/pull/14016#issuecomment-944046313
-            if kwargs_vision.get("from_pt", None):
-                del kwargs_vision["from_pt"]
-                with tempfile.TemporaryDirectory() as tmp_dirname:
-                    vision_model.save_pretrained(tmp_dirname)
-                    del vision_model
-                    vision_model = vision_class.from_pretrained(tmp_dirname, *model_args, **kwargs_vision)
-
         text_model = kwargs_text.pop("model", None)
         if text_model is None:
             if text_model_name_or_path is None:
@@ -606,15 +564,6 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
                 kwargs_text["config"] = text_config
 
             text_model = TFAutoModel.from_pretrained(text_model_name_or_path, *model_args, **kwargs_text)
-
-            # Necessary to make `save_pretrained -> from_pretrained` work correctly for the converted PT -> TF model.
-            # See https://github.com/huggingface/transformers/pull/14016#issuecomment-944046313
-            if kwargs_text.get("from_pt", None):
-                del kwargs_text["from_pt"]
-                with tempfile.TemporaryDirectory() as tmp_dirname:
-                    text_model.save_pretrained(tmp_dirname)
-                    del text_model
-                    text_model = TFAutoModel.from_pretrained(tmp_dirname, *model_args, **kwargs_text)
 
         # instantiate config with corresponding kwargs
         config = VisionTextDualEncoderConfig.from_vision_text_configs(vision_model.config, text_model.config, **kwargs)
