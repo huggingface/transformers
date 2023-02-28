@@ -15,12 +15,13 @@
 
 import argparse
 import glob
-import importlib.util
 import os
 import re
 
 import black
 from doc_builder.style_doc import style_docstrings_in_code
+
+from transformers.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -98,12 +99,7 @@ LOCALIZED_READMES = {
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(TRANSFORMERS_PATH, "__init__.py"),
-    submodule_search_locations=[TRANSFORMERS_PATH],
-)
-transformers_module = spec.loader.load_module()
+transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
 def _should_continue(line, indent):
@@ -389,7 +385,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
-    return readmes_match, "\n".join(map(lambda x: x[1], sorted_index)) + "\n"
+    return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
 
 
 def convert_readme_to_index(model_list):

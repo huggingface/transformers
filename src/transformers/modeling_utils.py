@@ -74,6 +74,7 @@ from .utils import (
     replace_return_docstrings,
 )
 from .utils.import_utils import importlib_metadata
+from .utils.quantization_config import BitsAndBytesConfig
 from .utils.versions import require_version_core
 
 
@@ -190,14 +191,14 @@ def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtil
             # Adding fix for https://github.com/pytorch/xla/issues/4152
             # Fixes issue where the model code passes a value that is out of range for XLA_USE_BF16=1
             # and XLA_DOWNCAST_BF16=1 so the conversion would cast it to -inf
-            if is_torch_tpu_available():
-                if XLA_USE_BF16 in ENV_VARS_TRUE_VALUES:
+            # NOTE: `is_torch_tpu_available()` is checked last as it induces a graph break in torch dynamo
+            if XLA_USE_BF16 in ENV_VARS_TRUE_VALUES and is_torch_tpu_available():
+                return torch.bfloat16
+            if XLA_DOWNCAST_BF16 in ENV_VARS_TRUE_VALUES and is_torch_tpu_available():
+                if t.dtype == torch.float:
                     return torch.bfloat16
-                if XLA_DOWNCAST_BF16 in ENV_VARS_TRUE_VALUES:
-                    if t.dtype == torch.float:
-                        return torch.bfloat16
-                    if t.dtype == torch.double:
-                        return torch.float32
+                if t.dtype == torch.double:
+                    return torch.float32
             return t.dtype
 
     if last_dtype is not None:
@@ -1148,6 +1149,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return False
         return True
 
+    def enable_input_require_grads(self):
+        """
+        Enables the gradients for the input embeddings. This is useful for fine-tuning adapter weights while keeping
+        the model weights fixed.
+        """
+
+        def make_inputs_require_grads(module, input, output):
+            output.requires_grad_(True)
+
+        self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
+
+    def disable_input_require_grads(self):
+        """
+        Removes the `_require_grads_hook`.
+        """
+        self._require_grads_hook.remove()
+
     def get_input_embeddings(self) -> nn.Module:
         """
         Returns the model's input embeddings.
@@ -1253,7 +1271,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     len(encoder_modules) > 0
                 ), f"Encoder module {encoder_pointer} does not match decoder module {decoder_pointer}"
 
-                all_encoder_weights = set([module_name + "/" + sub_name for sub_name in encoder_modules.keys()])
+                all_encoder_weights = {module_name + "/" + sub_name for sub_name in encoder_modules.keys()}
                 encoder_layer_pos = 0
                 for name, module in decoder_modules.items():
                     if name.isdigit():
@@ -1904,7 +1922,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
                 identifier allowed by git.
 
-
                 <Tip>
 
                 To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
@@ -1932,8 +1949,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Tries to not use more than 1x model size in CPU memory (including peak memory) while loading the model.
                 This is an experimental feature and a subject to change at any moment.
             torch_dtype (`str` or `torch.dtype`, *optional*):
-                Override the default `torch.dtype` and load the model under this dtype. If `"auto"` is passed the dtype
-                will be automatically derived from the model's weights.
+                Override the default `torch.dtype` and load the model under a specific `dtype`. The different options
+                are:
+
+                1. `torch.float16` or `torch.bfloat16` or `torch.float`: load in a specified
+                  `dtype`, ignoring the model's `config.torch_dtype` if one exists. If not specified
+                  - the model will get loaded in `torch.float` (fp32).
+
+                2. `"auto"` - A `torch_dtype` entry in the `config.json` file of the model will be
+                  attempted to be used. If this entry isn't found then next check the `dtype` of the first weight in
+                  the checkpoint that's of a floating point type and use that as `dtype`. This will load the model
+                  using the `dtype` it was saved in at the end of the training. It can't be used as an indicator of how
+                  the model was trained. Since it could be trained in one of half precision dtypes, but saved in fp32.
+
+                <Tip>
+
+                For some models the `dtype` they were trained in is unknown - you may try to check the model's paper or
+                reach out to the authors and ask them to add this information to the model's card and to insert the
+                `torch_dtype` entry in `config.json` on the hub.
+
+                </Tip>
+
             device_map (`str` or `Dict[str, Union[int, str, torch.device]]`, *optional*):
                 A map that specifies where each submodule should go. It doesn't need to be refined to each
                 parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
@@ -1957,19 +1993,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 https://test.pypi.org/simple/ bitsandbytes-cudaXXX` where XXX is your CUDA version (e.g. 11.6 = 116).
                 Make also sure that you have enough GPU RAM to store half of the model size since the 8bit modules are
                 not compiled and adapted for CPUs.
-            load_in_8bit_threshold (`float`, *optional*, defaults to 6):
-                Works together with `load_in_8bit`. This corresponds to the outlier threshold for outlier detection as
-                described in `GPT3.int8() : 8-bit Matrix Multiplication for Transformers at Scale` paper. Any hidden
-                states value that is above this threshold will be considered an outlier and the operation on those
-                values will be done in fp16. Values are usually normally distributed, that is, most values are in the
-                range [-3.5, 3.5], but there are some exceptional systematic outliers that are very differently
-                distributed for large models. These outliers are often in the interval [-60, -6] or [6, 60]. Int8
-                quantization works well for values of magnitude ~5, but beyond that, there is a significant performance
-                penalty. A good default threshold is 6, but a lower threshold might be needed for more unstable models
-                (small models, fine-tuning).
-            load_in_8bit_skip_modules (`List[str]`, *optional*):
-                An explicit list of the modules that we do not want to convert in 8-bit. This is useful for models such
-                as Jukebox that has several heads in different places and not necessarily at the last position.
+            quantization_config (`Dict`, *optional*):
+                A dictionary of configuration parameters for the `bitsandbytes` library and loading the model using
+                advanced features such as offloading in fp32 on CPU or on disk.
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
@@ -2058,8 +2084,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
-        load_in_8bit_threshold = kwargs.pop("load_in_8bit_threshold", 6.0)
-        load_in_8bit_skip_modules = kwargs.pop("load_in_8bit_skip_modules", None)
+        quantization_config = kwargs.pop("quantization_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
@@ -2091,6 +2116,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
                 )
 
+        if quantization_config is None:
+            quantization_config, kwargs = BitsAndBytesConfig.from_dict(
+                config_dict={"load_in_8bit": load_in_8bit}, return_unused_kwargs=True, **kwargs
+            )
+        elif quantization_config is not None:
+            load_in_8bit = quantization_config.load_in_8bit
+
+            quantization_config_kwargs = {
+                k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters
+            }
+
+            if len(quantization_config_kwargs) > 0:
+                raise ValueError(
+                    "You can't pass `load_in_8bit` or any other `BitsAndBytesConfig` argument as a kwarg when passing "
+                    "`quantization_config` argument at the same time."
+                )
+
         if load_in_8bit:
             if not (is_accelerate_available() and is_bitsandbytes_available()):
                 raise ImportError(
@@ -2098,10 +2140,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     " bitsandbytes `pip install -i https://test.pypi.org/simple/ bitsandbytes` or"
                     " pip install bitsandbytes` "
                 )
-            if torch_dtype == "auto" or torch_dtype != torch.float16:
+            if torch_dtype != torch.float16:
                 # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
+                logger.warning(
+                    f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
+                    "requirements of `bitsandbytes` to enable model loading in mixed int8. "
+                    "Either pass torch_dtype=torch.float16 or don't pass this argument at all to remove this warning."
+                )
                 torch_dtype = torch.float16
-                logger.info("Loading the model in mixed int8 - forcing the weights to be casted in float16")
+
             if device_map is None:
                 raise ValueError(
                     "A device map needs to be passed to run convert models into mixed-int8 format. Please run"
@@ -2257,19 +2304,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 try:
                     # Load from URL or cache if already cached
-                    cached_file_kwargs = dict(
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        proxies=proxies,
-                        resume_download=resume_download,
-                        local_files_only=local_files_only,
-                        use_auth_token=use_auth_token,
-                        user_agent=user_agent,
-                        revision=revision,
-                        subfolder=subfolder,
-                        _raise_exceptions_for_missing_entries=False,
-                        _commit_hash=commit_hash,
-                    )
+                    cached_file_kwargs = {
+                        "cache_dir": cache_dir,
+                        "force_download": force_download,
+                        "proxies": proxies,
+                        "resume_download": resume_download,
+                        "local_files_only": local_files_only,
+                        "use_auth_token": use_auth_token,
+                        "user_agent": user_agent,
+                        "revision": revision,
+                        "subfolder": subfolder,
+                        "_raise_exceptions_for_missing_entries": False,
+                        "_commit_hash": commit_hash,
+                    }
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
                     # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
@@ -2388,17 +2435,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if torch_dtype is not None:
                 if isinstance(torch_dtype, str):
                     if torch_dtype == "auto":
-                        if is_sharded and "dtype" in sharded_metadata:
-                            torch_dtype = sharded_metadata["dtype"]
-                        elif not is_sharded:
-                            torch_dtype = get_state_dict_dtype(state_dict)
+                        if hasattr(config, "torch_dtype") and config.torch_dtype is not None:
+                            torch_dtype = config.torch_dtype
+                            logger.info(f"Will use torch_dtype={torch_dtype} as defined in model's config object")
                         else:
-                            one_state_dict = load_state_dict(resolved_archive_file[0])
-                            torch_dtype = get_state_dict_dtype(one_state_dict)
-                            del one_state_dict  # free CPU memory
+                            if is_sharded and "dtype" in sharded_metadata:
+                                torch_dtype = sharded_metadata["dtype"]
+                            elif not is_sharded:
+                                torch_dtype = get_state_dict_dtype(state_dict)
+                            else:
+                                one_state_dict = load_state_dict(resolved_archive_file[0])
+                                torch_dtype = get_state_dict_dtype(one_state_dict)
+                                del one_state_dict  # free CPU memory
+                            logger.info(
+                                "Since the `torch_dtype` attribute can't be found in model's config object, "
+                                "will use torch_dtype={torch_dtype} as derived from model's weights"
+                            )
                     else:
                         raise ValueError(
-                            f"`torch_dtype` can be either a `torch.dtype` or `auto`, but received {torch_dtype}"
+                            f'`torch_dtype` can be either `torch.dtype` or `"auto"`, but received {torch_dtype}'
                         )
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
@@ -2419,7 +2474,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if is_sharded:
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
-                loaded_state_dict_keys = [k for k in state_dict.keys()]
+                loaded_state_dict_keys = list(state_dict.keys())
             if low_cpu_mem_usage or use_keep_in_fp32_modules:
                 state_dict = None
 
@@ -2449,6 +2504,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if load_in_8bit:
             from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear
 
+            load_in_8bit_skip_modules = quantization_config.llm_int8_skip_modules
+            load_in_8bit_threshold = quantization_config.llm_int8_threshold
+            load_in_8bit_fp32_cpu_offload = quantization_config.llm_int8_enable_fp32_cpu_offload
+
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
             # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
@@ -2461,6 +2520,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 modules_to_not_convert = [modules_to_not_convert]
 
             modules_to_not_convert.extend(keep_in_fp32_modules)
+
+            # Extend the modules to not convert to keys that are supposed to be offloaded to `cpu` or `disk`
+            if isinstance(device_map, dict) and len(device_map.keys()) > 1:
+                keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
+
+                if len(keys_on_cpu) > 0 and not load_in_8bit_fp32_cpu_offload:
+                    raise ValueError(
+                        "If you want to offload some keys to `cpu` or `disk`, you need to set "
+                        "`load_in_8bit_fp32_cpu_offload=True`. Note that these modules will not be "
+                        " converted to 8-bit but kept in 32-bit."
+                    )
+
+                modules_to_not_convert.extend(keys_on_cpu)
 
             model = replace_8bit_linear(
                 model, threshold=load_in_8bit_threshold, modules_to_not_convert=modules_to_not_convert
@@ -2600,7 +2672,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     _from_pipeline=from_pipeline,
                     **kwargs,
                 )
-            except OSError:
+            except (OSError, TypeError):
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
                 )
@@ -2974,12 +3046,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
-        module_keys = set([".".join(key.split(".")[:-1]) for key in names])
+        module_keys = {".".join(key.split(".")[:-1]) for key in names}
 
         # torch.nn.ParameterList is a special case where two parameter keywords
         # are appended to the module name, *e.g.* bert.special_embeddings.0
         module_keys = module_keys.union(
-            set([".".join(key.split(".")[:-2]) for key in names if len(key) > 0 and key[-1].isdigit()])
+            {".".join(key.split(".")[:-2]) for key in names if len(key) > 0 and key[-1].isdigit()}
         )
 
         retrieved_modules = []
