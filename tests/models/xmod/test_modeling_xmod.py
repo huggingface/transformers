@@ -20,6 +20,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -354,7 +355,7 @@ class XmodModelTester:
 
 
 @require_torch
-class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             XmodForCausalLM,
@@ -369,6 +370,19 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (XmodForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": XmodModel,
+            "fill-mask": XmodForMaskedLM,
+            "question-answering": XmodForQuestionAnswering,
+            "text-classification": XmodForSequenceClassification,
+            "text-generation": XmodForCausalLM,
+            "token-classification": XmodForTokenClassification,
+            "zero-shot": XmodForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = XmodModelTester(self)

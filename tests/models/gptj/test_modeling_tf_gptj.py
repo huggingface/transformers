@@ -20,6 +20,7 @@ from transformers.testing_utils import require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
@@ -293,7 +294,7 @@ class TFGPTJModelTester:
 
 
 @require_tf
-class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
+class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFGPTJForCausalLM, TFGPTJForSequenceClassification, TFGPTJForQuestionAnswering, TFGPTJModel)
         if is_tf_available()
@@ -301,6 +302,17 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
     )
 
     all_generative_model_classes = (TFGPTJForCausalLM,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFGPTJModel,
+            "question-answering": TFGPTJForQuestionAnswering,
+            "text-classification": TFGPTJForSequenceClassification,
+            "text-generation": TFGPTJForCausalLM,
+            "zero-shot": TFGPTJForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_onnx = False
     test_pruning = False
     test_missing_keys = False

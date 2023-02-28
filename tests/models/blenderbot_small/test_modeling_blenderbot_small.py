@@ -24,6 +24,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -217,9 +218,20 @@ class BlenderbotSmallModelTester:
 
 
 @require_torch
-class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotSmallModel, BlenderbotSmallForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (BlenderbotSmallForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": BlenderbotSmallForConditionalGeneration,
+            "feature-extraction": BlenderbotSmallModel,
+            "summarization": BlenderbotSmallForConditionalGeneration,
+            "text2text-generation": BlenderbotSmallForConditionalGeneration,
+            "text-generation": BlenderbotSmallForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = True
     test_pruning = False

@@ -19,7 +19,7 @@ from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_torch_available,
 from transformers.pipelines import DepthEstimationPipeline, pipeline
 from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_torch_available():
@@ -43,7 +43,7 @@ def hashimage(image: Image) -> str:
 @require_vision
 @require_timm
 @require_torch
-class DepthEstimationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class DepthEstimationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
