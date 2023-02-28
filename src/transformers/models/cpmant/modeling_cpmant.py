@@ -524,7 +524,7 @@ class CPMAntIntermediate(nn.Module):
 class CPMAntSegmentPositionEmbedding(nn.Module):
     def __init__(
         self,
-        config: CPMAntConfig
+        config: CPMAntConfig,
         bidirectional: bool = True,
     ):
         super().__init__()
