@@ -155,7 +155,7 @@ Use the processor to prepare the inputs for the model. The processor combines an
 image for the model by resizing and normalizing it, and a [`CLIPTokenizer`] that takes care of the text inputs.
 
 ```py
->>> text_queries = ["hat", "book", "sunglasses"]
+>>> text_queries = ["hat", "book", "sunglasses", "camera"]
 >>> inputs = processor(text=text_queries, images=im, return_tensors="pt")
 ```
 
@@ -198,7 +198,7 @@ PyTorch tensors, or NumPy arrays.
 
 ```py
 >>> images = [image, im]
->>> text_queries = [["human face", "rocket", "nasa badge", "star-spangled banner"], ["hat", "book", "sunglasses"]]
+>>> text_queries = [["human face", "rocket", "nasa badge", "star-spangled banner"], ["hat", "book", "sunglasses", "camera"]]
 >>> inputs = processor(text=text_queries, images=images, return_tensors="pt")
 ```
 
