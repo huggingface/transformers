@@ -2151,7 +2151,7 @@ class UtilsFunctionsTest(unittest.TestCase):
 
     def test_sharded_checkpoint_transfer(self):
         # If this doesn't throw an error then the test passes
-        model = TFBertForSequenceClassification.from_pretrained("ArthurZ/tiny-random-bert-sharded")
+        TFBertForSequenceClassification.from_pretrained("ArthurZ/tiny-random-bert-sharded")
 
     @is_pt_tf_cross_test
     def test_checkpoint_sharding_local_from_pt(self):
