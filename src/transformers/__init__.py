@@ -4756,8 +4756,6 @@ if TYPE_CHECKING:
             ConvNextModel,
             ConvNextPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.cpmant import (
             CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST,
             CPMAntForCausalLM,
