@@ -433,6 +433,24 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
         for idx, lag in enumerate(lags_sequence):
             assert torch.isclose(ref - lag, transformer_inputs[0, :, idx]).all()
 
+        # test for generation
+        batch.pop("future_values")
+        transformer_inputs, loc, scale, _ = model.create_network_inputs(**batch)
+
+        lagged_sequence = model.get_lagged_subsequences(
+            sequence=batch["past_values"],
+            subsequences_length=1,
+            shift=1,
+        )
+        # assert that the last element of the lagged sequence is the one after the encoders input
+        assert transformer_inputs[0, ..., 0][-1] + 1 == lagged_sequence[0, ..., 0][-1]
+
+        future_values = torch.arange(history_length, history_length + prediction_length, dtype=torch.float32).view(
+            1, prediction_length
+        )
+        # assert that the first element of the future_values is offset by lag after the decoders input
+        assert lagged_sequence[0, ..., 0][-1] + lags_sequence[0] == future_values[0, ..., 0]
+
     @is_flaky()
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
