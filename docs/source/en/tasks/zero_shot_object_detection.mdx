@@ -17,11 +17,11 @@ specific language governing permissions and limitations under the License.
 Traditionally, models used for [object detection](object_detection) require labeled image datasets for training,
 and are limited to detecting the set of classes from the training data.
 
-Zero-shot object detection is supported by the [OWL-ViT](./model_doc/owlvit) model which uses a different approach. OWL-ViT
+Zero-shot object detection is supported by the [OWL-ViT](../model_doc/owlvit) model which uses a different approach. OWL-ViT
 is an open-vocabulary object detector. It means that it can detect objects in images based on free-text queries without
 the need to fine-tune the model on labeled datasets.
 
-OWL-ViT leverages multi-modal representations to perform open-vocabulary detection. It combines [CLIP](./model_doc/clip) with
+OWL-ViT leverages multi-modal representations to perform open-vocabulary detection. It combines [CLIP](../model_doc/clip) with
 lightweight object classification and localization heads. Open-vocabulary detection is achieved by embedding free-text queries with the text encoder of CLIP and using them as input to the object classification and localization heads.
 associate images and their corresponding textual descriptions, and ViT processes image patches as inputs. The authors
 of OWL-ViT first trained CLIP from scratch and then fine-tuned OWL-ViT end to end on standard object detection datasets using
@@ -42,7 +42,7 @@ pip install -q transformers
 
 ## Zero-shot object detection pipeline
 
-The simplest way to try out inference with OWL-ViT is to use it in a [`Pipeline`]. Instantiate a pipeline
+The simplest way to try out inference with OWL-ViT is to use it in a [`pipeline`]. Instantiate a pipeline
 for zero-shot object detection from a [checkpoint on the Hugging Face Hub](https://huggingface.co/models?other=owlvit):
 
 ```python
