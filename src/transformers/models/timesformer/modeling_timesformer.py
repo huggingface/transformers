@@ -630,7 +630,7 @@ class TimesformerModel(TimesformerPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         >>> list(last_hidden_states.shape)
-        [1, 1568, 768]
+        [1, 1569, 768]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
