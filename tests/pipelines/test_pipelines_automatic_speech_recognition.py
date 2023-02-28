@@ -18,18 +18,20 @@ import numpy as np
 import pytest
 from datasets import load_dataset
 from huggingface_hub import snapshot_download
+
 from transformers import (
     MODEL_FOR_CTC_MAPPING,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     AutoFeatureExtractor,
+    AutoProcessor,
     AutoTokenizer,
     Speech2TextForConditionalGeneration,
     Wav2Vec2ForCTC,
     WhisperForConditionalGeneration,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.pipelines.audio_utils import chunk_bytes_iter, ffmpeg_read
-from transformers.pipelines.automatic_speech_recognition import chunk_iter
+from transformers.pipelines.audio_utils import chunk_bytes_iter
+from transformers.pipelines.automatic_speech_recognition import _find_timestamp_sequence, chunk_iter
 from transformers.testing_utils import (
     is_torch_available,
     nested_simplify,
@@ -314,34 +316,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
 
     @require_torch
-    def test_torch_whisper_fast(self):
-        speech_recognizer = pipeline(
-            task="automatic-speech-recognition",
-            model="hf-internal-testing/tiny-random-WhisperForConditionalGeneration",
-            framework="pt",
-        )
-        speech_recognizer.feature_extractor.n_samples //= 50
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
-        audio = ds[40]["audio"]["array"]
-        output = speech_recognizer(audio)
-        self.assertEqual(output, {"text": "v 돼요 돼요����������� 투 투 투 투 투 투"})
-
-        # Output is random so chunking *can* affect the output.
-        output = speech_recognizer([audio], chunk_length_s=5, batch_size=4)
-        self.assertEqual(output, [{"text": "v 돼요 돼요����������� 투 투 투 투 투 투"}])
-
-        output = speech_recognizer(audio, return_language=True)
-        self.assertEqual(
-            output,
-            {
-                "text": "v 돼요 돼요����������� 투 투 투 투 투 투",
-                "chunks": [{"text": "v 돼요 돼요����������� 투 투 투 투 투 투", "language": None}],
-            },
-        )
-
-    @require_torch
     @slow
-    def test_torch_whisper_slow(self):
+    def test_torch_whisper(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="openai/whisper-tiny",
@@ -355,79 +331,174 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer([filename], chunk_length_s=5, batch_size=4)
         self.assertEqual(output, [{"text": " A man said to the universe, Sir, I exist."}])
 
-        output = speech_recognizer(filename, return_language=True)
+    @slow
+    def test_find_longest_common_subsequence(self):
+        max_source_positions = 1500
+        processor = AutoProcessor.from_pretrained("openai/whisper-tiny")
+
+        previous_sequence = [[51492, 406, 3163, 1953, 466, 13, 51612, 51612]]
         self.assertEqual(
-            output,
+            processor.decode(previous_sequence[0], output_offsets=True),
             {
-                "text": " A man said to the universe, Sir, I exist.",
-                "chunks": [{"text": " A man said to the universe, Sir, I exist.", "language": "english"}],
+                "text": " not worth thinking about.",
+                "offsets": [{"text": " not worth thinking about.", "timestamp": (22.56, 24.96)}],
             },
         )
 
-        output = speech_recognizer(
-            "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/4.flac", return_language=True
-        )
+        # Merge when the previous sequence is a suffix of the next sequence
+        # fmt: off
+        next_sequences_1 = [
+            [50364, 295, 6177, 3391, 11, 19817, 3337, 507, 307, 406, 3163, 1953, 466, 13, 50614, 50614, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50834, 50257]
+        ]
+        # fmt: on
         self.assertEqual(
-            output,
+            processor.decode(next_sequences_1[0], output_offsets=True),
             {
                 "text": (
-                    " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario"
-                    " promaque."
+                    " of spectators, retrievality is not worth thinking about. His instant panic was followed by a"
+                    " small, sharp blow high on his chest.<|endoftext|>"
                 ),
-                "chunks": [
+                "offsets": [
+                    {"text": " of spectators, retrievality is not worth thinking about.", "timestamp": (0.0, 5.0)},
                     {
-                        "text": (
-                            " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le"
-                            " tendario promaque."
-                        ),
-                        "language": "spanish",
-                    }
+                        "text": " His instant panic was followed by a small, sharp blow high on his chest.",
+                        "timestamp": (5.0, 9.4),
+                    },
+                ],
+            },
+        )
+        merge = _find_timestamp_sequence(
+            [[previous_sequence, (480_000, 0, 0)], [next_sequences_1, (480_000, 120_000, 0)]],
+            processor.tokenizer,
+            processor.feature_extractor,
+            max_source_positions,
+        )
+
+        # fmt: off
+        self.assertEqual(
+            merge,
+            [51492, 406, 3163, 1953, 466, 13, 51739, 51739, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51959],
+        )
+        # fmt: on
+        self.assertEqual(
+            processor.decode(merge, output_offsets=True),
+            {
+                "text": (
+                    " not worth thinking about. His instant panic was followed by a small, sharp blow high on his"
+                    " chest."
+                ),
+                "offsets": [
+                    {"text": " not worth thinking about.", "timestamp": (22.56, 27.5)},
+                    {
+                        "text": " His instant panic was followed by a small, sharp blow high on his chest.",
+                        "timestamp": (27.5, 31.900000000000002),
+                    },
                 ],
             },
         )
 
-    @require_torch
-    @slow
-    def test_torch_whisper_mixed_language(self):
-        speech_recognizer = pipeline(
-            task="automatic-speech-recognition",
-            model="openai/whisper-tiny",
-            framework="pt",
+        # Merge when the sequence is in the middle of the 1st next sequence
+        # fmt: off
+        next_sequences_2 = [
+            [50364, 295, 6177, 3391, 11, 19817, 3337, 507, 307, 406, 3163, 1953, 466, 13, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50834, 50257]
+        ]
+        # fmt: on
+        # {'text': ' of spectators, retrievality is not worth thinking about. His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
+        merge = _find_timestamp_sequence(
+            [[previous_sequence, (480_000, 0, 0)], [next_sequences_2, (480_000, 120_000, 0)]],
+            processor.tokenizer,
+            processor.feature_extractor,
+            max_source_positions,
         )
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
-        en_audio = ds[40]["audio"]["array"]
-        dataset = load_dataset("Narsil/asr_dummy")
-        third_item = dataset["test"][3]
-        filename = third_item["file"]
-
-        with open(filename, "rb") as f:
-            inputs = f.read()
-
-        sp_audio = ffmpeg_read(inputs, sampling_rate=speech_recognizer.feature_extractor.sampling_rate)
-        array = np.concatenate([sp_audio, en_audio])
-
-        output = speech_recognizer(
-            array,
-            chunk_length_s=7.0,
-            stride_length_s=[0, 0],
-            return_language=True,
-        )
+        # fmt: off
         self.assertEqual(
-            output,
+            merge,
+            [51492, 406, 3163, 1953, 466, 13, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51959],
+        )
+        # fmt: on
+        self.assertEqual(
+            processor.decode(merge, output_offsets=True),
             {
                 "text": (
-                    " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le tendario"
-                    " promaque. A man said to the universe, Sir, I exist."
+                    " not worth thinking about. His instant panic was followed by a small, sharp blow high on his"
+                    " chest."
                 ),
-                "chunks": [
+                "offsets": [
                     {
-                        "language": "spanish",
                         "text": (
-                            " Y en las ramas medio sumerjidas revoluteamos en Buenos Pajaros de Quimédico y le"
-                            " tendario promaque."
+                            " not worth thinking about. His instant panic was followed by a small, sharp blow high on"
+                            " his chest."
                         ),
+                        "timestamp": (22.56, 31.900000000000002),
                     },
-                    {"language": "english", "text": " A man said to the universe, Sir, I exist."},
+                ],
+            },
+        )
+
+        # Merge when the previous sequence is not included in the current sequence
+        # fmt: off
+        next_sequences_3 = [[50364, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50584, 50257]]
+        # fmt: on
+        # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
+        merge = _find_timestamp_sequence(
+            [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 120_000, 0)]],
+            processor.tokenizer,
+            processor.feature_extractor,
+            max_source_positions,
+        )
+        # fmt: off
+        self.assertEqual(
+            merge,
+            [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832],
+        )
+        # fmt: on
+        self.assertEqual(
+            processor.decode(merge, output_offsets=True),
+            {
+                "text": (
+                    " not worth thinking about. His instant panic was followed by a small, sharp blow high on his"
+                    " chest."
+                ),
+                "offsets": [
+                    {"text": " not worth thinking about.", "timestamp": (22.56, 24.96)},
+                    {
+                        "text": " His instant panic was followed by a small, sharp blow high on his chest.",
+                        "timestamp": (24.96, 29.36),
+                    },
+                ],
+            },
+        )
+        # last case is when the sequence is not in the first next predicted start and end of timestamp
+        # fmt: off
+        next_sequences_3 = [
+            [50364, 2812, 9836, 14783, 390, 406, 3163, 1953, 466, 13, 50634, 50634, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50934]
+        ]
+        # fmt: on
+        merge = _find_timestamp_sequence(
+            [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 167_000, 0)]],
+            processor.tokenizer,
+            processor.feature_extractor,
+            max_source_positions,
+        )
+        # fmt: off
+        self.assertEqual(
+            merge,
+            [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51912]
+        )
+        # fmt: on
+        self.assertEqual(
+            processor.decode(merge, output_offsets=True),
+            {
+                "text": (
+                    " not worth thinking about. His instant panic was followed by a small, sharp blow high on his"
+                    " chest."
+                ),
+                "offsets": [
+                    {"text": " not worth thinking about.", "timestamp": (22.56, 24.96)},
+                    {
+                        "text": " His instant panic was followed by a small, sharp blow high on his chest.",
+                        "timestamp": (24.96, 30.96),
+                    },
                 ],
             },
         )
@@ -465,7 +536,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                             "tight-loan cloth that was the only garment he wore, the "
                             "cut"
                         ),
-                        "timestamp": (5.5, 11.95),
+                        "timestamp": (5.5, 11.94),
                     },
                     {
                         "text": (
@@ -473,7 +544,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                             "overstrained eyes, even the soaring arena around him "
                             "with"
                         ),
-                        "timestamp": (11.95, 19.61),
+                        "timestamp": (11.94, 19.6),
                     },
                     {
                         "text": " the thousands of spectators, retrievality is not worth thinking about.",
