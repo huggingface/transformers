@@ -311,7 +311,7 @@ class TokenClassificationPipeline(Pipeline):
             if offset_mapping is not None:
                 start_ind, end_ind = offset_mapping[idx]
                 if not isinstance(start_ind, int):
-                    if self.framework == "pt":
+                    if self.framework == "pt" or self.framework == "flax":
                         start_ind = start_ind.item()
                         end_ind = end_ind.item()
                 word_ref = sentence[start_ind:end_ind]

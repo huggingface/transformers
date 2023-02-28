@@ -198,6 +198,8 @@ class ConversationalPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+            # Flax uses this value, not the tokenizer one.
+            self.model.config.pad_token_id = self.model.config.eos_token_id
 
     def _sanitize_parameters(
         self, min_length_for_response=None, minimum_tokens=None, clean_up_tokenization_spaces=None, **generate_kwargs
@@ -267,6 +269,8 @@ class ConversationalPipeline(Pipeline):
             input_ids = tf.constant([input_ids])
         elif self.framework == "flax":
             input_ids = jnp.array([input_ids])
+        else:
+            raise ValueError(f"Framework {self.framework} is not supported")
         return {"input_ids": input_ids, "conversation": conversation}
 
     def _forward(self, model_inputs, minimum_tokens=10, **generate_kwargs):

@@ -11,6 +11,7 @@ from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
     PaddingStrategy,
     add_end_docstrings,
+    is_flax_available,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -22,6 +23,7 @@ from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
+    from ..modeling_flax_utils import FlaxPreTrainedModel
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
 
@@ -40,6 +42,9 @@ if is_torch_available():
     from torch.utils.data import Dataset
 
     from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
+
+if is_flax_available():
+    from ..models.auto.modeling_flax_auto import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
 
 def decode_spans(
@@ -251,7 +256,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
     def __init__(
         self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        model: Union["PreTrainedModel", "TFPreTrainedModel", "FlaxPreTrainedModel"],
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
@@ -268,9 +273,12 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         )
 
         self._args_parser = QuestionAnsweringArgumentHandler()
-        self.check_model_type(
-            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING
-        )
+        if self.framework == "tf":
+            self.check_model_type(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING)
+        elif self.framework == "flax":
+            self.check_model_type(FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING)
+        else:
+            self.check_model_type(MODEL_FOR_QUESTION_ANSWERING_MAPPING)
 
     @staticmethod
     def create_sample(
@@ -501,6 +509,9 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                         if tensor.dtype == torch.int32:
                             tensor = tensor.long()
                         fw_args[k] = tensor.unsqueeze(0)
+                    elif self.framework == "flax":
+                        tensor = np.array(v)
+                        fw_args[k] = np.expand_dims(tensor, axis=0)
                 else:
                     others[k] = v
 
@@ -532,9 +543,13 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             end_ = output["end"]
             example = output["example"]
             p_mask = output["p_mask"]
-            attention_mask = (
-                output["attention_mask"].numpy() if output.get("attention_mask", None) is not None else None
-            )
+            if output.get("attention_mask", None) is not None:
+                if self.framework != "flax":
+                    attention_mask = output["attention_mask"].numpy()
+                else:
+                    attention_mask = output["attention_mask"]
+            else:
+                attention_mask = None
 
             starts, ends, scores, min_null_score = select_starts_ends(
                 start_, end_, p_mask, attention_mask, min_null_score, top_k, handle_impossible_answer, max_answer_len

@@ -14,9 +14,16 @@
 
 import unittest
 
-from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING, TextGenerationPipeline, pipeline
+from transformers import (
+    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+    MODEL_FOR_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+    TextGenerationPipeline,
+    pipeline,
+)
 from transformers.testing_utils import (
     require_accelerate,
+    require_flax,
     require_tf,
     require_torch,
     require_torch_gpu,
@@ -30,6 +37,7 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_CAUSAL_LM_MAPPING
 
     @require_torch
     def test_small_model_pt(self):
@@ -138,6 +146,39 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                             "This is a second test Chieftain Chieftain prefecture prefecture prefecture Cannes Cannes"
                             " Cannes 閲閲Cannes Cannes Cannes 攵 please,"
                         )
+                    }
+                ],
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        # NOTE: tiny-ctrl is not available in Flax, so instead using tiny-gpt2, output are compared with running pipeline on pt and flax
+        text_generator = pipeline(task="text-generation", model="sshleifer/tiny-gpt2", framework="flax")
+
+        # Using `do_sample=False` to force deterministic output
+        outputs = text_generator("This is a test", do_sample=False)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "generated_text": "This is a test factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors"
+                }
+            ],
+        )
+
+        outputs = text_generator(["This is a test", "This is a second test"], do_sample=False)
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {
+                        "generated_text": "This is a test factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors factors"
+                    }
+                ],
+                [
+                    {
+                        "generated_text": "This is a second test stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs"
                     }
                 ],
             ],

@@ -810,6 +810,10 @@ class Pipeline(_ScikitCompat):
         if self.framework == "pt" and device is not None:
             self.model = self.model.to(device=device)
 
+        if self.framework == "flax":
+            print("JIT compiling flax model...")
+            self.model.__call__ = jax.jit(self.model.__call__)
+
         if device is None:
             # `accelerate` device map
             hf_device_map = getattr(self.model, "hf_device_map", None)
@@ -839,9 +843,8 @@ class Pipeline(_ScikitCompat):
                     device, device_index = device.split(":")
                 self.device = jax.devices(device)[int(device_index)]
             elif device is None:
-                # Use default device, "cuda" is GPU available,
-                # "tpu" if TPU available, "cpu" otherwise
-                self.device = jax.devices(jax.default_backend())[0]
+                # Jax automatically uses the correct default device
+                pass
             elif device < 0:
                 self.device = jax.devices("cpu")[0]
             elif device >= 0:
@@ -1082,7 +1085,11 @@ class Pipeline(_ScikitCompat):
             elif self.framework == "flax":
                 model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                 model_outputs = self._forward(model_inputs, **forward_params)
-                model_outputs = self._ensure_tensor_on_device(model_outputs, device=jax.devices("cpu")[0])
+                # model_outputs = self._ensure_tensor_on_device(model_outputs, device=jax.devices("cpu")[0])
+                # Back to numpy
+                model_outputs = model_outputs.__class__(
+                    **{k: v.to_py() if isinstance(v, jnp.DeviceArray) else v for k, v in model_outputs.items()}
+                )
             else:
                 raise ValueError(f"Framework {self.framework} is not supported")
         return model_outputs

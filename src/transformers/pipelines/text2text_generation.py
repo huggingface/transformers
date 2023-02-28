@@ -193,6 +193,14 @@ class Text2TextGenerationPipeline(Pipeline):
         generate_kwargs["min_length"] = generate_kwargs.get("min_length", self.model.config.min_length)
         generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
         self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
+        if self.framework == "flax":
+            # From https://github.com/huggingface/transformers/pull/14356/files#diff-4a2e36475ac5b3362854783afec69fca147ee4ef72e84ae40e04afe9b2f07ae8R159
+            # Workaround the fact specific to flax.
+            # Should `forced_bos_token_id` become `decoder_start_token_id`?
+            if "forced_bos_token_id" in model_inputs:
+                model_inputs["decoder_start_token_id"] = model_inputs.pop("forced_bos_token_id")
+            elif "decoder_start_token_id" not in model_inputs:
+                model_inputs["decoder_start_token_id"] = self.tokenizer.bos_token_id
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.framework == "flax":
             output_ids = output_ids.sequences

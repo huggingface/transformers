@@ -14,9 +14,14 @@
 
 import unittest
 
-from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
+from transformers import (
+    FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
+    MODEL_FOR_VISION_2_SEQ_MAPPING,
+    TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
+    is_vision_available,
+)
 from transformers.pipelines import pipeline
-from transformers.testing_utils import require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import require_flax, require_tf, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -35,6 +40,7 @@ else:
 class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
     tf_model_mapping = TF_MODEL_FOR_VISION_2_SEQ_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
         pipe = pipeline("image-to-text", model=model, tokenizer=tokenizer, image_processor=processor)
@@ -57,6 +63,44 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     @require_tf
     def test_small_model_tf(self):
         pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2", framework="tf")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+
+        outputs = pipe(image)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
+                },
+            ],
+        )
+
+        outputs = pipe([image, image])
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {
+                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
+                    }
+                ],
+                [
+                    {
+                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
+                    }
+                ],
+            ],
+        )
+
+        outputs = pipe(image, max_new_tokens=1)
+        self.assertEqual(
+            outputs,
+            [{"generated_text": "growth"}],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2", framework="flax")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)
@@ -146,6 +190,24 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     @require_tf
     def test_large_model_tf(self):
         pipe = pipeline("image-to-text", model="ydshieh/vit-gpt2-coco-en", framework="tf")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+
+        outputs = pipe(image)
+        self.assertEqual(outputs, [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}])
+
+        outputs = pipe([image, image])
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
+                [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
+            ],
+        )
+
+    @slow
+    @require_flax
+    def test_large_model_flax(self):
+        pipe = pipeline("image-to-text", model="ydshieh/vit-gpt2-coco-en", framework="flax")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)

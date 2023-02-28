@@ -326,9 +326,10 @@ class PipelineTestCaseMeta(type):
         def inner(self):
             raise NotImplementedError("Not implemented test")
 
-        # Force these 2 methods to exist
+        # Force these 3 methods to exist
         dct["test_small_model_pt"] = dct.get("test_small_model_pt", inner)
         dct["test_small_model_tf"] = dct.get("test_small_model_tf", inner)
+        dct["test_small_model_flax"] = dct.get("test_small_model_flax", inner)
 
         return type.__new__(mcs, name, bases, dct)
 
@@ -804,6 +805,23 @@ class PipelineUtilsTest(unittest.TestCase):
             self.check_default_pipeline(task, "tf", set_seed_fn, self.check_models_equal_tf)
 
     @slow
+    @require_flax
+    def test_load_default_pipelines_flax(self):
+        import jax
+
+        from transformers.pipelines import SUPPORTED_TASKS
+
+        def set_seed_fn():
+            return jax.random.PRNGKey(0)
+
+        for task in SUPPORTED_TASKS.keys():
+            if task == "table-question-answering":
+                # test table in seperate test due to more dependencies
+                continue
+
+            self.check_default_pipeline(task, "flax", set_seed_fn, self.check_models_equal_flax)
+
+    @slow
     @require_torch
     def test_load_default_pipelines_pt_table_qa(self):
         import torch
@@ -890,6 +908,14 @@ class PipelineUtilsTest(unittest.TestCase):
         models_are_equal = True
         for model1_p, model2_p in zip(model1.weights, model2.weights):
             if np.abs(model1_p.numpy() - model2_p.numpy()).sum() > 1e-5:
+                models_are_equal = False
+
+        return models_are_equal
+
+    def check_models_equal_flax(self, model1, model2):
+        models_are_equal = True
+        for model1_p, model2_p in zip(model1.params.values(), model2.params.values()):
+            if np.abs(model1_p - model2_p).sum() > 1e-5:
                 models_are_equal = False
 
         return models_are_equal

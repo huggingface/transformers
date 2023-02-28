@@ -68,7 +68,8 @@ class TextGenerationPipeline(Pipeline):
             self.check_model_type(FLAX_MODEL_FOR_CAUSAL_LM_MAPPING)
         else:
             self.check_model_type(MODEL_FOR_CAUSAL_LM_MAPPING)
-        if "prefix" not in self._preprocess_params and self.framework != "flax":
+
+        if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
             # as a "default".
             # It also defines both some preprocess_kwargs and generate_kwargs
@@ -89,8 +90,6 @@ class TextGenerationPipeline(Pipeline):
                 preprocess_params, forward_params, _ = self._sanitize_parameters(prefix=prefix, **self._forward_params)
                 self._preprocess_params = {**self._preprocess_params, **preprocess_params}
                 self._forward_params = {**self._forward_params, **forward_params}
-        else:
-            raise ValueError("XLNet and TransformerXL models are not supported by this pipeline in flax.")
 
     def _sanitize_parameters(
         self,
@@ -250,7 +249,13 @@ class TextGenerationPipeline(Pipeline):
         attention_mask = model_inputs.get("attention_mask", None)
         # Allow empty prompts
         if input_ids.shape[1] == 0:
-            input_ids = None
+            if self.framework == "flax":
+                import jax.numpy as jnp
+
+                B = input_ids.shape[0]
+                input_ids = jnp.zeros((B, 2), dtype=jnp.int32)
+            else:
+                input_ids = None
             attention_mask = None
             in_b = 1
         else:

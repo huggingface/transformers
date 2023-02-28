@@ -872,14 +872,16 @@ def pipeline(
             else:
                 device_name = device
         elif device is None:
-            device_name = jax.default_backend()
+            # Jax automatically uses the correct default device
+            device_name = None
         elif device < 0:
             device_name = "cpu"
         elif device >= 0:
             device_name = "cuda"
         else:
             raise ValueError(f"Device {device} is not supported for Flax.")
-        jax.config.update("jax_platform_name", device_name)
+        if device_name is not None:
+            jax.config.update("jax_platform_name", device_name)
 
     # Infer the framework from the model
     # Forced if framework already defined, inferred if it's None

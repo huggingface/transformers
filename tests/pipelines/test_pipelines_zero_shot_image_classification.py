@@ -16,7 +16,7 @@ import unittest
 
 from transformers import is_vision_available
 from transformers.pipelines import pipeline
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import nested_simplify, require_flax, require_tf, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -164,6 +164,57 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
             ],
         )
 
+    @require_flax
+    def test_small_model_flax(self):
+        image_classifier = pipeline(
+            model="Shubhamai/tiny-random-clip-zero-shot-image-classification", framework="flax"
+        )
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        output = image_classifier(image, candidate_labels=["a", "b", "c"])
+
+        self.assertEqual(
+            nested_simplify(output),
+            [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
+        )
+
+        output = image_classifier([image] * 5, candidate_labels=["A", "B", "C"], batch_size=2)
+        self.assertEqual(
+            nested_simplify(output),
+            # Pipeline outputs are supposed to be deterministic and
+            # So we could in theory have real values "A", "B", "C" instead
+            # of ANY(str).
+            # However it seems that in this particular case, the floating
+            # scores are so close, we enter floating error approximation
+            # and the order is not guaranteed anymore with batching.
+            [
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+                [
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                    {"score": 0.333, "label": ANY(str)},
+                ],
+            ],
+        )
+
     @slow
     @require_torch
     def test_large_model_pt(self):
@@ -202,6 +253,37 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     def test_large_model_tf(self):
         image_classifier = pipeline(
             task="zero-shot-image-classification", model="openai/clip-vit-base-patch32", framework="tf"
+        )
+        # This is an image of 2 cats with remotes and no planes
+        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        output = image_classifier(image, candidate_labels=["cat", "plane", "remote"])
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                {"score": 0.511, "label": "remote"},
+                {"score": 0.485, "label": "cat"},
+                {"score": 0.004, "label": "plane"},
+            ],
+        )
+
+        output = image_classifier([image] * 5, candidate_labels=["cat", "plane", "remote"], batch_size=2)
+        self.assertEqual(
+            nested_simplify(output),
+            [
+                [
+                    {"score": 0.511, "label": "remote"},
+                    {"score": 0.485, "label": "cat"},
+                    {"score": 0.004, "label": "plane"},
+                ],
+            ]
+            * 5,
+        )
+
+    @slow
+    @require_flax
+    def test_large_model_flax(self):
+        image_classifier = pipeline(
+            task="zero-shot-image-classification", model="openai/clip-vit-base-patch32", framework="flax"
         )
         # This is an image of 2 cats with remotes and no planes
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

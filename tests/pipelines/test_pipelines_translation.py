@@ -17,6 +17,7 @@ import unittest
 import pytest
 
 from transformers import (
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MBart50TokenizerFast,
@@ -25,7 +26,7 @@ from transformers import (
     TranslationPipeline,
     pipeline,
 )
-from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.testing_utils import require_flax, require_tf, require_torch, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -33,6 +34,7 @@ from .test_pipelines_common import ANY, PipelineTestCaseMeta
 class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
         if isinstance(model.config, MBartConfig):
@@ -84,6 +86,22 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
             ],
         )
 
+    @require_flax
+    def test_small_model_flax(self):
+        translator = pipeline("translation_en_to_ro", model="patrickvonplaten/t5-tiny-random", framework="flax")
+        outputs = translator("This is a test string", max_length=20)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "translation_text": (
+                        "Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide Beide"
+                        " Beide Beide"
+                    )
+                }
+            ],
+        )
+
     @require_torch
     def test_en_to_de_pt(self):
         translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random", framework="pt")
@@ -103,6 +121,22 @@ class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     @require_tf
     def test_en_to_de_tf(self):
         translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random", framework="tf")
+        outputs = translator("This is a test string", max_length=20)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "translation_text": (
+                        "monoton monoton monoton monoton monoton monoton monoton monoton monoton monoton urine urine"
+                        " urine urine urine urine urine urine urine"
+                    )
+                }
+            ],
+        )
+
+    @require_flax
+    def test_en_to_de_flax(self):
+        translator = pipeline("translation_en_to_de", model="patrickvonplaten/t5-tiny-random", framework="flax")
         outputs = translator("This is a test string", max_length=20)
         self.assertEqual(
             outputs,

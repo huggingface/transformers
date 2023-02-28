@@ -17,6 +17,7 @@ import unittest
 import numpy as np
 
 from transformers import (
+    FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     AutoModelForTokenClassification,
@@ -25,7 +26,14 @@ from transformers import (
     pipeline,
 )
 from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_torch_gpu, slow
+from transformers.testing_utils import (
+    nested_simplify,
+    require_flax,
+    require_tf,
+    require_torch,
+    require_torch_gpu,
+    slow,
+)
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -36,6 +44,7 @@ VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is 
 class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
         token_classifier = TokenClassificationPipeline(model=model, tokenizer=tokenizer)
@@ -630,10 +639,30 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         token_classifier = pipeline(task="ner", model=model_name)
         self.assertEqual(token_classifier.framework, "tf")
 
+    @require_flax
+    def test_flax_only(self):
+        model_name = "hf-internal-testing/tiny-random-bert-tf-only"  # This model only has a Flax version
+        # We test that if we don't specificy framework='flax', it gets detected automatically
+        token_classifier = pipeline(task="ner", model=model_name)
+        self.assertEqual(token_classifier.framework, "flax")
+
     @require_tf
     def test_small_model_tf(self):
         model_name = "hf-internal-testing/tiny-bert-for-token-classification"
         token_classifier = pipeline(task="token-classification", model=model_name, framework="tf")
+        outputs = token_classifier("This is a test !")
+        self.assertEqual(
+            nested_simplify(outputs),
+            [
+                {"entity": "I-MISC", "score": 0.115, "index": 1, "word": "this", "start": 0, "end": 4},
+                {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        model_name = "Shubhamai/tiny-bert-for-token-classification"
+        token_classifier = pipeline(task="token-classification", model=model_name, framework="flax")
         outputs = token_classifier("This is a test !")
         self.assertEqual(
             nested_simplify(outputs),

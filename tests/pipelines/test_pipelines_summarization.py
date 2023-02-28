@@ -15,13 +15,14 @@
 import unittest
 
 from transformers import (
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     SummarizationPipeline,
     TFPreTrainedModel,
     pipeline,
 )
-from transformers.testing_utils import get_gpu_count, require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import get_gpu_count, require_flax, require_tf, require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
@@ -33,6 +34,7 @@ DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
         summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer)
@@ -92,6 +94,21 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
     @require_tf
     def test_small_model_tf(self):
         summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="tf")
+        outputs = summarizer("This is a small test")
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "summary_text": "เข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไปเข้าไป"
+                }
+            ],
+        )
+
+    @require_flax
+    def test_small_model_flax(self):
+        summarizer = pipeline(
+            task="summarization", model="sshleifer/tiny-mbart", framework="flax", model_kwargs={"from_pt": True}
+        )
         outputs = summarizer("This is a small test")
         self.assertEqual(
             outputs,

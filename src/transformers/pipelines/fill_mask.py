@@ -105,7 +105,7 @@ class FillMaskPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         model_outputs = self.model(**model_inputs)
-        model_outputs["input_ids"] = model_inputs["input_ids"]
+        model_outputs = {"input_ids": model_inputs["input_ids"], **model_outputs}
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=5, target_ids=None):
@@ -157,14 +157,11 @@ class FillMaskPipeline(Pipeline):
                 if self.framework != "flax":
                     tokens = input_ids.numpy().copy()
                 else:
-                    tokens = input_ids.copy()
+                    tokens = np.array(input_ids.copy())
                 if target_ids is not None:
                     p = target_ids[p].tolist()
 
-                if self.framework != "flax":
-                    tokens[masked_index[i]] = p
-                else:
-                    tokens.at[masked_index[i]].set(p)
+                tokens[masked_index[i]] = p
                 # Filter padding out:
                 tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
                 # Originally we skip special tokens to give readable output.

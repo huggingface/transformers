@@ -15,12 +15,13 @@
 import unittest
 
 from transformers import (
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     Text2TextGenerationPipeline,
     pipeline,
 )
-from transformers.testing_utils import require_tf, require_torch
+from transformers.testing_utils import require_flax, require_tf, require_torch
 from transformers.utils import is_torch_available
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
@@ -33,6 +34,7 @@ if is_torch_available():
 class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    flax_model_mapping = FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, processor):
         generator = Text2TextGenerationPipeline(model=model, tokenizer=tokenizer)
@@ -121,6 +123,13 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     @require_tf
     def test_small_model_tf(self):
         generator = pipeline("text2text-generation", model="patrickvonplaten/t5-tiny-random", framework="tf")
+        # do_sample=False necessary for reproducibility
+        outputs = generator("Something there", do_sample=False)
+        self.assertEqual(outputs, [{"generated_text": ""}])
+
+    @require_flax
+    def test_small_model_flax(self):
+        generator = pipeline("text2text-generation", model="patrickvonplaten/t5-tiny-random", framework="flax")
         # do_sample=False necessary for reproducibility
         outputs = generator("Something there", do_sample=False)
         self.assertEqual(outputs, [{"generated_text": ""}])

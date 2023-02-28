@@ -76,7 +76,9 @@ class FeatureExtractionPipeline(Pipeline):
 
     def preprocess(self, inputs, **tokenize_kwargs) -> Dict[str, GenericTensor]:
         return_tensors = self.framework
-        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **tokenize_kwargs)
+        model_inputs = self.tokenizer(
+            inputs, return_tensors=return_tensors if return_tensors != "flax" else "jax", **tokenize_kwargs
+        )
         return model_inputs
 
     def _forward(self, model_inputs):
@@ -91,6 +93,8 @@ class FeatureExtractionPipeline(Pipeline):
             return model_outputs[0].tolist()
         elif self.framework == "tf":
             return model_outputs[0].numpy().tolist()
+        else:
+            raise ValueError(f"Framework {self.framework} is not supported.")
 
     def __call__(self, *args, **kwargs):
         """
