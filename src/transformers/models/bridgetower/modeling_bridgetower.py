@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN, QuickGELUActivation
 from ...modeling_outputs import (
@@ -1535,8 +1536,10 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[MaskedLMOutput, Tuple[torch.FloatTensor]]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels are currently not supported.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         Returns:
 
         Examples:
@@ -1580,11 +1583,17 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         )
 
         mlm_logits = self.mlm_score(outputs.text_features if return_dict else outputs[0])
+        masked_lm_loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            masked_lm_loss = loss_fct(mlm_logits.view(-1, self.config.text_config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            return tuple(mlm_logits)
+            output = tuple(mlm_logits)
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
+            loss=masked_lm_loss,
             logits=mlm_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
@@ -1627,8 +1636,9 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
     ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels are currently not supported.
+        labels (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
+            Labels for computing the image-text matching loss. 0 means the pairs don't match and 1 means they match.
+            The pairs with 0 will be skipped for calculation.
         Returns:
 
         Examples:
@@ -1673,11 +1683,17 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
 
         logits = self.itm_score(pooler_output)
 
+        itm_loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            itm_loss = loss_fct(logits, labels)
+
         if not return_dict:
-            return tuple(logits)
+            output = tuple(logits)
+            return ((itm_loss,) + output) if itm_loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=None,
+            loss=itm_loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
