@@ -375,7 +375,7 @@ class ALIGNConfig(PretrainedConfig):
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the ALIGNVisionConfig with default values.")
+            logger.info("vision_config is None. Initializing the ALIGNVisionConfig with default values.")
 
         self.text_config = ALIGNTextConfig(**text_config)
         self.vision_config = ALIGNVisionConfig(**vision_config)
