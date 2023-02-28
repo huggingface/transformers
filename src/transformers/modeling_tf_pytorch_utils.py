@@ -62,7 +62,7 @@ def convert_tf_weight_name_to_pt_weight_name(
                 f"Weight name {tf_name} does not start with name_scope {name_scope}. This is an internal error "
                 "in Transformers, so (unless you were doing something really evil) please open an issue to report it!"
             )
-        tf_name = tf_name[len(name_scope) :]  # We can't use remove_prefix because we need to support older Python
+        tf_name = tf_name[len(name_scope) :]
         tf_name = tf_name.lstrip("/")
     tf_name = tf_name.replace(":0", "")  # device ids
     tf_name = re.sub(
