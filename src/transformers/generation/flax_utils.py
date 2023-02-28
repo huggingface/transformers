@@ -452,6 +452,10 @@ class FlaxGenerationMixin:
                 model_kwargs["attention_mask"] = self._expand_to_num_beams(
                     model_kwargs["attention_mask"], num_beams=generation_config.num_beams
                 )
+            if "decoder_attention_mask" in model_kwargs:
+                model_kwargs["decoder_attention_mask"] = self._expand_to_num_beams(
+                    model_kwargs["decoder_attention_mask"], num_beams=generation_config.num_beams
+                )
 
             return self._beam_search(
                 input_ids,
@@ -823,6 +827,8 @@ class FlaxGenerationMixin:
             )
         if "attention_mask" in model_kwargs:
             model_kwargs["attention_mask"] = flatten_beam_dim(model_kwargs["attention_mask"])
+        if "decoder_attention_mask" in model_kwargs:
+            model_kwargs["decoder_attention_mask"] = flatten_beam_dim(model_kwargs["decoder_attention_mask"])
 
         # initialize model specific kwargs
         model_kwargs = self.prepare_inputs_for_generation(flatten_beam_dim(input_ids), max_length, **model_kwargs)
