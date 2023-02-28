@@ -18,6 +18,7 @@ from ...utils import (
     _LazyModule,
     is_flax_available,
     is_tf_available,
+    is_tokenizers_available,
     is_torch_available,
 )
 
@@ -29,6 +30,13 @@ _import_structure = {
     "tokenization_whisper": ["WhisperTokenizer"],
 }
 
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_whisper_fast"] = ["WhisperTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -74,6 +82,14 @@ if TYPE_CHECKING:
     from .feature_extraction_whisper import WhisperFeatureExtractor
     from .processing_whisper import WhisperProcessor
     from .tokenization_whisper import WhisperTokenizer
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_whisper_fast import WhisperTokenizerFast
 
     try:
         if not is_torch_available():
