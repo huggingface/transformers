@@ -72,7 +72,11 @@ class DinatConfig(PretrainedConfig):
             The initial value for the layer scale. Disabled if <=0.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). Will default to the last stage if unset.
+            (depending on how many stages the model has). Will default to the last stage if unset. Deprecated: use
+            `output_indices` instead.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). Will default to the last stage if unset.
 
     Example:
 
@@ -114,6 +118,7 @@ class DinatConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         layer_scale_init_value=0.0,
         out_features=None,
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -148,3 +153,10 @@ class DinatConfig(PretrainedConfig):
                         f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
                     )
         self.out_features = out_features
+        if out_indices is not None:
+            if not isinstance(out_indices, (list, tuple)):
+                raise ValueError("out_indices should be a list or tuple")
+            for idx in out_indices:
+                if idx >= len(self.stage_names):
+                    raise ValueError(f"Index {idx} is not a valid index for a list of length {len(self.stage_names)}")
+        self.out_indices = out_indices
