@@ -729,32 +729,31 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
     """
 
     # Load the index
-    missing_keys = []
     unexpected_keys = set()
     saved_keys = set()
-    missmatched_keys = set()
+    mismatched_keys = set()
 
     # Since TF adds the name of the class to its weights, and uses the index and not the name of the layer to load
     # the weight, we have to get rid of the first prefix of the name of the layer.
     model_keys = set()
     model_layer_map = {}
     for i, k in enumerate(model.weights):
-        if "model." in k.name or len(k.name.split("/")) == 1:
-            layer_name = k.name
-        else:
-            layer_name = "/".join(k.name.split("/")[1:])
+        layer_name = k.name
+        if _prefix is not None and layer_name.startswith(_prefix):
+            layer_name = layer_name[len(_prefix):]
+            layer_name = layer_name.lstrip('/')
+        if not ("model." in layer_name or len(layer_name.split("/")) == 1):
+            layer_name = "/".join(layer_name.split("/")[1:])
         model_keys.add(layer_name)
         model_layer_map[layer_name] = i
 
     for shard_file in shard_files:
-        state_dict = tf.io.read_file(shard_file)
         saved_weight_names_set, unexpected_keys_set, missmatched_keys_set = load_tf_shard(
             model, model_layer_map, shard_file, ignore_mismatched_sizes=ignore_mismatched_sizes, _prefix=_prefix,
         )
         saved_keys.update(saved_weight_names_set)
         unexpected_keys.update(unexpected_keys_set)
-        missmatched_keys.update(missmatched_keys_set)
-        del state_dict
+        mismatched_keys.update(missmatched_keys_set)
         gc.collect()
 
     missing_keys = model_keys - saved_keys
@@ -768,7 +767,7 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    return missing_keys, unexpected_keys, missmatched_keys
+    return missing_keys, unexpected_keys, mismatched_keys
 
 
 def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
@@ -787,7 +786,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
     """
     saved_weight_names_set = set()
     saved_weights = {}
-    missmatched_keys = set()
+    mismatched_keys = set()
     unexpected_keys = set()
     # Read the H5 file
     try:
@@ -822,7 +821,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
                                 array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
                             except ValueError as e:
                                 if ignore_mismatched_sizes:
-                                    missmatched_keys.add(
+                                    mismatched_keys.add(
                                         (layer_name, saved_weight_value.shape, K.int_shape(symbolic_weight))
                                     )
                                     continue
@@ -836,7 +835,7 @@ def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatch
 
         K.batch_set_value(weight_value_tuples)
 
-        return saved_weight_names_set, unexpected_keys, missmatched_keys
+        return saved_weight_names_set, unexpected_keys, mismatched_keys
 
     except Exception as e:
         try:
