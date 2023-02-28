@@ -915,7 +915,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel):
 
         >>> # TrOCR is a decoder model and should be used within a VisionEncoderDecoderModel
         >>> # init vision2text model with random weights
-        >>> encoder = ViTModel(ViTConfig())
+        >>> encoder = ViTModel(ViTConfig(image_size=384))
         >>> decoder = TrOCRForCausalLM(TrOCRConfig())
         >>> model = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
