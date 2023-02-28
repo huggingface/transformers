@@ -971,7 +971,6 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -986,6 +985,15 @@ else:
             "load_tf_weights_in_albert",
         ]
     )
+    _import_structure["models.altclip"].extend(
+        [
+            "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AltCLIPModel",
+            "AltCLIPPreTrainedModel",
+            "AltCLIPTextModel",
+            "AltCLIPVisionModel",
+        ]
+    )
     _import_structure["models.audio_spectrogram_transformer"].extend(
         [
             "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -994,7 +1002,6 @@ else:
             "ASTPreTrainedModel",
         ]
     )
-
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING",
@@ -4464,6 +4471,8 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
+
+        # PyTorch model imports
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
