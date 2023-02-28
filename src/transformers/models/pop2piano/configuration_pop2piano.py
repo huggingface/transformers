@@ -168,12 +168,9 @@ class Pop2PianoConfig(PretrainedConfig):
         self.tie_encoder_decoder = tie_encoder_decoder
         self.tie_word_embeddings = tie_word_embeddings
 
+        act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = dense_act_fn
-        self.is_gated_act = is_gated_act
-
-        # for backwards compatibility
-        if feed_forward_proj == "gated-gelu":
-            self.dense_act_fn = "gelu_new"
+        self.is_gated_act = act_info[0] == "gated"
 
         super().__init__(
             pad_token_id=pad_token_id,

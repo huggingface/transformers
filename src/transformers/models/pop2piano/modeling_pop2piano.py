@@ -15,8 +15,10 @@
 """ PyTorch Pop2Piano model."""
 
 
+import copy
 import math
 import random
+import torchaudio
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -25,8 +27,10 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+
 from ...activations import ACT2FN
-from ...generation.logits_process import Pop2PianoTimeStampLogitsProcessor
+# from ...generation.logits_process import Pop2PianoTimeStampLogitsProcessor
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -49,644 +53,67 @@ POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Pop2Piano models at https://huggingface.co/models?filter=pop2piano
 ]
 
-
-
-# Copied from transformers.models.bart.modeling_bart.shift_tokens_right
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    """
-    Shift input ids one token to the right.
-    """
-    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-    shifted_input_ids[:, 0] = decoder_start_token_id
-
-    if pad_token_id is None:
-        raise ValueError("self.model.config.pad_token_id has to be defined.")
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-    return shifted_input_ids
-
-
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
-    mask_cond = torch.arange(mask.size(-1))
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
-
-
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
-def _compute_mask_indices(
-    shape: Tuple[int, int],
-    mask_prob: float,
-    mask_length: int,
-    attention_mask: Optional[torch.LongTensor] = None,
-    min_masks: int = 0,
-) -> np.ndarray:
-    """
-    Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
-    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
-    CPU as part of the preprocessing during training.
-
+Pop2Piano_INPUTS_DOCSTRING = r"""
     Args:
-        shape: The shape for which to compute masks. This should be of a tuple of size 2 where
-               the first element is the batch size and the second element is the length of the axis to span.
-        mask_prob:  The percentage of the whole axis (between 0 and 1) which will be masked. The number of
-                    independently generated mask spans of length `mask_length` is computed by
-                    `mask_prob*shape[1]/mask_length`. Note that due to overlaps, `mask_prob` is an upper bound and the
-                    actual percentage will be smaller.
-        mask_length: size of the mask
-        min_masks: minimum number of masked spans
-        attention_mask: A (right-padded) attention mask which independently shortens the feature axis of
-                        each batch dimension.
-    """
-    batch_size, sequence_length = shape
-
-    if mask_length < 1:
-        raise ValueError("`mask_length` has to be bigger than 0.")
-
-    if mask_length > sequence_length:
-        raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length}"
-            f" and `sequence_length`: {sequence_length}`"
-        )
-
-    # epsilon is used for probabilistic rounding
-    epsilon = np.random.rand(1).item()
-
-    def compute_num_masked_span(input_length):
-        """Given input length, compute how many spans should be masked"""
-        num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
-        num_masked_span = max(num_masked_span, min_masks)
-
-        # make sure num masked span <= sequence_length
-        if num_masked_span * mask_length > sequence_length:
-            num_masked_span = sequence_length // mask_length
-
-        # make sure num_masked span is also <= input_length - (mask_length - 1)
-        if input_length - (mask_length - 1) < num_masked_span:
-            num_masked_span = max(input_length - (mask_length - 1), 0)
-
-        return num_masked_span
-
-    # compute number of masked spans in batch
-    input_lengths = (
-        attention_mask.sum(-1).detach().tolist()
-        if attention_mask is not None
-        else [sequence_length for _ in range(batch_size)]
-    )
-
-    # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
-    spec_aug_mask_idxs = []
-
-    max_num_masked_span = compute_num_masked_span(sequence_length)
-
-    if max_num_masked_span == 0:
-        return spec_aug_mask
-
-    for input_length in input_lengths:
-        # compute num of masked spans for this input
-        num_masked_span = compute_num_masked_span(input_length)
-
-        # get random indices to mask
-        spec_aug_mask_idx = np.random.choice(
-            np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
-        )
-
-        # pick first sampled index that will serve as a dummy index to pad vector
-        # to ensure same dimension for all batches due to probabilistic rounding
-        # Picking first sample just pads those vectors twice.
-        if len(spec_aug_mask_idx) == 0:
-            # this case can only happen if `input_length` is strictly smaller then
-            # `sequence_length` in which case the last token has to be a padding
-            # token which we can use as a dummy mask id
-            dummy_mask_idx = sequence_length - 1
-        else:
-            dummy_mask_idx = spec_aug_mask_idx[0]
-
-        spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
-        )
-        spec_aug_mask_idxs.append(spec_aug_mask_idx)
-
-    spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
-
-    # expand masked indices to masked spans
-    spec_aug_mask_idxs = np.broadcast_to(
-        spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
-    )
-    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
-
-    # add offset to the starting indexes so that indexes now create a span
-    offsets = np.arange(mask_length)[None, None, :]
-    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
-        batch_size, max_num_masked_span * mask_length
-    )
-    spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
-
-    # ensure that we cannot have indices larger than sequence_length
-    if spec_aug_mask_idxs.max() > sequence_length - 1:
-        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
-
-    # scatter indices to mask
-    np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
-
-    return spec_aug_mask
-
-
-class Pop2PianoPositionalEmbedding(nn.Embedding):
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        super().__init__(num_positions, embedding_dim)
-
-    def forward(self, input_ids, past_key_values_length=0):
-        return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[-1]]
-
-
-class Pop2PianoAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-    ):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-
-        if (self.head_dim * num_heads) != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
-            )
-        self.scaling = self.head_dim**-0.5
-        self.is_decoder = is_decoder
-
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-
-        bsz, tgt_len, _ = hidden_states.size()
-
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
-        # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
-        ):
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        else:
-            # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
-
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
-        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped, past_key_value
-
-
-# Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Pop2Piano
-class Pop2PianoEncoderLayer(nn.Module):
-    def __init__(self, config: Pop2PianoConfig):
-        super().__init__()
-        self.embed_dim = config.d_model
-        self.self_attn = Pop2PianoAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
-        )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        layer_head_mask: torch.Tensor,
-        output_attentions: bool = False,
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-
-        if hidden_states.dtype == torch.float16 and (
-            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
-        ):
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
-# Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Pop2Piano
-class Pop2PianoDecoderLayer(nn.Module):
-    def __init__(self, config: Pop2PianoConfig):
-        super().__init__()
-        self.embed_dim = config.d_model
-
-        self.self_attn = Pop2PianoAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-        )
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = Pop2PianoAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-        )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
-            encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
-            cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size `(decoder_attention_heads,)`.
-            past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        # Self Attention
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        # add present self-attn cache to positions 1,2 of present_key_value tuple
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            past_key_value=self_attn_past_key_value,
-            attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-
-        # Cross-Attention Block
-        cross_attn_present_key_value = None
-        cross_attn_weights = None
-        if encoder_hidden_states is not None:
-            residual = hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
-
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
-                hidden_states=hidden_states,
-                key_value_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
-                layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
-                output_attentions=output_attentions,
-            )
-            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-            hidden_states = residual + hidden_states
-
-            # add cross-attn to positions 3,4 of present_key_value tuple
-            present_key_value = present_key_value + cross_attn_present_key_value
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
-
-
-class Pop2PianoPreTrainedModel(PreTrainedModel):
-    config_class = Pop2PianoConfig
-    base_model_prefix = "model"
-    main_input_name = "input_features"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Pop2PianoEncoderLayer"]
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Pop2PianoDecoder, Pop2PianoEncoder)):
-            module.gradient_checkpointing = value
-
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
-        """
-        Computes the output length of the convolutional layers
-        """
-        input_lengths = (input_lengths - 1) // 2 + 1
-
-        return input_lengths
-
-
-POP2PIANO_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Pop2PianoConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-POP2PIANO_INPUTS_DOCSTRING = r"""
-    Args:
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
-            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-            tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-        attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing *SpecAugment* data augmentation on padding token indices. Mask values selected in
-            `[0, 1]`:
-
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
+            should be able to pad the inputs on both the right and the left.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for detail.
+            [What are input IDs?](../glossary#input-ids)
+            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-
             [What are attention masks?](../glossary#attention-mask)
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`WhisperTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
-
             [What are decoder input IDs?](../glossary#decoder-input-ids)
-
-            Pop2Piano uses the `decoder_start_token_id` as the starting token for `decoder_input_ids` generation. If
-            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
-            `past_key_values`).
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [T5
+            Training](./t5#training).
+        decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-
-            If you want to change padding behavior, you should read
-            [`modeling_pop2piano._prepare_decoder_attention_mask`] and modify to your needs. See diagram 1 in [the BART
-            paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
-        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
-
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in `[0,
+            1]`:
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-
-        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
-
+        decoder_head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
+        cross_attn_head_mask (`torch.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+                Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
+                `[0, 1]`:
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the head is **masked**.
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
+            Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
+            the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
             input (see `past_key_values`). This is useful if you want more control over how to convert
             `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
+            of `inputs_embeds`.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -700,419 +127,994 @@ POP2PIANO_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-
-class Pop2PianoEncoder(Pop2PianoPreTrainedModel):
+class Pop2PianoPreTrainedModel(PreTrainedModel):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`Pop2PianoEncoderLayer`].
-
-    Args:
-        config: Pop2PianoConfig
-        embed_tokens (nn.Embedding): output embedding
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
-    def __init__(self, config: Pop2PianoConfig):
-        super().__init__(config)
-        self.dropout = config.dropout
-        self.layerdrop = config.encoder_layerdrop
+    config_class = Pop2PianoConfig
+    # load_tf_weights = load_tf_weights_in_t5
+    base_model_prefix = "transformer"
+    is_parallelizable = False
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Pop2PianoBlock"]
+    _keep_in_fp32_modules = ["wo"]
 
-        embed_dim = config.d_model
-        self.num_mel_bins = config.num_mel_bins
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_source_positions
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        factor = self.config.initializer_factor  # Used for testing weights initialization
+        if isinstance(module, Pop2PianoLayerNorm):
+            module.weight.data.fill_(factor * 1.0)
+        elif isinstance(module, ConcatEmbeddingToMel):
+            module.embedding.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, Pop2PianoForConditionalGeneration):
+            # Mesh TensorFlow embeddings initialization
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
+            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
+                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+        elif isinstance(module, Pop2PianoDenseActDense):
+            # Mesh TensorFlow FF initialization
+            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
+            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
+            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi, "bias") and module.wi.bias is not None:
+                module.wi.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                module.wo.bias.data.zero_()
+        elif isinstance(module, Pop2PianoDenseGatedActDense):
+            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
+                module.wi_0.bias.data.zero_()
+            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
+                module.wi_1.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                module.wo.bias.data.zero_()
+        elif isinstance(module, Pop2PianoAttention):
+            # Mesh TensorFlow attention initialization to avoid scaling before softmax
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
+            d_model = self.config.d_model
+            key_value_proj_dim = self.config.d_kv
+            n_heads = self.config.num_heads
+            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            if module.has_relative_attention_bias:
+                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
-        self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (Pop2PianoAttention, Pop2PianoStack)):
+            module.gradient_checkpointing = value
 
-        self.layers = nn.ModuleList([Pop2PianoEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layer_norm = nn.LayerNorm(config.d_model)
+    def _shift_right(self, input_ids):
+        decoder_start_token_id = self.config.decoder_start_token_id
+        pad_token_id = self.config.pad_token_id
 
-        self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
+        assert decoder_start_token_id is not None, (
+            "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id."
+            " See T5 docs for more information"
+        )
 
-    def _freeze_parameters(self):
-        for param in self.parameters():
-            param.requires_grad = False
-        self._requires_grad = False
+        # shift inputs to the right
+        if is_torch_fx_proxy(input_ids):
+            # Item assignment is not supported natively for proxies.
+            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
+            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
+        else:
+            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+            shifted_input_ids[..., 0] = decoder_start_token_id
+
+        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+        # replace possible -100 values in labels by `pad_token_id`
+        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+        return shifted_input_ids
+
+
+
+class LogMelSpectrogram(nn.Module):
+    def __init__(self):
+        super(LogMelSpectrogram, self).__init__()
+        self.melspectrogram = torchaudio.transforms.MelSpectrogram(
+            sample_rate=22050,
+            n_fft=4096,
+            hop_length=1024,
+            f_min=10.0,
+            n_mels=512,
+        )
+
+    def forward(self, x):
+        with torch.no_grad():
+            with torch.cuda.amp.autocast(enabled=False):
+                X = self.melspectrogram(x)
+                X = X.clamp(min=1e-6).log()
+
+        return X
+
+class ConcatEmbeddingToMel(nn.Module):
+    def __init__(self, embedding_offset, n_vocab, n_dim) -> None:
+        super(ConcatEmbeddingToMel, self).__init__()
+        self.embedding = nn.Embedding(num_embeddings=n_vocab, embedding_dim=n_dim)
+        self.embedding_offset = embedding_offset
+
+    def forward(self, feature, index_value):
+        """
+        index_value : (batch, )
+        feature : (batch, time, feature_dim)
+        """
+        index_shifted = index_value - self.embedding_offset
+
+        # (batch, 1, feature_dim)
+        composer_embedding = self.embedding(index_shifted).unsqueeze(1)
+        # print(composer_embedding.shape, feature.shape)
+        # (batch, 1 + time, feature_dim)
+        inputs_embeds = torch.cat([composer_embedding, feature], dim=1)
+        return inputs_embeds
+
+# Copied from transformers.models.t5.T5LayerNorm with T5->Pop2Piano,t5->pop2piano
+class Pop2PianoLayerNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Construct a layernorm module in the Pop2Piano style. No bias and no subtraction of mean.
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        # Pop2Piano uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
+        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
+        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
+        # half-precision inputs is done in fp32
+
+        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+
+        # convert into half-precision if necessary
+        if self.weight.dtype in [torch.float16, torch.bfloat16]:
+            hidden_states = hidden_states.to(self.weight.dtype)
+
+        return self.weight * hidden_states
+
+
+try:
+    from apex.normalization import FusedRMSNorm
+
+    Pop2PianoLayerNorm = FusedRMSNorm  # noqa
+
+    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of Pop2PianoLayerNorm")
+except ImportError:
+    # using the normal Pop2PianoLayerNorm
+    pass
+except Exception:
+    logger.warning("discovered apex but it failed to load, falling back to Pop2PianoLayerNorm")
+    pass
+
+ALL_LAYERNORM_LAYERS.append(Pop2PianoLayerNorm)
+
+
+# Copied from transformers.models.t5.T5LayerSelfAttention with T5->Pop2Piano,t5->pop2piano
+class Pop2PianoLayerSelfAttention(nn.Module):
+    def __init__(self, config, has_relative_attention_bias=False):
+        super().__init__()
+        self.SelfAttention = Pop2PianoAttention(config, has_relative_attention_bias=has_relative_attention_bias)
+        self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
         self,
-        input_features,
+        hidden_states,
         attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        position_bias=None,
+        layer_head_mask=None,
+        past_key_value=None,
+        use_cache=False,
+        output_attentions=False,
     ):
-        r"""
-        Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-            attention_mask (`torch.Tensor`)`, *optional*):
-                Pop2Piano does not support masking of the `input_features`, this argument is preserved for compatibility,
-                but it is not used. By default the silence in the input log mel spectrogram are ignored.
-            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        normed_hidden_states = self.layer_norm(hidden_states)
+        attention_output = self.SelfAttention(
+            normed_hidden_states,
+            mask=attention_mask,
+            position_bias=position_bias,
+            layer_head_mask=layer_head_mask,
+            past_key_value=past_key_value,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
-        inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
+        hidden_states = hidden_states + self.dropout(attention_output[0])
+        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        return outputs
 
-        inputs_embeds = inputs_embeds.permute(0, 2, 1)
-        embed_pos = self.embed_positions.weight
+# Copied from transformers.models.t5.T5LayerCrossAttention with T5->Pop2Piano,t5->pop2piano
+class Pop2PianoAttention(nn.Module):
+    def __init__(self, config: Pop2PianoConfig, has_relative_attention_bias=False):
+        super().__init__()
+        self.is_decoder = config.is_decoder
+        self.has_relative_attention_bias = has_relative_attention_bias
+        self.relative_attention_num_buckets = config.relative_attention_num_buckets
+        self.relative_attention_max_distance = config.relative_attention_max_distance
+        self.d_model = config.d_model
+        self.key_value_proj_dim = config.d_kv
+        self.n_heads = config.num_heads
+        self.dropout = config.dropout_rate
+        self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        hidden_states = inputs_embeds + embed_pos
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        # Mesh TensorFlow initialization to avoid scaling before softmax
+        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
+        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
-                if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
-                        hidden_states,
-                        None,
-                        (head_mask[idx] if head_mask is not None else None),
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        None,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
-
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        hidden_states = self.layer_norm(hidden_states)
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
-
-
-class Pop2PianoDecoder(Pop2PianoPreTrainedModel):
-    """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`Pop2PianoDecoderLayer`]
-
-    Args:
-        config: Pop2PianoConfig
-    """
-
-    def __init__(self, config: Pop2PianoConfig):
-        super().__init__(config)
-        self.dropout = config.dropout
-        self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = config.pad_token_id
-        self.max_target_positions = config.max_target_positions
-        self.max_source_positions = config.max_source_positions
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
-        self.embed_positions = Pop2PianoPositionalEmbedding(self.max_target_positions, config.d_model)
-
-        self.layers = nn.ModuleList([Pop2PianoDecoderLayer(config) for _ in range(config.decoder_layers)])
-
-        self.layer_norm = nn.LayerNorm(config.d_model)
-
+        if self.has_relative_attention_bias:
+            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
+        self.pruned_heads = set()
         self.gradient_checkpointing = False
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.n_heads, self.key_value_proj_dim, self.pruned_heads
+        )
+        # Prune linear layers
+        self.q = prune_linear_layer(self.q, index)
+        self.k = prune_linear_layer(self.k, index)
+        self.v = prune_linear_layer(self.v, index)
+        self.o = prune_linear_layer(self.o, index, dim=1)
+        # Update hyper params
+        self.n_heads = self.n_heads - len(heads)
+        self.inner_dim = self.key_value_proj_dim * self.n_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
+
+    @staticmethod
+    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+        """
+        Adapted from Mesh Tensorflow:
+        https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
+        Translate relative position to a bucket number for relative attention. The relative position is defined as
+        memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
+        position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
+        small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
+        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
+        This should allow for more graceful generalization to longer sequences than the model has been trained on
+        Args:
+            relative_position: an int32 Tensor
+            bidirectional: a boolean - whether the attention is bidirectional
+            num_buckets: an integer
+            max_distance: an integer
+        Returns:
+            a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
+        """
+        relative_buckets = 0
+        if bidirectional:
+            num_buckets //= 2
+            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
+            relative_position = torch.abs(relative_position)
+        else:
+            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
+        # now relative_position is in the range [0, inf)
+
+        # half of the buckets are for exact increments in positions
+        max_exact = num_buckets // 2
+        is_small = relative_position < max_exact
+
+        # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
+        relative_position_if_large = max_exact + (
+            torch.log(relative_position.float() / max_exact)
+            / math.log(max_distance / max_exact)
+            * (num_buckets - max_exact)
+        ).to(torch.long)
+        relative_position_if_large = torch.min(
+            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
+        )
+
+        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
+        return relative_buckets
+
+    def compute_bias(self, query_length, key_length, device=None):
+        """Compute binned relative position bias"""
+        if device is None:
+            device = self.relative_attention_bias.weight.device
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
+        relative_position = memory_position - context_position  # shape (query_length, key_length)
+        relative_position_bucket = self._relative_position_bucket(
+            relative_position,  # shape (query_length, key_length)
+            bidirectional=(not self.is_decoder),
+            num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
+        )
+        values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
+        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
+        return values
+
+    def forward(
+        self,
+        hidden_states,
+        mask=None,
+        key_value_states=None,
+        position_bias=None,
+        past_key_value=None,
+        layer_head_mask=None,
+        query_length=None,
+        use_cache=False,
+        output_attentions=False,
+    ):
+        """
+        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
+        """
+        # Input is (batch_size, seq_length, dim)
+        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
+        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
+        batch_size, seq_length = hidden_states.shape[:2]
+
+        real_seq_length = seq_length
+
+        if past_key_value is not None:
+            assert (
+                len(past_key_value) == 2
+            ), f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
+
+        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
+
+        def shape(states):
+            """projection"""
+            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
+
+        def unshape(states):
+            """reshape"""
+            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
+
+        def project(hidden_states, proj_layer, key_value_states, past_key_value):
+            """projects hidden states correctly to key/query states"""
+            if key_value_states is None:
+                # self-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = shape(proj_layer(hidden_states))
+            elif past_key_value is None:
+                # cross-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = shape(proj_layer(key_value_states))
+
+            if past_key_value is not None:
+                if key_value_states is None:
+                    # self-attn
+                    # (batch_size, n_heads, key_length, dim_per_head)
+                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
+                elif past_key_value.shape[2] != key_value_states.shape[1]:
+                    # checking that the `sequence_length` of the `past_key_value` is the same as
+                    # the provided `key_value_states` to support prefix tuning
+                    # cross-attn
+                    # (batch_size, n_heads, seq_length, dim_per_head)
+                    hidden_states = shape(proj_layer(key_value_states))
+                else:
+                    # cross-attn
+                    hidden_states = past_key_value
+            return hidden_states
+
+        # get query states
+        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
+
+        # get key/value states
+        key_states = project(
+            hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
+        )
+        value_states = project(
+            hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
+        )
+
+        # compute scores
+        scores = torch.matmul(
+            query_states, key_states.transpose(3, 2)
+        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
+
+        if position_bias is None:
+            if not self.has_relative_attention_bias:
+                position_bias = torch.zeros(
+                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                )
+                if self.gradient_checkpointing and self.training:
+                    position_bias.requires_grad = True
+            else:
+                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
+
+            # if key and values are already calculated
+            # we want only the last query position bias
+            if past_key_value is not None:
+                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+
+            if mask is not None:
+                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+
+        if self.pruned_heads:
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
+        else:
+            position_bias_masked = position_bias
+
+        scores += position_bias_masked
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
+            scores
+        )  # (batch_size, n_heads, seq_length, key_length)
+        attn_weights = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )  # (batch_size, n_heads, seq_length, key_length)
+
+        # Mask heads if we want to
+        if layer_head_mask is not None:
+            attn_weights = attn_weights * layer_head_mask
+
+        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+        attn_output = self.o(attn_output)
+
+        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
+        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
+
+        if output_attentions:
+            outputs = outputs + (attn_weights,)
+        return outputs
+
+# Copied from transformers.models.t5.T5LayerCrossAttention with T5->Pop2Piano,t5->pop2piano
+class T5LayerCrossAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.EncDecAttention = Pop2PianoAttention(config, has_relative_attention_bias=False)
+        self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.dropout = nn.Dropout(config.dropout_rate)
+
+    def forward(
+        self,
+        hidden_states,
+        key_value_states,
+        attention_mask=None,
+        position_bias=None,
+        layer_head_mask=None,
+        past_key_value=None,
+        use_cache=False,
+        query_length=None,
+        output_attentions=False,
+    ):
+        normed_hidden_states = self.layer_norm(hidden_states)
+        attention_output = self.EncDecAttention(
+            normed_hidden_states,
+            mask=attention_mask,
+            key_value_states=key_value_states,
+            position_bias=position_bias,
+            layer_head_mask=layer_head_mask,
+            past_key_value=past_key_value,
+            use_cache=use_cache,
+            query_length=query_length,
+            output_attentions=output_attentions,
+        )
+        layer_output = hidden_states + self.dropout(attention_output[0])
+        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
+        return outputs
+
+# Copied from transformers.models.t5.T5Block with T5->Pop2Piano,t5->pop2piano
+class Pop2PianoLayerFF(nn.Module):
+    def __init__(self, config: Pop2PianoConfig):
+        super().__init__()
+        if config.is_gated_act:
+            self.DenseReluDense = Pop2PianoDenseGatedActDense(config)
+        else:
+            self.DenseReluDense = Pop2PianoDenseActDense(config)
+
+        self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.dropout = nn.Dropout(config.dropout_rate)
+
+    def forward(self, hidden_states):
+        forwarded_states = self.layer_norm(hidden_states)
+        forwarded_states = self.DenseReluDense(forwarded_states)
+        hidden_states = hidden_states + self.dropout(forwarded_states)
+        return hidden_states
+
+# Copied from transformers.models.t5.T5Block with T5->Pop2Piano,t5->pop2piano
+class Pop2PianoDenseActDense(nn.Module):
+    def __init__(self, config: Pop2PianoConfig):
+        super().__init__()
+        self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.dropout = nn.Dropout(config.dropout_rate)
+        self.act = ACT2FN[config.dense_act_fn]
+
+    def forward(self, hidden_states):
+        hidden_states = self.wi(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
+
+# Copied from transformers.models.t5.T5Block with T5->Pop2Piano,t5->pop2piano
+class Pop2PianoDenseGatedActDense(nn.Module):
+    def __init__(self, config: Pop2PianoConfig):
+        super().__init__()
+        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.dropout = nn.Dropout(config.dropout_rate)
+        self.act = ACT2FN[config.dense_act_fn]
+
+    def forward(self, hidden_states):
+        hidden_gelu = self.act(self.wi_0(hidden_states))
+        hidden_linear = self.wi_1(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.dropout(hidden_states)
+
+        # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
+        # See https://github.com/huggingface/transformers/issues/20287
+        # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
+        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
+
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
+
+# Copied from transformers.models.t5.T5Block with T5->Pop2Piano,t5->pop2piano
+class Pop2PianoLayerCrossAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.EncDecAttention = Pop2PianoAttention(config, has_relative_attention_bias=False)
+        self.layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.dropout = nn.Dropout(config.dropout_rate)
+
+    def forward(
+        self,
+        hidden_states,
+        key_value_states,
+        attention_mask=None,
+        position_bias=None,
+        layer_head_mask=None,
+        past_key_value=None,
+        use_cache=False,
+        query_length=None,
+        output_attentions=False,
+    ):
+        normed_hidden_states = self.layer_norm(hidden_states)
+        attention_output = self.EncDecAttention(
+            normed_hidden_states,
+            mask=attention_mask,
+            key_value_states=key_value_states,
+            position_bias=position_bias,
+            layer_head_mask=layer_head_mask,
+            past_key_value=past_key_value,
+            use_cache=use_cache,
+            query_length=query_length,
+            output_attentions=output_attentions,
+        )
+        layer_output = hidden_states + self.dropout(attention_output[0])
+        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
+        return outputs
+
+# Copied from transformers.models.t5.T5Block with T5->Pop2Piano,t5->pop2piano
+class Pop2PianoBlock(nn.Module):
+    def __init__(self, config, has_relative_attention_bias=False):
+        super().__init__()
+        self.is_decoder = config.is_decoder
+        self.layer = nn.ModuleList()
+        self.layer.append(Pop2PianoLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
+        if self.is_decoder:
+            self.layer.append(Pop2PianoLayerCrossAttention(config))
+
+        self.layer.append(Pop2PianoLayerFF(config))
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        position_bias=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        encoder_decoder_position_bias=None,
+        layer_head_mask=None,
+        cross_attn_layer_head_mask=None,
+        past_key_value=None,
+        use_cache=False,
+        output_attentions=False,
+        return_dict=True,
+    ):
+        if past_key_value is not None:
+            if not self.is_decoder:
+                logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
+            expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
+
+            if len(past_key_value) != expected_num_past_key_values:
+                raise ValueError(
+                    f"There should be {expected_num_past_key_values} past states. "
+                    f"{'2 (past / key) for cross attention. ' if expected_num_past_key_values == 4 else ''}"
+                    f"Got {len(past_key_value)} past key / value states"
+                )
+
+            self_attn_past_key_value = past_key_value[:2]
+            cross_attn_past_key_value = past_key_value[2:]
+        else:
+            self_attn_past_key_value, cross_attn_past_key_value = None, None
+
+        self_attention_outputs = self.layer[0](
+            hidden_states,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            layer_head_mask=layer_head_mask,
+            past_key_value=self_attn_past_key_value,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+        )
+        hidden_states, present_key_value_state = self_attention_outputs[:2]
+        attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
+
+        # clamp inf values to enable fp16 training
+        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+        do_cross_attention = self.is_decoder and encoder_hidden_states is not None
+        if do_cross_attention:
+            # the actual query length is unknown for cross attention
+            # if using past key value states. Need to inject it here
+            if present_key_value_state is not None:
+                query_length = present_key_value_state[0].shape[2]
+            else:
+                query_length = None
+
+            cross_attention_outputs = self.layer[1](
+                hidden_states,
+                key_value_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+                position_bias=encoder_decoder_position_bias,
+                layer_head_mask=cross_attn_layer_head_mask,
+                past_key_value=cross_attn_past_key_value,
+                query_length=query_length,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
+            hidden_states = cross_attention_outputs[0]
+
+            # clamp inf values to enable fp16 training
+            if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+            # Combine self attn and cross attn key value states
+            if present_key_value_state is not None:
+                present_key_value_state = present_key_value_state + cross_attention_outputs[1]
+
+            # Keep cross-attention outputs and relative position weights
+            attention_outputs = attention_outputs + cross_attention_outputs[2:]
+
+        # Apply Feed Forward layer
+        hidden_states = self.layer[-1](hidden_states)
+
+        # clamp inf values to enable fp16 training
+        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+        outputs = (hidden_states,)
+
+        if use_cache:
+            outputs = outputs + (present_key_value_state,) + attention_outputs
+        else:
+            outputs = outputs + attention_outputs
+
+        return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+
+
+# Copied from transformers.models.t5.T5Stack with T5->Pop2Piano,t5->pop2piano
+class Pop2PianoStack(Pop2PianoPreTrainedModel):
+    def __init__(self, config, embed_tokens=None):
+        super().__init__(config)
+
+        self.embed_tokens = embed_tokens
+        self.is_decoder = config.is_decoder
+
+        self.block = nn.ModuleList(
+            [Pop2PianoBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
+        )
+        self.final_layer_norm = Pop2PianoLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.dropout = nn.Dropout(config.dropout_rate)
+
         # Initialize weights and apply final processing
         self.post_init()
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
+        self.gradient_checkpointing = False
 
     def get_input_embeddings(self):
         return self.embed_tokens
 
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-            ).to(inputs_embeds.device)
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
+    def set_input_embeddings(self, new_embeddings):
+        self.embed_tokens = new_embeddings
 
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
         encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        inputs_embeds=None,
         head_mask=None,
         cross_attn_head_mask=None,
         past_key_values=None,
-        inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
-        r"""
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`WhisperTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-                of the decoder.
-            head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
-                on hidden heads. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
-                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        """
+        # Model parallel
+        if self.model_parallel:
+            torch.cuda.set_device(self.first_device)
+            self.embed_tokens = self.embed_tokens.to(self.first_device)
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+            err_msg_prefix = "decoder_" if self.is_decoder else ""
+            raise ValueError(
+                f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
-
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+            err_msg_prefix = "decoder_" if self.is_decoder else ""
+            raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
 
         if inputs_embeds is None:
+            assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
             inputs_embeds = self.embed_tokens(input_ids)
 
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
-        )
+        batch_size, seq_length = input_shape
 
-        # embed positions
-        positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+        # required mask seq length can be calculated via length of past
+        mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
 
-        hidden_states = inputs_embeds + positions
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        if use_cache is True:
+            assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
 
-        # decoder layers
+        if attention_mask is None:
+            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
+            encoder_seq_length = encoder_hidden_states.shape[1]
+            encoder_attention_mask = torch.ones(
+                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
+            )
+
+        # initialize past_key_values with `None` if past does not exist
+        if past_key_values is None:
+            past_key_values = [None] * len(self.block)
+
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+
+        # If a 2D or 3D attention mask is provided for the cross-attention
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
+        if self.is_decoder and encoder_hidden_states is not None:
+            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            if encoder_attention_mask is None:
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=inputs_embeds.device)
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        else:
+            encoder_extended_attention_mask = None
+
+        # Prepare head mask if needed
+        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
+        cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
+        present_key_value_states = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-        next_decoder_cache = () if use_cache else None
+        all_attentions = () if output_attentions else None
+        all_cross_attentions = () if (output_attentions and self.is_decoder) else None
+        position_bias = None
+        encoder_decoder_position_bias = None
 
-        # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
-            if attn_mask is not None:
-                assert attn_mask.size()[0] == (len(self.layers)), (
-                    f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
-                    f" {head_mask.size()[0]}."
-                )
-        for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+        hidden_states = self.dropout(inputs_embeds)
+
+        for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
+            layer_head_mask = head_mask[i]
+            cross_attn_layer_head_mask = cross_attn_head_mask[i]
+            # Model parallel
+            if self.model_parallel:
+                torch.cuda.set_device(hidden_states.device)
+                # Ensure that attention_mask is always on the same device as hidden_states
+                if attention_mask is not None:
+                    attention_mask = attention_mask.to(hidden_states.device)
+                if position_bias is not None:
+                    position_bias = position_bias.to(hidden_states.device)
+                if encoder_hidden_states is not None:
+                    encoder_hidden_states = encoder_hidden_states.to(hidden_states.device)
+                if encoder_extended_attention_mask is not None:
+                    encoder_extended_attention_mask = encoder_extended_attention_mask.to(hidden_states.device)
+                if encoder_decoder_position_bias is not None:
+                    encoder_decoder_position_bias = encoder_decoder_position_bias.to(hidden_states.device)
+                if layer_head_mask is not None:
+                    layer_head_mask = layer_head_mask.to(hidden_states.device)
+                if cross_attn_layer_head_mask is not None:
+                    cross_attn_layer_head_mask = cross_attn_layer_head_mask.to(hidden_states.device)
             if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
-
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
                 if use_cache:
                     logger.warning(
-                        "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache ="
-                        " False`..."
+                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
+                        return tuple(module(*inputs, use_cache, output_attentions))
 
                     return custom_forward
 
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = checkpoint(
+                    create_custom_forward(layer_module),
                     hidden_states,
-                    attention_mask,
+                    extended_attention_mask,
+                    position_bias,
                     encoder_hidden_states,
-                    None,  # encoder attention mask
-                    head_mask[idx] if head_mask is not None else None,
-                    cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
-                    None,  # past_key_value
+                    encoder_extended_attention_mask,
+                    encoder_decoder_position_bias,
+                    layer_head_mask,
+                    cross_attn_layer_head_mask,
+                    None,  # past_key_value is always None with gradient checkpointing
                 )
             else:
-                layer_outputs = decoder_layer(
+                layer_outputs = layer_module(
                     hidden_states,
-                    attention_mask=attention_mask,
+                    attention_mask=extended_attention_mask,
+                    position_bias=position_bias,
                     encoder_hidden_states=encoder_hidden_states,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_attn_layer_head_mask=(
-                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                    ),
+                    encoder_attention_mask=encoder_extended_attention_mask,
+                    encoder_decoder_position_bias=encoder_decoder_position_bias,
+                    layer_head_mask=layer_head_mask,
+                    cross_attn_layer_head_mask=cross_attn_layer_head_mask,
                     past_key_value=past_key_value,
-                    output_attentions=output_attentions,
                     use_cache=use_cache,
+                    output_attentions=output_attentions,
                 )
-            hidden_states = layer_outputs[0]
 
+            # layer_outputs is a tuple with:
+            # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+            if use_cache is False:
+                layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
+
+            hidden_states, present_key_value_state = layer_outputs[:2]
+
+            # We share the position biases between the layers - the first layer store them
+            # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
+            # (cross-attention position bias), (cross-attention weights)
+            position_bias = layer_outputs[2]
+            if self.is_decoder and encoder_hidden_states is not None:
+                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
+            # append next layer key value states
             if use_cache:
-                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
+                present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                all_self_attns += (layer_outputs[1],)
+                all_attentions = all_attentions + (layer_outputs[3],)
+                if self.is_decoder:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
 
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
+            # Model Parallel: If it's the last layer for that device, put things on the next device
+            if self.model_parallel:
+                for k, v in self.device_map.items():
+                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
+                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
-        hidden_states = self.layer_norm(hidden_states)
-        # add hidden states from the last decoder layer
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        # Add last layer
         if output_hidden_states:
-            all_hidden_states += (hidden_states,)
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+                for v in [
+                    hidden_states,
+                    present_key_value_states,
+                    all_hidden_states,
+                    all_attentions,
+                    all_cross_attentions,
+                ]
                 if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=present_key_value_states,
             hidden_states=all_hidden_states,
-            attentions=all_self_attns,
+            attentions=all_attentions,
             cross_attentions=all_cross_attentions,
         )
 
 
-@add_start_docstrings(
-    "The bare Pop2Piano Model outputting raw hidden-states without any specific head on top.",
-    POP2PIANO_START_DOCSTRING,
-)
-class Pop2PianoModel(Pop2PianoPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"proj_out.weight"]
+Pop2Piano_START_DOCSTRING = r"""
+    The Pop2Piano model was proposed in [POP2PIANO : POP AUDIO-BASED PIANO COVER GENERATION](https://arxiv.org/pdf/2211.00895) by Jongho Choi, Kyogu 
+    Lee. It's an encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+    Parameters:
+        config ([`Pop2PianoConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+# Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration with T5->Pop2Piano,t5->pop2piano
+@add_start_docstrings("""Pop2Piano Model with a `language modeling` head on top.""", Pop2Piano_START_DOCSTRING)
+class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        r"encoder.embed_tokens.weight",
+        r"decoder.embed_tokens.weight",
+        r"lm_head.weight",
+    ]
+    _keys_to_ignore_on_load_unexpected = [
+        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
+    ]
 
     def __init__(self, config: Pop2PianoConfig):
         super().__init__(config)
+        self.model_dim = config.d_model
 
-        self.encoder = Pop2PianoEncoder(config)
-        self.decoder = Pop2PianoDecoder(config)
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+
+        encoder_config = copy.deepcopy(config)
+        encoder_config.is_decoder = False
+        encoder_config.use_cache = False
+        encoder_config.is_encoder_decoder = False
+        self.encoder = Pop2PianoStack(encoder_config, self.shared)
+
+        decoder_config = copy.deepcopy(config)
+        decoder_config.is_decoder = True
+        decoder_config.is_encoder_decoder = False
+        decoder_config.num_layers = config.num_decoder_layers
+        self.decoder = Pop2PianoStack(decoder_config, self.shared)
+
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.decoder.embed_tokens
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
 
-    def set_input_embeddings(self, value):
-        self.decoder.embed_tokens = value
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
+        self.encoder.set_input_embeddings(new_embeddings)
+        self.decoder.set_input_embeddings(new_embeddings)
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def get_output_embeddings(self):
+        return self.lm_head
 
     def get_encoder(self):
         return self.encoder
@@ -1120,112 +1122,49 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def freeze_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the Pop2Piano encoder so that its parameters will
-        not be updated during training.
-        """
-        self.encoder._freeze_parameters()
-
-    def _mask_input_features(
-        self,
-        input_features: torch.FloatTensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-    ):
-        """
-        Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
-        """
-
-        # `config.apply_spec_augment` can set masking to False
-        if not getattr(self.config, "apply_spec_augment", True):
-            return input_features
-
-        # generate indices & apply SpecAugment along time axis
-        batch_size, hidden_size, sequence_length = input_features.size()
-
-        if self.config.mask_time_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along time axis
-            mask_time_indices = _compute_mask_indices(
-                (batch_size, sequence_length),
-                mask_prob=self.config.mask_time_prob,
-                mask_length=self.config.mask_time_length,
-                attention_mask=attention_mask,
-                min_masks=self.config.mask_time_min_masks,
-            )
-            mask_time_indices = torch.tensor(mask_time_indices, device=input_features.device, dtype=torch.bool)
-            mask_time_indices = mask_time_indices[:, None].expand(-1, hidden_size, -1)
-            input_features[mask_time_indices] = 0
-
-        if self.config.mask_feature_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along feature axis
-            mask_feature_indices = _compute_mask_indices(
-                (batch_size, hidden_size),
-                mask_prob=self.config.mask_feature_prob,
-                mask_length=self.config.mask_feature_length,
-                min_masks=self.config.mask_feature_min_masks,
-            )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=input_features.device, dtype=torch.bool)
-            input_features[mask_feature_indices] = 0
-
-        return input_features
-
-    @add_start_docstrings_to_model_forward(POP2PIANO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    # @add_start_docstrings_to_model_forward(Pop2Piano_INPUTS_DOCSTRING)
+    # @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_features: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
-        r"""
-        Returns:
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            decoder_input_ids: Optional[torch.LongTensor] = None,
+            decoder_attention_mask: Optional[torch.BoolTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            decoder_head_mask: Optional[torch.FloatTensor] = None,
+            cross_attn_head_mask: Optional[torch.Tensor] = None,
+            encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
 
-        Example:
-         ```python
-         >>> import torch
-         >>> from transformers import AutoFeatureExtractor, Pop2PianoModel
-         >>> from datasets import load_dataset
-
-         >>> model = Pop2PianoModel.from_pretrained("openai/pop2piano-base")
-         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/pop2piano-base")
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
-         >>> input_features = inputs.input_features
-         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
-         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
-         >>> list(last_hidden_state.shape)
-         [1, 2, 512]
-         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if encoder_outputs is None:
-            input_features = self._mask_input_features(input_features, attention_mask=attention_mask)
+        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+        if head_mask is not None and decoder_head_mask is None:
+            if self.config.num_layers == self.config.num_decoder_layers:
+                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
+                decoder_head_mask = head_mask
 
+        # Encode if needed (training, first prediction pass)
+        if encoder_outputs is None:
+            # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder(
-                input_features,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
@@ -1233,26 +1172,70 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        hidden_states = encoder_outputs[0]
+
+        if self.model_parallel:
+            torch.cuda.set_device(self.decoder.first_device)
+
+        if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
+            # get decoder inputs from shifting lm labels to the right
+            decoder_input_ids = self._shift_right(labels)
+
+        # Set device for model parallelism
+        if self.model_parallel:
+            torch.cuda.set_device(self.decoder.first_device)
+            hidden_states = hidden_states.to(self.decoder.first_device)
+            if decoder_input_ids is not None:
+                decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
+            if attention_mask is not None:
+                attention_mask = attention_mask.to(self.decoder.first_device)
+            if decoder_attention_mask is not None:
+                decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
+
+        # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
+            inputs_embeds=decoder_inputs_embeds,
+            past_key_values=past_key_values,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
+        sequence_output = decoder_outputs[0]
 
-        return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
+        # Set device for model parallelism
+        if self.model_parallel:
+            torch.cuda.set_device(self.encoder.first_device)
+            self.lm_head = self.lm_head.to(self.encoder.first_device)
+            sequence_output = sequence_output.to(self.lm_head.weight.device)
+
+        if self.config.tie_word_embeddings:
+            # Rescale output before projecting on vocab
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
+            sequence_output = sequence_output * (self.model_dim ** -0.5)
+
+        lm_logits = self.lm_head(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss(ignore_index=-100)
+            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
+            # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
+
+        if not return_dict:
+            output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
+            return ((loss,) + output) if loss is not None else output
+
+        return Seq2SeqLMOutput(
+            loss=loss,
+            logits=lm_logits,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
@@ -1262,318 +1245,161 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-
-@add_start_docstrings(
-    "The Pop2Piano Model with a language modeling head. Can be used for automatic speech recognition.",
-    POP2PIANO_START_DOCSTRING,
-)
-class Pop2PianoForConditionalGeneration(Pop2PianoPreTrainedModel):
-    base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.version",
-        r"decoder.version",
-        r"proj_out.weight",
-    ]
-    _keys_to_ignore_on_save = [
-        r"proj_out.weight",
-    ]
-
-    def __init__(self, config: Pop2PianoConfig):
-        super().__init__(config)
-        self.model = Pop2PianoModel(config)
-        self.proj_out = nn.Linear(config.d_model, config.vocab_size, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        return new_embeddings
-
-    def get_output_embeddings(self):
-        return self.proj_out
-
-    def set_output_embeddings(self, new_embeddings):
-        self.proj_out = new_embeddings
-
-    def freeze_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the Pop2Piano encoder so that its parameters will
-        not be updated during training.
-        """
-        self.model.encoder._freeze_parameters()
-
-    @add_start_docstrings_to_model_forward(POP2PIANO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_features: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
-            or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
-            only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> import torch
-        >>> from transformers import AutoProcessor, Pop2PianoForConditionalGeneration
-        >>> from datasets import load_dataset
-
-        >>> processor = AutoProcessor.from_pretrained("sweetcocoa/pop2piano.en")
-        >>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano.en")
-
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-
-        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
-        >>> input_features = inputs.input_features
-
-        >>> generated_ids = model.generate(inputs=input_features)
-
-        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        >>> transcription
-        ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if labels is not None:
-            if decoder_input_ids is None and decoder_inputs_embeds is None:
-                decoder_input_ids = shift_tokens_right(
-                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
-                )
-
-        outputs = self.model(
-            input_features,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            encoder_outputs=encoder_outputs,
-            decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            past_key_values=past_key_values,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        lm_logits = self.proj_out(outputs[0])
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.reshape(-1))
-
-        if not return_dict:
-            output = (lm_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return Seq2SeqLMOutput(
-            loss=loss,
-            logits=lm_logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-    def generate(
-        self,
-        inputs: Optional[torch.Tensor] = None,
-        generation_config=None,
-        logits_processor=None,
-        stopping_criteria=None,
-        prefix_allowed_tokens_fn=None,
-        synced_gpus=False,
-        return_timestamps=None,
-        task=None,
-        language=None,
-        is_multilingual=None,
-        **kwargs,
-    ):
-        """
-
-        Generates sequences of token ids for models with a language modeling head.
-
-        <Tip warning={true}>
-
-        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
-        model's default generation configuration. You can override any `generation_config` by passing the corresponding
-        parameters to generate(), e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
-
-        For an overview of generation strategies and code examples, check out the [following
-        guide](./generation_strategies).
-
-        </Tip>
-
-        Parameters:
-            inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
-                The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
-                method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
-                should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
-                `input_ids`, `input_values`, `input_features`, or `pixel_values`.
-            generation_config (`~generation.GenerationConfig`, *optional*):
-                The generation configuration to be used as base parametrization for the generation call. `**kwargs`
-                passed to generate matching the attributes of `generation_config` will override them. If
-                `generation_config` is not provided, the default will be used, which had the following loading
-                priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
-                configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
-                default values, whose documentation should be checked to parameterize generation.
-            logits_processor (`LogitsProcessorList`, *optional*):
-                Custom logits processors that complement the default logits processors built from arguments and
-                generation config. If a logit processor is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
-            stopping_criteria (`StoppingCriteriaList`, *optional*):
-                Custom stopping criteria that complement the default stopping criteria built from arguments and a
-                generation config. If a stopping criteria is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
-            prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
-                If provided, this function constraints the beam search to allowed tokens only at each step. If not
-                provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
-                `input_ids`. It has to return a list with the allowed tokens for the next generation step conditioned
-                on the batch ID `batch_id` and the previously generated tokens `inputs_ids`. This argument is useful
-                for constrained generation conditioned on the prefix, as described in [Autoregressive Entity
-                Retrieval](https://arxiv.org/abs/2010.00904).
-            synced_gpus (`bool`, *optional*, defaults to `False`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
-            return_timestamps (`bool`, *optional*):
-                Whether to return the timestamps with the text. This enables the `Pop2PianoTimestampsLogitsProcessor`.
-            task (`bool`, *optional*):
-                Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
-                will be updated accordingly.
-            language (`bool`, *optional*):
-                Language token to use for generation, should be in the form `<|en|>`. You can find all the possible
-                language tokens in the `model.generation_config.lang_to_id` dictionary.
-            is_multilingual (`bool`, *optional*):
-                Whether or not the model is multilingual.
-            kwargs:
-                Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
-                forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
-                specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
-
-        Return:
-            [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
-            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor`.
-
-                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
-                [`~utils.ModelOutput`] types are:
-
-                    - [`~generation.GreedySearchDecoderOnlyOutput`],
-                    - [`~generation.SampleDecoderOnlyOutput`],
-                    - [`~generation.BeamSearchDecoderOnlyOutput`],
-                    - [`~generation.BeamSampleDecoderOnlyOutput`]
-
-                If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
-                [`~utils.ModelOutput`] types are:
-
-                    - [`~generation.GreedySearchEncoderDecoderOutput`],
-                    - [`~generation.SampleEncoderDecoderOutput`],
-                    - [`~generation.BeamSearchEncoderDecoderOutput`],
-                    - [`~generation.BeamSampleEncoderDecoderOutput`]
-        """
-        if generation_config is None:
-            generation_config = self.generation_config
-
-        if return_timestamps is not None:
-            generation_config.return_timestamps = return_timestamps
-
-        if task is not None:
-            generation_config.task = task
-
-        if is_multilingual is not None:
-            generation_config.is_multilingual = is_multilingual
-
-        if language is not None:
-            generation_config.language = language
-
-        forced_decoder_ids = []
-
-        if hasattr(generation_config, "is_multilingual") and generation_config.is_multilingual:
-            if hasattr(generation_config, "language"):
-                forced_decoder_ids.append((1, generation_config.lang_to_id[generation_config.language]))
-            else:
-                forced_decoder_ids.append((1, None))
-
-            if hasattr(generation_config, "task"):
-                forced_decoder_ids.append((2, generation_config.task_to_id[generation_config.task]))
-            else:
-                forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))
-
-        if (
-            hasattr(generation_config, "return_timestamps") and generation_config.return_timestamps
-        ) or return_timestamps:
-            logits_processor = [Pop2PianoTimeStampLogitsProcessor(generation_config)]
-        else:
-            if forced_decoder_ids and forced_decoder_ids[-1][0] != generation_config.no_timestamps_token_id:
-                idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
-                forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
-
-        if len(forced_decoder_ids) > 0:
-            generation_config.forced_decoder_ids = forced_decoder_ids
-
-        return super().generate(
-            inputs,
-            generation_config,
-            logits_processor,
-            stopping_criteria,
-            prefix_allowed_tokens_fn,
-            synced_gpus,
-            **kwargs,
-        )
-
     def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        use_cache=None,
-        encoder_outputs=None,
-        attention_mask=None,
-        **kwargs,
+            self,
+            input_ids,
+            past_key_values=None,
+            attention_mask=None,
+            head_mask=None,
+            decoder_head_mask=None,
+            cross_attn_head_mask=None,
+            use_cache=None,
+            encoder_outputs=None,
+            **kwargs,
     ):
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            input_ids = input_ids[:, -1:]
 
         return {
-            "encoder_outputs": encoder_outputs,
+            "decoder_input_ids": input_ids,
             "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
+            "encoder_outputs": encoder_outputs,
+            "attention_mask": attention_mask,
+            "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
-            "decoder_attention_mask": None,
         }
 
-    #
-    @staticmethod
-    def _reorder_cache(past_key_values, beam_idx):
-        reordered_past = ()
-        for layer_past in past_key_values:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
-        return reordered_past
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return self._shift_right(labels)
+
+    def _reorder_cache(self, past_key_values, beam_idx):
+        # if decoder past is not included in output
+        # speedy decoding is disabled and no need to reorder
+        if past_key_values is None:
+            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
+            return past_key_values
+
+        reordered_decoder_past = ()
+        for layer_past_states in past_key_values:
+            # get the correct batch idx from layer past batch dim
+            # batch dim of `past` is at 2nd position
+            reordered_layer_past_states = ()
+            for layer_past_state in layer_past_states:
+                # need to set correct `past` for each of the four key / value states
+                reordered_layer_past_states = reordered_layer_past_states + (
+                    layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
+                )
+
+            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
+            assert len(reordered_layer_past_states) == len(layer_past_states)
+
+            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
+        return reordered_decoder_past
+
+
+class Pop2PianoModel(Pop2PianoPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        r"encoder.embed_tokens.weight",
+        r"decoder.embed_tokens.weight",
+    ]
+    _keys_to_ignore_on_load_unexpected = [
+        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
+    ]
+    def __init__(self,
+                 config: Pop2PianoConfig
+        ):
+        super(Pop2PianoModel, self).__init__(config)
+        self.config = config
+
+        self.spectrogram = LogMelSpectrogram()
+        if self.config.dataset.get("mel_is_conditioned", None):
+            n_dim = 512
+            composer_n_vocab = len(config.composer_to_feature_token)
+            embedding_offset = min(config.composer_to_feature_token.values())
+            self.mel_conditioner = ConcatEmbeddingToMel(
+                        embedding_offset=embedding_offset,
+                        n_vocab=composer_n_vocab,
+                        n_dim=n_dim)
+        self.transformer = Pop2PianoForConditionalGeneration(config)
+
+        self.post_init()
+
+    def get_encoder(self):
+        return self.transformer.encoder
+
+    def get_decoder(self):
+        return self.transformer.decoder
+
+    def get_input_embeddings(self):
+        return self.transformer.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.transformer.decoder.embed_tokens = value
+
+    def freeze_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the Whisper encoder so that its parameters will
+        not be updated during training.
+        """
+        self.transformer.encoder._freeze_parameters()
+
+    def forward(self, input_ids, batch, ext_beatstep, max_batch_size:int = None, n_bars: int = 2):
+        n_bars = self.config.dataset.get("n_bars", None) if n_bars is None else n_bars
+        max_batch_size = 64 // n_bars if max_batch_size is None else max_batch_size
+        max_length = self.config.dataset.get("target_length", None) * \
+                     max(1, (n_bars // self.config.dataset.get("n_bars", None))),
+
+        inputs_embeds = self.spectrogram(batch).transpose(-1, -2)
+        if self.config.dataset.get("mel_is_conditioned", None):
+            composer_value = torch.tensor(composer_value, device=self.device)
+            composer_value = composer_value.repeat(inputs_embeds.shape[0])
+            inputs_embeds = self.mel_conditioner(inputs_embeds, composer_value)
+
+        batch_size = inputs_embeds.shape[0]
+
+        relative_tokens = list()
+        for i in range(0, batch_size, max_batch_size):
+            start = i
+            end = min(batch_size, i + max_batch_size)
+
+            if input_ids is None:
+                _input_ids = None
+                _inputs_embeds = inputs_embeds[start:end]
+            else:
+                _input_ids = input_ids[start:end]
+                _inputs_embeds = None
+
+            _relative_tokens = self.transformer.generate(
+                input_ids=_input_ids,
+                inputs_embeds=_inputs_embeds,
+                max_length=max_length,
+            )
+            _relative_tokens = _relative_tokens.cpu().numpy()
+            relative_tokens.append(_relative_tokens)
+
+        max_length = max([rt.shape[-1] for rt in relative_tokens])
+        for i in range(len(relative_tokens)):
+            relative_tokens[i] = np.pad(
+                relative_tokens[i],
+                [(0, 0), (0, max_length - relative_tokens[i].shape[-1])],
+                constant_values=PAD,
+            )
+        relative_tokens = np.concatenate(relative_tokens)
+
+        return relative_tokens
+
+
+
+
+
+
+
+
+
+
+
+
+

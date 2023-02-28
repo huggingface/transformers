@@ -142,8 +142,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             beatstep,
             feature_tokens=None,
             audio=None,
-            max_length=256,
-            max_batch_size=64,
             n_bars=None,
             composer_value=None,
     ):
@@ -204,9 +202,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                  mix_path=None,
                  click_amp=0.2,
                  add_click=False,
-                 max_batch_size=None,
                  mix_sample_rate=None,
-
                  ):
 
         # If only raw_audio is present then audio_sr also must be present
@@ -234,8 +230,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             raw_audio, sr = librosa.load(audio_path, sr=ESSENTIA_SAMPLERATE)
         else:
             sr = audio_sr
-
-        max_batch_size = 64 // n_bars if max_batch_size is None else max_batch_size
 
         # select composer randomly if not already given
         composer_to_feature_token = self.config.composer_to_feature_token
@@ -269,9 +263,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             feature_tokens=fzs,
             audio=_audio,
             beatstep=beatsteps - beatsteps[0],
-            max_length=self.config.dataset.get("target_length", None) * \
-                       max(1, (n_bars // self.config.dataset.get("n_bars", None))),
-            max_batch_size=max_batch_size,
             n_bars=n_bars,
             composer_value=composer_value,
         )
