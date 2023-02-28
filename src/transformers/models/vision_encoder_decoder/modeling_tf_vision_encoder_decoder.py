@@ -318,22 +318,22 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
         >>> assert preds == ["a cat laying on top of a couch next to another cat"]
         ```"""
-
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-        encoder_model_type = config.encoder.model_type
-
         # Matt: The TF and PT weights don't align because our TF base classes have an extra layer compared to PT models
         # (the main model stem is in the MainLayer class). If we remove that layer, then weight names sync up as normal.
         # However, the name of that extra layer is the name of the MainLayer in the base model. We make the assumption
         # here that the config model_type is the same as the name of the MainLayer. I don't know of anywhere that's
         # not the case, and I wasn't sure how else to go from the config to the correct MainLayer name!
-        def tf_to_pt_weight_rename(tf_weight):
-            if "encoder" in tf_weight and "decoder" not in tf_weight:
-                return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
-            else:
-                return tf_weight
 
         if kwargs.get("from_pt", False):
+            config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
+            encoder_model_type = config.encoder.model_type
+
+            def tf_to_pt_weight_rename(tf_weight):
+                if "encoder" in tf_weight and "decoder" not in tf_weight:
+                    return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
+                else:
+                    return tf_weight
+
             kwargs["tf_to_pt_weight_rename"] = tf_to_pt_weight_rename
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
