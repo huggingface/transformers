@@ -70,8 +70,7 @@ class AggregationStrategy(ExplicitEnum):
             same entity together in the predictions or not.
         stride (`int`, *optional*, defaults to `None`):
             If stride is provided, the pipeline is applied on the whole text. The text is split into chunks of size
-            model_max_length and for each token the returned predictions is the highest score among the chunks. Works
-            only with fast tokenizers.
+            model_max_length. Works only with fast tokenizers.
         aggregation_strategy (`str`, *optional*, defaults to `"none"`):
             The strategy to fuse (or not) tokens based on the model prediction.
 
