@@ -21,6 +21,7 @@ from transformers.testing_utils import require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -189,9 +190,19 @@ def prepare_led_inputs_dict(
 
 
 @require_tf
-class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFLEDModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFLEDForConditionalGeneration, TFLEDModel) if is_tf_available() else ()
     all_generative_model_classes = (TFLEDForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": TFLEDForConditionalGeneration,
+            "feature-extraction": TFLEDModel,
+            "summarization": TFLEDForConditionalGeneration,
+            "text2text-generation": TFLEDForConditionalGeneration,
+        }
+        if is_tf_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False

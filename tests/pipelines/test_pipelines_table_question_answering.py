@@ -24,10 +24,8 @@ from transformers import (
 )
 from transformers.testing_utils import require_pandas, require_tensorflow_probability, require_tf, require_torch, slow
 
-from .test_pipelines_common import PipelineTestCaseMeta
 
-
-class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class TQAPipelineTests(unittest.TestCase):
     # Putting it there for consistency, but TQA do not have fast tokenizer
     # which are needed to generate automatic tests
     model_mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING

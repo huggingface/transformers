@@ -21,6 +21,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -169,7 +170,7 @@ class TFDistilBertModelTester:
 
 
 @require_tf
-class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFDistilBertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFDistilBertModel,
@@ -181,6 +182,18 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else None
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFDistilBertModel,
+            "fill-mask": TFDistilBertForMaskedLM,
+            "question-answering": TFDistilBertForQuestionAnswering,
+            "text-classification": TFDistilBertForSequenceClassification,
+            "token-classification": TFDistilBertForTokenClassification,
+            "zero-shot": TFDistilBertForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
     test_head_masking = False
     test_onnx = False

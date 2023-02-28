@@ -21,6 +21,7 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -270,7 +271,7 @@ class TFLongformerModelTester:
 
 
 @require_tf
-class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFLongformerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFLongformerModel,
@@ -282,6 +283,18 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFLongformerModel,
+            "fill-mask": TFLongformerForMaskedLM,
+            "question-answering": TFLongformerForQuestionAnswering,
+            "text-classification": TFLongformerForSequenceClassification,
+            "token-classification": TFLongformerForTokenClassification,
+            "zero-shot": TFLongformerForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
     test_head_masking = False
     test_onnx = False
