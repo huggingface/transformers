@@ -1238,7 +1238,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             # warn users about unexpected behavior when using multi-GPU + BLIP-2 + `accelerate`.
             logger.warning(
                 "The `language_model` is not in the `hf_device_map` dictionary and you are running your script in a multi-GPU environment. "
-                " this may lead to unexpected behavior when using `accelerate`. Please pass a `device_map` that contains `language_model` to remove this warning"
+                " this may lead to unexpected behavior when using `accelerate`. Please pass a `device_map` that contains `language_model` to remove this warning. "
+                " Please refer to https://github.com/huggingface/blog/blob/main/accelerate-large-models.md for more details on creating a `device_map` for large models."
             )
 
         if hasattr(self.language_model, "_hf_hook"):
@@ -1453,7 +1454,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             )
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
-        attention_mask = torch.cat([language_attention_mask, attention_mask], dim=1)
+        attention_mask = torch.cat([language_attention_mask, attention_mask.to(language_attention_mask.device)], dim=1)
 
         # concatenate query embeddings with prompt embeddings
         inputs_embeds = self.get_input_embeddings()(input_ids)
