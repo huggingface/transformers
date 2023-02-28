@@ -32,7 +32,8 @@ from transformers import PreTrainedModel
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from transformers.pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from transformers.utils import DUMMY_INPUTS, DUMMY_MASK, is_torch_fx_proxy
+from transformers.utils import DUMMY_INPUTS, DUMMY_MASK, is_torch_fx_proxy, add_start_docstrings_to_model_forward, \
+    replace_return_docstrings
 
 from .configuration_udop import UdopConfig
 
@@ -47,10 +48,9 @@ UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP = ["udop-uniudop-dual"]
 # _CHECKPOINT_FOR_DOC = "UDOP-small"
 UDOPDUAL_START_DOCSTRING = r"""
 
-    The UDOP model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
-    Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
-    Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a
-    text-to-text denoising generative setting.
+    The udop models was presented in [Unifying Vision, Text, and Layout for Universal Document Processing]
+    (https://arxiv.org/pdf/2212.02623.pdf) by Zineng Tang, Ziyi Yang, Guoxin Wang, Yuwei Fang, Yang Liu, 
+    Chenguang Zhu, Michael Zeng, Cha Zhang, Mohit Bansal, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -69,15 +69,15 @@ UDOPDUAL_START_DOCSTRING = r"""
 UDOPDUAL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. UDOP is a model with relative position embeddings so
-            you should be able to pad the inputs on both the right and the left.
+            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
+            should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`UDOPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             [What are input IDs?](../glossary#input-ids)
 
-            To know more on how to prepare `input_ids` for pretraining take a look a [UDOP Training](./UDOP#training).
+            To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
         attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -88,16 +88,16 @@ UDOPDUAL_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`UDOPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            UDOP uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            T5 uses the `pad_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
             is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
 
-            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [UDOP
-            Training](./UDOP#training).
+            To know more on how to prepare `decoder_input_ids` for pretraining take a look at [T5
+            Training](./t5#training).
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
@@ -132,6 +132,12 @@ UDOPDUAL_INPUTS_DOCSTRING = r"""
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        image: (`torch.Tensor` of shape `(image_size,image_size,in_channels)`, *optional*):
+            The image of the document.
+        ids_keep: (`torch.Tensor` of shape `(batch_size, sequence_length)`): 
+            The ids to be kept when masking.
+        seg_data: (`torch.Tensor` of shape `(4,batch_size, sequence_length)`): 
+            The bbox location for corresponding input_ids pass on.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
@@ -158,44 +164,6 @@ UDOPDUAL_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
-
-UDOPDUAL_ENCODER_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. UDOP is a model with relative position embeddings so
-            you should be able to pad the inputs on both the right and the left.
-
-            Indices can be obtained using [`UDOPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for detail.
-
-            To know more on how to prepare `input_ids` for pretraining take a look a [UDOP Training](./UDOP#training).
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
 __HEAD_MASK_WARNING_MSG = """
 The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
 `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
@@ -1604,7 +1572,6 @@ class UdopDualStack(UdopPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         inputs_embeds=None,
-        vision_embeds=None,
         head_mask=None,
         past_key_values=None,
         image=None,
@@ -1615,7 +1582,6 @@ class UdopDualStack(UdopPreTrainedModel):
         return_dict=None,
         position_bias=None,
         seg_data=None,
-        cross_attn_head_mask=None,
         token_type_ids=None,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1840,6 +1806,8 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
             d_model = self.config.d_model
             module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
+    @add_start_docstrings_to_model_forward(UDOPDUAL_START_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Tensor = None,
@@ -1853,14 +1821,9 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
         past_key_values: Optional[Tensor] = None,
         image: Optional[Tensor] = None,
         ids_keep: Optional[Tensor] = None,
-        ids_restore: Optional[Tensor] = None,
-        image_mask_label: Optional[Tensor] = None,
-        mask_ratio: Optional[Tensor] = None,
         seg_data: Dict[str, Any] = None,
         labels: Optional[Tensor] = None,
         masked_lm_labels: Optional[Tensor] = None,
-        char_ids: Optional[Tensor] = None,
-        char_seg_data: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         decoder_inputs_embeds: Optional[Tensor] = None,
         use_cache=True,
@@ -1869,7 +1832,7 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
         return_dict: Optional[bool] = None,
         input_dict: Dict[str, Any] = None,
         **kwargs,
-    ) -> Tuple[Tensor, Seq2SeqLMOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[-100, 0, ...,
@@ -2123,18 +2086,14 @@ class UdopUniStack(UdopPreTrainedModel):
         inputs_embeds=None,
         head_mask=None,
         past_key_values=None,
-        ids_keep=None,
         use_cache=None,
-        output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        cross_attn_head_mask=None,
-        position_bias=None,  # modified line,
-        inputs_patches=None,  # modified line,
-        seg_data=None,  # modified line,
-        visual_seg_data=None,  # modified line,
-        num_patches=None,  # modified line,
-        special_vis_token=None,  # modified line,
+        inputs_patches=None,
+        seg_data=None,
+        visual_seg_data=None,
+        num_patches=None,
+        special_vis_token=None,
     ):
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -2311,10 +2270,6 @@ class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
         r"decoder.relative_bias.biases.0.relative_attention_bias.weight",
         r"encoder.relative_bias.biases.0.relative_attention_bias.weight",
     ]
-    """
-    Copied from original UDOPForConditionalGeneration class with signature extended with 2D data. :param config: a
-    `UDOPConfig` instance
-    """
 
     def __init__(self, config):
         super().__init__(config)
