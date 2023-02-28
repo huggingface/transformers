@@ -609,7 +609,7 @@ All you need to do is enable it through the config.
 
 **Usage**:
 
-Pass `--fsdp True` along with following changes to be made in `--fsdp_config <path_to_fsdp_config.json>`:
+Pass `--fsdp "full shard"` along with following changes to be made in `--fsdp_config <path_to_fsdp_config.json>`:
 - `xla` should be set to `True` to enable PyTorch/XLA FSDP.
 - `xla_fsdp_settings` The value is a dictionary which stores the XLA FSDP wrapping parameters.
   For a complete list of options, please see [here](
