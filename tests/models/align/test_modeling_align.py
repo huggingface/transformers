@@ -570,9 +570,8 @@ class AlignModelIntegrationTest(unittest.TestCase):
         processor = AlignProcessor.from_pretrained(model_name)
 
         image = prepare_img()
-        inputs = processor(
-            text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
-        ).to(torch_device)
+        texts = ["a photo of a cat", "a photo of a dog"]
+        inputs = processor(text=texts, images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -588,5 +587,4 @@ class AlignModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
         expected_logits = torch.tensor([[9.7093, 3.4679]], device=torch_device)
-
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
