@@ -36,7 +36,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import meshgrid
+from ...pytorch_utils import meshgrid, torch_int_div
 from ...utils import is_torchvision_available, logging, requires_backends
 from ..auto import AutoBackbone
 from .configuration_deta import DetaConfig
@@ -399,7 +399,7 @@ class DetaSinePositionEmbedding(nn.Module):
             x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
 
         dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
+        dim_t = self.temperature ** (2 * torch_int_div(dim_t, 2 / self.embedding_dim))
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t

@@ -46,6 +46,7 @@ from ...utils import (
 )
 from .configuration_bigbird_pegasus import BigBirdPegasusConfig
 
+from transformers.pytorch_utils import torch_int_div
 
 logger = logging.get_logger(__name__)
 
@@ -790,7 +791,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         num_indices_to_pick_from = params.shape[2]
 
         shift = torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device)
-        indices_shift = torch.div(shift, num_indices_to_gather, rounding_mode="floor") * num_indices_to_pick_from
+        indices_shift = torch_int_div(shift, num_indices_to_gather) * num_indices_to_pick_from
 
         flattened_indices = indices.view(-1) + indices_shift
         flattened_params = params.reshape(-1, params.shape[-2], params.shape[-1])
