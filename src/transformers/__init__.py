@@ -1193,6 +1193,7 @@ else:
         [
             "BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Blip2ForConditionalGeneration",
+            "Blip2Model",
             "Blip2PreTrainedModel",
             "Blip2QFormerModel",
             "Blip2VisionModel",
@@ -4664,6 +4665,7 @@ if TYPE_CHECKING:
         from .models.blip_2 import (
             BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Blip2ForConditionalGeneration,
+            Blip2Model,
             Blip2PreTrainedModel,
             Blip2QFormerModel,
             Blip2VisionModel,
