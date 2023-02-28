@@ -1259,9 +1259,9 @@ class SwinForImageClassification(SwinPreTrainedModel):
 class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
     def __init__(self, config: SwinConfig):
         super().__init__(config)
+        super()._init_backbone(config)
 
-        self.stage_names = config.stage_names
-
+        self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
         self.embeddings = SwinEmbeddings(config)
         self.encoder = SwinEncoder(config, self.embeddings.patch_grid)
 

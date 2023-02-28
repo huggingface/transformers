@@ -845,8 +845,8 @@ class BitForImageClassification(BitPreTrainedModel):
 class BitBackbone(BitPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
-        self.stage_names = config.stage_names
         self.bit = BitModel(config)
 
         self.num_features = [config.embedding_size] + config.hidden_sizes

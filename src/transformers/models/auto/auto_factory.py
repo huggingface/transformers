@@ -19,7 +19,7 @@ from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...utils import copy_func, logging
+from ...utils import copy_func, logging, requires_backends
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
 
 
@@ -513,6 +513,41 @@ class _BaseAutoModelClass:
                 "one of those so they match!"
             )
         cls._model_mapping.register(config_class, model_class)
+
+
+class _BaseAutoBackboneClass(_BaseAutoModelClass):
+    # Base class for auto models.
+    _model_mapping = None
+
+    @classmethod
+    def _load_timm_backbone_from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        requires_backends(cls, ["vision", "timm"])
+        from ...models.timm_backbone import TimmBackboneConfig
+
+        config = kwargs.pop("config", TimmBackboneConfig())
+
+        use_timm = kwargs.pop("use_timm_backbone", True)
+        if not use_timm:
+            raise ValueError("use_timm_backbone must be True for timm backbones")
+
+        num_channels = kwargs.pop("num_channels", config.num_channels)
+        features_only = kwargs.pop("features_only", config.features_only)
+        use_pretrained_backbone = kwargs.pop("use_pretrained_backbone", config.use_pretrained_backbone)
+        out_indices = kwargs.pop("out_indices", config.out_indices)
+        config = TimmBackboneConfig(
+            backbone=pretrained_model_name_or_path,
+            num_channels=num_channels,
+            features_only=features_only,
+            use_pretrained_backbone=use_pretrained_backbone,
+            out_indices=out_indices,
+        )
+        return super().from_config(config, **kwargs)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        if kwargs.get("use_timm_backbone", False):
+            return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
 def insert_head_doc(docstring, head_doc=""):

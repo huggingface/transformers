@@ -883,10 +883,9 @@ class DinatForImageClassification(DinatPreTrainedModel):
 class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
         requires_backends(self, ["natten"])
-
-        self.stage_names = config.stage_names
 
         self.embeddings = DinatEmbeddings(config)
         self.encoder = DinatEncoder(config)
