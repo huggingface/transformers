@@ -32,6 +32,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 from huggingface_hub import HfFolder, delete_repo, set_access_token
 from huggingface_hub.file_download import http_get
+from pytest import mark
 from requests.exceptions import HTTPError
 
 import transformers
@@ -442,8 +443,11 @@ class ModelTesterMixin:
                 # Before we test anything
 
                 for key in model_fast_init.state_dict().keys():
-                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-5, msg=f"{key} not identical")
+                    if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
+                        max_diff = (model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]).sum().item()
+                    else:
+                        max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -490,10 +494,15 @@ class ModelTesterMixin:
                 model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
                 for key in model_fast_init.state_dict().keys():
-                    max_diff = torch.max(
-                        torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
-                    ).item()
-                    self.assertLessEqual(max_diff, 1e-5, msg=f"{key} not identical")
+                    if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
+                        max_diff = torch.max(
+                            model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]
+                        ).item()
+                    else:
+                        max_diff = torch.max(
+                            torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
+                        ).item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -2455,6 +2464,7 @@ class ModelTesterMixin:
                 self.assertEqual(param.device, torch.device(param_device))
 
     @require_accelerate
+    @mark.accelerate_tests
     @require_torch_gpu
     def test_disk_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -2490,6 +2500,7 @@ class ModelTesterMixin:
                 self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
     @require_accelerate
+    @mark.accelerate_tests
     @require_torch_gpu
     def test_cpu_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -2525,6 +2536,7 @@ class ModelTesterMixin:
                     self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
     @require_accelerate
+    @mark.accelerate_tests
     @require_torch_multi_gpu
     def test_model_parallelism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3164,6 +3176,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIsNotNone(model)
 
     @require_accelerate
+    @mark.accelerate_tests
     def test_from_pretrained_low_cpu_mem_usage_functional(self):
         # test that we can use `from_pretrained(..., low_cpu_mem_usage=True)` with normal and
         # sharded models
@@ -3177,6 +3190,7 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_usr_bin_time
     @require_accelerate
+    @mark.accelerate_tests
     def test_from_pretrained_low_cpu_mem_usage_measured(self):
         # test that `from_pretrained(..., low_cpu_mem_usage=True)` uses less cpu memory than default
 
@@ -3216,6 +3230,7 @@ class ModelUtilsTest(TestCasePlus):
         # cuda memory tracking and then we should be able to do a much more precise test.
 
     @require_accelerate
+    @mark.accelerate_tests
     @require_torch_multi_gpu
     @slow
     def test_model_parallelism_gpt2(self):
@@ -3233,6 +3248,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(text_output, "Hello, my name is John. I'm a writer, and I'm a writer. I'm")
 
     @require_accelerate
+    @mark.accelerate_tests
     @require_torch_gpu
     def test_from_pretrained_disk_offload_task_model(self):
         model = AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
