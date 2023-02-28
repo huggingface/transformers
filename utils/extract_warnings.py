@@ -83,19 +83,14 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument(
-        "--workflow_run_id", default=None, type=str, required=True, help="A GitHub Actions workflow run id."
-    )
+    parser.add_argument("--workflow_run_id", type=str, required=True, help="A GitHub Actions workflow run id.")
     parser.add_argument(
         "--output_dir",
-        default=None,
         type=str,
         required=True,
         help="Where to store the downloaded artifacts and other result files.",
     )
-    parser.add_argument(
-        "--token", default=None, type=str, required=True, help="A token that has actions:read permission."
-    )
+    parser.add_argument("--token", default=None, type=str, help="A token that has actions:read permission.")
     # optional parameters
     parser.add_argument(
         "--targets",
@@ -119,7 +114,7 @@ if __name__ == "__main__":
         os.makedirs(args.output_dir, exist_ok=True)
 
         # get download links
-        artifacts = get_artifacts_links(args.workflow_run_id)
+        artifacts = get_artifacts_links(args.workflow_run_id, token=args.token)
         with open(os.path.join(args.output_dir, "artifacts.json"), "w", encoding="UTF-8") as fp:
             json.dump(artifacts, fp, ensure_ascii=False, indent=4)
 
