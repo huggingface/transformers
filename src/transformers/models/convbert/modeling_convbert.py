@@ -316,7 +316,7 @@ class ConvBertSelfAttention(nn.Module):
         if config.hidden_size % self.num_attention_heads != 0:
             raise ValueError("hidden_size should be divisible by num_attention_heads")
 
-        self.attention_head_size = config.hidden_size // config.num_attention_heads
+        self.attention_head_size = (config.hidden_size // self.num_attention_heads) // 2
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
