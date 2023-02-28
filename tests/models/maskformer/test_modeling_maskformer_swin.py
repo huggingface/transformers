@@ -23,6 +23,7 @@ from transformers import MaskFormerSwinConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, torch_device
 from transformers.utils import is_torch_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -395,3 +396,12 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+
+
+@require_torch
+class MaskFormerSwinBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (MaskFormerSwinBackbone,) if is_torch_available() else ()
+
+    def setUp(self):
+        self.model_tester = MaskFormerSwinModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MaskFormerSwinConfig, embed_dim=37)

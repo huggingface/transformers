@@ -22,6 +22,7 @@ from transformers import DinatConfig
 from transformers.testing_utils import require_natten, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -383,3 +384,12 @@ class DinatModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
         expected_slice = torch.tensor([-0.1545, -0.7667, 0.4642]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class DinatBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (DinatBackbone,) if is_torch_available() else ()
+
+    def setUp(self):
+        self.model_tester = DinatModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=DinatConfig, embed_dim=37)

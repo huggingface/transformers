@@ -22,6 +22,7 @@ from transformers import ConvNextConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -299,3 +300,12 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([-0.0260, -0.4739, 0.1911]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class ConvNextBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (ConvNextBackbone,) if is_torch_available() else ()
+
+    def setUp(self):
+        self.model_tester = ConvNextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ConvNextConfig, has_text_modality=False, hidden_size=37)
