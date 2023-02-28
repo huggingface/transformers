@@ -51,6 +51,7 @@ from .pipelines.test_pipelines_translation import TranslationPipelineTests
 from .pipelines.test_pipelines_video_classification import VideoClassificationPipelineTests
 from .pipelines.test_pipelines_visual_question_answering import VisualQuestionAnsweringPipelineTests
 from .pipelines.test_pipelines_zero_shot import ZeroShotClassificationPipelineTests
+from .pipelines.test_pipelines_zero_shot_audio_classification import ZeroShotAudioClassificationPipelineTests
 from .pipelines.test_pipelines_zero_shot_image_classification import ZeroShotImageClassificationPipelineTests
 from .pipelines.test_pipelines_zero_shot_object_detection import ZeroShotObjectDetectionPipelineTests
 
@@ -78,6 +79,7 @@ pipeline_test_mapping = {
     "video-classification": {"test": VideoClassificationPipelineTests},
     "visual-question-answering": {"test": VisualQuestionAnsweringPipelineTests},
     "zero-shot": {"test": ZeroShotClassificationPipelineTests},
+    "zero-shot-audio-classification": {"test": ZeroShotAudioClassificationPipelineTests},
     "zero-shot-image-classification": {"test": ZeroShotImageClassificationPipelineTests},
     "zero-shot-object-detection": {"test": ZeroShotObjectDetectionPipelineTests},
 }
@@ -362,6 +364,10 @@ class PipelineTesterMixin:
 
     def test_pipeline_zero_shot(self):
         self.run_task_tests(task="zero-shot")
+
+    @require_torch
+    def test_pipeline_zero_shot_audio_classification(self):
+        self.run_task_tests(task="zero-shot-audio-classification")
 
     @require_vision
     def test_pipeline_zero_shot_image_classification(self):
