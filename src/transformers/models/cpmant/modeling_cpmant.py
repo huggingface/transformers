@@ -524,19 +524,16 @@ class CPMAntIntermediate(nn.Module):
 class CPMAntSegmentPositionEmbedding(nn.Module):
     def __init__(
         self,
-        num_heads: int = 32,
-        num_segments: int = 32,
-        num_buckets: int = 512,
-        max_distance: int = 2048,
+        config: CPMAntConfig
         bidirectional: bool = True,
     ):
         super().__init__()
 
-        self.num_heads = num_heads
-        self.num_buckets = num_buckets
-        self.max_distance = max_distance
+        self.num_heads = config.num_heads
+        self.num_buckets = config.position_bias_num_buckets
+        self.max_distance = config.position_bias_max_distance
+        self.num_segments = config.segment_types
         self.bidirectional = bidirectional
-        self.num_segments = num_segments
 
         self.relative_attention_bias = torch.nn.parameter.Parameter(
             torch.empty(num_segments * num_segments + num_buckets, num_heads)
@@ -706,7 +703,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
         self.input_embedding = nn.Embedding(
             config.vocab_size + config.prompt_types * config.prompt_length, config.dim_model
         )
-        self.position_bias = CPMAntSegmentPositionEmbedding()
+        self.position_bias = CPMAntSegmentPositionEmbedding(config)
         self.prompt_length = config.prompt_length
         self.vocab_size = config.vocab_size
 
