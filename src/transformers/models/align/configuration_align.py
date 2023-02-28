@@ -33,9 +33,9 @@ ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ALIGNTextConfig(PretrainedConfig):
+class AlignTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ALIGNTextModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`AlignTextModel`]. It is used to instantiate a
     ALIGN text encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text encoder of the ALIGN
     [kakaobrain/align-base](https://huggingface.co/kakaobrain/align-base) architecture. The default values here are
@@ -89,13 +89,13 @@ class ALIGNTextConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ALIGNTextConfig, ALIGNTextModel
+    >>> from transformers import AlignTextConfig, AlignTextModel
 
-    >>> # Initializing a ALIGNTextConfig with kakaobrain/align-base style configuration
-    >>> configuration = ALIGNTextConfig()
+    >>> # Initializing a AlignTextConfig with kakaobrain/align-base style configuration
+    >>> configuration = AlignTextConfig()
 
-    >>> # Initializing a ALIGNTextModel (with random weights) from the kakaobrain/align-base style configuration
-    >>> model = ALIGNTextModel(configuration)
+    >>> # Initializing a AlignTextModel (with random weights) from the kakaobrain/align-base style configuration
+    >>> model = AlignTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -145,7 +145,7 @@ class ALIGNTextConfig(PretrainedConfig):
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the text config dict if we are loading from ALIGNConfig
+        # get the text config dict if we are loading from AlignConfig
         if config_dict.get("model_type") == "align":
             config_dict = config_dict["text_config"]
 
@@ -158,9 +158,9 @@ class ALIGNTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class ALIGNVisionConfig(PretrainedConfig):
+class AlignVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ALIGNVisionModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`AlignVisionModel`]. It is used to instantiate a
     ALIGN vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the ALIGN
     [kakaobrain/align-base](https://huggingface.co/kakaobrain/align-base) architecture. The default values are copied
@@ -218,13 +218,13 @@ class ALIGNVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ALIGNVisionConfig, ALIGNVisionModel
+    >>> from transformers import AlignVisionConfig, AlignVisionModel
 
-    >>> # Initializing a ALIGNVisionConfig with kakaobrain/align-base style configuration
-    >>> configuration = ALIGNVisionConfig()
+    >>> # Initializing a AlignVisionConfig with kakaobrain/align-base style configuration
+    >>> configuration = AlignVisionConfig()
 
-    >>> # Initializing a ALIGNVisionModel (with random weights) from the kakaobrain/align-base style configuration
-    >>> model = ALIGNVisionModel(configuration)
+    >>> # Initializing a AlignVisionModel (with random weights) from the kakaobrain/align-base style configuration
+    >>> model = AlignVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -286,7 +286,7 @@ class ALIGNVisionConfig(PretrainedConfig):
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the vision config dict if we are loading from ALIGNConfig
+        # get the vision config dict if we are loading from AlignConfig
         if config_dict.get("model_type") == "align":
             config_dict = config_dict["vision_config"]
 
@@ -299,9 +299,9 @@ class ALIGNVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class ALIGNConfig(PretrainedConfig):
+class AlignConfig(PretrainedConfig):
     r"""
-    [`ALIGNConfig`] is the configuration class to store the configuration of a [`ALIGNModel`]. It is used to
+    [`AlignConfig`] is the configuration class to store the configuration of a [`AlignModel`]. It is used to
     instantiate a ALIGN model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ALIGN
     [kakaobrain/align-base](https://huggingface.co/kakaobrain/align-base) architecture.
@@ -311,9 +311,9 @@ class ALIGNConfig(PretrainedConfig):
 
     Args:
         text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`ALIGNTextConfig`].
+            Dictionary of configuration options used to initialize [`AlignTextConfig`].
         vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`ALIGNVisionConfig`].
+            Dictionary of configuration options used to initialize [`AlignVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
         temperature_init_value (`float`, *optional*, defaults to 1.0):
@@ -326,25 +326,25 @@ class ALIGNConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ALIGNConfig, ALIGNModel
+    >>> from transformers import AlignConfig, AlignModel
 
-    >>> # Initializing a ALIGNConfig with kakaobrain/align-base style configuration
-    >>> configuration = ALIGNConfig()
+    >>> # Initializing a AlignConfig with kakaobrain/align-base style configuration
+    >>> configuration = AlignConfig()
 
-    >>> # Initializing a ALIGNModel (with random weights) from the kakaobrain/align-base style configuration
-    >>> model = ALIGNModel(configuration)
+    >>> # Initializing a AlignModel (with random weights) from the kakaobrain/align-base style configuration
+    >>> model = AlignModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
 
-    >>> # We can also initialize a ALIGNConfig from a ALIGNTextConfig and a ALIGNVisionConfig
-    >>> from transformers import ALIGNTextConfig, ALIGNVisionConfig
+    >>> # We can also initialize a AlignConfig from a AlignTextConfig and a AlignVisionConfig
+    >>> from transformers import AlignTextConfig, AlignVisionConfig
 
-    >>> # Initializing a ALIGNText and ALIGNVision configuration
-    >>> config_text = ALIGNTextConfig()
-    >>> config_vision = ALIGNVisionConfig()
+    >>> # Initializing ALIGN Text and Vision configurations
+    >>> config_text = AlignTextConfig()
+    >>> config_vision = AlignVisionConfig()
 
-    >>> config = ALIGNConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = AlignConfig.from_text_vision_configs(config_text, config_vision)
     ```"""
 
     model_type = "align"
@@ -371,27 +371,27 @@ class ALIGNConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the ALIGNTextConfig with default values.")
+            logger.info("text_config is None. Initializing the AlignTextConfig with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. Initializing the ALIGNVisionConfig with default values.")
+            logger.info("vision_config is None. Initializing the AlignVisionConfig with default values.")
 
-        self.text_config = ALIGNTextConfig(**text_config)
-        self.vision_config = ALIGNVisionConfig(**vision_config)
+        self.text_config = AlignTextConfig(**text_config)
+        self.vision_config = AlignVisionConfig(**vision_config)
 
         self.projection_dim = projection_dim
         self.temperature_init_value = temperature_init_value
         self.initializer_range = initializer_range
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: ALIGNTextConfig, vision_config: ALIGNVisionConfig, **kwargs):
+    def from_text_vision_configs(cls, text_config: AlignTextConfig, vision_config: AlignVisionConfig, **kwargs):
         r"""
-        Instantiate a [`ALIGNConfig`] (or a derived class) from align text model configuration and align vision model
+        Instantiate a [`AlignConfig`] (or a derived class) from align text model configuration and align vision model
         configuration.
 
         Returns:
-            [`ALIGNConfig`]: An instance of a configuration object
+            [`AlignConfig`]: An instance of a configuration object
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)

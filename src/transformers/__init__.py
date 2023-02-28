@@ -125,10 +125,10 @@ _import_structure = {
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ALIGNConfig",
-        "ALIGNProcessor",
-        "ALIGNTextConfig",
-        "ALIGNVisionConfig",
+        "AlignConfig",
+        "AlignProcessor",
+        "AlignTextConfig",
+        "AlignVisionConfig",
     ],
     "models.altclip": [
         "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -992,10 +992,10 @@ else:
     _import_structure["models.align"].extend(
         [
             "ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ALIGNModel",
-            "ALIGNPreTrainedModel",
-            "ALIGNTextModel",
-            "ALIGNVisionModel",
+            "AlignModel",
+            "AlignPreTrainedModel",
+            "AlignTextModel",
+            "AlignVisionModel",
         ]
     )
     _import_structure["models.altclip"].extend(
@@ -3725,10 +3725,10 @@ if TYPE_CHECKING:
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ALIGNConfig,
-        ALIGNProcessor,
-        ALIGNTextConfig,
-        ALIGNVisionConfig,
+        AlignConfig,
+        AlignProcessor,
+        AlignTextConfig,
+        AlignVisionConfig,
     )
     from .models.altclip import (
         ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4495,10 +4495,10 @@ if TYPE_CHECKING:
         )
         from .models.align import (
             ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ALIGNModel,
-            ALIGNPreTrainedModel,
-            ALIGNTextModel,
-            ALIGNVisionModel,
+            AlignModel,
+            AlignPreTrainedModel,
+            AlignTextModel,
+            AlignVisionModel,
         )
         from .models.altclip import (
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,

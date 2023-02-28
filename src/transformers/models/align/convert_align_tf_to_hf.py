@@ -26,9 +26,9 @@ from PIL import Image
 from tokenizer import Tokenizer
 
 from transformers import (
-    ALIGNConfig,
-    ALIGNModel,
-    ALIGNProcessor,
+    AlignConfig,
+    AlignModel,
+    AlignProcessor,
     BertConfig,
     BertTokenizer,
     EfficientNetConfig,
@@ -56,7 +56,7 @@ def get_align_config():
     vision_config.depthwise_padding = []
 
     text_config = BertConfig()
-    config = ALIGNConfig.from_text_vision_configs(
+    config = AlignConfig.from_text_vision_configs(
         text_config=text_config, vision_config=vision_config, projection_dim=640
     )
     return config
@@ -80,7 +80,7 @@ def get_processor():
     )
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     tokenizer.model_max_length = 64
-    processor = ALIGNProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    processor = AlignProcessor(image_processor=image_processor, tokenizer=tokenizer)
     return processor
 
 
@@ -305,7 +305,7 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
 
     # Load HuggingFace model
     config = get_align_config()
-    hf_model = ALIGNModel(config).eval()
+    hf_model = AlignModel(config).eval()
     hf_params = hf_model.state_dict()
 
     # Create src-to-dst parameter name mapping dictionary

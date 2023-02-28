@@ -21,11 +21,11 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
-class ALIGNProcessor(ProcessorMixin):
+class AlignProcessor(ProcessorMixin):
     r"""
     Constructs an ALIGN processor which wraps [`EfficientNetImageProcessor`] and
     [`BertTokenizer`]/[`BertTokenizerFast`] into a single processor that interits both the image processor and
-    tokenizer functionalities. See the [`~ALIGN Processor.__call__`] and [`~OwlViTProcessor.decode`] for more
+    tokenizer functionalities. See the [`~AlignProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more
     information.
 
     Args:

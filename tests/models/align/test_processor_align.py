@@ -30,11 +30,11 @@ from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ALIGNProcessor, EfficientNetImageProcessor
+    from transformers import AlignProcessor, EfficientNetImageProcessor
 
 
 @require_vision
-class ALIGNProcessorTest(unittest.TestCase):
+class AlignProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -98,13 +98,13 @@ class ALIGNProcessorTest(unittest.TestCase):
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
 
-        processor_slow = ALIGNProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
+        processor_slow = AlignProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
         processor_slow.save_pretrained(self.tmpdirname)
-        processor_slow = ALIGNProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        processor_slow = AlignProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = ALIGNProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
+        processor_fast = AlignProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
         processor_fast.save_pretrained(self.tmpdirname)
-        processor_fast = ALIGNProcessor.from_pretrained(self.tmpdirname)
+        processor_fast = AlignProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
@@ -118,13 +118,13 @@ class ALIGNProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor_fast.image_processor, EfficientNetImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = ALIGNProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = AlignProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = ALIGNProcessor.from_pretrained(
+        processor = AlignProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
@@ -138,7 +138,7 @@ class ALIGNProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ALIGNProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = AlignProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         image_input = self.prepare_image_inputs()
 
@@ -152,7 +152,7 @@ class ALIGNProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ALIGNProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = AlignProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
 
@@ -167,7 +167,7 @@ class ALIGNProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ALIGNProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = AlignProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -184,7 +184,7 @@ class ALIGNProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ALIGNProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = AlignProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -197,7 +197,7 @@ class ALIGNProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = ALIGNProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = AlignProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()

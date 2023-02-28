@@ -22,7 +22,7 @@ import unittest
 
 import requests
 
-from transformers import ALIGNConfig, ALIGNProcessor, ALIGNTextConfig, ALIGNVisionConfig
+from transformers import AlignConfig, AlignProcessor, AlignTextConfig, AlignVisionConfig
 from transformers.testing_utils import (
     is_flax_available,
     require_torch,
@@ -46,9 +46,9 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        ALIGNModel,
-        ALIGNTextModel,
-        ALIGNVisionModel,
+        AlignModel,
+        AlignTextModel,
+        AlignVisionModel,
     )
     from transformers.models.align.modeling_align import ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -61,7 +61,7 @@ if is_flax_available():
     pass
 
 
-class ALIGNVisionModelTester:
+class AlignVisionModelTester:
     def __init__(
         self,
         parent,
@@ -99,7 +99,7 @@ class ALIGNVisionModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return ALIGNVisionConfig(
+        return AlignVisionConfig(
             num_channels=self.num_channels,
             kernel_sizes=self.kernel_sizes,
             in_channels=self.in_channels,
@@ -112,7 +112,7 @@ class ALIGNVisionModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = ALIGNVisionModel(config=config)
+        model = AlignVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -132,13 +132,13 @@ class ALIGNVisionModelTester:
 
 
 @require_torch
-class ALIGNVisionModelTest(ModelTesterMixin, unittest.TestCase):
+class AlignVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ALIGN does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (ALIGNVisionModel,) if is_torch_available() else ()
+    all_model_classes = (AlignVisionModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
@@ -146,9 +146,9 @@ class ALIGNVisionModelTest(ModelTesterMixin, unittest.TestCase):
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = ALIGNVisionModelTester(self)
+        self.model_tester = AlignVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=ALIGNVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=AlignVisionConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
@@ -163,11 +163,11 @@ class ALIGNVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
-    @unittest.skip(reason="ALIGNVisionModel does not use inputs_embeds")
+    @unittest.skip(reason="AlignVisionModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="ALIGNVisionModel does not support input and output embeddings")
+    @unittest.skip(reason="AlignVisionModel does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -226,11 +226,11 @@ class ALIGNVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ALIGNVisionModel.from_pretrained(model_name)
+            model = AlignVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-class ALIGNTextModelTester:
+class AlignTextModelTester:
     def __init__(
         self,
         parent,
@@ -289,7 +289,7 @@ class ALIGNTextModelTester:
         return config, input_ids, token_type_ids, input_mask
 
     def get_config(self):
-        return ALIGNTextConfig(
+        return AlignTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -305,7 +305,7 @@ class ALIGNTextModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, token_type_ids, input_mask):
-        model = ALIGNTextModel(config=config)
+        model = AlignTextModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -328,15 +328,15 @@ class ALIGNTextModelTester:
 
 
 @require_torch
-class ALIGNTextModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (ALIGNTextModel,) if is_torch_available() else ()
+class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (AlignTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ALIGNTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ALIGNTextConfig, hidden_size=37)
+        self.model_tester = AlignTextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=AlignTextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -355,22 +355,22 @@ class ALIGNTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="ALIGNTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="ALIGNTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="AlignTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ALIGNTextModel.from_pretrained(model_name)
+            model = AlignTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-class ALIGNModelTester:
+class AlignModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
         if text_kwargs is None:
             text_kwargs = {}
@@ -378,8 +378,8 @@ class ALIGNModelTester:
             vision_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = ALIGNTextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = ALIGNVisionModelTester(parent, **vision_kwargs)
+        self.text_model_tester = AlignTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = AlignVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -391,12 +391,12 @@ class ALIGNModelTester:
         return config, input_ids, token_type_ids, input_mask, pixel_values
 
     def get_config(self):
-        return ALIGNConfig.from_text_vision_configs(
+        return AlignConfig.from_text_vision_configs(
             self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
         )
 
     def create_and_check_model(self, config, input_ids, token_type_ids, attention_mask, pixel_values):
-        model = ALIGNModel(config).to(torch_device).eval()
+        model = AlignModel(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask, token_type_ids)
         self.parent.assertEqual(
@@ -420,8 +420,8 @@ class ALIGNModelTester:
 
 
 @require_torch
-class ALIGNModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (ALIGNModel,) if is_torch_available() else ()
+class AlignModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (AlignModel,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -429,7 +429,7 @@ class ALIGNModelTest(ModelTesterMixin, unittest.TestCase):
     test_attention_outputs = False
 
     def setUp(self):
-        self.model_tester = ALIGNModelTester(self)
+        self.model_tester = AlignModelTester(self)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -447,7 +447,7 @@ class ALIGNModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="ALIGNModel does not have input/output embeddings")
+    @unittest.skip(reason="AlignModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
 
@@ -534,22 +534,22 @@ class ALIGNModelTest(ModelTesterMixin, unittest.TestCase):
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Save ALIGNConfig and check if we can load ALIGNVisionConfig from it
+        # Save AlignConfig and check if we can load AlignVisionConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            vision_config = ALIGNVisionConfig.from_pretrained(tmp_dir_name)
+            vision_config = AlignVisionConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
 
-        # Save ALIGNConfig and check if we can load ALIGNTextConfig from it
+        # Save AlignConfig and check if we can load AlignTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            text_config = ALIGNTextConfig.from_pretrained(tmp_dir_name)
+            text_config = AlignTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ALIGNModel.from_pretrained(model_name)
+            model = AlignModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -562,12 +562,12 @@ def prepare_img():
 
 @require_vision
 @require_torch
-class ALIGNModelIntegrationTest(unittest.TestCase):
+class AlignModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "kakaobrain/align-base"
-        model = ALIGNModel.from_pretrained(model_name).to(torch_device)
-        processor = ALIGNProcessor.from_pretrained(model_name)
+        model = AlignModel.from_pretrained(model_name).to(torch_device)
+        processor = AlignProcessor.from_pretrained(model_name)
 
         image = prepare_img()
         inputs = processor(

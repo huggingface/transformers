@@ -359,28 +359,28 @@ def load_tf_weights_in_albert(*args, **kwargs):
 ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ALIGNModel(metaclass=DummyObject):
+class AlignModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ALIGNPreTrainedModel(metaclass=DummyObject):
+class AlignPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ALIGNTextModel(metaclass=DummyObject):
+class AlignTextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ALIGNVisionModel(metaclass=DummyObject):
+class AlignVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

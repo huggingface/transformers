@@ -37,16 +37,16 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_align import ALIGNConfig, ALIGNTextConfig, ALIGNVisionConfig
+from .configuration_align import AlignConfig, AlignTextConfig, AlignVisionConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "kakaobrain/align-base"
-_CONFIG_FOR_DOC = "ALIGNConfig"
+_CONFIG_FOR_DOC = "AlignConfig"
 _IMAGE_PROCESSOR_FOR_DOC = "EfficientNetImageProcessor"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
-_PROCESSOR_FOR_DOC = "ALIGNProcessor"
+_PROCESSOR_FOR_DOC = "AlignProcessor"
 
 ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "kakaobrain/align-base",
@@ -64,7 +64,7 @@ ALIGN_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`ALIGNConfig`]): Model configuration class with all the parameters of the model.
+        config ([`AlignConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -188,7 +188,7 @@ ALIGN_INPUTS_DOCSTRING = r"""
 
 
 @dataclass
-class ALIGNVisionModelOutput(ModelOutput):
+class AlignVisionModelOutput(ModelOutput):
     """
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
 
@@ -210,7 +210,7 @@ class ALIGNVisionModelOutput(ModelOutput):
 
 
 @dataclass
-class ALIGNTextModelOutput(ModelOutput):
+class AlignTextModelOutput(ModelOutput):
     """
     Base class for text model's outputs that also contains a pooling of the last hidden states.
 
@@ -239,7 +239,7 @@ class ALIGNTextModelOutput(ModelOutput):
 
 
 @dataclass
-class ALIGNOutput(ModelOutput):
+class AlignOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -251,13 +251,13 @@ class ALIGNOutput(ModelOutput):
             The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`ALIGNTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of [`AlignTextModel`].
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The output of [`ALIGNVisionModel`].
+            The output of [`AlignVisionModel`].
         text_model_output(`BaseModelOutputWithPoolingAndCrossAttentions`):
-            The output of the [`ALIGNTextModel`].
+            The output of the [`AlignTextModel`].
         vision_model_output(`BaseModelOutputWithPoolingAndNoAttention`):
-            The output of the [`ALIGNVisionModel`].
+            The output of the [`AlignVisionModel`].
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -276,7 +276,7 @@ class ALIGNOutput(ModelOutput):
 
 
 # contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/ALIGN.html
+# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/CLIP.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device), label_smoothing=0.1)
 
@@ -287,8 +287,8 @@ def align_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
-# Copied from transformers.models.efficientnet.modeling_efficientnet.round_filters with EfficientNetConfig -> ALIGNVisionConfig
-def round_filters(config: ALIGNVisionConfig, num_channels: int):
+# Copied from transformers.models.efficientnet.modeling_efficientnet.round_filters with EfficientNetConfig -> AlignVisionConfig
+def round_filters(config: AlignVisionConfig, num_channels: int):
     r"""
     Round number of filters based on depth multiplier.
     """
@@ -324,13 +324,13 @@ def correct_pad(kernel_size: Union[int, Tuple], adjust: bool = True):
         return (correct[1], correct[1], correct[0], correct[0])
 
 
-# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetEmbeddings with EfficientNet->ALIGNVision
-class ALIGNVisionEmbeddings(nn.Module):
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetEmbeddings with EfficientNet->AlignVision
+class AlignVisionEmbeddings(nn.Module):
     r"""
     A module that corresponds to the stem module of the original work.
     """
 
-    def __init__(self, config: ALIGNVisionConfig):
+    def __init__(self, config: AlignVisionConfig):
         super().__init__()
 
         self.out_dim = round_filters(config, 32)
@@ -350,8 +350,8 @@ class ALIGNVisionEmbeddings(nn.Module):
         return features
 
 
-# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetDepthwiseConv2d with EfficientNet->ALIGNVision
-class ALIGNVisionDepthwiseConv2d(nn.Conv2d):
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetDepthwiseConv2d with EfficientNet->AlignVision
+class AlignVisionDepthwiseConv2d(nn.Conv2d):
     def __init__(
         self,
         in_channels,
@@ -377,13 +377,13 @@ class ALIGNVisionDepthwiseConv2d(nn.Conv2d):
         )
 
 
-# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetExpansionLayer with EfficientNet->ALIGNVision
-class ALIGNVisionExpansionLayer(nn.Module):
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetExpansionLayer with EfficientNet->AlignVision
+class AlignVisionExpansionLayer(nn.Module):
     r"""
     This corresponds to the expansion phase of each block in the original implementation.
     """
 
-    def __init__(self, config: ALIGNVisionConfig, in_dim: int, out_dim: int, stride: int):
+    def __init__(self, config: AlignVisionConfig, in_dim: int, out_dim: int, stride: int):
         super().__init__()
         self.expand_conv = nn.Conv2d(
             in_channels=in_dim,
@@ -404,15 +404,15 @@ class ALIGNVisionExpansionLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetDepthwiseLayer with with EfficientNet->ALIGNVision
-class ALIGNVisionDepthwiseLayer(nn.Module):
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetDepthwiseLayer with with EfficientNet->AlignVision
+class AlignVisionDepthwiseLayer(nn.Module):
     r"""
     This corresponds to the depthwise convolution phase of each block in the original implementation.
     """
 
     def __init__(
         self,
-        config: ALIGNVisionConfig,
+        config: AlignVisionConfig,
         in_dim: int,
         stride: int,
         kernel_size: int,
@@ -424,7 +424,7 @@ class ALIGNVisionDepthwiseLayer(nn.Module):
         padding = correct_pad(kernel_size, adjust=adjust_padding)
 
         self.depthwise_conv_pad = nn.ZeroPad2d(padding=padding)
-        self.depthwise_conv = ALIGNVisionDepthwiseConv2d(
+        self.depthwise_conv = AlignVisionDepthwiseConv2d(
             in_dim, kernel_size=kernel_size, stride=stride, padding=conv_pad, bias=False
         )
         self.depthwise_norm = nn.BatchNorm2d(
@@ -444,13 +444,13 @@ class ALIGNVisionDepthwiseLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetSqueezeExciteLayer with with EfficientNet->ALIGNVision
-class ALIGNVisionSqueezeExciteLayer(nn.Module):
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetSqueezeExciteLayer with with EfficientNet->AlignVision
+class AlignVisionSqueezeExciteLayer(nn.Module):
     r"""
     This corresponds to the Squeeze and Excitement phase of each block in the original implementation.
     """
 
-    def __init__(self, config: ALIGNVisionConfig, in_dim: int, expand_dim: int, expand: bool = False):
+    def __init__(self, config: AlignVisionConfig, in_dim: int, expand_dim: int, expand: bool = False):
         super().__init__()
         self.dim = expand_dim if expand else in_dim
         self.dim_se = max(1, int(in_dim * config.squeeze_expansion_ratio))
@@ -484,13 +484,13 @@ class ALIGNVisionSqueezeExciteLayer(nn.Module):
         return hidden_states
 
 
-class ALIGNVisionFinalBlockLayer(nn.Module):
+class AlignVisionFinalBlockLayer(nn.Module):
     r"""
     This corresponds to the final phase of each block in the original implementation.
     """
 
     def __init__(
-        self, config: ALIGNVisionConfig, in_dim: int, out_dim: int, stride: int, drop_rate: float, id_skip: bool
+        self, config: AlignVisionConfig, in_dim: int, out_dim: int, stride: int, drop_rate: float, id_skip: bool
     ):
         super().__init__()
         self.apply_dropout = stride == 1 and not id_skip
@@ -517,12 +517,12 @@ class ALIGNVisionFinalBlockLayer(nn.Module):
         return hidden_states
 
 
-class ALIGNVisionBlock(nn.Module):
+class AlignVisionBlock(nn.Module):
     r"""
     This corresponds to the block module of original the EfficientNet vision encoder implementation.
 
     Args:
-        config ([`ALIGNVisionConfig`]):
+        config ([`AlignVisionConfig`]):
             Model configuration class.
         in_dim (`int`):
             Number of input channels.
@@ -546,7 +546,7 @@ class ALIGNVisionBlock(nn.Module):
 
     def __init__(
         self,
-        config: ALIGNVisionConfig,
+        config: AlignVisionConfig,
         in_dim: int,
         out_dim: int,
         stride: int,
@@ -562,21 +562,21 @@ class ALIGNVisionBlock(nn.Module):
         expand_in_dim = in_dim * expand_ratio
 
         if self.expand:
-            self.expansion = ALIGNVisionExpansionLayer(
+            self.expansion = AlignVisionExpansionLayer(
                 config=config, in_dim=in_dim, out_dim=expand_in_dim, stride=stride
             )
 
-        self.depthwise_conv = ALIGNVisionDepthwiseLayer(
+        self.depthwise_conv = AlignVisionDepthwiseLayer(
             config=config,
             in_dim=expand_in_dim if self.expand else in_dim,
             stride=stride,
             kernel_size=kernel_size,
             adjust_padding=adjust_padding,
         )
-        self.squeeze_excite = ALIGNVisionSqueezeExciteLayer(
+        self.squeeze_excite = AlignVisionSqueezeExciteLayer(
             config=config, in_dim=in_dim, expand_dim=expand_in_dim, expand=self.expand
         )
-        self.projection = ALIGNVisionFinalBlockLayer(
+        self.projection = AlignVisionFinalBlockLayer(
             config=config,
             in_dim=expand_in_dim if self.expand else in_dim,
             out_dim=out_dim,
@@ -598,16 +598,16 @@ class ALIGNVisionBlock(nn.Module):
         return hidden_states
 
 
-class ALIGNVisionEncoder(nn.Module):
+class AlignVisionEncoder(nn.Module):
     r"""
     Forward propogates the embeddings through each vision encoder (EfficientNet) block.
 
     Args:
-        config ([`ALIGNVisionConfig`]):
+        config ([`AlignVisionConfig`]):
             Model configuration class.
     """
 
-    def __init__(self, config: ALIGNVisionConfig):
+    def __init__(self, config: AlignVisionConfig):
         super().__init__()
         self.depth_coefficient = config.depth_coefficient
 
@@ -634,7 +634,7 @@ class ALIGNVisionEncoder(nn.Module):
                 adjust_padding = False if curr_block_num in config.depthwise_padding else True
                 drop_rate = config.drop_connect_rate * curr_block_num / num_blocks
 
-                block = ALIGNVisionBlock(
+                block = AlignVisionBlock(
                     config=config,
                     in_dim=in_dim,
                     out_dim=out_dim,
@@ -672,13 +672,13 @@ class ALIGNVisionEncoder(nn.Module):
         )
 
 
-class ALIGNPreTrainedModel(PreTrainedModel):
+class AlignPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ALIGNConfig
+    config_class = AlignConfig
     base_model_prefix = "align"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -689,7 +689,7 @@ class ALIGNPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, ALIGNModel):
+        elif isinstance(module, AlignModel):
             nn.init.xavier_uniform_(module.text_projection.weight)
 
         if isinstance(module, nn.LayerNorm):
@@ -699,7 +699,7 @@ class ALIGNPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (ALIGNTextModel, ALIGNVisionModel)):
+        if isinstance(module, (AlignTextModel, AlignVisionModel)):
             module.gradient_checkpointing = value
 
 
@@ -707,10 +707,10 @@ class ALIGNPreTrainedModel(PreTrainedModel):
     """The text model from ALIGN without any head or projection on top.""",
     ALIGN_START_DOCSTRING,
 )
-class ALIGNTextModel(ALIGNPreTrainedModel):
-    config_class = ALIGNTextConfig
+class AlignTextModel(AlignPreTrainedModel):
+    config_class = AlignTextConfig
 
-    def __init__(self, config: ALIGNTextConfig):
+    def __init__(self, config: AlignTextConfig):
         super().__init__(config)
         self.text_model = BertModel(config)
 
@@ -724,7 +724,7 @@ class ALIGNTextModel(ALIGNPreTrainedModel):
         self.text_model.embeddings.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(ALIGN_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=ALIGNTextConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=AlignTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -743,9 +743,9 @@ class ALIGNTextModel(ALIGNPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, ALIGNTextModel
+        >>> from transformers import AutoTokenizer, AlignTextModel
 
-        >>> model = ALIGNTextModel.from_pretrained("kakaobrain/align-base")
+        >>> model = AlignTextModel.from_pretrained("kakaobrain/align-base")
         >>> tokenizer = AutoTokenizer.from_pretrained("kakaobrain/align-base")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -773,15 +773,15 @@ class ALIGNTextModel(ALIGNPreTrainedModel):
     """The vision model from ALIGN without any head or projection on top.""",
     ALIGN_START_DOCSTRING,
 )
-class ALIGNVisionModel(ALIGNPreTrainedModel):
-    config_class = ALIGNVisionConfig
+class AlignVisionModel(AlignPreTrainedModel):
+    config_class = AlignVisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: ALIGNVisionConfig):
+    def __init__(self, config: AlignVisionConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = ALIGNVisionEmbeddings(config)
-        self.encoder = ALIGNVisionEncoder(config)
+        self.embeddings = AlignVisionEmbeddings(config)
+        self.encoder = AlignVisionEncoder(config)
 
         # Final pooling layer
         if config.pooling_type == "mean":
@@ -798,7 +798,7 @@ class ALIGNVisionModel(ALIGNPreTrainedModel):
         return self.vision_model.embeddings.convolution
 
     @add_start_docstrings_to_model_forward(ALIGN_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndNoAttention, config_class=ALIGNVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndNoAttention, config_class=AlignVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -813,9 +813,9 @@ class ALIGNVisionModel(ALIGNPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, ALIGNVisionModel
+        >>> from transformers import AutoProcessor, AlignVisionModel
 
-        >>> model = ALIGNVisionModel.from_pretrained("kakaobrain/align-base")
+        >>> model = AlignVisionModel.from_pretrained("kakaobrain/align-base")
         >>> processor = AutoProcessor.from_pretrained("kakaobrain/align-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -858,21 +858,21 @@ class ALIGNVisionModel(ALIGNPreTrainedModel):
 
 
 @add_start_docstrings(ALIGN_START_DOCSTRING)
-class ALIGNModel(ALIGNPreTrainedModel):
-    config_class = ALIGNConfig
+class AlignModel(AlignPreTrainedModel):
+    config_class = AlignConfig
 
-    def __init__(self, config: ALIGNConfig):
+    def __init__(self, config: AlignConfig):
         super().__init__(config)
 
-        if not isinstance(config.text_config, ALIGNTextConfig):
+        if not isinstance(config.text_config, AlignTextConfig):
             raise ValueError(
-                "config.text_config is expected to be of type ALIGNTextConfig but is of type"
+                "config.text_config is expected to be of type AlignTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.vision_config, ALIGNVisionConfig):
+        if not isinstance(config.vision_config, AlignVisionConfig):
             raise ValueError(
-                "config.vision_config is expected to be of type ALIGNVisionConfig but is of type"
+                "config.vision_config is expected to be of type AlignVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
 
@@ -882,8 +882,8 @@ class ALIGNModel(ALIGNPreTrainedModel):
         self.projection_dim = config.projection_dim
         self.text_embed_dim = text_config.hidden_size
 
-        self.text_model = ALIGNTextModel(text_config)
-        self.vision_model = ALIGNVisionModel(vision_config)
+        self.text_model = AlignTextModel(text_config)
+        self.vision_model = AlignVisionModel(vision_config)
 
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim)
         self.temperature = nn.Parameter(torch.ones([]) * self.config.temperature_init_value)
@@ -907,14 +907,14 @@ class ALIGNModel(ALIGNPreTrainedModel):
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`ALIGNTextModel`].
+            applying the projection layer to the pooled output of [`AlignTextModel`].
 
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, ALIGNModel
+        >>> from transformers import AutoTokenizer, AlignModel
 
-        >>> model = ALIGNModel.from_pretrained("kakaobrain/align-base")
+        >>> model = AlignModel.from_pretrained("kakaobrain/align-base")
         >>> tokenizer = AutoTokenizer.from_pretrained("kakaobrain/align-base")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -954,16 +954,16 @@ class ALIGNModel(ALIGNPreTrainedModel):
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`ALIGNVisionModel`].
+            applying the projection layer to the pooled output of [`AlignVisionModel`].
 
         Examples:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, ALIGNModel
+        >>> from transformers import AutoProcessor, AlignModel
 
-        >>> model = ALIGNModel.from_pretrained("kakaobrain/align-base")
+        >>> model = AlignModel.from_pretrained("kakaobrain/align-base")
         >>> processor = AutoProcessor.from_pretrained("kakaobrain/align-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -990,7 +990,7 @@ class ALIGNModel(ALIGNPreTrainedModel):
         return image_features
 
     @add_start_docstrings_to_model_forward(ALIGN_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ALIGNOutput, config_class=ALIGNConfig)
+    @replace_return_docstrings(output_type=AlignOutput, config_class=AlignConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1004,7 +1004,7 @@ class ALIGNModel(ALIGNPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ALIGNOutput]:
+    ) -> Union[Tuple, AlignOutput]:
         r"""
         Returns:
 
@@ -1013,9 +1013,9 @@ class ALIGNModel(ALIGNPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, ALIGNModel
+        >>> from transformers import AutoProcessor, AlignModel
 
-        >>> model = ALIGNModel.from_pretrained("kakaobrain/align-base")
+        >>> model = AlignModel.from_pretrained("kakaobrain/align-base")
         >>> processor = AutoProcessor.from_pretrained("kakaobrain/align-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1074,7 +1074,7 @@ class ALIGNModel(ALIGNPreTrainedModel):
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
-        return ALIGNOutput(
+        return AlignOutput(
             loss=loss,
             logits_per_image=logits_per_image,
             logits_per_text=logits_per_text,

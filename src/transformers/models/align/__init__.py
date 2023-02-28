@@ -23,11 +23,11 @@ from ...utils import (
 _import_structure = {
     "configuration_align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ALIGNConfig",
-        "ALIGNTextConfig",
-        "ALIGNVisionConfig",
+        "AlignConfig",
+        "AlignTextConfig",
+        "AlignVisionConfig",
     ],
-    "processing_align": ["ALIGNProcessor"],
+    "processing_align": ["AlignProcessor"],
 }
 
 try:
@@ -38,20 +38,20 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_align"] = [
         "ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ALIGNModel",
-        "ALIGNPreTrainedModel",
-        "ALIGNTextModel",
-        "ALIGNVisionModel",
+        "AlignModel",
+        "AlignPreTrainedModel",
+        "AlignTextModel",
+        "AlignVisionModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ALIGNConfig,
-        ALIGNTextConfig,
-        ALIGNVisionConfig,
+        AlignConfig,
+        AlignTextConfig,
+        AlignVisionConfig,
     )
-    from .processing_align import ALIGNProcessor
+    from .processing_align import AlignProcessor
 
     try:
         if not is_torch_available():
@@ -61,10 +61,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_align import (
             ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ALIGNModel,
-            ALIGNPreTrainedModel,
-            ALIGNTextModel,
-            ALIGNVisionModel,
+            AlignModel,
+            AlignPreTrainedModel,
+            AlignTextModel,
+            AlignVisionModel,
         )
 
 else:
