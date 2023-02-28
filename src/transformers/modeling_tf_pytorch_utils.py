@@ -56,7 +56,7 @@ def convert_tf_weight_name_to_pt_weight_name(
         - transpose: `TransposeType` member indicating whether and how TF2.0 and PyTorch weights matrices should be
           transposed with regards to each other
     """
-    if name_scope:
+    if name_scope is not None:
         if not tf_name.startswith(name_scope):
             raise ValueError(
                 f"Weight name {tf_name} does not start with name_scope {name_scope}. This is an internal error "
