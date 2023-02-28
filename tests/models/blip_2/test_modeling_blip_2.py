@@ -23,7 +23,7 @@ import numpy as np
 import requests
 
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -909,3 +909,75 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         # Test output (in this case, slightly different from greedy search)
         self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
         self.assertEqual(predictions[1].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
+
+    @require_torch_multi_gpu
+    def test_inference_opt_multi_gpu(self):
+        processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+        model = Blip2ForConditionalGeneration.from_pretrained(
+            "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16, device_map="balanced"
+        )
+
+        # prepare image
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").to(0, dtype=torch.float16)
+
+        predictions = model.generate(**inputs)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        # Test output
+        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118])
+        self.assertEqual("a woman sitting on the beach with a dog", generated_text)
+
+        # image and context
+        prompt = "Question: which city is this? Answer:"
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(0, dtype=torch.float16)
+
+        predictions = model.generate(**inputs)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        # Test output
+        self.assertEqual(
+            predictions[0].tolist(),
+            [2, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
+        )
+        self.assertEqual(generated_text, "it's not a city, it's a beach")
+
+    @require_torch_multi_gpu
+    def test_inference_t5_multi_gpu(self):
+        processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
+        device_map = device_map = {
+            "query_tokens": 0,
+            "vision_model": 0,
+            "language_model": 1,
+            "language_projection": 0,
+            "qformer": 0,
+        }
+
+        model = Blip2ForConditionalGeneration.from_pretrained(
+            "Salesforce/blip2-flan-t5-xl", torch_dtype=torch.float16, device_map=device_map
+        )
+
+        # prepare image
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").to(0, dtype=torch.float16)
+
+        predictions = model.generate(**inputs)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        # Test output
+        self.assertEqual(predictions[0].tolist(), [0, 2335, 1556, 28, 1782, 30, 8, 2608, 1])
+        self.assertEqual("woman playing with dog on the beach", generated_text)
+
+        # image and context
+        prompt = "Question: which city is this? Answer:"
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(0, dtype=torch.float16)
+
+        predictions = model.generate(**inputs)
+        generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
+
+        # Test output
+        self.assertEqual(
+            predictions[0].tolist(),
+            [0, 3, 7, 152, 67, 839, 1],
+        )
+        self.assertEqual(generated_text, "san diego")
