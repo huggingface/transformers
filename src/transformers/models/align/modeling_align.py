@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The OpenAI Team Authors and The HuggingFace Team. All rights reserved.
+# Copyright 2023 The Google Research Team Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -287,6 +287,7 @@ def align_loss(similarity: torch.Tensor) -> torch.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
+# Copied from transformers.models.efficientnet.modeling_efficientnet.round_filters with EfficientNetConfig -> ALIGNVisionConfig
 def round_filters(config: ALIGNVisionConfig, num_channels: int):
     r"""
     Round number of filters based on depth multiplier.
@@ -302,6 +303,7 @@ def round_filters(config: ALIGNVisionConfig, num_channels: int):
     return int(new_dim)
 
 
+# Copied from transformers.models.efficientnet.modeling_efficientnet.correct_pad
 def correct_pad(kernel_size: Union[int, Tuple], adjust: bool = True):
     r"""
     Utility function to get the tuple padding value for the depthwise convolution.
@@ -322,9 +324,10 @@ def correct_pad(kernel_size: Union[int, Tuple], adjust: bool = True):
         return (correct[1], correct[1], correct[0], correct[0])
 
 
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetEmbeddings with EfficientNet->ALIGNVision
 class ALIGNVisionEmbeddings(nn.Module):
     r"""
-    A module that corresponds to the stem module of the EfficientNet Vision Encoder.
+    A module that corresponds to the stem module of the original work.
     """
 
     def __init__(self, config: ALIGNVisionConfig):
@@ -347,7 +350,8 @@ class ALIGNVisionEmbeddings(nn.Module):
         return features
 
 
-class ALIGNDepthwiseConv2d(nn.Conv2d):
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetDepthwiseConv2d with EfficientNet->ALIGNVision
+class ALIGNVisionDepthwiseConv2d(nn.Conv2d):
     def __init__(
         self,
         in_channels,
@@ -373,18 +377,13 @@ class ALIGNDepthwiseConv2d(nn.Conv2d):
         )
 
 
-class ALIGNExpansionLayer(nn.Module):
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetExpansionLayer with EfficientNet->ALIGNVision
+class ALIGNVisionExpansionLayer(nn.Module):
     r"""
     This corresponds to the expansion phase of each block in the original implementation.
     """
 
-    def __init__(
-        self,
-        config: ALIGNVisionConfig,
-        in_dim: int,
-        out_dim: int,
-        stride: int,
-    ):
+    def __init__(self, config: ALIGNVisionConfig, in_dim: int, out_dim: int, stride: int):
         super().__init__()
         self.expand_conv = nn.Conv2d(
             in_channels=in_dim,
@@ -393,7 +392,7 @@ class ALIGNExpansionLayer(nn.Module):
             padding="same",
             bias=False,
         )
-        self.expand_bn = nn.BatchNorm2d(num_features=out_dim)
+        self.expand_bn = nn.BatchNorm2d(num_features=out_dim, eps=config.batch_norm_eps)
         self.expand_act = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
@@ -405,7 +404,8 @@ class ALIGNExpansionLayer(nn.Module):
         return hidden_states
 
 
-class ALIGNDepthwiseLayer(nn.Module):
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetDepthwiseLayer with with EfficientNet->ALIGNVision
+class ALIGNVisionDepthwiseLayer(nn.Module):
     r"""
     This corresponds to the depthwise convolution phase of each block in the original implementation.
     """
@@ -424,7 +424,7 @@ class ALIGNDepthwiseLayer(nn.Module):
         padding = correct_pad(kernel_size, adjust=adjust_padding)
 
         self.depthwise_conv_pad = nn.ZeroPad2d(padding=padding)
-        self.depthwise_conv = ALIGNDepthwiseConv2d(
+        self.depthwise_conv = ALIGNVisionDepthwiseConv2d(
             in_dim, kernel_size=kernel_size, stride=stride, padding=conv_pad, bias=False
         )
         self.depthwise_norm = nn.BatchNorm2d(
@@ -444,7 +444,8 @@ class ALIGNDepthwiseLayer(nn.Module):
         return hidden_states
 
 
-class ALIGNSqueezeExciteLayer(nn.Module):
+# Copied from transformers.models.efficientnet.modeling_efficientnet.EfficientNetSqueezeExciteLayer with with EfficientNet->ALIGNVision
+class ALIGNVisionSqueezeExciteLayer(nn.Module):
     r"""
     This corresponds to the Squeeze and Excitement phase of each block in the original implementation.
     """
@@ -483,7 +484,7 @@ class ALIGNSqueezeExciteLayer(nn.Module):
         return hidden_states
 
 
-class ALIGNFinalBlockLayer(nn.Module):
+class ALIGNVisionFinalBlockLayer(nn.Module):
     r"""
     This corresponds to the final phase of each block in the original implementation.
     """
@@ -518,7 +519,7 @@ class ALIGNFinalBlockLayer(nn.Module):
 
 class ALIGNVisionBlock(nn.Module):
     r"""
-    This corresponds to the expansion and depthwise convolution phase of each block in the original implementation.
+    This corresponds to the block module of original the EfficientNet vision encoder implementation.
 
     Args:
         config ([`ALIGNVisionConfig`]):
@@ -561,19 +562,21 @@ class ALIGNVisionBlock(nn.Module):
         expand_in_dim = in_dim * expand_ratio
 
         if self.expand:
-            self.expansion = ALIGNExpansionLayer(config=config, in_dim=in_dim, out_dim=expand_in_dim, stride=stride)
+            self.expansion = ALIGNVisionExpansionLayer(
+                config=config, in_dim=in_dim, out_dim=expand_in_dim, stride=stride
+            )
 
-        self.depthwise_conv = ALIGNDepthwiseLayer(
+        self.depthwise_conv = ALIGNVisionDepthwiseLayer(
             config=config,
             in_dim=expand_in_dim if self.expand else in_dim,
             stride=stride,
             kernel_size=kernel_size,
             adjust_padding=adjust_padding,
         )
-        self.squeeze_excite = ALIGNSqueezeExciteLayer(
+        self.squeeze_excite = ALIGNVisionSqueezeExciteLayer(
             config=config, in_dim=in_dim, expand_dim=expand_in_dim, expand=self.expand
         )
-        self.projection = ALIGNFinalBlockLayer(
+        self.projection = ALIGNVisionFinalBlockLayer(
             config=config,
             in_dim=expand_in_dim if self.expand else in_dim,
             out_dim=out_dim,

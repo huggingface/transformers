@@ -315,7 +315,9 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
 
     # Initialize processor
     processor = get_processor()
-    inputs = processor(images=prepare_img(), text="A picture of a cat", max_seq_len=64, return_tensors="pt")
+    inputs = processor(
+        images=prepare_img(), text="A picture of a cat", padding="max_length", max_length=64, return_tensors="pt"
+    )
 
     # HF model inference
     hf_model.eval()
