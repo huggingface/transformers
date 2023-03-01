@@ -159,9 +159,6 @@ class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
-    def create_and_test_config_common_properties(self):
-        return
-
     @slow
     def test_cpmant_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs()
@@ -201,7 +198,7 @@ class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class CPMAntModelIntegrationTest(ModelTesterMixin, unittest.TestCase):
+class CPMAntModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         texts = "今天天气真好！"
@@ -218,7 +215,7 @@ class CPMAntModelIntegrationTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class CPMAntForCausalLMlIntegrationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class CPMAntForCausalLMlIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_casual(self):
         texts = "今天天气真好！"
