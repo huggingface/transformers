@@ -32,8 +32,13 @@ from transformers import PreTrainedModel
 from transformers.activations import ACT2FN
 from transformers.modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from transformers.pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from transformers.utils import DUMMY_INPUTS, DUMMY_MASK, is_torch_fx_proxy, add_start_docstrings_to_model_forward, \
-    replace_return_docstrings
+from transformers.utils import (
+    DUMMY_INPUTS,
+    DUMMY_MASK,
+    add_start_docstrings_to_model_forward,
+    is_torch_fx_proxy,
+    replace_return_docstrings,
+)
 
 from .configuration_udop import UdopConfig
 
@@ -49,8 +54,8 @@ UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP = ["udop-uniudop-dual"]
 UDOPDUAL_START_DOCSTRING = r"""
 
     The udop models was presented in [Unifying Vision, Text, and Layout for Universal Document Processing]
-    (https://arxiv.org/pdf/2212.02623.pdf) by Zineng Tang, Ziyi Yang, Guoxin Wang, Yuwei Fang, Yang Liu, 
-    Chenguang Zhu, Michael Zeng, Cha Zhang, Mohit Bansal, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
+    (https://arxiv.org/pdf/2212.02623.pdf) by Zineng Tang, Ziyi Yang, Guoxin Wang, Yuwei Fang, Yang Liu, Chenguang Zhu,
+    Michael Zeng, Cha Zhang, Mohit Bansal, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
 
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
