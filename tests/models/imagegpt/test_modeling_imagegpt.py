@@ -33,6 +33,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -264,11 +265,16 @@ class ImageGPTModelTester:
 
 
 @require_torch
-class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (ImageGPTForCausalImageModeling, ImageGPTForImageClassification, ImageGPTModel) if is_torch_available() else ()
     )
     all_generative_model_classes = (ImageGPTForCausalImageModeling,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": ImageGPTModel, "image-classification": ImageGPTForImageClassification}
+        if is_torch_available()
+        else {}
+    )
     test_missing_keys = False
     input_name = "pixel_values"
 

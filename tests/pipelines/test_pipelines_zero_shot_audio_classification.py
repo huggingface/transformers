@@ -19,11 +19,9 @@ from datasets import load_dataset
 from transformers.pipelines import pipeline
 from transformers.testing_utils import nested_simplify, require_torch, slow
 
-from .test_pipelines_common import PipelineTestCaseMeta
-
 
 @require_torch
-class ZeroShotAudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
     # Deactivating auto tests since we don't have a good MODEL_FOR_XX mapping,
     # and only CLAP would be there for now.
     # model_mapping = {CLAPConfig: CLAPModel}

@@ -22,6 +22,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -155,11 +156,21 @@ class TFTransfoXLModelTester:
 
 
 @require_tf
-class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFTransfoXLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFTransfoXLModel, TFTransfoXLLMHeadModel, TFTransfoXLForSequenceClassification) if is_tf_available() else ()
     )
     all_generative_model_classes = () if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFTransfoXLModel,
+            "text-classification": TFTransfoXLForSequenceClassification,
+            "text-generation": TFTransfoXLLMHeadModel,
+            "zero-shot": TFTransfoXLForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     # TODO: add this test when TFTransfoXLLMHead has a linear output layer implemented
     test_resize_embeddings = False
     test_head_masking = False

@@ -67,6 +67,8 @@ if is_torch_available():
     import torch
     from torch import nn
 
+    from transformers.pytorch_utils import torch_int_div
+
 
 if is_vision_available():
     import PIL
@@ -1311,7 +1313,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         prob = out_logits.sigmoid()
         topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 300, dim=1)
         scores = topk_values
-        topk_boxes = topk_indexes // out_logits.shape[2]
+        topk_boxes = torch_int_div(topk_indexes, out_logits.shape[2])
         labels = topk_indexes % out_logits.shape[2]
         boxes = center_to_corners_format(out_bbox)
         boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
@@ -1357,7 +1359,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         prob = out_logits.sigmoid()
         topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
         scores = topk_values
-        topk_boxes = topk_indexes // out_logits.shape[2]
+        topk_boxes = torch_int_div(topk_indexes, out_logits.shape[2])
         labels = topk_indexes % out_logits.shape[2]
         boxes = center_to_corners_format(out_bbox)
         boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))

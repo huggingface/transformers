@@ -23,6 +23,7 @@ from transformers.utils import cached_property, is_tf_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -209,9 +210,10 @@ class TFSpeech2TextModelTester:
 
 
 @require_tf
-class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFSpeech2TextModel, TFSpeech2TextForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFSpeech2TextForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TFSpeech2TextModel} if is_tf_available() else {}
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False

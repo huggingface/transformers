@@ -1093,18 +1093,20 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
             self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
-    # FIXME: sgugger
-    @unittest.skip(reason="might be flaky after PR #21700. Skip for now.")
     def test_log_level(self):
         # testing only --log_level (--log_level_replica requires multiple gpus and DDP and is tested elsewhere)
         logger = logging.get_logger()
         log_info_string = "Running training"
 
-        # test with the default log_level - should be warning and thus not log on the main process
+        # test with the default log_level - should be the same as before and thus we test depending on is_info
+        is_info = logging.get_verbosity() <= 20
         with CaptureLogger(logger) as cl:
             trainer = get_regression_trainer()
             trainer.train()
-        self.assertNotIn(log_info_string, cl.out)
+        if is_info:
+            self.assertIn(log_info_string, cl.out)
+        else:
+            self.assertNotIn(log_info_string, cl.out)
 
         # test with low log_level - lower than info
         with CaptureLogger(logger) as cl:
