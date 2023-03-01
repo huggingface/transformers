@@ -182,10 +182,7 @@ class GPTSanJapaneseForConditionalGenerationTest(ModelTesterMixin, GenerationTes
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     @unittest.skip(
-        reason=(
-            "skip for now as the computed `max_memory` by `model_split_percents` in the test method will be changed"
-            " inside `from_pretrained`"
-        )
+        reason="skip for now as the computed `max_memory` by `model_split_percents` in the test method will be changed inside `from_pretrained`"
     )
     def test_model_parallelism(self):
         super().test_model_parallelism()
