@@ -879,6 +879,22 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 CPMAnt will process attention mask automatically, this parameter is a dummy parameter for
                 text-generation pipeline.
+
+        Example:
+
+        Text Generation with CPMAntForCausalLM.
+        ```python
+        >>> from transformers import CPMAntTokenizer, CPMAntForCausalLM
+
+        >>> texts = "今天天气不错，"
+        >>> model = CPMAntForCausalLM.from_pretrained("openbmb/cpm-ant-10b")
+        >>> tokenizer = CPMAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
+        >>> input_ids = tokenizer(texts, return_tensors="pt")
+        >>> outputs = model.generate(**input_ids)
+        >>> output_texts = tokenizer.batch_decode(outputs)
+        >>> print(output_texts)
+        ['今天天气不错，阳光明媚，我和妈妈一起去超市买东西。\n在超市里，我看到了一个很好玩的玩具，它的名字叫“机器人”。它有一个圆圆的脑袋，两只圆圆的眼睛，还有一个圆圆的']
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
