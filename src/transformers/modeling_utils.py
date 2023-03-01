@@ -1047,6 +1047,21 @@ class BackboneMixin:
         # to match the transformers model.
         self.out_indices = tuple(i for i, layer in enumerate(self.stage_names) if layer in self.out_features)
 
+        # Verify backbone and config correspond
+        config_out_indices = (-1,) if config.out_indices is None else config.out_indices
+        if len(self.out_indices) != len(config_out_indices):
+            raise ValueError(
+                f"out_indices in the config file must match the number of output layers in the backbone. "
+                f"Got {len(config_out_indices)} out_indices for {len(self.out_indices)} output layers."
+            )
+        config_out_features = [self.stage_names[idx] for idx in config_out_indices]
+        if config_out_features != self.out_features:
+            raise ValueError(
+                f"out_indices in the config file must map to the the output layers in the backbone. "
+                f"Got {self.out_features} for {self.out_indices} output layers. Expected {config_out_features} for "
+                f"{config_out_indices} output layers."
+            )
+
     def _init_transformers_backbone(self, config) -> None:
         stage_names = getattr(config, "stage_names")
         out_features = getattr(config, "out_features", None)
@@ -1056,9 +1071,6 @@ class BackboneMixin:
             raise ValueError("stage_names must be set in the config file for transformers backbones")
 
         if out_features is not None:
-            warnings.warn(
-                "out_features is deprecated and will be removed in v4.28. Use out_indices instead.", FutureWarning
-            )
             if any(feat not in stage_names for feat in out_features):
                 raise ValueError(f"out_features must be a subset of stage_names: {stage_names} got {out_features}")
 
@@ -1067,20 +1079,22 @@ class BackboneMixin:
                 raise ValueError("out_indices must be valid indices for stage_names {stage_names}, got {out_indices}")
 
         if out_features is not None and out_indices is not None:
-            if len(out_features) != len(out_indices) or [stage_names[idx] for idx in out_indices] != out_features:
-                raise ValueError("out_features and out_indices must be equal if both are set")
+            if len(out_features) != len(out_indices):
+                raise ValueError("out_features and out_indices should have the same length if both are set")
+            elif out_features != [stage_names[idx] for idx in out_indices]:
+                raise ValueError("out_features and out_indices should correspond to the same stages if both are set")
 
-        if out_indices is None:
-            if out_features is None:
-                out_indices = [len(stage_names) - 1]
-            else:
-                out_indices = [idx for idx, layer in enumerate(stage_names) if layer in out_features]
-
-        if out_features is None:
+        # Set out_indices and out_features if they are not set
+        if out_indices is None and out_features is None:
+            out_indices = [len(stage_names) - 1]
+            out_features = [stage_names[-1]]
+        elif out_indices is None and out_features is not None:
+            out_indices = [idx for idx, layer in enumerate(stage_names) if layer in out_features]
+        elif out_features is None and out_indices is not None:
             out_features = [stage_names[idx] for idx in out_indices]
 
-        self.out_indices = tuple(out_indices)
         self.stage_names = stage_names
+        self.out_indices = tuple(out_indices)
         self.out_features = out_features
         # Number of channels for each stage. This is set in the transformer backbone model init
         self.num_features = None

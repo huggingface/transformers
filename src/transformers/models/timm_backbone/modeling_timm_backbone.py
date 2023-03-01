@@ -50,22 +50,22 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         if config.backbone not in timm.list_models():
             raise ValueError(f"backbone {config.backbone} is not supported by timm.")
 
+        if hasattr(config, "out_features") and config.out_features is not None:
+            raise ValueError("out_features is not supported by TimmBackbone. Please use out_indices instead.")
+
         pretrained = getattr(config, "use_pretrained_backbone", None)
         if pretrained is None:
             raise ValueError("use_pretrained_backbone is not set in the config. Please set it to True or False.")
 
-        # For timm we set features_only to True to use the model as a backbone. This
-        # is currently not possible for transformer architectures.
-        features_only = getattr(config, "features_only", True)
-        in_chans = getattr(config, "num_channels", 3)
         # We just take the final layer by default. This matches the default for the transformers models.
-        out_indices = getattr(config, "out_indices", (-1,))
+        out_indices = config.out_indices if config.out_indices is not None else (-1,)
 
         self._backbone = timm.create_model(
             config.backbone,
             pretrained=pretrained,
-            features_only=features_only,
-            in_chans=in_chans,
+            # This is currently not possible for transformer architectures.
+            features_only=config.features_only,
+            in_chans=config.num_channels,
             out_indices=out_indices,
             **kwargs,
         )

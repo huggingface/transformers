@@ -16,8 +16,9 @@
 import copy
 import inspect
 
-from transformers.testing_utils import require_torch, torch_device
 from transformers.modeling_utils import BackboneType
+from transformers.testing_utils import require_torch, torch_device
+
 
 @require_torch
 class BackboneTesterMixin:
@@ -102,8 +103,8 @@ class BackboneTesterMixin:
             model.eval()
             result = model(**inputs_dict)
 
-            self.assertEqual(len(result.feature_maps), len(config.out_features))
-            self.assertEqual(len(model.channels), len(config.out_features))
+            self.assertEqual(len(result.feature_maps), len(config.out_indices))
+            self.assertEqual(len(model.channels), len(config.out_indices))
 
             # Check output of last stage is taken if out_features=None, out_indices=None
             modified_config = copy.deepcopy(config)

@@ -46,7 +46,7 @@ class TimmBackboneModelTester:
     ):
         self.parent = parent
         self.out_indices = out_indices if out_indices is not None else [4]
-        self.stage_names = stage_names if stage_names is not None else ["stem", "stage1", "stage2", "stage3", "stage4"]
+        self.stage_names = stage_names
         self.out_features = out_features
         self.backbone = backbone
         self.batch_size = batch_size
@@ -163,6 +163,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, unittest.Test
 
     @unittest.skip("model weights aren't tied in TimmBackbone.")
     def test_tied_model_weights_key_ignore(self):
+        pass
+
+    @unittest.skip("TimmBackbone doesn't have hidden size info in its configuration.")
+    def test_channels(self):
         pass
 
     def test_forward_signature(self):

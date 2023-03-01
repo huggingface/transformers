@@ -49,9 +49,9 @@ class TimmBackboneConfig(PretrainedConfig):
     >>> from transformers import TimmBackboneConfig, TimmBackbone
 
     >>> # Initializing a timm backbone
-    >>> configuration = TimmBackboneConfig()
+    >>> configuration = TimmBackboneConfig("resnet50")
 
-    >>> # Initializing a model (with random weights) from the bit-50 style configuration
+    >>> # Initializing a model from the configuration
     >>> model = TimmBackbone(configuration)
 
     >>> # Accessing the model configuration
@@ -75,4 +75,4 @@ class TimmBackboneConfig(PretrainedConfig):
         self.features_only = features_only
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = True
-        self.out_indices = out_indices if out_indices is not None else [-1]
+        self.out_indices = out_indices if out_indices is not None else (-1,)

@@ -848,11 +848,7 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
         super()._init_backbone(config)
 
         self.bit = BitModel(config)
-
         self.num_features = [config.embedding_size] + config.hidden_sizes
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            config.out_features, config.out_indices, self.stage_names
-        )
 
         # initialize weights and apply final processing
         self.post_init()

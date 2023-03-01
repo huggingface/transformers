@@ -867,10 +867,6 @@ class NatBackbone(NatPreTrainedModel, BackboneMixin):
 
         self.embeddings = NatEmbeddings(config)
         self.encoder = NatEncoder(config)
-
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            config.out_features, config.out_indices, self.stage_names
-        )
         self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
 
         # Add layer norms to hidden states of out_features

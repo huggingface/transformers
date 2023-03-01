@@ -545,6 +545,11 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        # We set the defaults as None if they are not specified in the kwargs to enable
+        # passing just one of `out_features` or `out_indices` to the model.
+        kwargs["out_indices"] = kwargs.get("out_indices", None)
+        kwargs["out_features"] = kwargs.get("out_features", None)
+
         if kwargs.get("use_timm_backbone", False):
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
