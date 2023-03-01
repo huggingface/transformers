@@ -326,7 +326,6 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
 
     hf_image_features = outputs.image_embeds.detach().numpy()
     hf_text_features = outputs.text_embeds.detach().numpy()
-    # print(hf_text_features)
 
     # Original model inference
     original_model.trainable = False

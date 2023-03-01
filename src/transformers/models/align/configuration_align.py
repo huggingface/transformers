@@ -78,13 +78,11 @@ class AlignTextConfig(PretrainedConfig):
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
+        pad_token_id (`int`, *optional*, defaults to 0)
+            Padding token id.
 
     Example:
 
@@ -119,7 +117,6 @@ class AlignTextConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         use_cache=True,
-        classifier_dropout=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -138,7 +135,6 @@ class AlignTextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
         self.pad_token_id = pad_token_id
 
     @classmethod
