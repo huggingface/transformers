@@ -894,37 +894,37 @@ class InformerProbSparseAttention(nn.Module):
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
 
-        L_K = key_states.size(1)
-        log_L_K = np.ceil(np.log1p(L_K)).astype("int").item()
+        key_states_time_length = key_states.size(1)  # L_K
+        log_key_states_time_length = np.ceil(np.log1p(key_states_time_length)).astype("int").item()  # log_L_K
 
-        L_Q = query_states.size(1)
-        log_L_Q = np.ceil(np.log1p(L_Q)).astype("int").item()
+        query_states_time_length = query_states.size(1)  # L_Q
+        log_query_states_time_length = np.ceil(np.log1p(query_states_time_length)).astype("int").item() # log_L_Q
 
-        U_part = min(self.factor * L_Q * log_L_K, L_K)
-        u = min(self.factor * log_L_Q, L_Q)
+        u_part = min(self.factor * query_states_time_length * log_key_states_time_length, key_states_time_length)
+        u = min(self.factor * log_query_states_time_length, query_states_time_length)
 
-        if L_K > 0:
-            index_sample = torch.randint(0, L_K, (U_part,))
-            K_sample = key_states[:, index_sample, :]
+        if key_states_time_length > 0:
+            index_sample = torch.randint(0, key_states_time_length, (u_part,))
+            k_sample = key_states[:, index_sample, :]
         else:
-            K_sample = key_states
+            k_sample = key_states
 
-        Q_K_sample = torch.bmm(query_states, K_sample.transpose(1, 2))
+        queries_keys_sample = torch.bmm(query_states, k_sample.transpose(1, 2))  # Q_K_sampled
 
         # find the Top_k query with sparsity measurement
         if u > 0:
-            M = Q_K_sample.max(dim=-1)[0] - torch.div(Q_K_sample.sum(dim=-1), L_K)
-            M_top = M.topk(u, sorted=False)[1]
+            sparsity_measurement = queries_keys_sample.max(dim=-1)[0] - torch.div(queries_keys_sample.sum(dim=-1), key_states_time_length)  # M
+            top_u_sparsity_measurement = sparsity_measurement.topk(u, sorted=False)[1]  # M_top
 
-            # calculate Q_reduce: query_states[:, M_top]
+            # calculate q_reduce: query_states[:, top_u_sparsity_measurement]
             dim_for_slice = torch.arange(query_states.size(0)).unsqueeze(-1)
-            Q_reduce = query_states[dim_for_slice, M_top]
+            q_reduce = query_states[dim_for_slice, top_u_sparsity_measurement]
         else:
-            Q_reduce = query_states
-            M_top = None
+            q_reduce = query_states
+            top_u_sparsity_measurement = None
 
-        # Use Q_reduce to calculate attention weights
-        attn_weights = torch.bmm(Q_reduce, key_states.transpose(1, 2))
+        # Use q_reduce to calculate attention weights
+        attn_weights = torch.bmm(q_reduce, key_states.transpose(1, 2))
 
         src_len = key_states.size(1)
         if attn_weights.size() != (bsz * self.num_heads, u, src_len):
@@ -942,9 +942,9 @@ class InformerProbSparseAttention(nn.Module):
                 bsz * self.num_heads, tgt_len, src_len
             )
 
-            if M_top is not None:
+            if top_u_sparsity_measurement is not None:
                 dim_for_slice = torch.arange(prob_mask.size(0)).unsqueeze(-1)
-                prob_mask = prob_mask[dim_for_slice, M_top, :]
+                prob_mask = prob_mask[dim_for_slice, top_u_sparsity_measurement, :]
 
             attn_weights = attn_weights.view(bsz, self.num_heads, u, src_len) + prob_mask.view(
                 bsz, self.num_heads, u, src_len
@@ -981,12 +981,12 @@ class InformerProbSparseAttention(nn.Module):
             context = value_states.cumsum(dim=-2)
         else:
             v_mean_dim_time = value_states.mean(dim=-2)
-            context = v_mean_dim_time.unsqueeze(dim=1).expand(bsz * self.num_heads, L_Q, v_mean_dim_time.size(-1)).clone()
+            context = v_mean_dim_time.unsqueeze(dim=1).expand(bsz * self.num_heads, query_states_time_length, v_mean_dim_time.size(-1)).clone()
 
-        if M_top is not None:
-            # update context: copy the attention output to the context at M_top index
+        if top_u_sparsity_measurement is not None:
+            # update context: copy the attention output to the context at top_u_sparsity_measurement index
             dim_for_slice = torch.arange(context.size(0)).unsqueeze(-1)
-            context[dim_for_slice, M_top, :] = attn_output
+            context[dim_for_slice, top_u_sparsity_measurement, :] = attn_output
             attn_output = context
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
