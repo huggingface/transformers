@@ -1008,9 +1008,9 @@ class InformerProbSparseAttention(nn.Module):
 
 
 # source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
-class ConvLayer(nn.Module):
+class InformerConvLayer(nn.Module):
     def __init__(self, c_in):
-        super(ConvLayer, self).__init__()
+        super().__init__()
         self.downConv = nn.Conv1d(
             in_channels=c_in,
             out_channels=c_in,
@@ -1452,7 +1452,7 @@ class InformerEncoder(InformerPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         if config.distil:
-            self.conv_layers = nn.ModuleList([ConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)])
+            self.conv_layers = nn.ModuleList([InformerConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)])
             self.conv_layers.append(None)
         else:
             self.conv_layers = [None] * config.encoder_layers
