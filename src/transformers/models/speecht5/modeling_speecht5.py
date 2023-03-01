@@ -2638,7 +2638,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return Seq2SeqSpectrogramOutput(
             loss=loss,
             spectrogram=outputs_after_postnet,
-            logits=logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,

@@ -1417,8 +1417,6 @@ class Seq2SeqSpectrogramOutput(ModelOutput):
             Spectrogram generation loss.
         spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
             The predicted spectrogram.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Stop token prediction scores (before sigmoid).
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
@@ -1460,7 +1458,6 @@ class Seq2SeqSpectrogramOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     spectrogram: torch.FloatTensor = None
-    logits: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
