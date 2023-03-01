@@ -172,8 +172,12 @@ def get_model_to_tester_mapping(test_file):
     return model_to_tester_mapping
 
 
-# Make the information succinct and easy to read
 def to_json(o):
+    """Make the information succinct and easy to read.
+
+    Avoid the full class representation like `<class 'transformers.models.bert.modeling_bert.BertForMaskedLM'>` when
+    displaying the results. Instead, we use class name (`BertForMaskedLM`) for the readability.
+    """
     if isinstance(o, str):
         return o
     elif isinstance(o, type):
