@@ -37,7 +37,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils.generic import TensorType, logging
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
