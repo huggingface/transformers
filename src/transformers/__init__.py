@@ -3508,6 +3508,9 @@ else:
             "FlaxDistilBertPreTrainedModel",
         ]
     )
+    _import_structure["models.efficientnet"].extend(
+        ["FlaxEfficientNetForImageClassification", "FlaxEfficientNetModel", "FlaxEfficientNetPreTrainedModel"]
+    )
     _import_structure["models.electra"].extend(
         [
             "FlaxElectraForCausalLM",
@@ -6520,6 +6523,11 @@ if TYPE_CHECKING:
             FlaxDistilBertForTokenClassification,
             FlaxDistilBertModel,
             FlaxDistilBertPreTrainedModel,
+        )
+        from .models.efficientnet import (
+            FlaxEfficientNetForImageClassification,
+            FlaxEfficientNetModel,
+            FlaxEfficientNetPreTrainedModel,
         )
         from .models.electra import (
             FlaxElectraForCausalLM,

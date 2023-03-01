@@ -18,7 +18,13 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_flax_available,
+    is_torch_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -50,6 +56,19 @@ else:
         "EfficientNetPreTrainedModel",
     ]
 
+
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_flax_efficientnet"] = [
+        "FlaxEfficientNetForImageClassification",
+        "FlaxEfficientNetModel",
+        "FlaxEfficientNetPreTrainedModel",
+    ]
+
 if TYPE_CHECKING:
     from .configuration_efficientnet import (
         EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -76,6 +95,18 @@ if TYPE_CHECKING:
             EfficientNetForImageClassification,
             EfficientNetModel,
             EfficientNetPreTrainedModel,
+        )
+
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_flax_efficientnet import (
+            FlaxEfficientNetForImageClassification,
+            FlaxEfficientNetModel,
+            FlaxEfficientNetPreTrainedModel,
         )
 
 else:
