@@ -2490,42 +2490,6 @@ def _generate_speech(
         return spectrogram
 
 
-# TODO: from ESPNet, but (hopefully) only temporary
-def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
-    if length_dim == 0:
-        raise ValueError("length_dim cannot be 0: {}".format(length_dim))
-
-    if not isinstance(lengths, list):
-        lengths = lengths.long().tolist()
-
-    bs = int(len(lengths))
-    if maxlen is None:
-        if xs is None:
-            maxlen = int(max(lengths))
-        else:
-            maxlen = xs.size(length_dim)
-    else:
-        assert xs is None
-        assert maxlen >= int(max(lengths))
-
-    seq_range = torch.arange(0, maxlen, dtype=torch.int64)
-    seq_range_expand = seq_range.unsqueeze(0).expand(bs, maxlen)
-    seq_length_expand = seq_range_expand.new(lengths).unsqueeze(-1)
-    mask = seq_range_expand >= seq_length_expand
-
-    if xs is not None:
-        assert xs.size(0) == bs, (xs.size(0), bs)
-
-        if length_dim < 0:
-            length_dim = xs.dim() + length_dim
-        # ind = (:, None, ..., None, :, , None, ..., None)
-        ind = tuple(
-            slice(None) if i in (0, length_dim) else None for i in range(xs.dim())
-        )
-        mask = mask[ind].expand_as(xs).to(xs.device)
-    return mask
-
-
 @add_start_docstrings(
     """SpeechT5 Model with a text encoder and a speech decoder.""",
     SPEECHT5_START_DOCSTRING,
@@ -2582,7 +2546,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         speaker_embeddings: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         stop_labels: Optional[torch.Tensor] = None,
-        target_lengths: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2601,15 +2564,14 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
             Tensor containing the speaker embeddings.
         labels (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`, *optional*):
-            Float values of target mel spectrogram. Spectrograms can be obtained using [`SpeechT5Processor`]. See
-            [`SpeechT5Processor.__call__`] for details.
+            Float values of target mel spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
+            computation. Spectrograms can be obtained using [`SpeechT5Processor`]. See [`SpeechT5Processor.__call__`]
+            for details.
         stop_labels (`torch.FloatTensor` of shape `(batch_size, unreduced_sequence_length)`, *optional*):
             Labels for computing the stop token loss. Values are 0.0 until the end of the sequence, after which they
             become 1.0. The sequence length of this tensor is `config.reduction_factor` times larger than the length of
             the target mel spectrogram. Labels can be obtained using [`SpeechT5Processor`]. See
             [`SpeechT5Processor.__call__`] for details.
-        target_lengths (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Original sequence lengths of the target mel spectrograms before padding.
 
         Returns:
 
@@ -2667,7 +2629,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 logits,
                 labels,
                 stop_labels,
-                target_lengths,
             )
 
         if not return_dict:
@@ -2694,26 +2655,9 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         logits: torch.FloatTensor,
         labels: torch.FloatTensor,
         stop_labels: torch.FloatTensor,
-        target_lengths: torch.LongTensor,
     ):
-        # TODO:
-        #  - round down the targets in feature extractor
-        #  - use decoder_attention_mask for the masked_select
-        #  - don't need to use target_lengths anymore
-
-        # round down target lengths to multiple of reduction factor
-        if self.config.reduction_factor > 1:
-            target_lengths = target_lengths.new([length - length % self.config.reduction_factor for length in target_lengths])
-
-            max_length = max(target_lengths)
-            labels = labels[:, :max_length]
-            stop_labels = stop_labels[:, :max_length]
-
-            # make sure at least one frame has 1
-            stop_labels = torch.scatter(stop_labels, 1, (target_lengths - 1).unsqueeze(1), 1.0)
-
-        # mask out the padded bits
-        masks = (~make_pad_mask(target_lengths, None, -1)).unsqueeze(-1).to(labels.device)
+        # mask out the padded portions
+        masks = (stop_labels != -100).unsqueeze(-1)
         labels = labels.masked_select(masks)
         outputs_before_postnet = outputs_before_postnet.masked_select(masks)
         outputs_after_postnet = outputs_after_postnet.masked_select(masks)
