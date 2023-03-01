@@ -81,6 +81,8 @@
       title: Video classification
     - local: tasks/object_detection
       title: Object detection
+    - local: tasks/zero_shot_object_detection
+      title: Zero-shot object detection
     title: Computer Vision
   - sections:
     - local: tasks/image_captioning

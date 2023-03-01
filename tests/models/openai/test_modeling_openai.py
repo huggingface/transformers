@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -189,7 +190,7 @@ class OpenAIGPTModelTester:
 
 
 @require_torch
-class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel, OpenAIGPTForSequenceClassification)
         if is_torch_available()
@@ -198,6 +199,16 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
     all_generative_model_classes = (
         (OpenAIGPTLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": OpenAIGPTModel,
+            "text-classification": OpenAIGPTForSequenceClassification,
+            "text-generation": OpenAIGPTLMHeadModel,
+            "zero-shot": OpenAIGPTForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
