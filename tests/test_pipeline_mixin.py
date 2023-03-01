@@ -224,11 +224,11 @@ class PipelineTesterMixin:
         # TODO: Maybe not upload such problematic tiny models to Hub.
         if tokenizer is None and processor is None:
             self.skipTest(
-                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load"
-                f" any tokenizer / processor from `{repo_id}`."
+                f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')} is skipped: Could not find or load "
+                f"any tokenizer / processor from `{repo_id}`."
             )
 
-        # TODO: We should check if a model file is on the Hub repo instead.
+        # TODO: We should check if a model file is on the Hub repo. instead.
         try:
             model = model_architecture.from_pretrained(repo_id)
         except Exception:
