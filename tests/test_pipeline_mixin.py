@@ -228,7 +228,7 @@ class PipelineTesterMixin:
                 f" any tokenizer / processor from `{repo_id}`."
             )
 
-        # TODO: We should check if a model file is on the Hub repo. instead.
+        # TODO: We should check if a model file is on the Hub repo instead.
         try:
             model = model_architecture.from_pretrained(repo_id)
         except Exception:
