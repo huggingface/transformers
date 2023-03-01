@@ -900,10 +900,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         tokenizer = T5Tokenizer.from_pretrained(model_name)
         model = T5ForConditionalGeneration.from_pretrained(model_name)
         model = torch.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
-        input_text = (
-            "Answer the following yes/no question by reasoning step-by-step. Can you write a whole Haiku in a single"
-            " tweet?"
-        )
+        input_text = "Answer the following yes/no question by reasoning step-by-step. Can you write a whole Haiku in a single tweet?"
         input_ids = tokenizer(input_text, return_tensors="pt").input_ids
         _ = model.generate(input_ids)
 
