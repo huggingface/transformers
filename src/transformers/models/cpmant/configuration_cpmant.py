@@ -67,7 +67,7 @@ class CPMAntConfig(PretrainedConfig):
             The length of prompt.
         segment_types (`int`, *optional*, defaults to 32):
             The type of segment.
-        use_cache (`bool`, *optional*, defaults to 32):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use cache.
 
         Example:
