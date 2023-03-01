@@ -20,7 +20,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers import AutoBackbone
+from ... import AutoBackbone
 
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import BackboneMixin, PreTrainedModel

@@ -14,7 +14,7 @@
 # limitations under the License.
 """ MarkupLM model configuration"""
 
-from transformers.utils import logging
+from ...utils import logging
 
 from ...configuration_utils import PretrainedConfig
 

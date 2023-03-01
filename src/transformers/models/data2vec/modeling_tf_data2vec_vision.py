@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-from transformers.tf_utils import shape_list, stable_softmax
+from ...tf_utils import shape_list, stable_softmax
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (

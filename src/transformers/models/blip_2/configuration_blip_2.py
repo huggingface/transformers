@@ -18,7 +18,7 @@ import copy
 import os
 from typing import Union
 
-from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
