@@ -22,11 +22,11 @@ git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(
 sys.path.append(os.path.join(git_repo_path, "utils"))
 
 import get_test_info  # noqa: E402
-from get_test_info import (
+from get_test_info import (  # noqa: E402
     get_model_to_test_mapping,
     get_model_to_tester_mapping,
     get_test_to_tester_mapping,
-)  # noqa: E402
+)
 
 
 BERT_TEST_FILE = "tests/models/bert/test_modeling_bert.py"
