@@ -83,11 +83,12 @@ class SwinConfig(PretrainedConfig):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). Will default to the last stage if unset. Deprecated: use
-            `output_indices` instead.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
         out_indices (`List[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). Will default to the last stage if unset.
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
 
     Example:
 
@@ -157,6 +158,17 @@ class SwinConfig(PretrainedConfig):
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        if out_features is not None and out_indices is not None:
+            raise ValueError("Cannot set both `out_features` and `out_indices`")
+
+        if out_features is None and out_indices is not None:
+            out_features = [self.stage_names[idx] for idx in out_indices]
+        elif out_features is not None and out_indices is None:
+            out_indices = [self.stage_names.index(feature) for feature in out_features]
+        elif out_features is None and out_indices is None:
+            out_features = [self.stage_names[-1]]
+            out_indices = [len(self.stage_names) - 1]
+
         if out_features is not None:
             if not isinstance(out_features, list):
                 raise ValueError("out_features should be a list")
@@ -165,15 +177,14 @@ class SwinConfig(PretrainedConfig):
                     raise ValueError(
                         f"Feature {feature} is not a valid feature name. Valid names are {self.stage_names}"
                     )
-        self.out_features = out_features
         if out_indices is not None:
             if not isinstance(out_indices, (list, tuple)):
                 raise ValueError("out_indices should be a list or tuple")
             for idx in out_indices:
-                if idx not in range(len(self.stage_names)):
-                    raise ValueError(
-                        f"Index {idx} is not a valid index. Valid indices are {list(range(len(self.stage_names)))}"
-                    )
+                if idx >= len(self.stage_names):
+                    raise ValueError(f"Index {idx} is not a valid index for a list of length {len(self.stage_names)}")
+
+        self.out_features = out_features
         self.out_indices = out_indices
 
 
