@@ -324,7 +324,9 @@ if __name__ == "__main__":
         "--model_name",
         default="b0",
         type=str,
-        help="Version name of the EfficientNet model you want to convert, select from [b0, b1, b2, b3, b4, b5, b6, b7].",
+        help=(
+            "Version name of the EfficientNet model you want to convert, select from [b0, b1, b2, b3, b4, b5, b6, b7]."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
