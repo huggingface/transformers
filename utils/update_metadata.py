@@ -15,7 +15,6 @@
 
 import argparse
 import collections
-import importlib.util
 import os
 import re
 import tempfile
@@ -24,6 +23,8 @@ import pandas as pd
 from datasets import Dataset
 from huggingface_hub import Repository
 
+from transformers.utils import direct_transformers_import
+
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/update_metadata.py
@@ -31,12 +32,7 @@ TRANSFORMERS_PATH = "src/transformers"
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(TRANSFORMERS_PATH, "__init__.py"),
-    submodule_search_locations=[TRANSFORMERS_PATH],
-)
-transformers_module = spec.loader.load_module()
+transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
 # Regexes that match TF/Flax/PT model names.
@@ -227,7 +223,7 @@ def update_metadata(token, commit_sha):
         table = update_pipeline_and_auto_class_table(table)
 
         # Sort the model classes to avoid some nondeterministic updates to create false update commits.
-        model_classes = sorted(list(table.keys()))
+        model_classes = sorted(table.keys())
         tags_table = pd.DataFrame(
             {
                 "model_class": model_classes,

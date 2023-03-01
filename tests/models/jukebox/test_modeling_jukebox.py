@@ -30,10 +30,10 @@ if is_torch_available():
 class Jukebox1bModelTester(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
     model_id = "openai/jukebox-1b-lyrics"
-    metas = dict(
-        artist="Zac Brown Band",
-        genres="Country",
-        lyrics="""I met a traveller from an antique land,
+    metas = {
+        "artist": "Zac Brown Band",
+        "genres": "Country",
+        "lyrics": """I met a traveller from an antique land,
     Who said "Two vast and trunkless legs of stone
     Stand in the desert. . . . Near them, on the sand,
     Half sunk a shattered visage lies, whose frown,
@@ -48,7 +48,7 @@ class Jukebox1bModelTester(unittest.TestCase):
     Of that colossal Wreck, boundless and bare
     The lone and level sands stretch far away
     """,
-    )
+    }
     # fmt: off
     EXPECTED_OUTPUT_2 = [
         1864, 1536, 1213, 1870, 1357, 1536, 519, 880, 1323, 789, 1082, 534,
@@ -180,7 +180,7 @@ class Jukebox1bModelTester(unittest.TestCase):
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
         set_seed(0)
         waveform = torch.rand((1, 5120, 1))
-        tokens = [i for i in self.prepare_inputs()]
+        tokens = list(self.prepare_inputs())
 
         zs = [model.vqvae.encode(waveform, start_level=2, bs_chunks=waveform.shape[0])[0], None, None]
         zs = model._sample(
@@ -220,10 +220,10 @@ class Jukebox1bModelTester(unittest.TestCase):
 class Jukebox5bModelTester(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
     model_id = "openai/jukebox-5b-lyrics"
-    metas = dict(
-        artist="Zac Brown Band",
-        genres="Country",
-        lyrics="""I met a traveller from an antique land,
+    metas = {
+        "artist": "Zac Brown Band",
+        "genres": "Country",
+        "lyrics": """I met a traveller from an antique land,
     Who said "Two vast and trunkless legs of stone
     Stand in the desert. . . . Near them, on the sand,
     Half sunk a shattered visage lies, whose frown,
@@ -238,7 +238,7 @@ class Jukebox5bModelTester(unittest.TestCase):
     Of that colossal Wreck, boundless and bare
     The lone and level sands stretch far away
     """,
-    )
+    }
 
     # fmt: off
     EXPECTED_OUTPUT_2 = [

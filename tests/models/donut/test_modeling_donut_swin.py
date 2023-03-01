@@ -24,6 +24,7 @@ from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -143,8 +144,9 @@ class DonutSwinModelTester:
 
 
 @require_torch
-class DonutSwinModelTest(ModelTesterMixin, unittest.TestCase):
+class DonutSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DonutSwinModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": DonutSwinModel} if is_torch_available() else {}
     fx_compatible = True
 
     test_pruning = False

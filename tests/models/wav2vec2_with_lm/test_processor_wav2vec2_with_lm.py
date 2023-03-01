@@ -215,7 +215,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
             with get_context(pool_context).Pool() as pool:
                 decoded_processor = processor.batch_decode(logits, pool)
 
-        logits_list = [array for array in logits]
+        logits_list = list(logits)
 
         with get_context("fork").Pool() as p:
             decoded_beams = decoder.decode_beams_batch(p, logits_list)
@@ -252,7 +252,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         )
         decoded_processor = decoded_processor_out.text
 
-        logits_list = [array for array in logits]
+        logits_list = list(logits)
 
         with get_context("fork").Pool() as pool:
             decoded_decoder_out = decoder.decode_beams_batch(
@@ -299,7 +299,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         )
         decoded_processor = decoded_processor_out.text
 
-        logits_list = [array for array in logits]
+        logits_list = list(logits)
         decoder.reset_params(
             alpha=alpha,
             beta=beta,

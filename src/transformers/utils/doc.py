@@ -1085,19 +1085,19 @@ def add_code_sample_docstrings(
         # putting all kwargs for docstrings in a dict to be used
         # with the `.format(**doc_kwargs)`. Note that string might
         # be formatted with non-existing keys, which is fine.
-        doc_kwargs = dict(
-            model_class=model_class,
-            processor_class=processor_class,
-            checkpoint=checkpoint,
-            mask=mask,
-            qa_target_start_index=qa_target_start_index,
-            qa_target_end_index=qa_target_end_index,
-            expected_output=expected_output,
-            expected_loss=expected_loss,
-            real_checkpoint=real_checkpoint,
-            fake_checkpoint=checkpoint,
-            true="{true}",  # For <Tip warning={true}> syntax that conflicts with formatting.
-        )
+        doc_kwargs = {
+            "model_class": model_class,
+            "processor_class": processor_class,
+            "checkpoint": checkpoint,
+            "mask": mask,
+            "qa_target_start_index": qa_target_start_index,
+            "qa_target_end_index": qa_target_end_index,
+            "expected_output": expected_output,
+            "expected_loss": expected_loss,
+            "real_checkpoint": real_checkpoint,
+            "fake_checkpoint": checkpoint,
+            "true": "{true}",  # For <Tip warning={true}> syntax that conflicts with formatting.
+        }
 
         if ("SequenceClassification" in model_class or "AudioClassification" in model_class) and modality == "audio":
             code_sample = sample_docstrings["AudioClassification"]

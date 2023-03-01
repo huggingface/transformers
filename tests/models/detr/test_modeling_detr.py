@@ -26,6 +26,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_timm_available():
@@ -174,7 +175,7 @@ class DetrModelTester:
 
 
 @require_timm
-class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DetrModel,
@@ -183,6 +184,15 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         )
         if is_timm_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": DetrModel,
+            "image-segmentation": DetrForSegmentation,
+            "object-detection": DetrForObjectDetection,
+        }
+        if is_timm_available()
+        else {}
     )
     is_encoder_decoder = True
     test_torchscript = False

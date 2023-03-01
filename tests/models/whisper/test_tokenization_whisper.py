@@ -14,7 +14,7 @@
 
 import unittest
 
-from transformers.models.whisper import WhisperTokenizer
+from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
 from transformers.testing_utils import slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -31,7 +31,8 @@ NOTIMESTAMPS = 50363
 
 class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = WhisperTokenizer
-    test_rust_tokenizer = False
+    rust_tokenizer_class = WhisperTokenizerFast
+    test_rust_tokenizer = True
     test_sentencepiece = False
     test_seq2seq = False
 
@@ -91,6 +92,17 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_tokenizer_slow_store_full_signature(self):
+        pass
+
+    def test_tokenizer_fast_store_full_signature(self):
+        pass
+
+    def test_special_tokens_initialization(self):
+        # Whisper relies on specific additional special tokens, so we skip this
+        # general test. In particular, this test loads fast tokenizer from slow
+        # tokenizer, and the conversion uses prefix_tokens, where we reference
+        # additional special tokens by specific indices, hence overriding the
+        # list with less tokens leads to out of index error
         pass
 
     @slow

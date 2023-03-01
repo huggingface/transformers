@@ -21,6 +21,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -209,7 +210,7 @@ class TFDebertaV2ModelTester:
 
 
 @require_tf
-class TFDebertaModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFDebertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFDebertaV2Model,
@@ -220,6 +221,18 @@ class TFDebertaModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFDebertaV2Model,
+            "fill-mask": TFDebertaV2ForMaskedLM,
+            "question-answering": TFDebertaV2ForQuestionAnswering,
+            "text-classification": TFDebertaV2ForSequenceClassification,
+            "token-classification": TFDebertaV2ForTokenClassification,
+            "zero-shot": TFDebertaV2ForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
 
     test_head_masking = False
