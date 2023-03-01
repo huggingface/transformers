@@ -24,18 +24,17 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers import apply_chunking_to_forward
-from transformers.modeling_outputs import (
+from ...pytorch_utils import apply_chunking_to_forward
+from ...modeling_outputs import (
     BaseModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import logging
+from ...modeling_utils import PreTrainedModel
 
 from ...activations import ACT2FN
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings, logging
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
 

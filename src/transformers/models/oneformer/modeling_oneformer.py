@@ -24,9 +24,7 @@ import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
 
-from transformers import AutoBackbone
-from transformers.utils import logging
-
+from ... import AutoBackbone
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -37,6 +35,7 @@ from ...utils import (
     is_scipy_available,
     replace_return_docstrings,
     requires_backends,
+    logging,
 )
 from .configuration_oneformer import OneFormerConfig
 

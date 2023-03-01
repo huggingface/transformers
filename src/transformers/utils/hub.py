@@ -49,7 +49,7 @@ from huggingface_hub.utils import (
 )
 from requests.exceptions import HTTPError
 
-from transformers.utils.logging import tqdm
+from .logging import tqdm
 
 from . import __version__, logging
 from .generic import working_or_temp_dir

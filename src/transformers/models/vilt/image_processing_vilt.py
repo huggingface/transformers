@@ -19,8 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import is_vision_available
-from transformers.utils.generic import TensorType
+from ...utils import is_vision_available, TensorType, logging
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import PaddingMode, normalize, pad, rescale, resize, to_channel_dimension_format
@@ -36,7 +35,6 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging
 
 
 if is_vision_available():

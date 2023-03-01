@@ -24,7 +24,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers.utils.doc import add_code_sample_docstrings
+
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -35,6 +35,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    add_code_sample_docstrings,
 )
 from .configuration_flava import (
     FlavaConfig,

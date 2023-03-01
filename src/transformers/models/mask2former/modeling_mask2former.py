@@ -24,8 +24,8 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from transformers import AutoBackbone, SwinConfig
-from transformers.utils import logging
+from ... import AutoBackbone, SwinConfig
+from ...utils import logging
 
 from ...activations import ACT2FN
 from ...file_utils import (

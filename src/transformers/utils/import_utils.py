@@ -29,7 +29,7 @@ from typing import Any
 
 from packaging import version
 
-from transformers.utils.versions import importlib_metadata
+from .versions import importlib_metadata
 
 from . import logging
 

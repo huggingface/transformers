@@ -24,8 +24,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from transformers import AutoBackbone
-from transformers.utils import logging
+from ... import AutoBackbone
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
@@ -37,6 +36,7 @@ from ...utils import (
     is_scipy_available,
     replace_return_docstrings,
     requires_backends,
+    logging,
 )
 from ..detr import DetrConfig
 from .configuration_maskformer import MaskFormerConfig

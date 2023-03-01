@@ -27,7 +27,7 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig
 
 from ...activations import get_activation
 from ...deepspeed import is_deepspeed_zero3_enabled
