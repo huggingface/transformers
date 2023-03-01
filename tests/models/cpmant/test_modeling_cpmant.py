@@ -18,9 +18,9 @@ import unittest
 
 from transformers.testing_utils import is_torch_available, require_torch, slow
 
-from ...generation.test_utils import torch_device, GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin, torch_device
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ids_tensor, ModelTesterMixin
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():

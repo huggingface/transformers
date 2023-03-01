@@ -45,7 +45,7 @@ CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with BERT -> load_tf_weights_in_cpmant
 def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model"""
+    """Load tf checkpoints in a pytorch model."""
     try:
         import re
 
@@ -108,7 +108,7 @@ def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
             array = np.transpose(array)
         try:
             if pointer.shape != array.shape:
-                raise AssertionError("Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
+                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -246,7 +246,7 @@ class CPMAntAttention(nn.Module):
         past_key_values = None
         if use_cache:
             past_key_values = (key, value)
-          
+
         return score, attn_weights, past_key_values
 
 
@@ -414,7 +414,7 @@ class CPMAntTransformerBlock(nn.Module):
         )
 
         hidden_states, attn_weights, current_key_value = hidden_states
-        
+
         hidden_states = self.ffn(hidden_states)
 
         return hidden_states, attn_weights, current_key_value
@@ -476,12 +476,12 @@ class CPMAntEncoder(nn.Module):
                 all_self_attns += (attn_weights,)
             if current_key_value is not None:
                 current_key_values.append(current_key_value)
-        
+
         hidden_states = self.output_layernorm(hidden_states)
-        
+
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-        
+
         return hidden_states, current_key_values, all_hidden_states, all_self_attns
 
 
@@ -495,7 +495,7 @@ class CPMAntIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
@@ -516,7 +516,9 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         self.bidirectional = bidirectional
 
         self.relative_attention_bias = torch.nn.parameter.Parameter(
-            torch.empty(config.segment_types * config.segment_types + config.position_bias_num_buckets, config.num_heads)
+            torch.empty(
+                config.segment_types * config.segment_types + config.position_bias_num_buckets, config.num_heads
+            )
         )
 
     def forward(
@@ -532,11 +534,17 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
             querylen = query_pos.size(1)
 
             if key_pos.size(0) != query_pos.size(0):
-                raise AssertionError(f"key_pos.size(0) should be equal to query_pos.size(0), but got {key_pos.size(0)} and {query_pos.size(0)}!")
+                raise AssertionError(
+                    f"key_pos.size(0) should be equal to query_pos.size(0), but got {key_pos.size(0)} and {query_pos.size(0)}!"
+                )
             if keylen != key_segment.size(1) or querylen != query_segment.size(1):
-                raise AssertionError(f"keylen should be equal to key_segment.size(1), but got {keylen} and {key_segment.size(1)}!")
+                raise AssertionError(
+                    f"keylen should be equal to key_segment.size(1), but got {keylen} and {key_segment.size(1)}!"
+                )
             if querylen != query_segment.size(1):
-                raise AssertionError(f"querylen should be equal to query_segment.size(1), but got {querylen} and {query_segment.szie(1)}!")
+                raise AssertionError(
+                    f"querylen should be equal to query_segment.size(1), but got {querylen} and {query_segment.szie(1)}!"
+                )
 
             key_pos = key_pos.view(batch, -1, keylen)
             query_pos = query_pos.view(batch, querylen, -1)
@@ -600,7 +608,7 @@ class CPMAntOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
