@@ -15,23 +15,26 @@
 """TensorFlow VisionTextDualEncoder model."""
 
 
+import re
 from typing import Optional, Tuple, Union
 
 import tensorflow as tf
-
-from ...modeling_tf_utils import TFPreTrainedModel, unpack_inputs
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings, DUMMY_INPUTS
-from ...tf_utils import shape_list
-from ..auto.configuration_auto import AutoConfig
-from ..auto.modeling_tf_auto import TFAutoModel
-from ..clip.modeling_tf_clip import TFCLIPOutput, CLIPVisionConfig, TFCLIPVisionModel
-from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
-from ...configuration_utils import PretrainedConfig
-
-import re
-
 from tensorflow.keras.layers import Dense
 
+from ...configuration_utils import PretrainedConfig
+from ...modeling_tf_utils import TFPreTrainedModel, unpack_inputs
+from ...tf_utils import shape_list
+from ...utils import (
+    DUMMY_INPUTS,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
+from ..auto.configuration_auto import AutoConfig
+from ..auto.modeling_tf_auto import TFAutoModel
+from ..clip.modeling_tf_clip import CLIPVisionConfig, TFCLIPOutput, TFCLIPVisionModel
+from .configuration_vision_text_dual_encoder import VisionTextDualEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -55,9 +58,8 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a Keras [Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass.
-    Use it as a regular Keras Model and refer to the TF documentation for all matter related to general usage
-    and behavior.
+    This model is also a Keras [Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it as a
+    regular Keras Model and refer to the TF documentation for all matter related to general usage and behavior.
 
     Parameters:
         config ([`VisionEncoderDecoderConfig`]): Model configuration class with all the parameters of the model.
@@ -226,17 +228,23 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         # Matt: The TF and PT weights don't align because our TF base classes have an extra layer compared to PT models
         # (the main model stem is in the MainLayer class). If we remove that layer, then weight names sync up as normal.
-        # However, the name of that extra layer is the name of the MainLayer in the base model. We make the assumption
-        # here that the config model_type is the same as the name of the MainLayer. I don't know of anywhere that's
-        # not the case, and I wasn't sure how else to go from the config to the correct MainLayer name!
+        # However, the name of that extra layer is the name of the MainLayer in the base model.
 
         if kwargs.get("from_pt", False):
-            config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-            encoder_model_type = config.encoder.model_type
 
             def tf_to_pt_weight_rename(tf_weight):
-                if "encoder" in tf_weight and "decoder" not in tf_weight:
-                    return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
+                if "vision_model" in tf_weight:
+                    if tf_weight.count("vision_model") == 1:
+                        return re.sub(r"vision_model\..*?\.", "vision_model.", tf_weight)
+                    elif tf_weight.count("vision_model") == 2:
+                        return re.sub(r"vision_model\..*?\.vision_model", "vision_model.vision_model", tf_weight)
+                    else:
+                        raise ValueError(
+                            f"Unexpected weight name {tf_weight}. Please file an issue on the"
+                            " Transformers repo to let us know about this error!"
+                        )
+                elif "text_model" in tf_weight:
+                    return re.sub(r"text_model\..*?\.", "text_model.", tf_weight)
                 else:
                     return tf_weight
 

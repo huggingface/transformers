@@ -22,7 +22,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_tf, require_vision, slow
-from transformers.utils import is_vision_available, is_tf_available
+from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_modeling_tf_common import floats_tensor, ids_tensor, random_attention_mask
 from ..bert.test_modeling_tf_bert import TFBertModelTester
@@ -38,13 +38,14 @@ if is_tf_available():
         TFCLIPVisionModel,
         TFDeiTModel,
         TFRobertaModel,
-        VisionTextDualEncoderConfig,
         TFVisionTextDualEncoderModel,
         TFViTModel,
+        VisionTextDualEncoderConfig,
     )
 
 if is_vision_available():
     from PIL import Image
+
     from transformers import VisionTextDualEncoderProcessor
 
 
@@ -394,7 +395,9 @@ class TFCLIPVisionBertModelTest(TFVisionTextDualEncoderMixin, unittest.TestCase)
 class TFVisionTextDualEncoderIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model = TFVisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian", logit_scale_init_value=1, from_pt=True)
+        model = TFVisionTextDualEncoderModel.from_pretrained(
+            "clip-italian/clip-italian", logit_scale_init_value=1, from_pt=True
+        )
         processor = VisionTextDualEncoderProcessor.from_pretrained("clip-italian/clip-italian")
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
