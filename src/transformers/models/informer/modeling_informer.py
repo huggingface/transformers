@@ -798,9 +798,10 @@ class InformerAttention(nn.Module):
 
 class InformerProbSparseAttention(nn.Module):
     """Probabilistic Attention mechanism to select the "active"
-     queries rather than the "lazy" queries and provides a sparse
-     Transformer thus mitigating the quadratic compute and memory requirements of
+     queries rather than the "lazy" queries and provides a sparse Transformer thus mitigating the quadratic compute and
+     memory requirements of
     vanilla attention"""
+
     def __init__(
         self,
         embed_dim: int,
@@ -898,7 +899,7 @@ class InformerProbSparseAttention(nn.Module):
         log_key_states_time_length = np.ceil(np.log1p(key_states_time_length)).astype("int").item()  # log_L_K
 
         query_states_time_length = query_states.size(1)  # L_Q
-        log_query_states_time_length = np.ceil(np.log1p(query_states_time_length)).astype("int").item() # log_L_Q
+        log_query_states_time_length = np.ceil(np.log1p(query_states_time_length)).astype("int").item()  # log_L_Q
 
         u_part = min(self.factor * query_states_time_length * log_key_states_time_length, key_states_time_length)
         u = min(self.factor * log_query_states_time_length, query_states_time_length)
@@ -913,7 +914,9 @@ class InformerProbSparseAttention(nn.Module):
 
         # find the Top_k query with sparsity measurement
         if u > 0:
-            sparsity_measurement = queries_keys_sample.max(dim=-1)[0] - torch.div(queries_keys_sample.sum(dim=-1), key_states_time_length)  # M
+            sparsity_measurement = queries_keys_sample.max(dim=-1)[0] - torch.div(
+                queries_keys_sample.sum(dim=-1), key_states_time_length
+            )  # M
             top_u_sparsity_measurement = sparsity_measurement.topk(u, sorted=False)[1]  # M_top
 
             # calculate q_reduce: query_states[:, top_u_sparsity_measurement]
@@ -981,7 +984,11 @@ class InformerProbSparseAttention(nn.Module):
             context = value_states.cumsum(dim=-2)
         else:
             v_mean_dim_time = value_states.mean(dim=-2)
-            context = v_mean_dim_time.unsqueeze(dim=1).expand(bsz * self.num_heads, query_states_time_length, v_mean_dim_time.size(-1)).clone()
+            context = (
+                v_mean_dim_time.unsqueeze(dim=1)
+                .expand(bsz * self.num_heads, query_states_time_length, v_mean_dim_time.size(-1))
+                .clone()
+            )
 
         if top_u_sparsity_measurement is not None:
             # update context: copy the attention output to the context at top_u_sparsity_measurement index
@@ -1452,7 +1459,9 @@ class InformerEncoder(InformerPreTrainedModel):
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         if config.distil:
-            self.conv_layers = nn.ModuleList([InformerConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)])
+            self.conv_layers = nn.ModuleList(
+                [InformerConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)]
+            )
             self.conv_layers.append(None)
         else:
             self.conv_layers = [None] * config.encoder_layers
