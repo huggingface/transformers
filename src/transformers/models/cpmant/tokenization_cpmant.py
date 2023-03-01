@@ -15,22 +15,17 @@
 """Tokenization classes for CPMAnt."""
 import collections
 import os
-from importlib.util import find_spec
 from typing import List, Optional, Tuple
 
 from transformers import is_torch_available
+from transformers.utils import is_jieba_available
 
 
 if is_torch_available():
     import torch
 
-if find_spec("jieba") is not None:
+if is_jieba_available():
     import jieba
-else:
-    print(
-        "You need to install jieba to use CPMAntTokenizer or CPMAntTokenizerFast. "
-        "See https://pypi.org/project/jieba/ for installation."
-    )
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
