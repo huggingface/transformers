@@ -141,8 +141,12 @@ class MaskFormerSwinConfig(PretrainedConfig):
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+
         if out_features is not None and out_indices is not None:
-            raise ValueError("Cannot set both `out_features` and `out_indices`")
+            if len(out_features) != len(out_indices):
+                raise ValueError("out_features and out_indices should have the same length if both are set")
+            elif out_features != [self.stage_names[idx] for idx in out_indices]:
+                raise ValueError("out_features and out_indices should correspond to the same stages if both are set")
 
         if out_features is None and out_indices is not None:
             out_features = [self.stage_names[idx] for idx in out_indices]
