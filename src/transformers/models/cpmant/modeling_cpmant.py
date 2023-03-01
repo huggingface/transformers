@@ -43,9 +43,9 @@ CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Adapted from Bert
+# Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with BERT -> load_tf_weights_in_cpmant
 def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch"""
+    """Load tf checkpoints in a pytorch model"""
     try:
         import re
 
@@ -117,13 +117,6 @@ def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
     return model
 
 
-def rms_layernorm(hidden: torch.Tensor, weight: torch.Tensor, eps: float):
-    old_dtype = hidden.dtype
-    variance = hidden.to(torch.float32).pow(2).mean(dim=-1, keepdim=True)
-    hidden = (hidden * torch.rsqrt(variance + eps)).to(old_dtype)
-    return hidden * weight
-
-
 class CPMAntLayerNorm(nn.Module):
     """
     We use Root Mean Square (RMS) Layer Normalization, please see https://arxiv.org/abs/1910.07467 for details."
@@ -147,7 +140,10 @@ class CPMAntLayerNorm(nn.Module):
         """
         if hidden_states.size(-1) != self.dim_norm:
             raise AssertionError("hidden_states.size(-1) != self.dim_norm")
-        return rms_layernorm(hidden_states, self.weight, self.eps)
+        old_dtype = hidden_states.dtype
+        variance = hidden_states.to(torch.float32).pow(2).mean(dim=-1, keepdim=True)
+        hidden_states = (hidden_states * torch.rsqrt(variance + self.eps)).to(old_dtype) * self.weight
+        return hidden_states
 
 
 class CPMAntAttention(nn.Module):
@@ -247,10 +243,11 @@ class CPMAntAttention(nn.Module):
 
         score = self.attention_out(score)
 
+        past_key_values = None
         if use_cache:
-            return score, attn_weights, (key, value)
-
-        return score, attn_weights
+            past_key_values = (key, value)
+          
+        return score, attn_weights, past_key_values
 
 
 class CPMAntSelfAttentionBlock(nn.Module):
@@ -292,19 +289,14 @@ class CPMAntSelfAttentionBlock(nn.Module):
         outputs = self.self_attention(
             outputs, outputs, attention_mask, position_bias, output_attentions, past_key_values, use_cache
         )
-        if use_cache:
-            outputs, attn_weights, current_key_value = outputs
-        else:
-            outputs, attn_weights = outputs
+
+        outputs, attn_weights, current_key_value = outputs
 
         if self.dropout is not None:
             outputs = self.dropout(outputs)
         hidden_states = hidden_states + outputs
 
-        if use_cache:
-            return (hidden_states, attn_weights, current_key_value)
-
-        return hidden_states, attn_weights
+        return hidden_states, attn_weights, current_key_value
 
 
 class DenseGatedACT(nn.Module):
@@ -420,16 +412,12 @@ class CPMAntTransformerBlock(nn.Module):
             past_key_values=past_key_values,
             use_cache=use_cache,
         )
-        if use_cache:
-            hidden_states, attn_weights, current_key_value = hidden_states
-        else:
-            hidden_states, attn_weights = hidden_states
+
+        hidden_states, attn_weights, current_key_value = hidden_states
+        
         hidden_states = self.ffn(hidden_states)
 
-        if use_cache:
-            return (hidden_states, attn_weights, current_key_value)
-
-        return hidden_states, attn_weights
+        return hidden_states, attn_weights, current_key_value
 
 
 class CPMAntEncoder(nn.Module):
@@ -470,24 +458,12 @@ class CPMAntEncoder(nn.Module):
         """
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        if not use_cache:
-            for layer in self.layers:
-                if output_hidden_states:
-                    all_hidden_states += (hidden_states,)
-                layer_outputs = layer(hidden_states, attention_mask, position_bias, output_attentions, None, use_cache)
-                hidden_states = layer_outputs[0]
-                if output_attentions:
-                    all_self_attns += (layer_outputs[1],)
-            hidden_states = self.output_layernorm(hidden_states)
-            if output_attentions:
-                all_hidden_states += (hidden_states,)
-            return hidden_states, None, all_hidden_states, all_self_attns
 
         current_key_values = []
-        for i, module in enumerate(self.layers):
+        for i, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            module_outputs = module(
+            layer_outputs = layer(
                 hidden_states,
                 attention_mask,
                 position_bias,
@@ -495,17 +471,21 @@ class CPMAntEncoder(nn.Module):
                 past_key_values=past_key_values[i] if past_key_values else None,
                 use_cache=use_cache,
             )
-            hidden_states = module_outputs[0]
+            hidden_states, attn_weights, current_key_value = layer_outputs
             if output_attentions:
-                all_self_attns += (module_outputs[1],)
-            current_key_values.append(module_outputs[-1])
+                all_self_attns += (attn_weights,)
+            if current_key_value is not None:
+                current_key_values.append(module_outputs[-1])
+        
         hidden_states = self.output_layernorm(hidden_states)
-        if output_attentions:
+        
+        if output_hidden_states:
             all_hidden_states += (hidden_states,)
+        
         return hidden_states, current_key_values, all_hidden_states, all_self_attns
 
 
-# Copied from BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert -> CPMAnt
 class CPMAntIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -551,10 +531,12 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
             keylen = key_pos.size(1)
             querylen = query_pos.size(1)
 
-            assert key_pos.size(0) == query_pos.size(0), "key_pos.size(0) != query_pos.size(0)"
-            assert keylen == key_segment.size(1) and querylen == query_segment.size(
-                1
-            ), "keylen != key_segment.size(1) or querylen != query_segment.size(1)"
+            if key_pos.size(0) != query_pos.size(0):
+                raise AssertionError(f"key_pos.size(0) should be equal to query_pos.size(0), but got {key_pos.size(0)} and {query_pos.size(0)}!")
+            if keylen != key_segment.size(1) or querylen != query_segment.size(1):
+                raise AssertionError(f"keylen should be equal to key_segment.size(1), but got {keylen} and {key_segment.size(1)}!")
+            if querylen != query_segment.size(1):
+                raise AssertionError(f"querylen should be equal to query_segment.size(1), but got {querylen} and {query_segment.szie(1)}!")
 
             key_pos = key_pos.view(batch, -1, keylen)
             query_pos = query_pos.view(batch, querylen, -1)
@@ -610,7 +592,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         return relative_buckets
 
 
-# Copied from BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert -> CPMAnt
 class CPMAntOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
