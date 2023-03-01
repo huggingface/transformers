@@ -475,7 +475,7 @@ class CPMAntEncoder(nn.Module):
             if output_attentions:
                 all_self_attns += (attn_weights,)
             if current_key_value is not None:
-                current_key_values.append(module_outputs[-1])
+                current_key_values.append(current_key_value)
         
         hidden_states = self.output_layernorm(hidden_states)
         
@@ -516,7 +516,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         self.bidirectional = bidirectional
 
         self.relative_attention_bias = torch.nn.parameter.Parameter(
-            torch.empty(config.num_segments * config.num_segments + config.num_buckets, config.num_heads)
+            torch.empty(config.segment_types * config.segment_types + config.position_bias_num_buckets, config.num_heads)
         )
 
     def forward(
