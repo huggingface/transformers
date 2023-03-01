@@ -698,26 +698,10 @@ class ProphetNetAttention(nn.Module):
             past_key_value = (key_states, value_states)
 
         # project states into the correct shape
-        #BUG: Batch size dimension is mixed up with the number of attention heads
-        # proj_shape = (batch_size * self.num_attn_heads, -1, self.head_dim)
-        # FIXME: This is a workaround to fix the bug
         proj_shape = (batch_size,  self.num_attn_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, batch_size).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
         value_states = value_states.view(*proj_shape)
-
-        #BUG: Since dimensions have changed, the attention mask needs to be adapted
-        # src_len = key_states.size(1)
-        # attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-        # assert attn_weights.size() == (
-        #     batch_size * self.num_attn_heads,
-        #     tgt_len,
-        #     src_len,
-        # ), (
-        #     f"`attn_weights` should be of size {batch_size * self.num_attn_heads, tgt_len, src_len}, but is of size"
-        #     f" {attn_weights.shape}"
-        # )
-        #FIXME: This is a workaround to fix the bug
         src_len = key_states.size(2)
         attn_weights = torch.einsum('bsij,bsjk->bsik', query_states, key_states.transpose(2, 3))
         assert attn_weights.size() == (
@@ -732,16 +716,6 @@ class ProphetNetAttention(nn.Module):
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if attention_mask is not None and attention_mask.dim() == 0:
             attention_mask = None
-        # BUG: Attention mask is mixing batch dimension with attention head dimension
-        # assert attention_mask is None or attention_mask.size() == (
-        #     self.num_attn_heads * batch_size,
-        #     1,
-        #     src_len,
-        # ), (
-        #     "`attention_mask` should be `None` or of shape attention_mask.size() =="
-        #     f" {batch_size * self.num_attn_heads, 1, src_len}, but is {attention_mask.shape}"
-        # )
-        #FIXME: This is a workaround to fix the bug
         assert attention_mask is None or attention_mask.size() == (
             batch_size,
             self.num_attn_heads,
@@ -754,17 +728,6 @@ class ProphetNetAttention(nn.Module):
 
         if attention_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights + attention_mask
-        # BUG: No longer need to reshape attention weights
-        # if output_attentions:
-        #     # this operation is a bit awkward, but it's required to
-        #     # make sure that attn_weights keeps its gradient.
-        #     # In order to do so, attn_weights have to be reshaped
-        #     # twice and have to be reused in the following
-        #     attn_weights_reshaped = attn_weights.view(batch_size, self.num_attn_heads, tgt_len, src_len)
-        #     attn_weights = attn_weights_reshaped.view(batch_size * self.num_attn_heads, tgt_len, src_len)
-        # else:
-        #     attn_weights_reshaped = None
-        # FIXME: This is a workaround to fix the bug
         if output_attentions:
             attn_weights_reshaped = attn_weights
         else: 
@@ -791,17 +754,6 @@ class ProphetNetAttention(nn.Module):
             p=self.attention_dropout,
             training=self.training,
         )
-        # BUG: Attention output is mixing batch dimension with attention head dimension
-        # attn_output = torch.bmm(attn_probs, value_states)
-        # assert attn_output.size() == (
-        #     batch_size * self.num_attn_heads,
-        #     tgt_len,
-        #     self.head_dim,
-        # ), (
-        #     f"`attn_output` should be of shape {batch_size * self.num_attn_heads, tgt_len, self.head_dim}, but is of"
-        #     f" shape {attn_output.size()}"
-        # )
-        # FIXME: This is a workaround to fix the bug
         attn_output = torch.einsum('bsij,bsjk->bsik', attn_probs, value_states)
         assert attn_output.size() == (
             batch_size,
@@ -812,13 +764,6 @@ class ProphetNetAttention(nn.Module):
             f"`attn_output` should be of shape {batch_size,  self.num_attn_heads, tgt_len, self.head_dim}, but is of"
             f" shape {attn_output.size()}"
         )
-        # BUG: No need to reshape the attention output
-        # attn_output = (
-        #     attn_output.view(batch_size, self.num_attn_heads, tgt_len, self.head_dim)
-        #     .transpose(1, 2)
-        #     .reshape(batch_size, tgt_len, hidden_size)
-        # )
-        # FIXME: No need to reshape the attention output
         attn_output = (
             attn_output.transpose(1, 2)
             .reshape(batch_size, tgt_len, hidden_size)
@@ -926,9 +871,6 @@ class ProphetNetNgramSelfAttention(nn.Module):
         query_states = self._shape(query_states, ngram_sequence_length, batch_size)
         key_states = self._shape(key_states, -1, batch_size)
         value_states = self._shape(value_states, -1, batch_size)
-        # BUG: Don't need to mix batch size and attention heads
-        # proj_shape = (batch_size * self.num_attn_heads, -1, self.head_dim)
-        # FIXME: No need to mix batch size and attention heads
         proj_shape = (batch_size, self.num_attn_heads, -1, self.head_dim)
         
 
@@ -938,13 +880,6 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         # chunk into main stream and predict stream
         hidden_states_list = hidden_states.chunk(1 + self.ngram, dim=1)
-
-        #BUG: Next dimension because we don't mix up batch size and attention heads
-        # query_states_list = query_states.chunk(1 + self.ngram, dim=1)
-        # key_states_list = key_states.chunk(1 + self.ngram, dim=1)
-        # value_states_list = value_states.chunk(1 + self.ngram, dim=1)
-        
-        #FIXME: Next dimension because we don't mix up batch size and attention heads
         query_states_list = query_states.chunk(1 + self.ngram, dim=2)
         key_states_list = key_states.chunk(1 + self.ngram, dim=2)
         value_states_list = value_states.chunk(1 + self.ngram, dim=2)
@@ -1008,14 +943,6 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         main_attn_probs = nn.functional.dropout(main_attn_probs, p=self.attention_dropout, training=self.training)
         # project to attn_output
-        # BUG: Change Bmm to einsum
-        # main_attn_output = torch.bmm(main_attn_probs, main_value_states)
-        # main_attn_output = (
-        #     main_attn_output.view(batch_size, self.num_attn_heads, sequence_length, self.head_dim)
-        #     .transpose(1, 2)
-        #     .reshape(batch_size, 1, sequence_length, hidden_size)
-        # )
-        # FIXME: Change Bmm to einsum
         main_attn_output = torch.einsum("bntc,bncs->bnts", main_attn_probs, main_value_states)
         # reshape so that num_heads dim is merged into last `head_dim` axis
         main_attn_output = (
@@ -1131,7 +1058,6 @@ class ProphetNetNgramSelfAttention(nn.Module):
         # input hidden_states [B,T,C], input attn_weights [T*head,T,S], input position_ids [B,T] or [1,1]
         batch_size, num_attn_heads, tgt_len, src_len = attn_weights.shape
         attn_weights = attn_weights.view(batch_size,  num_attn_heads, tgt_len, src_len)
-        #FIXME: How to interact when main_relative_position_buckets is None
         if main_relative_position_buckets is None:
             batch_size, sequence_length = hidden_states.shape[:2]
             relative_positions = (
@@ -1424,15 +1350,6 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             inputs_embeds = self.word_embeddings(input_ids)
 
         # prepare attention mask
-        # BUG: Attention mask mixes up batch dimension
-        # if attention_mask is not None:
-        #     extended_attention_mask = (
-        #         1.0 - attention_mask[:, None, :].repeat(self.config.num_encoder_attention_heads, 1, 1)
-        #     ) * torch.finfo(self.dtype).min
-        #     extended_attention_mask = extended_attention_mask.to(inputs_embeds.dtype)
-        # else:
-        #     extended_attention_mask = None
-        #FIXME: Attention mask mixes up batch dimension
         if attention_mask is not None:
             extended_attention_mask = (
                 1.0 - attention_mask[:,None, None, :].repeat(1, self.config.num_encoder_attention_heads, 1, 1)
@@ -1651,17 +1568,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             extended_predict_attention_mask = self.prepare_predict_attention_mask(hidden_states, attention_mask)
         
         # prepare encoder attention mask
-        # BUG encoder_attention_mask mixes batch dimension with sequence dimension
-        # if encoder_attention_mask is not None:
-        #     extended_encoder_attention_mask = (
-        #         1.0 - encoder_attention_mask[:, None, :].repeat(self.config.num_decoder_attention_heads, 1, 1)
-        #     ) * torch.finfo(self.dtype).min
-        #     extended_encoder_attention_mask = extended_encoder_attention_mask.to(inputs_embeds.dtype)
-        # else:
-        #     extended_encoder_attention_mask = None
-        
-        # prepare encoder attention mask
-        # FIXME: encoder_attention_mask mixes batch dimension with sequence dimension
         if encoder_attention_mask is not None:
             extended_encoder_attention_mask = (
                 1.0 - encoder_attention_mask[:,None, None, :].repeat(1,self.config.num_decoder_attention_heads, 1, 1)
@@ -1830,21 +1736,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             device=hidden_states.device,
         )
         causal_mask = torch.triu(causal_mask, 1)
-        
-        # BUG: this is not correct, it should be batch_size, num_decoder_attention_heads, seq_length, seq_length
-        # extended_causal_mask = causal_mask[:seq_length, :seq_length][None, :, :].expand(
-        #     (batch_size,) + causal_mask.shape
-        # )
 
-        # # add usual attention mask
-        # if attention_mask is not None:
-        #     extended_attention_mask = (1.0 - attention_mask[:, None, :]) * torch.finfo(self.dtype).min
-        #     extended_attention_mask = extended_causal_mask + extended_attention_mask
-        # else:
-        #     extended_attention_mask = extended_causal_mask
-        # return extended_attention_mask.repeat(self.config.num_decoder_attention_heads, 1, 1).to(hidden_states.dtype)
-        
-        # FIXME: this is doesn't mix batch dimension with number of heads
         extended_causal_mask = causal_mask[:seq_length, :seq_length][None, None, :, :].expand(
             (batch_size, self.config.num_decoder_attention_heads) + causal_mask.shape
         )
