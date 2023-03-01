@@ -486,7 +486,7 @@ class ConvNextBackbone(ConvNextPreTrainedModel, BackboneMixin):
         self.encoder = ConvNextEncoder(config)
 
         self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-        self.num_features = config.hidden_sizes
+        self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}

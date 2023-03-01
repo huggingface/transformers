@@ -849,7 +849,7 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
         self.bit = BitModel(config)
 
         self.out_features = config.out_features if config.out_features is not None else [self.stage_names[-1]]
-        self.num_parameters = [config.embedding_size] + config.hidden_sizes
+        self.num_features = [config.embedding_size] + config.hidden_sizes
 
         # initialize weights and apply final processing
         self.post_init()
