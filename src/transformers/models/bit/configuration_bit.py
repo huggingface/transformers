@@ -159,10 +159,4 @@ class BitConfig(PretrainedConfig):
                     raise ValueError(f"Index {idx} is not a valid index for a list of length {len(self.stage_names)}")
 
         self.out_features = out_features
-        if out_indices is not None:
-            if not isinstance(out_indices, (list, tuple)):
-                raise ValueError("out_indices should be a list or tuple")
-            for idx in out_indices:
-                if idx >= len(self.stage_names):
-                    raise ValueError(f"Index {idx} is not a valid index for a list of length {len(self.stage_names)}")
         self.out_indices = out_indices

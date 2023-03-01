@@ -83,11 +83,12 @@ class SwinConfig(PretrainedConfig):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). Will default to the last stage if unset. Deprecated: use
-            `output_indices` instead.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
         out_indices (`List[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). Will default to the last stage if unset.
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
 
     Example:
 
