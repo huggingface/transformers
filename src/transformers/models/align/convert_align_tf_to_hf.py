@@ -147,7 +147,7 @@ def rename_keys(original_param_names):
     # BERT text encoder
     rename_keys = []
     old = "tf_bert_model/bert"
-    new = "text_model.text_model"
+    new = "text_model"
     for i in range(12):
         rename_keys.append(
             (
@@ -292,7 +292,7 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     # Load original model
     seq_length = 64
     tok = Tokenizer(seq_length)
-    original_model = align.ALIGN("efficientnet-b7", "bert-base", 640, seq_length, tok.get_vocab_size())
+    original_model = align.Align("efficientnet-b7", "bert-base", 640, seq_length, tok.get_vocab_size())
     original_model.compile()
     original_model.load_weights(checkpoint_path)
 
