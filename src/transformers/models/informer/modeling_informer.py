@@ -798,9 +798,8 @@ class InformerAttention(nn.Module):
 
 class InformerProbSparseAttention(nn.Module):
     """Probabilistic Attention mechanism to select the "active"
-     queries rather than the "lazy" queries and provides a sparse Transformer thus mitigating the quadratic compute and
-     memory requirements of
-    vanilla attention"""
+    queries rather than the "lazy" queries and provides a sparse Transformer thus mitigating the quadratic compute and
+    memory requirements of vanilla attention"""
 
     def __init__(
         self,
