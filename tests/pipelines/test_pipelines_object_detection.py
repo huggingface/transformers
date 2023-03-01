@@ -24,6 +24,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     nested_simplify,
+    require_flax,
     require_pytesseract,
     require_tf,
     require_timm,
@@ -101,6 +102,11 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
     @require_tf
     @unittest.skip("Object detection not implemented in TF")
     def test_small_model_tf(self):
+        pass
+
+    @require_flax
+    @unittest.skip("Object detection not implemented in Flax")
+    def test_small_model_flax(self):
         pass
 
     @require_torch

@@ -34,7 +34,15 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    nested_simplify,
+    require_flax,
+    require_tf,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+)
 
 from .test_pipelines_common import ANY
 
@@ -162,6 +170,11 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
     @require_tf
     @unittest.skip("Image segmentation not implemented in TF")
     def test_small_model_tf(self):
+        pass
+
+    @require_flax
+    @unittest.skip("Image segmentation not implemented in Flax")
+    def test_small_model_flax(self):
         pass
 
     @require_torch

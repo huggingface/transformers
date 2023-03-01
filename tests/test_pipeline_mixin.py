@@ -89,6 +89,7 @@ for task, task_info in pipeline_test_mapping.items():
     task_info["mapping"] = {
         "pt": getattr(test, "model_mapping", None),
         "tf": getattr(test, "tf_model_mapping", None),
+        "flax": getattr(test, "flax_model_mapping", None),
     }
 
 
@@ -107,7 +108,7 @@ transformers_module = direct_transformers_import(PATH_TO_TRANSFORMERS)
 class PipelineTesterMixin:
     model_tester = None
     pipeline_model_mapping = None
-    supported_frameworks = ["pt", "tf"]
+    supported_frameworks = ["pt", "tf", "flax"]
 
     def run_task_tests(self, task):
         """Run pipeline tests for a specific `task`

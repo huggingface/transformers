@@ -3,13 +3,15 @@ import warnings
 
 from transformers import FLAX_MODEL_FOR_CAUSAL_LM_MAPPING, MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
-from ..utils import add_end_docstrings, is_tf_available
+from ..utils import add_end_docstrings, is_flax_available, is_tf_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_tf_available():
     import tensorflow as tf
 
+if is_flax_available():
+    import jax.numpy as jnp
 
 class ReturnType(enum.Enum):
     TENSORS = 0
@@ -250,8 +252,6 @@ class TextGenerationPipeline(Pipeline):
         # Allow empty prompts
         if input_ids.shape[1] == 0:
             if self.framework == "flax":
-                import jax.numpy as jnp
-
                 B = input_ids.shape[0]
                 input_ids = jnp.zeros((B, 2), dtype=jnp.int32)
             else:

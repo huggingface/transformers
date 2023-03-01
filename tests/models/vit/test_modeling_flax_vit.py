@@ -22,6 +22,7 @@ from transformers.testing_utils import require_flax, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_flax_available():
@@ -124,8 +125,14 @@ class FlaxViTModelTester(unittest.TestCase):
 
 
 @require_flax
-class FlaxViTModelTest(FlaxModelTesterMixin, unittest.TestCase):
+class FlaxViTModelTest(FlaxModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxViTModel, FlaxViTForImageClassification) if is_flax_available() else ()
+
+    pipeline_model_mapping = (
+        {"feature-extraction": FlaxViTModel, "image-classification": FlaxViTForImageClassification}
+        if is_flax_available()
+        else {}
+    )
 
     def setUp(self) -> None:
         self.model_tester = FlaxViTModelTester(self)

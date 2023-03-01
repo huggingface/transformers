@@ -17,7 +17,7 @@ import unittest
 from datasets import load_dataset
 
 from transformers.pipelines import pipeline
-from transformers.testing_utils import nested_simplify, require_torch, slow
+from transformers.testing_utils import nested_simplify, require_flax, require_torch, slow
 
 
 @require_torch
@@ -90,4 +90,9 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
 
     @unittest.skip("No models are available in TF")
     def test_large_model_tf(self):
+        pass
+
+    @require_flax
+    @unittest.skip("No models are available in Flax")
+    def test_small_model_flax(self):
         pass

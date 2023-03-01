@@ -35,6 +35,7 @@ from transformers.pipelines.automatic_speech_recognition import _find_timestamp_
 from transformers.testing_utils import (
     is_torch_available,
     nested_simplify,
+    require_flax,
     require_pyctcdecode,
     require_tf,
     require_torch,
@@ -263,6 +264,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @require_tf
     def test_small_model_tf(self):
         self.skipTest("Tensorflow not supported yet.")
+
+    @require_flax
+    def test_small_model_flax(self):
+        self.skipTest("Flax not supported yet.")
 
     @require_torch
     def test_torch_small_no_tokenizer_files(self):

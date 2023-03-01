@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING, is_vision_available, pipeline
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import nested_simplify, require_flax, require_tf, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY
 
@@ -68,6 +68,11 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
     @require_tf
     @unittest.skip("Zero Shot Object Detection not implemented in TF")
     def test_small_model_tf(self):
+        pass
+
+    @require_flax
+    @unittest.skip("Zero Shot Object Detection is not implemented in Flax")
+    def test_small_model_flax(self):
         pass
 
     @require_torch
@@ -179,6 +184,11 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
     @require_tf
     @unittest.skip("Zero Shot Object Detection not implemented in TF")
     def test_large_model_tf(self):
+        pass
+
+    @require_flax
+    @unittest.skip("Zero Shot Object Detection is not implemented in Flax")
+    def test_large_model_flax(self):
         pass
 
     @require_torch

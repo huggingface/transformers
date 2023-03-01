@@ -22,7 +22,14 @@ from transformers import (
     TFAutoModelForTableQuestionAnswering,
     pipeline,
 )
-from transformers.testing_utils import require_pandas, require_tensorflow_probability, require_tf, require_torch, slow
+from transformers.testing_utils import (
+    require_flax,
+    require_pandas,
+    require_tensorflow_probability,
+    require_tf,
+    require_torch,
+    slow,
+)
 
 
 class TQAPipelineTests(unittest.TestCase):
@@ -134,6 +141,11 @@ class TQAPipelineTests(unittest.TestCase):
                     "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
                 },
             )
+
+    @require_flax
+    @unittest.skip("Table question answering is not implemented in Flax")
+    def test_small_model_flax(self):
+        pass
 
     @require_torch
     def test_small_model_pt(self):

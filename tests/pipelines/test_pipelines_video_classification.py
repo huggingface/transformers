@@ -21,6 +21,7 @@ from transformers.pipelines import VideoClassificationPipeline, pipeline
 from transformers.testing_utils import (
     nested_simplify,
     require_decord,
+    require_flax,
     require_tf,
     require_torch,
     require_torch_or_tf,
@@ -93,4 +94,9 @@ class VideoClassificationPipelineTests(unittest.TestCase):
 
     @require_tf
     def test_small_model_tf(self):
+        pass
+
+    @require_flax
+    @unittest.skip("Video Classification pipeline is not implemented in Flax")
+    def test_small_model_flax(self):
         pass

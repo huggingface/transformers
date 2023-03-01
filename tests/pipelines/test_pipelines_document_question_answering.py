@@ -20,6 +20,7 @@ from transformers.pipelines.document_question_answering import apply_tesseract
 from transformers.testing_utils import (
     nested_simplify,
     require_detectron2,
+    require_flax,
     require_pytesseract,
     require_tf,
     require_torch,
@@ -364,4 +365,9 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     @require_tf
     @unittest.skip("Document question answering not implemented in TF")
     def test_small_model_tf(self):
+        pass
+
+    @require_flax
+    @unittest.skip("Document question answering not implemented in Flax")
+    def test_small_model_flax(self):
         pass

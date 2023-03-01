@@ -16,7 +16,7 @@ import unittest
 
 from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_available
 from transformers.pipelines import pipeline
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import nested_simplify, require_flax, require_tf, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY
 
@@ -104,4 +104,9 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
     @require_tf
     @unittest.skip("Visual question answering not implemented in TF")
     def test_small_model_tf(self):
+        pass
+
+    @require_flax
+    @unittest.skip("Visual question answering is not implemented in Flax")
+    def test_small_model_flax(self):
         pass

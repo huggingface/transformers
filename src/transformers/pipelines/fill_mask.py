@@ -129,7 +129,7 @@ class FillMaskPipeline(Pipeline):
             topk = tf.math.top_k(probs, k=top_k)
             values, predictions = topk.values.numpy(), topk.indices.numpy()
         elif self.framework == "flax":
-            masked_index = np.asarray(jnp.nonzero(input_ids == self.tokenizer.mask_token_id))[:, 0]
+            masked_index = np.nonzero(input_ids == self.tokenizer.mask_token_id)[0]
 
             logits = outputs[0, masked_index, :]
             probs = nn.softmax(logits)
