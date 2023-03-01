@@ -24,7 +24,7 @@ import numpy as np
 import requests
 
 from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -41,7 +41,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Pix2StructForConditionalGeneration, Pix2StructTextModel, Pix2StructVisionModel
+    from transformers import Pix2StructForConditionalGeneration, Pix2StructTextModel, Pix2StructVisionModel, Pix2StructProcessor
     from transformers.models.pix2struct.modeling_pix2struct import PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -582,6 +582,23 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/demo.jpg"
+    url = "https://www.ilankelman.org/stopsigns/australia.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
+
+@require_vision
+@require_torch
+@slow
+class Pix2StructIntegrationTest(unittest.TestCase):
+    def test_inference_image_captioning(self):
+        model = Pix2StructForConditionalGeneration.from_pretrained("ybelkada/pix2struct-textcaps-base").to(torch_device)
+        processor = Pix2StructProcessor.from_pretrained("ybelkada/pix2struct-textcaps-base")
+        image = prepare_img()
+
+        # image only
+        inputs = processor(images=image, return_tensors="pt").to(torch_device)
+        inputs["decoder_input_ids"] = torch.LongTensor([[0]]).to(torch_device)
+
+        predictions = model.generate(**inputs)
+
+        self.assertEqual(processor.decode(predictions[0], skip_special_tokens=True), "A stop sign is on a street corner.")

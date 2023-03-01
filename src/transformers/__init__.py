@@ -2082,6 +2082,7 @@ else:
             "PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Pix2StructForConditionalGeneration",
             "Pix2StructPreTrainedModel",
+            "Pix2StructTextModel",
             "Pix2StructTextPreTrainedModel",
             "Pix2StructVisionModel",
         ]
