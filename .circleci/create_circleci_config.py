@@ -379,7 +379,7 @@ repo_utils_job = CircleCIJob(
     "repo_utils",
     install_steps=[
         "pip install --upgrade pip",
-        "pip install .[quality,testing]",
+        "pip install .[quality,testing,torch]",
     ],
     parallelism=None,
     pytest_num_workers=1,
