@@ -18,7 +18,7 @@ from typing import Any, List, Mapping, Optional
 
 from ... import PretrainedConfig, PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec
-from ...utils import logging, is_torch_available, TensorType
+from ...utils import TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)

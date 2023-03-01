@@ -19,10 +19,16 @@ from typing import List, Optional, Union
 import numpy as np
 import PIL.Image
 
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import rescale, resize, to_channel_dimension_format
-from ...image_utils import ChannelDimension, get_image_size, make_list_of_images, to_numpy_array, valid_images, PILImageResampling
+from ...image_utils import (
+    ChannelDimension,
+    PILImageResampling,
+    get_image_size,
+    make_list_of_images,
+    to_numpy_array,
+    valid_images,
+)
 from ...utils import TensorType, logging
 
 

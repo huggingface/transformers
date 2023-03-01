@@ -35,7 +35,6 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-
 from .configuration_blip import BlipTextConfig
 
 

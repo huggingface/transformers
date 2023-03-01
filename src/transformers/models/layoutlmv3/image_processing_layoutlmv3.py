@@ -31,7 +31,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import is_pytesseract_available, logging, requires_backends, is_vision_available, TensorType
+from ...utils import TensorType, is_pytesseract_available, is_vision_available, logging, requires_backends
 
 
 if is_vision_available():

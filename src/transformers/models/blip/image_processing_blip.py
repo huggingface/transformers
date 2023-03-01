@@ -18,7 +18,6 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import convert_to_rgb, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
@@ -31,7 +30,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging, is_vision_available, TensorType
+from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():

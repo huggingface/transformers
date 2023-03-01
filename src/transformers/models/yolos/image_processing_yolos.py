@@ -49,6 +49,8 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import (
+    ExplicitEnum,
+    TensorType,
     is_flax_available,
     is_jax_tensor,
     is_scipy_available,
@@ -57,10 +59,9 @@ from ...utils import (
     is_torch_available,
     is_torch_tensor,
     is_vision_available,
-    ExplicitEnum,
-    TensorType,
     logging,
 )
+
 
 if is_torch_available():
     import torch

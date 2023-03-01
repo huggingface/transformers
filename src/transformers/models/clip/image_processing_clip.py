@@ -38,7 +38,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging, TensorType, is_vision_available
+from ...utils import TensorType, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)

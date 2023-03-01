@@ -19,8 +19,6 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...utils import is_vision_available, TensorType, logging
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
@@ -36,6 +34,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
+from ...utils import TensorType, is_vision_available, logging
 
 
 if is_torch_available():

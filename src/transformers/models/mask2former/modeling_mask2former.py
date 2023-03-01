@@ -25,8 +25,6 @@ import torch
 from torch import Tensor, nn
 
 from ... import AutoBackbone, SwinConfig
-from ...utils import logging
-
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
@@ -38,6 +36,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
+from ...utils import logging
 from .configuration_mask2former import Mask2FormerConfig
 
 

@@ -33,9 +33,9 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
+    logging,
     replace_return_docstrings,
     requires_backends,
-    logging,
 )
 from .configuration_oneformer import OneFormerConfig
 
