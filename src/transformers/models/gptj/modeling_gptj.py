@@ -555,7 +555,7 @@ class GPTJModel(GPTJPreTrainedModel):
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
             warnings.warn(
-                "`position_ids` have no functionality in BLOOM and will be removed in v5.0.0. You can safely ignore"
+                "`position_ids` have no functionality in GPT-J and will be removed in v5.0.0. You can safely ignore"
                 " passing `position_ids`.",
                 FutureWarning,
             )
@@ -765,7 +765,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, inputs_embeds=None, use_cache=True, **kwargs
+        self, input_ids, past_key_values=None, inputs_embeds=None, use_cache=None, **kwargs
     ):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
@@ -824,7 +824,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel):
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
             warnings.warn(
-                "`position_ids` have no functionality in BLOOM and will be removed in v5.0.0. You can safely ignore"
+                "`position_ids` have no functionality in GPT-J and will be removed in v5.0.0. You can safely ignore"
                 " passing `position_ids`.",
                 FutureWarning,
             )
@@ -957,7 +957,7 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
             warnings.warn(
-                "`position_ids` have no functionality in BLOOM and will be removed in v5.0.0. You can safely ignore"
+                "`position_ids` have no functionality in GPT-J and will be removed in v5.0.0. You can safely ignore"
                 " passing `position_ids`.",
                 FutureWarning,
             )
@@ -1094,7 +1094,7 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
             warnings.warn(
-                "`position_ids` have no functionality in BLOOM and will be removed in v5.0.0. You can safely ignore"
+                "`position_ids` have no functionality in GPT-J and will be removed in v5.0.0. You can safely ignore"
                 " passing `position_ids`.",
                 FutureWarning,
             )
