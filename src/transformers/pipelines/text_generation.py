@@ -13,6 +13,7 @@ if is_tf_available():
 if is_flax_available():
     import jax.numpy as jnp
 
+
 class ReturnType(enum.Enum):
     TENSORS = 0
     NEW_TEXT = 1

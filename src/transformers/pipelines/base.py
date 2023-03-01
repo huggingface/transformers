@@ -815,7 +815,6 @@ class Pipeline(_ScikitCompat):
             self.model = self.model.to(device=device)
 
         if self.framework == "flax":
-            print("JIT compiling flax model...")
             self.model.__call__ = jax.jit(self.model.__call__)
 
         if device is None:
@@ -992,11 +991,11 @@ class Pipeline(_ScikitCompat):
             return [self._ensure_tensor_on_device(item, device) for item in inputs]
         elif isinstance(inputs, tuple):
             return tuple([self._ensure_tensor_on_device(item, device) for item in inputs])
-        elif isinstance(inputs, torch.Tensor):
+        elif is_torch_available() and isinstance(inputs, torch.Tensor):
             if device == torch.device("cpu") and inputs.dtype in {torch.float16, torch.bfloat16}:
                 inputs = inputs.float()
             return inputs.to(device)
-        elif self.framework == "flax" and isinstance(inputs, jnp.ndarray):
+        elif is_flax_available() and isinstance(inputs, jnp.ndarray):
             return jax.device_put(inputs, device=device)
         else:
             return inputs
@@ -1091,8 +1090,15 @@ class Pipeline(_ScikitCompat):
                 model_outputs = self._forward(model_inputs, **forward_params)
                 # model_outputs = self._ensure_tensor_on_device(model_outputs, device=jax.devices("cpu")[0])
                 # Back to numpy
-                model_outputs = model_outputs.__class__(
-                    **{k: jnp.asarray(v) if isinstance(v, jnp.DeviceArray) else v for k, v in model_outputs.items()}
+                model_outputs = (
+                    model_outputs.__class__(
+                        **{
+                            k: jnp.asarray(v) if isinstance(v, jnp.DeviceArray) else v
+                            for k, v in model_outputs.items()
+                        }
+                    )
+                    if not isinstance(model_outputs, jnp.DeviceArray)
+                    else jnp.asarray(model_outputs)
                 )
             else:
                 raise ValueError(f"Framework {self.framework} is not supported")

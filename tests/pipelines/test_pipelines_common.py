@@ -658,8 +658,12 @@ class PipelineUtilsTest(unittest.TestCase):
         return models_are_equal
 
     def check_models_equal_flax(self, model1, model2):
+        from flax import traverse_util
+
         models_are_equal = True
-        for model1_p, model2_p in zip(model1.params.values(), model2.params.values()):
+        for model1_p, model2_p in zip(
+            traverse_util.flatten_dict(model1.params).values(), traverse_util.flatten_dict(model2.params).values()
+        ):
             if np.abs(model1_p - model2_p).sum() > 1e-5:
                 models_are_equal = False
 
@@ -727,7 +731,6 @@ class CustomPipelineTest(unittest.TestCase):
         del PIPELINE_REGISTRY.supported_tasks["custom-text-classification"]
 
     @require_torch_or_tf
-    @require_flax
     def test_dynamic_pipeline(self):
         PIPELINE_REGISTRY.register_pipeline(
             "pair-classification",

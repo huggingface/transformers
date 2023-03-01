@@ -641,7 +641,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
 
     @require_flax
     def test_flax_only(self):
-        model_name = "hf-internal-testing/tiny-random-bert-tf-only"  # This model only has a Flax version
+        model_name = "Shubhamai/tiny-random-distilbert"  # This model only has a Flax version
         # We test that if we don't specificy framework='flax', it gets detected automatically
         token_classifier = pipeline(task="ner", model=model_name)
         self.assertEqual(token_classifier.framework, "flax")

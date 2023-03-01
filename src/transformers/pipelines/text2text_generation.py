@@ -198,9 +198,9 @@ class Text2TextGenerationPipeline(Pipeline):
             # Workaround the fact specific to flax.
             # Should `forced_bos_token_id` become `decoder_start_token_id`?
             if "forced_bos_token_id" in model_inputs:
-                model_inputs["decoder_start_token_id"] = model_inputs.pop("forced_bos_token_id")
+                generate_kwargs["decoder_start_token_id"] = model_inputs.pop("forced_bos_token_id")
             elif "decoder_start_token_id" not in model_inputs:
-                model_inputs["decoder_start_token_id"] = self.tokenizer.bos_token_id
+                generate_kwargs["decoder_start_token_id"] = self.model.config.decoder_start_token_id
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         if self.framework == "flax":
             output_ids = output_ids.sequences

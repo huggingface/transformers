@@ -100,7 +100,12 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
     @require_flax
     def test_small_model_flax(self):
-        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2", framework="flax")
+        pipe = pipeline(
+            "image-to-text",
+            model="hf-internal-testing/tiny-random-vit-gpt2",  # NOTE: Add flax to small model
+            framework="flax",
+            model_kwargs={"from_pt": True},
+        )
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)

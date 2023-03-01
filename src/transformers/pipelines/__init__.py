@@ -225,7 +225,7 @@ SUPPORTED_TASKS = {
                 "flax": (
                     "Shubhamai/distilbert-base-uncased-finetuned-sst-2-english",
                     "1dd3802",
-                ),  # NOTE: Add flax model
+                ),
             },
         },
         "type": "text",
@@ -239,7 +239,7 @@ SUPPORTED_TASKS = {
             "model": {
                 "pt": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
                 "tf": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
-                "flax": ("dbmdz/bert-large-cased-finetuned-conll03-english", "1dd3802"),
+                "flax": ("dbmdz/bert-large-cased-finetuned-conll03-english", "f2482bf"),
             },
         },
         "type": "text",
@@ -285,7 +285,7 @@ SUPPORTED_TASKS = {
         "impl": DocumentQuestionAnsweringPipeline,
         "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
-        "flax": (),  # NOTE: Probably is possible with https://huggingface.co/deepset/roberta-base-squad2
+        "flax": (),
         "default": {
             "model": {"pt": ("impira/layoutlm-document-qa", "52e01b3")},
         },
@@ -393,6 +393,7 @@ SUPPORTED_TASKS = {
         "impl": ZeroShotAudioClassificationPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
+        "flax": (FlaxAutoModel,) if is_flax_available() else (),
         "default": {
             "model": {
                 "pt": ("laion/clap-htsat-fused", "f39917b"),
