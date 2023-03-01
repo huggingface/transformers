@@ -2083,7 +2083,6 @@ else:
             "Pix2StructForConditionalGeneration",
             "Pix2StructPreTrainedModel",
             "Pix2StructTextModel",
-            "Pix2StructTextPreTrainedModel",
             "Pix2StructVisionModel",
         ]
     )

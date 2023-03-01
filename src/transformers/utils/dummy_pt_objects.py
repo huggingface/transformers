@@ -4832,21 +4832,8 @@ class Pix2StructTextModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Pix2StructTextPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
 
 class Pix2StructVisionModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class Pix2StructVisionPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
