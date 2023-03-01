@@ -16,6 +16,7 @@
 import unittest
 
 from transformers.testing_utils import custom_tokenizers, is_torch_available
+from ...test_tokenization_common import TokenizerTesterMixin
 
 
 if is_torch_available():
@@ -23,7 +24,7 @@ if is_torch_available():
 
 
 @custom_tokenizers
-class CPMAntTokenizationTest(unittest.TestCase):
+class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_pre_tokenization(self):
         tokenizer = CPMAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
         texts = "今天天气真好！"

@@ -20,7 +20,8 @@ from transformers.testing_utils import is_torch_available, require_torch, slow
 
 from ...generation.test_utils import torch_device
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ids_tensor
+from ...test_modeling_common import ids_tensor, ModelTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 
 
 if is_torch_available():
@@ -137,7 +138,7 @@ class CPMAntModelTester:
 
 
 @require_torch
-class CPMAntModelTest(unittest.TestCase):
+class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             CPMAntModel,
@@ -201,7 +202,7 @@ class CPMAntModelTest(unittest.TestCase):
 
 
 @require_torch
-class CPMAntModelIntegrationTest(unittest.TestCase):
+class CPMAntModelIntegrationTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         texts = "今天天气真好！"
@@ -218,7 +219,7 @@ class CPMAntModelIntegrationTest(unittest.TestCase):
 
 
 @require_torch
-class CPMAntForCausalLMlIntegrationTest(unittest.TestCase):
+class CPMAntForCausalLMlIntegrationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @slow
     def test_inference_casual(self):
         texts = "今天天气真好！"
