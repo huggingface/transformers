@@ -275,6 +275,13 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _decord_availale = False
 
+_jieba_available = importlib.util.find_spec("jieba") is not None
+try:
+    _jieba_version = importlib_metadata.version("jieba")
+    logger.debug(f"Successfully imported jieba version {_jieba_version}")
+except importlib_metadata.PackageNotFoundError:
+    _jieba_available = False
+
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
@@ -738,6 +745,10 @@ def is_jumanpp_available():
 
 def is_cython_available():
     return importlib.util.find_spec("pyximport") is not None
+
+
+def is_jieba_available():
+    return _jieba_available
 
 
 # docstyle-ignore
