@@ -150,6 +150,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("table-transformer", "TableTransformerModel"),
         ("tapas", "TapasModel"),
         ("time_series_transformer", "TimeSeriesTransformerModel"),
+        ("autoformer", "AutoformerModel"),
         ("timesformer", "TimesformerModel"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),

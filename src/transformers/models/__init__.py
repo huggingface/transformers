@@ -158,6 +158,7 @@ from . import (
     tapas,
     tapex,
     time_series_transformer,
+    autoformer,
     timesformer,
     trajectory_transformer,
     transfo_xl,
