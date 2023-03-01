@@ -82,7 +82,7 @@ def get_test_classes(test_file):
     for attr in dir(test_module):
         attr_value = getattr(test_module, attr)
         # (TF/Flax)ModelTesterMixin is also an attribute in specific model test module. Let's exclude them by checking
-        # `all_model_classes` is not `None` (and potentially other special classes)
+        # `all_model_classes` is not empty (which also excludes other special classes).
         model_classes = getattr(attr_value, "all_model_classes", [])
         if len(model_classes) > 0:
             test_classes.append(attr_value)
