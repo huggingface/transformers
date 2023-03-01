@@ -985,8 +985,9 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "A picture of"
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         ```"""
