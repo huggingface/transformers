@@ -996,7 +996,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
         )
 
         # embed positions
-        positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+        positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length).to(
+            inputs_embeds.device
+        )
 
         hidden_states = inputs_embeds + positions
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
