@@ -53,6 +53,7 @@ else:
                     "AlbertTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("align", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             (
                 "barthez",

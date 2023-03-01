@@ -14,6 +14,7 @@
 
 from . import (
     albert,
+    align,
     altclip,
     audio_spectrogram_transformer,
     auto,
