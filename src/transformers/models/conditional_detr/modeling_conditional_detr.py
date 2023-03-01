@@ -504,7 +504,7 @@ def build_position_encoding(config):
 def gen_sine_position_embeddings(pos_tensor):
     scale = 2 * math.pi
     dim_t = torch.arange(128, dtype=torch.float32, device=pos_tensor.device)
-    dim_t = 10000 ** (2 * (dim_t // 2) / 128)
+    dim_t = 10000 ** (2 * torch_int_div(dim_t, 2) / 128)
     x_embed = pos_tensor[:, :, 0] * scale
     y_embed = pos_tensor[:, :, 1] * scale
     pos_x = x_embed[:, :, None] / dim_t

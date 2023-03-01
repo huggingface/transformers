@@ -63,6 +63,8 @@ from ...utils.generic import ExplicitEnum, TensorType
 if is_torch_available():
     import torch
 
+    from ...pytorch_utils import torch_int_div
+
 if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
 
@@ -965,7 +967,7 @@ class DetaImageProcessor(BaseImageProcessor):
 
         all_scores = prob.view(batch_size, num_queries * num_labels).to(out_logits.device)
         all_indexes = torch.arange(num_queries * num_labels)[None].repeat(batch_size, 1).to(out_logits.device)
-        all_boxes = all_indexes // out_logits.shape[2]
+        all_boxes = torch_int_div(all_indexes, out_logits.shape[2])
         all_labels = all_indexes % out_logits.shape[2]
 
         boxes = center_to_corners_format(out_bbox)

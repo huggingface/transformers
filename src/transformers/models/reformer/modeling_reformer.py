@@ -909,10 +909,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         relevant_bucket_idx_chunk = bucket_idx[tuple(relevant_bucket_idx_chunk.transpose(0, 1))]
 
         # adapt bucket_idx for batch and hidden states for index select
+        offset = torch.arange(relevant_bucket_idx_chunk.shape[-1], device=hidden_states.device, dtype=torch.long)
         bucket_idx_batch_offset = sequence_length * (
-            batch_size
-            * torch.arange(relevant_bucket_idx_chunk.shape[-1], device=hidden_states.device, dtype=torch.long)
-            // relevant_bucket_idx_chunk.shape[-1]
+            batch_size * torch.div(offset, relevant_bucket_idx_chunk.shape[-1], rounding_mode="floor")
         )
 
         # add batch offset
