@@ -796,9 +796,11 @@ class InformerAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class ProbSparseAttention(nn.Module):
-    """ProbSparse Attention"""
-
+class InformerProbSparseAttention(nn.Module):
+    """Probabilistic Attention mechanism to select the "active"
+     queries rather than the "lazy" queries and provides a sparse
+     Transformer thus mitigating the quadratic compute and memory requirements of
+    vanilla attention"""
     def __init__(
         self,
         embed_dim: int,
@@ -1034,7 +1036,7 @@ class InformerEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         if config.attention_type == "prob":
-            self.self_attn = ProbSparseAttention(
+            self.self_attn = InformerProbSparseAttention(
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
@@ -1111,7 +1113,7 @@ class InformerDecoderLayer(nn.Module):
         self.embed_dim = config.d_model
 
         if config.attention_type == "prob":
-            self.self_attn = ProbSparseAttention(
+            self.self_attn = InformerProbSparseAttention(
                 embed_dim=self.embed_dim,
                 num_heads=config.encoder_attention_heads,
                 dropout=config.attention_dropout,
