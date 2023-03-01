@@ -304,7 +304,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         r"""
         Returns:
             image_features (`tf.Tensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`CLIPVisionModel`].
+            applying the projection layer to the pooled output of [`TFCLIPVisionModel`].
 
         Examples:
 
