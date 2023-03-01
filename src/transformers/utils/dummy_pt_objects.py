@@ -4832,7 +4832,6 @@ class Pix2StructTextModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-
 class Pix2StructVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
