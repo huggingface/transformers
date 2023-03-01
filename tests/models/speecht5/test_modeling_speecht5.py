@@ -30,6 +30,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import cached_property
+from transformers.trainer_utils import set_seed
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -1005,11 +1006,13 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         model.to(torch_device)
         processor = self.default_processor
 
+        set_seed(555)  # make deterministic
+
         input_text = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
         input_ids = processor(text=input_text, return_tensors="pt").input_ids.to(torch_device)
 
         generated_speech = model.generate_speech(input_ids)
-        self.assertEqual(generated_speech.shape, (1800, model.config.num_mel_bins))
+        self.assertEqual(generated_speech.shape, (1820, model.config.num_mel_bins))
 
 
 @require_torch
