@@ -1,10 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,6 +43,7 @@ from .generic import (
     is_tensor,
     is_tf_tensor,
     is_torch_device,
+    is_torch_dtype,
     is_torch_tensor,
     reshape,
     squeeze,
@@ -97,12 +94,15 @@ from .import_utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     ccl_version,
+    direct_transformers_import,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
     is_bs4_available,
     is_coloredlogs_available,
+    is_cython_available,
     is_datasets_available,
+    is_decord_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
@@ -111,8 +111,8 @@ from .import_utils import (
     is_ipex_available,
     is_jumanpp_available,
     is_kenlm_available,
+    is_keras_nlp_available,
     is_librosa_available,
-    is_more_itertools_available,
     is_natten_available,
     is_ninja_available,
     is_onnx_available,
@@ -146,9 +146,11 @@ from .import_utils import (
     is_torch_bf16_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_compile_available,
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_neuroncore_available,
     is_torch_onnx_dict_inputs_support_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
@@ -156,12 +158,11 @@ from .import_utils import (
     is_torchaudio_available,
     is_torchdistx_available,
     is_torchdynamo_available,
+    is_torchvision_available,
     is_training_run_on_sagemaker,
     is_vision_available,
     requires_backends,
-    tf_required,
     torch_only_method,
-    torch_required,
     torch_version,
 )
 

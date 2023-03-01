@@ -28,6 +28,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -414,13 +415,28 @@ class BartHeadTests(unittest.TestCase):
 
 
 @require_torch
-class BartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": BartForConditionalGeneration,
+            "feature-extraction": BartModel,
+            "fill-mask": BartForConditionalGeneration,
+            "question-answering": BartForQuestionAnswering,
+            "summarization": BartForConditionalGeneration,
+            "text2text-generation": BartForConditionalGeneration,
+            "text-classification": BartForSequenceClassification,
+            "text-generation": BartForCausalLM,
+            "zero-shot": BartForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = False  # Fix me Michael
     test_pruning = False
@@ -939,7 +955,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     def test_xsum_config_generation_params(self):
         config = BartConfig.from_pretrained("facebook/bart-large-xsum")
-        expected_params = dict(num_beams=6, do_sample=False, early_stopping=True, length_penalty=1.0)
+        expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": 1.0}
         config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 
@@ -1226,6 +1242,36 @@ class BartModelIntegrationTests(unittest.TestCase):
             ],
         )
 
+    @slow
+    def test_decoder_attention_mask(self):
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large", forced_bos_token_id=0).to(
+            torch_device
+        )
+        tokenizer = self.default_tokenizer
+        sentence = "UN Chief Says There Is No <mask> in Syria"
+        input_ids = tokenizer(sentence, return_tensors="pt").input_ids.to(torch_device)
+        padding_size = 3
+        decoder_input_ids = torch.tensor(
+            [
+                [model.config.decoder_start_token_id]
+                + padding_size * [model.config.pad_token_id]
+                + [model.config.bos_token_id]
+            ],
+            dtype=torch.long,
+            device=torch_device,
+        )
+        decoder_attention_mask = torch.where(decoder_input_ids == model.config.pad_token_id, 0, 1).to(torch_device)
+        generated_ids = model.generate(
+            input_ids=input_ids,
+            use_cache=False,
+            max_new_tokens=20,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        generated_sentence = tokenizer.batch_decode(generated_ids)[0]
+        expected_sentence = "</s><pad><pad><pad><s>UN Chief Says There Is No Plan B for Peace in Syria</s>"
+        self.assertEqual(generated_sentence, expected_sentence)
+
 
 class BartStandaloneDecoderModelTester:
     def __init__(
@@ -1466,3 +1512,6 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
+
+    def test_save_load_fast_init_from_base(self):
+        pass

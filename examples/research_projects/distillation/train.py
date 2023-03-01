@@ -24,9 +24,9 @@ import shutil
 
 import numpy as np
 import torch
-
 from distiller import Distiller
 from lm_seqs_dataset import LmSeqsDataset
+
 from transformers import (
     BertConfig,
     BertForMaskedLM,

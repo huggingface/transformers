@@ -22,6 +22,7 @@ from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -143,12 +144,12 @@ class EsmFoldModelTester:
 
 
 @require_torch
-class EsmFoldModelTest(ModelTesterMixin, unittest.TestCase):
-
+class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_mismatched_shapes = False
 
     all_model_classes = (EsmForProteinFolding,) if is_torch_available() else ()
     all_generative_model_classes = ()
+    pipeline_model_mapping = {} if is_torch_available() else {}
     test_sequence_classification_problem_types = False
 
     def setUp(self):
@@ -247,7 +248,7 @@ class EsmFoldModelTest(ModelTesterMixin, unittest.TestCase):
 class EsmModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_protein_folding(self):
-        model = EsmForProteinFolding.from_pretrained("Rocketknight1/esmfold_v1").float()
+        model = EsmForProteinFolding.from_pretrained("facebook/esmfold_v1").float()
         model.eval()
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         position_outputs = model(input_ids)["positions"]

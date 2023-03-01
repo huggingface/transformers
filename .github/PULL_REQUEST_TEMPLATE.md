@@ -39,36 +39,38 @@ members/contributors who may be interested in your PR.
 
 Models:
 
-- albert, bert, xlm: @LysandreJik
-- blenderbot, bart, marian, pegasus, encoderdecoder,  t5: @patrickvonplaten, @patil-suraj
-- longformer, reformer, transfoxl, xlnet: @patrickvonplaten
-- fsmt: @stas00
-- funnel: @sgugger
-- gpt2: @patrickvonplaten, @LysandreJik
-- rag: @patrickvonplaten, @lhoestq
-- tensorflow: @LysandreJik
+- text models: @ArthurZucker and @younesbelkada
+- vision models: @amyeroberts
+- speech models: @sanchit-gandhi
+- graph models: @clefourrier
 
 Library:
 
-- benchmarks: @patrickvonplaten
-- deepspeed: @stas00
-- ray/raytune: @richardliaw, @amogkam
-- text generation: @patrickvonplaten
-- tokenizers: @n1t0, @LysandreJik
+- flax: @sanchit-gandhi
+- generate: @gante
+- pipelines: @Narsil
+- tensorflow: @gante and @Rocketknight1
+- tokenizers: @ArthurZucker
 - trainer: @sgugger
-- pipelines: @LysandreJik
 
-Documentation: @sgugger
+Integrations:
+
+- deepspeed: HF Trainer: @stas00, Accelerate: @pacman100
+- ray/raytune: @richardliaw, @amogkam
+
+Documentation: @sgugger, @stevhliu and @MKhalusova
 
 HF projects:
 
+- accelerate: [different repo](https://github.com/huggingface/accelerate)
 - datasets: [different repo](https://github.com/huggingface/datasets)
+- diffusers: [different repo](https://github.com/huggingface/diffusers)
 - rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
 
-Examples:
+Maintained examples (not research project or legacy):
 
-- maintained examples (not research project or legacy): @sgugger, @patil-suraj
-- research_projects/bert-loses-patience: @JetRunner
-- research_projects/distillation: @VictorSanh
+- Flax: @sanchit-gandhi
+- PyTorch: @sgugger
+- TensorFlow: @Rocketknight1
 
  -->

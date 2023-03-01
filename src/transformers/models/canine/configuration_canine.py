@@ -104,8 +104,6 @@ class CanineConfig(PretrainedConfig):
         type_vocab_size=16,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_cache=True,
-        is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=0xE000,
         eos_token_id=0xE001,
@@ -114,7 +112,7 @@ class CanineConfig(PretrainedConfig):
         num_hash_functions=8,
         num_hash_buckets=16384,
         local_transformer_stride=128,  # Good TPU/XLA memory alignment.
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -129,7 +127,6 @@ class CanineConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
 
         # Character config:
         self.downsampling_rate = downsampling_rate

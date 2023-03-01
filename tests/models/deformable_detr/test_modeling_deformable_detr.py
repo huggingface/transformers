@@ -27,12 +27,13 @@ from transformers.testing_utils import require_timm, require_torch_gpu, require_
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_timm_available():
     import torch
 
-    from transformers import DeformableDetrForObjectDetection, DeformableDetrModel
+    from transformers import DeformableDetrForObjectDetection, DeformableDetrModel, ResNetConfig
 
 
 if is_vision_available():
@@ -164,10 +165,34 @@ class DeformableDetrModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
+    def create_and_check_no_timm_backbone(self, config, pixel_values, pixel_mask, labels):
+        config.use_timm_backbone = False
+        config.backbone_config = ResNetConfig()
+        model = DeformableDetrForObjectDetection(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        result = model(pixel_values)
+
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+
 
 @require_timm
-class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeformableDetrModel, DeformableDetrForObjectDetection) if is_timm_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": DeformableDetrModel, "object-detection": DeformableDetrForObjectDetection}
+        if is_timm_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
@@ -220,6 +245,10 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_deformable_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deformable_detr_object_detection_head_model(*config_and_inputs)
+
+    def test_deformable_detr_no_timm_backbone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_no_timm_backbone(*config_and_inputs)
 
     @unittest.skip(reason="Deformable DETR does not use inputs_embeds")
     def test_inputs_embeds(self):

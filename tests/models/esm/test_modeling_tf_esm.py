@@ -21,6 +21,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -194,8 +195,7 @@ class TFEsmModelTester:
 
 
 @require_tf
-class TFEsmModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFEsmModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFEsmModel,
@@ -205,6 +205,17 @@ class TFEsmModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFEsmModel,
+            "fill-mask": TFEsmForMaskedLM,
+            "text-classification": TFEsmForSequenceClassification,
+            "token-classification": TFEsmForTokenClassification,
+            "zero-shot": TFEsmForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
     test_head_masking = False
     test_onnx = False
@@ -254,9 +265,9 @@ class TFEsmModelTest(TFModelTesterMixin, unittest.TestCase):
 
 @require_tf
 class TFEsmModelIntegrationTest(unittest.TestCase):
-    @unittest.skip("Temporarily disabled as we update ESM model checkpoints")
+    @slow
     def test_inference_masked_lm(self):
-        model = TFEsmForMaskedLM.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
+        model = TFEsmForMaskedLM.from_pretrained("facebook/esm2_t6_8M_UR50D")
 
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
@@ -264,13 +275,19 @@ class TFEsmModelIntegrationTest(unittest.TestCase):
         self.assertEqual(list(output.numpy().shape), expected_shape)
         # compare the actual values for a slice.
         expected_slice = tf.constant(
-            [[[15.0963, -6.6414, -1.1346], [-0.2209, -9.9633, 4.2082], [-1.6045, -10.0011, 1.5882]]]
+            [
+                [
+                    [8.921518, -10.589814, -6.4671307],
+                    [-6.3967156, -13.911377, -1.1211915],
+                    [-7.781247, -13.951557, -3.740592],
+                ]
+            ]
         )
-        self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))
+        self.assertTrue(numpy.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-2))
 
-    @unittest.skip("Temporarily disabled as we update ESM model checkpoints")
+    @slow
     def test_inference_no_head(self):
-        model = TFEsmModel.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
+        model = TFEsmModel.from_pretrained("facebook/esm2_t6_8M_UR50D")
 
         input_ids = tf.constant([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         output = model(input_ids)[0]
@@ -278,9 +295,9 @@ class TFEsmModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.constant(
             [
                 [
-                    [0.144337, 0.541198, 0.32479298],
-                    [0.30328932, 0.00519154, 0.31089523],
-                    [0.32273883, -0.24992886, 0.34143737],
+                    [0.14443092, 0.54125327, 0.3247739],
+                    [0.30340484, 0.00526676, 0.31077722],
+                    [0.32278043, -0.24987096, 0.3414628],
                 ]
             ]
         )

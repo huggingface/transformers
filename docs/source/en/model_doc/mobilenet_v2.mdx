@@ -28,7 +28,7 @@ Tips:
 
 - Even though the checkpoint is trained on images of specific size, the model will work on images of any size. The smallest supported image size is 32x32.
 
-- One can use [`MobileNetV2FeatureExtractor`] to prepare images for the model.
+- One can use [`MobileNetV2ImageProcessor`] to prepare images for the model.
 
 - The available image classification checkpoints are pre-trained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k) (also referred to as ILSVRC 2012, a collection of 1.3 million images and 1,000 classes). However, the model predicts 1001 classes: the 1000 classes from ImageNet plus an extra “background” class (index 0).
 
@@ -47,6 +47,20 @@ Unsupported features:
 - The DeepLabV3+ segmentation head does not use the final convolution layer from the backbone, but this layer gets computed anyway. There is currently no way to tell [`MobileNetV2Model`] up to which layer it should run.
 
 This model was contributed by [matthijs](https://huggingface.co/Matthijs). The original code and weights can be found [here for the main model](https://github.com/tensorflow/models/tree/master/research/slim/nets/mobilenet) and [here for DeepLabV3+](https://github.com/tensorflow/models/tree/master/research/deeplab).
+
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with MobileNetV2.
+
+<PipelineTag pipeline="image-classification"/>
+
+- [`MobileNetV2ForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+- See also: [Image classification task guide](./tasks/image_classification)
+
+**Semantic segmentation**
+- [Semantic segmentation task guide](./tasks/semantic_segmentation)
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 ## MobileNetV2Config
 

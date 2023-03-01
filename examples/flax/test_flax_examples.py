@@ -60,14 +60,11 @@ def get_setup_file():
 
 
 def get_results(output_dir, split="eval"):
-    results = {}
     path = os.path.join(output_dir, f"{split}_results.json")
     if os.path.exists(path):
         with open(path, "r") as f:
-            results = json.load(f)
-    else:
-        raise ValueError(f"can't find {path}")
-    return results
+            return json.load(f)
+    raise ValueError(f"can't find {path}")
 
 
 stream_handler = logging.StreamHandler(sys.stdout)

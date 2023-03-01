@@ -21,10 +21,10 @@ from collections import OrderedDict
 from functools import partial
 from pathlib import Path
 
-import torch
-
 import timm
+import torch
 from huggingface_hub import hf_hub_download
+
 from transformers import LevitConfig, LevitFeatureExtractor, LevitForImageClassificationWithTeacher
 from transformers.utils import logging
 
@@ -167,12 +167,12 @@ if __name__ == "__main__":
         required=False,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and feature extractor to the hub")
     parser.add_argument(
-        "--push_to_hub",
-        default=True,
-        type=bool,
-        required=False,
-        help="If True, push model and feature extractor to the hub.",
+        "--no-push_to_hub",
+        dest="push_to_hub",
+        action="store_false",
+        help="Do not push model and feature extractor to the hub",
     )
 
     args = parser.parse_args()

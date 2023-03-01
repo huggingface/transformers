@@ -27,7 +27,6 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/spiece.model")
 @require_sentencepiece
 @require_tokenizers
 class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = DebertaV2Tokenizer
     rust_tokenizer_class = DebertaV2TokenizerFast
     test_sentencepiece = True
@@ -166,7 +165,6 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(rust_tokens, tokens_target)
 
     def test_rust_and_python_full_tokenizers(self):
-
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
 

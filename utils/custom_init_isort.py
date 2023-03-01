@@ -96,6 +96,7 @@ def ignore_underscore(key):
 
 def sort_objects(objects, key=None):
     "Sort a list of `objects` following the rules of isort. `key` optionally maps an object to a str."
+
     # If no key is provided, we use a noop.
     def noop(x):
         return x
@@ -117,6 +118,7 @@ def sort_objects_in_import(import_statement):
     """
     Return the same `import_statement` but with objects properly sorted.
     """
+
     # This inner function sort imports between [ ].
     def _replace(match):
         imports = match.groups()[0]
@@ -200,9 +202,9 @@ def sort_imports(file, check_only=True):
         indent = get_indent(block_lines[1])
         # Slit the internal block into blocks of indent level 1.
         internal_blocks = split_code_in_indented_blocks(internal_block_code, indent_level=indent)
-        # We have two categories of import key: list or _import_structu[key].append/extend
-        pattern = _re_direct_key if "_import_structure" in block_lines[0] else _re_indirect_key
-        # Grab the keys, but there is a trap: some lines are empty or jsut comments.
+        # We have two categories of import key: list or _import_structure[key].append/extend
+        pattern = _re_direct_key if "_import_structure = {" in block_lines[0] else _re_indirect_key
+        # Grab the keys, but there is a trap: some lines are empty or just comments.
         keys = [(pattern.search(b).groups()[0] if pattern.search(b) is not None else None) for b in internal_blocks]
         # We only sort the lines with a key.
         keys_to_sort = [(i, key) for i, key in enumerate(keys) if key is not None]

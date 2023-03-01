@@ -32,6 +32,7 @@ if is_torch_available():
         DisjunctiveConstraint,
         PhrasalConstraint,
     )
+    from transformers.pytorch_utils import torch_int_div
 
 
 class BeamSearchTester:
@@ -59,7 +60,7 @@ class BeamSearchTester:
         self.do_early_stopping = do_early_stopping
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
 
-        # cannot be randomely generated
+        # cannot be randomly generated
         self.eos_token_id = vocab_size + 1
 
     def prepare_beam_scorer(self, **kwargs):
@@ -160,10 +161,8 @@ class BeamSearchTester:
         expected_output_scores = cut_expected_tensor(next_scores)
 
         # add num_beams * batch_idx
-        expected_output_indices = (
-            cut_expected_tensor(next_indices)
-            + (torch.arange(self.num_beams * self.batch_size, device=torch_device) // self.num_beams) * self.num_beams
-        )
+        offset = torch_int_div(torch.arange(self.num_beams * self.batch_size, device=torch_device), self.num_beams)
+        expected_output_indices = cut_expected_tensor(next_indices) + offset * self.num_beams
 
         self.parent.assertListEqual(expected_output_tokens.tolist(), output_tokens.tolist())
         self.parent.assertListEqual(expected_output_indices.tolist(), output_indices.tolist())
@@ -283,7 +282,7 @@ class ConstrainedBeamSearchTester:
 
             constraints = [PhrasalConstraint(force_tokens), DisjunctiveConstraint(disjunctive_tokens)]
             self.constraints = constraints
-        # cannot be randomely generated
+        # cannot be randomly generated
         self.eos_token_id = vocab_size + 1
 
     def prepare_constrained_beam_scorer(self, **kwargs):
@@ -399,10 +398,8 @@ class ConstrainedBeamSearchTester:
         expected_output_scores = cut_expected_tensor(next_scores)
 
         # add num_beams * batch_idx
-        expected_output_indices = (
-            cut_expected_tensor(next_indices)
-            + (torch.arange(self.num_beams * self.batch_size, device=torch_device) // self.num_beams) * self.num_beams
-        )
+        offset = torch_int_div(torch.arange(self.num_beams * self.batch_size, device=torch_device), self.num_beams)
+        expected_output_indices = cut_expected_tensor(next_indices) + offset * self.num_beams
 
         self.parent.assertListEqual(expected_output_tokens.tolist(), output_tokens.tolist())
         self.parent.assertListEqual(expected_output_indices.tolist(), output_indices.tolist())

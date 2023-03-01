@@ -31,7 +31,6 @@ FRAMEWORK = "pt" if is_torch_available() else "tf"
 @require_sentencepiece
 @require_tokenizers
 class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = CamembertTokenizer
     rust_tokenizer_class = CamembertTokenizerFast
     test_rust_tokenizer = True

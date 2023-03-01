@@ -66,7 +66,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         self,
         image: Union[str, "Image.Image", List[Dict[str, Any]]],
         candidate_labels: Union[str, List[str]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Detect objects (bounding boxes & classes) in the image(s) passed as inputs.
@@ -97,7 +97,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
                 ...         },
                 ...     ]
                 ... )
-                [[{'score': 0.286811888217926, 'label': 'cat', 'box': {'xmin': 324, 'ymin': 20, 'xmax': 640, 'ymax': 373}}, {'score': 0.2537279725074768, 'label': 'cat', 'box': {'xmin': 1, 'ymin': 55, 'xmax': 315, 'ymax': 472}}, {'score': 0.12082888185977936, 'label': 'couch', 'box': {'xmin': 4, 'ymin': 0, 'xmax': 642, 'ymax': 476}}], [{'score': 0.286811888217926, 'label': 'cat', 'box': {'xmin': 324, 'ymin': 20, 'xmax': 640, 'ymax': 373}}, {'score': 0.2537279725074768, 'label': 'cat', 'box': {'xmin': 1, 'ymin': 55, 'xmax': 315, 'ymax': 472}}, {'score': 0.12082888185977936, 'label': 'couch', 'box': {'xmin': 4, 'ymin': 0, 'xmax': 642, 'ymax': 476}}]]
+                [[{'score': 0.287, 'label': 'cat', 'box': {'xmin': 324, 'ymin': 20, 'xmax': 640, 'ymax': 373}}, {'score': 0.25, 'label': 'cat', 'box': {'xmin': 1, 'ymin': 55, 'xmax': 315, 'ymax': 472}}, {'score': 0.121, 'label': 'couch', 'box': {'xmin': 4, 'ymin': 0, 'xmax': 642, 'ymax': 476}}], [{'score': 0.287, 'label': 'cat', 'box': {'xmin': 324, 'ymin': 20, 'xmax': 640, 'ymax': 373}}, {'score': 0.254, 'label': 'cat', 'box': {'xmin': 1, 'ymin': 55, 'xmax': 315, 'ymax': 472}}, {'score': 0.121, 'label': 'couch', 'box': {'xmin': 4, 'ymin': 0, 'xmax': 642, 'ymax': 476}}]]
                 ```
 
 
@@ -148,7 +148,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         target_size = torch.tensor([[image.height, image.width]], dtype=torch.int32)
         for i, candidate_label in enumerate(candidate_labels):
             text_inputs = self.tokenizer(candidate_label, return_tensors=self.framework)
-            image_features = self.feature_extractor(image, return_tensors=self.framework)
+            image_features = self.image_processor(image, return_tensors=self.framework)
             yield {
                 "is_last": i == len(candidate_labels) - 1,
                 "target_size": target_size,
@@ -168,17 +168,15 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.1, top_k=None):
-
         results = []
         for model_output in model_outputs:
             label = model_output["candidate_label"]
             model_output = BaseModelOutput(model_output)
-            outputs = self.feature_extractor.post_process(
-                outputs=model_output, target_sizes=model_output["target_size"]
+            outputs = self.image_processor.post_process_object_detection(
+                outputs=model_output, threshold=threshold, target_sizes=model_output["target_size"]
             )[0]
-            keep = outputs["scores"] >= threshold
 
-            for index in keep.nonzero():
+            for index in outputs["scores"].nonzero():
                 score = outputs["scores"][index].item()
                 box = self._get_bounding_box(outputs["boxes"][index][0])
 

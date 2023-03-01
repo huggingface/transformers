@@ -47,7 +47,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
-_TOKENIZER_FOR_DOC = "TransfoXLTokenizer"
 
 TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "transfo-xl-wt103",
@@ -129,7 +128,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         layer_norm_epsilon=1e-5,
         init_std=0.02,
         output_attentions=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -282,7 +281,7 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
         layer_norm_epsilon=1e-5,
         init_std=0.02,
         output_attentions=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -552,7 +551,6 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: bool = False,
     ):
-
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
         if input_ids is not None and inputs_embeds is not None:
@@ -687,7 +685,7 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
             }
         ]
     )
@@ -888,7 +886,6 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTransfoXLModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -968,7 +965,6 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTransfoXLLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1028,20 +1024,16 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             attentions=attns,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **model_kwargs):
         inputs = {}
 
         # if past is defined in model kwargs then use it for faster decoding
-        if past:
+        if past_key_values:
             input_ids = tf.expand_dims(input_ids[:, -1], axis=-1)
         else:
             input_ids = input_ids
 
         return inputs
-
-    @staticmethod
-    def _reorder_cache(mems: List[tf.Tensor], beam_idx: tf.Tensor) -> List[tf.Tensor]:
-        return [tf.gather(layer_past, beam_idx, axis=1) for layer_past in mems]
 
 
 @add_start_docstrings(
@@ -1077,7 +1069,6 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
     @unpack_inputs
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTransfoXLSequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,

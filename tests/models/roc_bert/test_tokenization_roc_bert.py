@@ -44,8 +44,8 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "你", "好", "是", "谁", "a", "b", "c", "d"]
-        word_shape = dict()
-        word_pronunciation = dict()
+        word_shape = {}
+        word_pronunciation = {}
         for i, value in enumerate(vocab_tokens):
             word_shape[value] = i
             word_pronunciation[value] = i
@@ -299,8 +299,8 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
-        assert encoded_sentence == [101] + text + [102]
-        assert encoded_pair == [101] + text + [102] + text_2 + [102]
+        assert encoded_sentence == [1] + text + [2]
+        assert encoded_pair == [1] + text + [2] + text_2 + [2]
 
     def test_prepare_for_model(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)

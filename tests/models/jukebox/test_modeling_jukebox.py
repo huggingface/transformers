@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
+from unittest import skip
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow
@@ -22,17 +23,17 @@ from transformers.trainer_utils import set_seed
 if is_torch_available():
     import torch
 
-    from transformers import JukeboxModel, JukeboxTokenizer
+    from transformers import JukeboxModel, JukeboxPrior, JukeboxTokenizer
 
 
 @require_torch
 class Jukebox1bModelTester(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
     model_id = "openai/jukebox-1b-lyrics"
-    metas = dict(
-        artist="Zac Brown Band",
-        genres="Country",
-        lyrics="""I met a traveller from an antique land,
+    metas = {
+        "artist": "Zac Brown Band",
+        "genres": "Country",
+        "lyrics": """I met a traveller from an antique land,
     Who said "Two vast and trunkless legs of stone
     Stand in the desert. . . . Near them, on the sand,
     Half sunk a shattered visage lies, whose frown,
@@ -47,7 +48,7 @@ class Jukebox1bModelTester(unittest.TestCase):
     Of that colossal Wreck, boundless and bare
     The lone and level sands stretch far away
     """,
-    )
+    }
     # fmt: off
     EXPECTED_OUTPUT_2 = [
         1864, 1536, 1213, 1870, 1357, 1536, 519, 880, 1323, 789, 1082, 534,
@@ -179,7 +180,7 @@ class Jukebox1bModelTester(unittest.TestCase):
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
         set_seed(0)
         waveform = torch.rand((1, 5120, 1))
-        tokens = [i for i in self.prepare_inputs()]
+        tokens = list(self.prepare_inputs())
 
         zs = [model.vqvae.encode(waveform, start_level=2, bs_chunks=waveform.shape[0])[0], None, None]
         zs = model._sample(
@@ -219,10 +220,10 @@ class Jukebox1bModelTester(unittest.TestCase):
 class Jukebox5bModelTester(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
     model_id = "openai/jukebox-5b-lyrics"
-    metas = dict(
-        artist="Zac Brown Band",
-        genres="Country",
-        lyrics="""I met a traveller from an antique land,
+    metas = {
+        "artist": "Zac Brown Band",
+        "genres": "Country",
+        "lyrics": """I met a traveller from an antique land,
     Who said "Two vast and trunkless legs of stone
     Stand in the desert. . . . Near them, on the sand,
     Half sunk a shattered visage lies, whose frown,
@@ -237,7 +238,7 @@ class Jukebox5bModelTester(unittest.TestCase):
     Of that colossal Wreck, boundless and bare
     The lone and level sands stretch far away
     """,
-    )
+    }
 
     # fmt: off
     EXPECTED_OUTPUT_2 = [
@@ -311,8 +312,9 @@ class Jukebox5bModelTester(unittest.TestCase):
         torch.testing.assert_allclose(zs[2][0], torch.tensor(self.EXPECTED_OUTPUT_0))
 
     @slow
+    @skip("Not enough GPU memory on CI runners")
     def test_slow_sampling(self):
-        model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval().to("cuda")
+        model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
         labels = [i.cuda() for i in self.prepare_inputs(self.model_id)]
 
         set_seed(0)
@@ -335,10 +337,11 @@ class Jukebox5bModelTester(unittest.TestCase):
 
     @slow
     def test_fp16_slow_sampling(self):
-        model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval().half().to("cuda")
-        labels = [i.cuda() for i in self.prepare_inputs(self.model_id)]
+        prior_id = "ArthurZ/jukebox_prior_0"
+        model = JukeboxPrior.from_pretrained(prior_id, min_duration=0).eval().half().to("cuda")
 
+        labels = self.prepare_inputs(prior_id)[0].cuda()
+        metadata = model.get_metadata(labels, 0, 7680, 0)
         set_seed(0)
-        zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
-        zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[0].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
+        outputs = model.sample(1, metadata=metadata, sample_tokens=60)
+        torch.testing.assert_allclose(outputs[0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))

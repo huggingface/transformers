@@ -121,9 +121,8 @@ class SegformerConfig(PretrainedConfig):
         drop_path_rate=0.1,
         layer_norm_eps=1e-6,
         decoder_hidden_size=256,
-        is_encoder_decoder=False,
         semantic_loss_ignore_index=255,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -156,7 +155,6 @@ class SegformerConfig(PretrainedConfig):
 
 
 class SegformerOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

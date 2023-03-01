@@ -24,6 +24,7 @@ from transformers.testing_utils import require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -363,9 +364,9 @@ class TFLxmertModelTester(object):
 
 
 @require_tf
-class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFLxmertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFLxmertModel, TFLxmertForPreTraining) if is_tf_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TFLxmertModel} if is_tf_available() else {}
     test_head_masking = False
     test_onnx = False
 
@@ -493,7 +494,6 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
 
         pt_inputs_dict = {}
         for key, value in tf_inputs_dict.items():
-
             if isinstance(value, dict):
                 pt_inputs_dict[key] = self.prepare_pt_inputs_from_tf_inputs(value)
             elif isinstance(value, (list, tuple)):

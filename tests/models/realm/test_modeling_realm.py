@@ -24,6 +24,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -303,8 +304,7 @@ class RealmModelTester:
 
 
 @require_torch
-class RealmModelTest(ModelTesterMixin, unittest.TestCase):
-
+class RealmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RealmEmbedder,
@@ -317,6 +317,7 @@ class RealmModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = ()
+    pipeline_model_mapping = {} if is_torch_available() else {}
 
     # disable these tests because there is no base_model in Realm
     test_save_load_fast_init_from_base = False
@@ -480,15 +481,12 @@ class RealmModelIntegrationTest(unittest.TestCase):
     def test_inference_open_qa(self):
         from transformers.models.realm.retrieval_realm import RealmRetriever
 
-        config = RealmConfig()
-
         tokenizer = RealmTokenizer.from_pretrained("google/realm-orqa-nq-openqa")
         retriever = RealmRetriever.from_pretrained("google/realm-orqa-nq-openqa")
 
         model = RealmForOpenQA.from_pretrained(
             "google/realm-orqa-nq-openqa",
             retriever=retriever,
-            config=config,
         )
 
         question = "Who is the pioneer in modern computer science?"

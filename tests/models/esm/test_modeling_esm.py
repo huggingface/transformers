@@ -22,6 +22,7 @@ from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -165,8 +166,7 @@ class EsmModelTester:
 
 
 @require_torch
-class EsmModelTest(ModelTesterMixin, unittest.TestCase):
-
+class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_mismatched_shapes = False
 
     all_model_classes = (
@@ -180,6 +180,17 @@ class EsmModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": EsmModel,
+            "fill-mask": EsmForMaskedLM,
+            "text-classification": EsmForSequenceClassification,
+            "token-classification": EsmForTokenClassification,
+            "zero-shot": EsmForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_sequence_classification_problem_types = True
 
     def setUp(self):
@@ -274,7 +285,7 @@ class EsmModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
         with torch.no_grad():
-            model = EsmForMaskedLM.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
+            model = EsmForMaskedLM.from_pretrained("facebook/esm2_t6_8M_UR50D")
             model.eval()
             input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
             output = model(input_ids)[0]
@@ -292,7 +303,7 @@ class EsmModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_no_head(self):
         with torch.no_grad():
-            model = EsmModel.from_pretrained("Rocketknight1/esm2_t6_8M_UR50D")
+            model = EsmModel.from_pretrained("facebook/esm2_t6_8M_UR50D")
             model.eval()
 
             input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])

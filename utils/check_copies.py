@@ -15,12 +15,13 @@
 
 import argparse
 import glob
-import importlib.util
 import os
 import re
 
 import black
 from doc_builder.style_doc import style_docstrings_in_code
+
+from transformers.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -66,8 +67,8 @@ LOCALIZED_READMES = {
         "start_prompt": "🤗 Transformers는 다음 모델들을 제공합니다",
         "end_prompt": "1. 새로운 모델을 올리고 싶나요?",
         "format_model_list": (
-            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
-            " {paper_authors}.{supplements}"
+            "**[{title}]({model_link})** ({paper_affiliations} 에서 제공)은 {paper_authors}.{supplements}의"
+            " {paper_title_link}논문과 함께 발표했습니다."
         ),
     },
     "README_es.md": {
@@ -82,20 +83,23 @@ LOCALIZED_READMES = {
         "start_prompt": "🤗Transformersは現在、以下のアーキテクチャを提供しています",
         "end_prompt": "1. 新しいモデルを投稿したいですか？",
         "format_model_list": (
-            "**[{title}]({model_link})** (from {paper_affiliations}) released with the paper {paper_title_link} by"
-            " {paper_authors}.{supplements}"
+            "**[{title}]({model_link})** ({paper_affiliations} から) {paper_authors}.{supplements} から公開された研究論文"
+            " {paper_title_link}"
+        ),
+    },
+    "README_hd.md": {
+        "start_prompt": "🤗 ट्रांसफॉर्मर वर्तमान में निम्नलिखित आर्किटेक्चर का समर्थन करते हैं",
+        "end_prompt": "1. एक नए मॉडल में योगदान देना चाहते हैं?",
+        "format_model_list": (
+            "**[{title}]({model_link})** ({paper_affiliations} से) {paper_authors}.{supplements} द्वारा"
+            "अनुसंधान पत्र {paper_title_link} के साथ जारी किया गया"
         ),
     },
 }
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(TRANSFORMERS_PATH, "__init__.py"),
-    submodule_search_locations=[TRANSFORMERS_PATH],
-)
-transformers_module = spec.loader.load_module()
+transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
 def _should_continue(line, indent):
@@ -169,7 +173,7 @@ def blackify(code):
     has_indent = len(get_indent(code)) > 0
     if has_indent:
         code = f"class Bla:\n{code}"
-    mode = black.Mode(target_versions={black.TargetVersion.PY35}, line_length=119, preview=True)
+    mode = black.Mode(target_versions={black.TargetVersion.PY37}, line_length=119)
     result = black.format_str(code, mode=mode)
     result, _ = style_docstrings_in_code(result)
     return result[len("class Bla:\n") :] if has_indent else result
@@ -381,7 +385,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
 
     sorted_index = sorted(localized_model_index.items(), key=lambda x: x[0].lower())
 
-    return readmes_match, "\n".join(map(lambda x: x[1], sorted_index)) + "\n"
+    return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
 
 
 def convert_readme_to_index(model_list):
@@ -492,8 +496,9 @@ SPECIAL_MODEL_NAMES = {
     "Data2VecAudio": "Data2Vec",
     "Data2VecText": "Data2Vec",
     "Data2VecVision": "Data2Vec",
-    "DonutSwin": "Donut",
+    "DonutSwin": "Swin Transformer",
     "Marian": "MarianMT",
+    "MaskFormerSwin": "Swin Transformer",
     "OpenAI GPT-2": "GPT-2",
     "OpenAI GPT": "GPT",
     "Perceiver": "Perceiver IO",

@@ -22,7 +22,7 @@ import shutil
 import sys
 import warnings
 from collections import OrderedDict
-from functools import lru_cache, wraps
+from functools import lru_cache
 from itertools import chain
 from types import ModuleType
 from typing import Any
@@ -268,6 +268,13 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _is_ccl_available = False
 
+_decord_availale = importlib.util.find_spec("decord") is not None
+try:
+    _decord_version = importlib_metadata.version("decord")
+    logger.debug(f"Successfully imported decord version {_decord_version}")
+except importlib_metadata.PackageNotFoundError:
+    _decord_availale = False
+
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
@@ -279,6 +286,10 @@ def is_kenlm_available():
 
 def is_torch_available():
     return _torch_available
+
+
+def is_torchvision_available():
+    return importlib.util.find_spec("torchvision") is not None
 
 
 def is_pyctcdecode_available():
@@ -444,8 +455,31 @@ def is_torch_tpu_available(check_device=True):
     return False
 
 
+@lru_cache()
+def is_torch_neuroncore_available(check_device=True):
+    if importlib.util.find_spec("torch_neuronx") is not None:
+        return is_torch_tpu_available(check_device)
+    return False
+
+
 def is_torchdynamo_available():
-    return importlib.util.find_spec("torchdynamo") is not None
+    if not is_torch_available():
+        return False
+    try:
+        import torch._dynamo as dynamo  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
+def is_torch_compile_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    return hasattr(torch, "compile")
 
 
 def is_torch_tensorrt_fx_available():
@@ -460,10 +494,6 @@ def is_datasets_available():
 
 def is_detectron2_available():
     return _detectron2_available
-
-
-def is_more_itertools_available():
-    return importlib.util.find_spec("more_itertools") is not None
 
 
 def is_rjieba_available():
@@ -548,6 +578,10 @@ def is_accelerate_available():
     return importlib.util.find_spec("accelerate") is not None
 
 
+def is_optimum_available():
+    return importlib.util.find_spec("optimum") is not None
+
+
 def is_safetensors_available():
     return importlib.util.find_spec("safetensors") is not None
 
@@ -569,7 +603,11 @@ def is_spacy_available():
 
 
 def is_tensorflow_text_available():
-    return importlib.util.find_spec("tensorflow_text") is not None
+    return is_tf_available() and importlib.util.find_spec("tensorflow_text") is not None
+
+
+def is_keras_nlp_available():
+    return is_tensorflow_text_available() and importlib.util.find_spec("keras_nlp") is not None
 
 
 def is_in_notebook():
@@ -686,12 +724,20 @@ def is_ccl_available():
     return _is_ccl_available
 
 
+def is_decord_available():
+    return _decord_availale
+
+
 def is_sudachi_available():
     return importlib.util.find_spec("sudachipy") is not None
 
 
 def is_jumanpp_available():
-    return (importlib.util.find_spec("pyknp") is not None) and (shutil.which("jumanpp") is not None)
+    return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
+
+
+def is_cython_available():
+    return importlib.util.find_spec("pyximport") is not None
 
 
 # docstyle-ignore
@@ -753,6 +799,14 @@ that match your environment. Please note that you may need to restart your runti
 # docstyle-ignore
 PYTORCH_IMPORT_ERROR = """
 {0} requires the PyTorch library but it was not found in your environment. Checkout the instructions on the
+installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
+"""
+
+
+# docstyle-ignore
+TORCHVISION_IMPORT_ERROR = """
+{0} requires the Torchvision library but it was not found in your environment. Checkout the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
 """
@@ -933,6 +987,16 @@ CCL_IMPORT_ERROR = """
 Please note that you may need to restart your runtime after installation.
 """
 
+DECORD_IMPORT_ERROR = """
+{0} requires the decord library but it was not found in your environment. You can install it with pip: `pip install
+decord`. Please note that you may need to restart your runtime after installation.
+"""
+
+CYTHON_IMPORT_ERROR = """
+{0} requires the Cython library but it was not found in your environment. You can install it with pip: `pip install
+Cython`. Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
@@ -958,10 +1022,13 @@ BACKENDS_MAPPING = OrderedDict(
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
+        ("torchvision", (is_torchvision_available, TORCHVISION_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
+        ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
+        ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
     ]
 )
 
@@ -993,33 +1060,9 @@ class DummyObject(type):
     """
 
     def __getattribute__(cls, key):
-        if key.startswith("_"):
+        if key.startswith("_") and key != "_from_config":
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
-
-
-def torch_required(func):
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_torch_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires PyTorch.")
-
-    return wrapper
-
-
-def tf_required(func):
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_tf_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires TF.")
-
-    return wrapper
 
 
 def is_torch_fx_proxy(x):
@@ -1092,3 +1135,22 @@ class _LazyModule(ModuleType):
 
 class OptionalDependencyNotAvailable(BaseException):
     """Internally used error class for signalling an optional dependency was not found."""
+
+
+def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
+    """Imports transformers directly
+
+    Args:
+        path (`str`): The path to the source file
+        file (`str`, optional): The file to join with the path. Defaults to "__init__.py".
+
+    Returns:
+        `ModuleType`: The resulting imported module
+    """
+    name = "transformers"
+    location = os.path.join(path, file)
+    spec = importlib.util.spec_from_file_location(name, location, submodule_search_locations=[path])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module = sys.modules[name]
+    return module

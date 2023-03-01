@@ -5,15 +5,15 @@ import gc
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List  # noqa: F401
 
 import pytorch_lightning as pl
 import torch
-from torch import nn
-
 from finetune import SummarizationModule, TranslationModule
 from finetune import main as ft_main
 from make_student import create_student_by_copying_alternating_layers, get_layers_to_supervise
+from torch import nn
+
 from transformers import AutoModelForSeq2SeqLM, MBartTokenizer, T5ForConditionalGeneration
 from transformers.models.bart.modeling_bart import shift_tokens_right
 from utils import calculate_bleu, check_output_dir, freeze_params, label_smoothed_nll_loss, use_task_specific_params

@@ -32,7 +32,7 @@ special customization for these tasks.*
 Tips:
 
 - The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition) (the task of recognizing the individual rows, columns etc. in a table).
-- One can use the [`AutoFeatureExtractor`] API to prepare images and optional targets for the model. This will load a [`DetrFeatureExtractor`] behind the scenes.
+- One can use the [`AutoImageProcessor`] API to prepare images and optional targets for the model. This will load a [`DetrImageProcessor`] behind the scenes.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/table_transformer_architecture.jpeg"
 alt="drawing" width="600"/>
@@ -47,7 +47,7 @@ found [here](https://github.com/microsoft/table-transformer).
 <PipelineTag pipeline="object-detection"/>
 
 - A demo notebook for the Table Transformer can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Table%20Transformer).
-- It turns out padding of images is quite important for detection. An interesting Github thread with replies from the authors can be found [here](https://github.com/microsoft/table-transformer/issues/68). 
+- It turns out padding of images is quite important for detection. An interesting Github thread with replies from the authors can be found [here](https://github.com/microsoft/table-transformer/issues/68).
 
 ## TableTransformerConfig
 

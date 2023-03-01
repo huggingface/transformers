@@ -19,10 +19,10 @@ import argparse
 from collections import OrderedDict
 from pathlib import Path
 
+import requests
 import torch
 from PIL import Image
 
-import requests
 from transformers import GLPNConfig, GLPNFeatureExtractor, GLPNForDepthEstimation
 from transformers.utils import logging
 
