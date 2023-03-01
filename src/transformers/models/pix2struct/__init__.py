@@ -49,8 +49,6 @@ else:
         "PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Pix2StructPreTrainedModel",
         "Pix2StructForConditionalGeneration",
-        "Pix2StructTextPreTrainedModel",
-        "Pix2StructVisionPreTrainedModel",
         "Pix2StructVisionModel",
         "Pix2StructTextModel",
     ]
@@ -83,9 +81,7 @@ if TYPE_CHECKING:
             Pix2StructForConditionalGeneration,
             Pix2StructPreTrainedModel,
             Pix2StructTextModel,
-            Pix2StructTextPreTrainedModel,
             Pix2StructVisionModel,
-            Pix2StructVisionPreTrainedModel,
         )
 
 else:

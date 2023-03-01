@@ -1514,7 +1514,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     ]
 
     def __init__(self, config: Pix2StructConfig):
-        super().__init__(config.text_config)
+        super().__init__(config)
         encoder_config = copy.deepcopy(config.vision_config)
         encoder_config.is_decoder = False
         encoder_config.is_encoder_decoder = False
@@ -1589,7 +1589,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = use_cache if use_cache is not None else self.config.text_config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
