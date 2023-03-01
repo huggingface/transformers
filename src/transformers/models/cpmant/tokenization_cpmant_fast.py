@@ -104,6 +104,22 @@ class CPMAntTokenizerFast(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        bod_token (`str`):
+            The beginning of document token.
+        eod_token (`str`):
+            The end of document token.
+        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+            The beginning of sequence token.
+        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+            The end of sequence token.
+        pad_token (`str`):
+            The token used for padding.
+        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+            The unknown token.
+        line_token (`str`):
+            the line token.
+        space_token (`str`):
+            the space token.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
