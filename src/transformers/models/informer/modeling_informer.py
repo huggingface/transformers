@@ -980,8 +980,8 @@ class InformerProbSparseAttention(nn.Module):
         if self.is_decoder:
             context = value_states.cumsum(dim=-2)
         else:
-            V_sum = value_states.mean(dim=-2)
-            context = V_sum.unsqueeze(dim=1).expand(bsz * self.num_heads, L_Q, V_sum.size(-1)).clone()
+            v_mean_dim_time = value_states.mean(dim=-2)
+            context = v_mean_dim_time.unsqueeze(dim=1).expand(bsz * self.num_heads, L_Q, v_mean_dim_time.size(-1)).clone()
 
         if M_top is not None:
             # update context: copy the attention output to the context at M_top index
