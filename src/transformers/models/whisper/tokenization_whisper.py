@@ -714,7 +714,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         )
 
 
-def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time_precision):
+def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
     """
     Internal method meant to only be used by asr pipeline. Handles all the little quirks specific to whisper to handle
     the various options not allowed in other seq2seq models
@@ -741,12 +741,12 @@ def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time
     chunks = []
     chunk = new_chunk()
     time_offset = 0.0
-    timestamp_begin = self.convert_tokens_to_ids("<|notimestamps|>") + 1
+    timestamp_begin = tokenizer.convert_tokens_to_ids("<|notimestamps|>") + 1
     previous_tokens = []
     skip = False
     right_stride_start = None
 
-    all_special_ids = set(self.all_special_ids)
+    all_special_ids = set(tokenizer.all_special_ids)
     # - iterate over all outputs
     for chunk_id, output in enumerate(model_outputs):
         # We can drop everything to Python list, it's going to make
@@ -794,7 +794,7 @@ def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time
             # - 4/ Regular text
             if token in all_special_ids:
                 # Either language code or other
-                text = self.decode([token])
+                text = tokenizer.decode([token])
                 # Removing outer shell <|XX|>
                 text = text[2:-2]
                 language = LANGUAGES.get(text, None)
@@ -805,7 +805,7 @@ def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time
                     if last_language and language != last_language and not return_timestamps:
                         previous_tokens.append(current_tokens)
                         resolved_tokens = _find_longest_common_sequence(previous_tokens)
-                        resolved_text = self.decode(resolved_tokens)
+                        resolved_text = tokenizer.decode(resolved_tokens)
                         chunk["text"] = resolved_text
                         chunks.append(chunk)
 
@@ -848,7 +848,7 @@ def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time
                         # Handling merges.
                         previous_tokens.append(current_tokens)
                         resolved_tokens = _find_longest_common_sequence(previous_tokens)
-                        resolved_text = self.decode(resolved_tokens)
+                        resolved_text = tokenizer.decode(resolved_tokens)
                         chunk["text"] = resolved_text
                         chunks.append(chunk)
 
@@ -885,7 +885,7 @@ def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time
         # Happens when we don't use timestamps
         resolved_tokens = _find_longest_common_sequence(previous_tokens)
         # print("Flushing previous tokens (FINAL)")
-        resolved_text = self.decode(resolved_tokens)
+        resolved_text = tokenizer.decode(resolved_tokens)
         chunk["text"] = resolved_text
         chunks.append(chunk)
 
