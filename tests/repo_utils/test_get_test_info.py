@@ -29,12 +29,8 @@ from get_test_info import (  # noqa: E402
 )
 
 
-BERT_TEST_FILE = "tests/models/bert/test_modeling_bert.py"
-BLIP_TEST_FILE = "tests/models/blip/test_modeling_blip.py"
-
-# The methods require the paths being obtained from OS specific path separator
-BERT_TEST_FILE = f"{os.path.sep}".join(BERT_TEST_FILE.split("/"))
-BLIP_TEST_FILE = f"{os.path.sep}".join(BLIP_TEST_FILE.split("/"))
+BERT_TEST_FILE = os.path.join("tests", "models", "bert", "test_modeling_bert.py")
+BLIP_TEST_FILE = os.path.join("tests", "models", "blip", "test_modeling_blip.py")
 
 
 class GetTestInfoTester(unittest.TestCase):
