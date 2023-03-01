@@ -26,7 +26,7 @@ from get_test_info import (
     get_model_to_test_mapping,
     get_model_to_tester_mapping,
     get_test_to_tester_mapping,
-)
+)  # noqa: E402
 
 
 BERT_TEST_FILE = "tests/models/bert/test_modeling_bert.py"
