@@ -22,6 +22,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -175,9 +176,19 @@ def prepare_blenderbot_inputs_dict(
 
 
 @require_tf
-class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFBlenderbotModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFBlenderbotForConditionalGeneration, TFBlenderbotModel) if is_tf_available() else ()
     all_generative_model_classes = (TFBlenderbotForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": TFBlenderbotForConditionalGeneration,
+            "feature-extraction": TFBlenderbotModel,
+            "summarization": TFBlenderbotForConditionalGeneration,
+            "text2text-generation": TFBlenderbotForConditionalGeneration,
+        }
+        if is_tf_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = False

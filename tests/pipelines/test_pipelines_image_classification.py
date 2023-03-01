@@ -32,7 +32,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -47,7 +47,7 @@ else:
 
 @require_torch_or_tf
 @require_vision
-class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ImageClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     flax_model_mapping = FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING

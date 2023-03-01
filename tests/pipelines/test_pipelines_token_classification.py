@@ -35,13 +35,13 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is quite a bit longer"]]
 
 
-class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class TokenClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     flax_model_mapping = FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING

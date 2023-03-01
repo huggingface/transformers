@@ -925,16 +925,14 @@ class TFViT2GPT2ModelIntegrationTest(unittest.TestCase):
         self.assertLessEqual(max_diff, 1e-4)
 
         def generate_step(pixel_values):
-            outputs = model.generate(
-                pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True, output_scores=True
-            )
+            outputs = model.generate(pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True)
             output_ids = outputs.sequences
             preds = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
             preds = [pred.strip() for pred in preds]
 
-            return preds, outputs.scores.numpy()
+            return preds
 
-        preds, scores = generate_step(pixel_values)
+        preds = generate_step(pixel_values)
 
         # should produce
         # ["a cat laying on top of a couch next to another cat"]

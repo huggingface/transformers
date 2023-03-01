@@ -28,6 +28,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -405,13 +406,28 @@ class MvpHeadTests(unittest.TestCase):
 
 
 @require_torch
-class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (MvpModel, MvpForConditionalGeneration, MvpForSequenceClassification, MvpForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (MvpForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": MvpForConditionalGeneration,
+            "feature-extraction": MvpModel,
+            "fill-mask": MvpForConditionalGeneration,
+            "question-answering": MvpForQuestionAnswering,
+            "summarization": MvpForConditionalGeneration,
+            "text2text-generation": MvpForConditionalGeneration,
+            "text-classification": MvpForSequenceClassification,
+            "text-generation": MvpForCausalLM,
+            "zero-shot": MvpForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = False
     test_pruning = False

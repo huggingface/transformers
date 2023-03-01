@@ -31,10 +31,10 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
-class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class FillMaskPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MASKED_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_MASKED_LM_MAPPING
     flax_model_mapping = FLAX_MODEL_FOR_MASKED_LM_MAPPING
