@@ -248,7 +248,7 @@ class CPMAntTokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A CPMAnt sequence has the following format:
 
-        - single sequence: `[BOS] Sequence`
+        - single sequence: `[BOS] Sequence`.
 
         Args:
             token_ids_0 (`List[int]`): The first tokenized sequence that special tokens will be added.
