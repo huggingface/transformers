@@ -74,8 +74,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
 
 def shift_spectrograms_right(input_values: torch.Tensor, reduction_factor: int = 1):
     """
-    Shift input spectrograms one timestep to the right.
-    Also applies the reduction factor to the sequence length.
+    Shift input spectrograms one timestep to the right. Also applies the reduction factor to the sequence length.
     """
     # thin out frames for reduction factor
     if reduction_factor > 1:
