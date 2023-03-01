@@ -43,5 +43,7 @@
     title: Come aggiungere un modello a 🤗 Transformers?
   - local: perf_hardware
     title: Hardware ottimizzato per l'addestramento
+  - local: community
+    title: Risorse della comunità
   title: Guide How-to
   
