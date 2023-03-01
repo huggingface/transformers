@@ -126,12 +126,12 @@ class EfficientNetEmbeddings(nn.Module):
     def __init__(self, config: EfficientNetConfig):
         super().__init__()
 
-        out_channels = round_filters(config, 32)
+        self.out_dim = round_filters(config, 32)
         self.padding = nn.ZeroPad2d(padding=(0, 1, 0, 1))
         self.convolution = nn.Conv2d(
-            config.num_channels, out_channels, kernel_size=3, stride=2, padding="valid", bias=False
+            config.num_channels, self.out_dim, kernel_size=3, stride=2, padding="valid", bias=False
         )
-        self.batchnorm = nn.BatchNorm2d(out_channels, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum)
+        self.batchnorm = nn.BatchNorm2d(self.out_dim, eps=config.batch_norm_eps, momentum=config.batch_norm_momentum)
         self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
@@ -174,13 +174,7 @@ class EfficientNetExpansionLayer(nn.Module):
     This corresponds to the expansion phase of each block in the original implementation.
     """
 
-    def __init__(
-        self,
-        config: EfficientNetConfig,
-        in_dim: int,
-        out_dim: int,
-        stride: int,
-    ):
+    def __init__(self, config: EfficientNetConfig, in_dim: int, out_dim: int, stride: int):
         super().__init__()
         self.expand_conv = nn.Conv2d(
             in_channels=in_dim,
@@ -189,7 +183,7 @@ class EfficientNetExpansionLayer(nn.Module):
             padding="same",
             bias=False,
         )
-        self.expand_bn = nn.BatchNorm2d(num_features=out_dim)
+        self.expand_bn = nn.BatchNorm2d(num_features=out_dim, eps=config.batch_norm_eps)
         self.expand_act = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
