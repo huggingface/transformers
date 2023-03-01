@@ -892,8 +892,6 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
 
 
 def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
-    missing_layers = []
-    unexpected_layers = []
     mismatched_layers = []
 
     # Read the H5 file

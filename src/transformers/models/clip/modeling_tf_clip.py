@@ -900,6 +900,8 @@ class TFCLIPPreTrainedModel(TFPreTrainedModel):
 
     config_class = CLIPConfig
     base_model_prefix = "clip"
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_unexpected = [r"position_ids"]
 
 
 CLIP_START_DOCSTRING = r"""

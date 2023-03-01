@@ -2469,6 +2469,13 @@ class TFVisionEncoderDecoderModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFVisionTextDualEncoderModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFViTForImageClassification(metaclass=DummyObject):
     _backends = ["tf"]
 
