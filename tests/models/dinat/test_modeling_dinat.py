@@ -387,6 +387,7 @@ class DinatModelIntegrationTest(unittest.TestCase):
 
 
 @require_torch
+@require_natten
 class DinatBackboneTest(unittest.TestCase, BackboneTesterMixin):
     all_model_classes = (DinatBackbone,) if is_torch_available() else ()
 

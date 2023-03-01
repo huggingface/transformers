@@ -329,6 +329,7 @@ class ResNetModelIntegrationTest(unittest.TestCase):
 @require_torch
 class ResNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
     all_model_classes = (ResNetBackbone,) if is_torch_available() else ()
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = ResNetModelTester(self)

@@ -384,6 +384,7 @@ class NatModelIntegrationTest(unittest.TestCase):
 
 
 @require_torch
+@require_natten
 class NatBackboneTest(unittest.TestCase, BackboneTesterMixin):
     all_model_classes = (NatBackbone,) if is_torch_available() else ()
 
