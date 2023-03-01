@@ -703,7 +703,9 @@ class BioGptForCausalLM(BioGptPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask, inputs_embeds = None, past_key_values=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, attention_mask, inputs_embeds=None, past_key_values=None, **kwargs
+    ):
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
@@ -715,9 +717,9 @@ class BioGptForCausalLM(BioGptPreTrainedModel):
 
         model_inputs.update(
             {
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
             }
         )
 
