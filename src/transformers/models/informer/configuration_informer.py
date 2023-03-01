@@ -179,6 +179,9 @@ class InformerConfig(PretrainedConfig):
         **kwargs,
     ):
         # time series specific configuration
+        if prediction_length is None:
+            raise ValueError("The `prediction_length` should be set.")
+
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
         self.distribution_output = distribution_output
