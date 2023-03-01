@@ -515,8 +515,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             return_timestamps=True,
         )
 
-        self.maxDiff=None
-
         output = pipe(ds[40]["audio"])
         self.assertDictEqual(
             output,
