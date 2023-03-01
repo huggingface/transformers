@@ -302,7 +302,6 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-audio-classification": {
         "impl": ZeroShotAudioClassificationPipeline,
-        "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {
             "model": {
