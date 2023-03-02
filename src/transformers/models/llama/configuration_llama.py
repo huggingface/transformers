@@ -86,8 +86,6 @@ class LLaMaConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(
-            tie_word_embeddings=False,
-            is_decoder=True,
             **kwargs
         )
         self.vocab_size = vocab_size
