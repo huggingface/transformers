@@ -69,9 +69,11 @@ def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
                 print(f"We ignore {original_name} as it stores the rotary embeddings which are not in fact parameters")
                 continue
 
+
             transformers_name = map_original_names_to_transformers_names(original_name)
             transformers_param = model.get_parameter(transformers_name)
 
+            print(original_name, transformers_name,  original_param.shape, transformers_param.shape)
             if original_name.endswith("norm.weight"):
                 transformers_param.copy_(original_param)
                 continue
@@ -79,9 +81,9 @@ def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
             # weights are sharded across TP
             if any(original_name.endswith(suffix) for suffix in [".feed_forward.w2.weight", ".attention.wo.weight"]):
                 # Row Linear weight
-                output_dim = transformers_param.shape[0]
-                assert output_dim % tp_size == 0
-                step = output_dim // tp_size
+                input_dim = transformers_param.shape[1]
+                assert input_dim % tp_size == 0
+                step = input_dim // tp_size
                 start = tp_rank * step
                 end = (tp_rank + 1) * step
                 transformers_param[:, start:end].copy_(original_param)
@@ -95,11 +97,11 @@ def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
                 heads_per_tp_rank = config.num_attention_heads // tp_size
                 transformer_shard = transformers_param \
                     .view(config.num_attention_heads, 3, config.hidden_size // config.num_attention_heads, config.hidden_size) \
-                    [tp_rank * heads_per_tp_rank: (tp_rank+1) * heads_per_tp_rank, index, :]
+                    [tp_rank * heads_per_tp_rank: (tp_rank+1) * heads_per_tp_rank, index]
             else:
-                input_dim = transformers_param.shape[-1]
-                assert input_dim % tp_size == 0
-                step = input_dim // tp_size
+                output_dim = transformers_param.shape[0]
+                assert output_dim % tp_size == 0
+                step = output_dim // tp_size
                 start = tp_rank * step
                 end = (tp_rank + 1) * step
                 transformer_shard = transformers_param[start: end]
