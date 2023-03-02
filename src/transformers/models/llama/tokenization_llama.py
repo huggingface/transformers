@@ -1,26 +1,10 @@
-# coding=utf-8
-# Copyright 2023 EleutherAI and The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# TODO @thomasw21: Figure out licensing
 """Tokenization classes for LLaMa."""
-import json
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List
 
-from tokenizers import pre_tokenizers
 import sentencepiece as spm
 
 from ... import PreTrainedTokenizer
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
 
@@ -74,6 +58,7 @@ class LLaMaTokenizer(PreTrainedTokenizer):
         bos_token: str = "<bos>",
         eos_token: str = "<eos>",
         unk_token: str = "<unk>",
+        **kwargs
     ) -> None:
         self.sp_model = spm.SentencePieceProcessor(model_file=vocab_file)
         # TODO @thomasw21: Understand if I need to have <bos> and such since they are not part of the official LLaMa model
@@ -83,6 +68,7 @@ class LLaMaTokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             # TODO @thomasw21: Why the fuck is that `-1`?
             # pad_token=self.sp_model.pad_id(),
+            **kwargs
         )
 
         self.vocab_file = vocab_file
