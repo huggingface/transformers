@@ -2,7 +2,7 @@ from typing import Dict
 
 import numpy as np
 
-from ..utils import add_end_docstrings, is_flax_available, is_tf_available, is_torch_available, logging
+from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline, PipelineException
 
 
@@ -15,10 +15,6 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
-if is_flax_available():
-    import flax.linen as nn
-    import jax
-    import jax.numpy as jnp
 
 logger = logging.get_logger(__name__)
 
@@ -73,7 +69,7 @@ class FillMaskPipeline(Pipeline):
         elif self.framework == "pt":
             masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
         elif self.framework == "flax":
-            masked_index = jnp.asarray(jnp.nonzero(input_ids == self.tokenizer.mask_token_id))
+            masked_index = np.asarray(np.nonzero(input_ids == self.tokenizer.mask_token_id))
         else:
             raise ValueError("Unsupported framework")
         return masked_index
@@ -132,11 +128,17 @@ class FillMaskPipeline(Pipeline):
             masked_index = np.nonzero(input_ids == self.tokenizer.mask_token_id)[0]
 
             logits = outputs[0, masked_index, :]
-            probs = nn.softmax(logits)
+
+            # Softmax function
+            unnormalized = np.exp(model_outputs.logits - np.max(model_outputs.logits, axis=-1))
+            probs = (unnormalized / unnormalized.sum(axis=-1))[0]
+
             if target_ids is not None:
                 probs = probs[..., target_ids]
 
-            values, predictions = jax.lax.top_k(probs, top_k)
+            # Top k
+            predictions = np.argpartition(probs, -top_k)[-top_k:]
+            values = probs[predictions]
         else:
             masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False).squeeze(-1)
             # Fill mask pipeline supports only one ${mask_token} per sample

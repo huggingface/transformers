@@ -26,8 +26,7 @@ if is_tf_available():
     from ..tf_utils import stable_softmax
 
 if is_flax_available():
-    import flax.linen as nn
-    import jax.numpy as jnp
+    import numpy as np
 
 logger = logging.get_logger(__name__)
 
@@ -134,7 +133,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
         if self.framework == "pt":
             logits_per_image = torch.diagonal(outputs.logits_per_image)
         elif self.framework == "flax":
-            logits_per_image = jnp.diagonal(outputs.logits_per_image)
+            logits_per_image = np.diagonal(outputs.logits_per_image)
         else:
             logits_per_image = tf.linalg.diag_part(outputs.logits_per_image)
 
@@ -152,9 +151,11 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
             probs = logits.softmax(dim=0)
             scores = probs.tolist()
         elif self.framework == "flax":
-            logits = jnp.concatenate([output["logits_per_image"] for output in model_outputs])
-            probs = nn.softmax(logits, axis=0)
-            scores = probs.tolist()
+            logits = np.concatenate([output["logits_per_image"] for output in model_outputs])
+
+            # Softmax
+            unnormalized = np.exp(model_outputs.logits - np.max(model_outputs.logits, axis=0))
+            probs = (unnormalized / unnormalized.sum(axis=0)).tolist()
         else:
             logits = tf.concat([output["logits_per_image"] for output in model_outputs], axis=0)
             probs = stable_softmax(logits, axis=0)

@@ -27,8 +27,7 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
 if is_flax_available():
-    import flax.linen as nn
-    import jax
+    import numpy as np
 
     from ..models.auto.modeling_flax_auto import FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
@@ -130,8 +129,13 @@ class ImageClassificationPipeline(Pipeline):
             topk = tf.math.top_k(probs, k=top_k)
             scores, ids = topk.values.numpy(), topk.indices.numpy()
         elif self.framework == "flax":
-            probs = nn.softmax(model_outputs.logits)[0]
-            scores, ids = jax.lax.top_k(probs, top_k)
+            # Softmax function
+            unnormalized = np.exp(model_outputs.logits - np.max(model_outputs.logits, axis=-1))
+            probs = (unnormalized / unnormalized.sum(axis=-1))[0]
+
+            # Top k
+            ids = np.argpartition(probs, -top_k)[-top_k:]
+            scores = probs[ids]
         else:
             raise ValueError(f"Unsupported framework: {self.framework}")
 

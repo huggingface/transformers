@@ -106,9 +106,7 @@ class SummarizationPipelineTests(unittest.TestCase):
 
     @require_flax
     def test_small_model_flax(self):
-        summarizer = pipeline(
-            task="summarization", model="sshleifer/tiny-mbart", framework="flax", model_kwargs={"from_pt": True}
-        )
+        summarizer = pipeline(task="summarization", model="Shubhamai/tiny-mbart", framework="flax")
         outputs = summarizer("This is a small test")
         self.assertEqual(
             outputs,

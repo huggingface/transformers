@@ -99,47 +99,9 @@ class ImageToTextPipelineTests(unittest.TestCase):
         )
 
     @require_flax
+    @unittest.skip("No tiny random flax model available")
     def test_small_model_flax(self):
-        pipe = pipeline(
-            "image-to-text",
-            model="hf-internal-testing/tiny-random-vit-gpt2",  # NOTE: Add flax to small model
-            framework="flax",
-            model_kwargs={"from_pt": True},
-        )
-        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-
-        outputs = pipe(image)
-        self.assertEqual(
-            outputs,
-            [
-                {
-                    "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
-                },
-            ],
-        )
-
-        outputs = pipe([image, image])
-        self.assertEqual(
-            outputs,
-            [
-                [
-                    {
-                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
-                    }
-                ],
-                [
-                    {
-                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
-                    }
-                ],
-            ],
-        )
-
-        outputs = pipe(image, max_new_tokens=1)
-        self.assertEqual(
-            outputs,
-            [{"generated_text": "growth"}],
-        )
+        pass
 
     @require_torch
     def test_small_model_pt(self):

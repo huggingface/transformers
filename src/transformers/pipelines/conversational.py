@@ -12,7 +12,7 @@ if is_torch_available():
     import torch
 
 if is_flax_available():
-    import jax.numpy as jnp
+    import numpy as np
 
 logger = logging.get_logger(__name__)
 
@@ -268,7 +268,7 @@ class ConversationalPipeline(Pipeline):
         elif self.framework == "tf":
             input_ids = tf.constant([input_ids])
         elif self.framework == "flax":
-            input_ids = jnp.array([input_ids])
+            input_ids = np.array([input_ids])
         else:
             raise ValueError(f"Framework {self.framework} is not supported")
         return {"input_ids": input_ids, "conversation": conversation}

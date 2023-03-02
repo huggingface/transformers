@@ -234,9 +234,8 @@ class QAPipelineTests(unittest.TestCase):
     def test_small_model_flax(self):
         question_answerer = pipeline(
             "question-answering",
-            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            model="Shubhamai/tiny-distilbert-base-cased-distilled-squad",
             framework="flax",
-            model_kwargs={"from_pt": True},
         )
         outputs = question_answerer(
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."

@@ -607,6 +607,7 @@ def pipeline(
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
+    use_jit: bool = False,
     use_auth_token: Optional[Union[str, bool]] = None,
     device: Optional[Union[int, str, "torch.device"]] = None,
     device_map=None,
@@ -702,6 +703,8 @@ def pipeline(
             artifacts on huggingface.co, so `revision` can be any identifier allowed by git.
         use_fast (`bool`, *optional*, defaults to `True`):
             Whether or not to use a Fast tokenizer if possible (a [`PreTrainedTokenizerFast`]).
+        use_jit (`bool`, *optional*, defaults to `False`):
+            Whether or not to use a Just-In-Time compiler. This is only relevant for [`FlaxPreTrainedModel`] models.
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `huggingface-cli login` (stored in `~/.huggingface`).
@@ -874,28 +877,6 @@ def pipeline(
         model_kwargs["torch_dtype"] = torch_dtype
 
     model_name = model if isinstance(model, str) else None
-
-    # Globally setting the device for flax
-    if is_flax_available() and framework == "flax":
-        if isinstance(device, jaxlib.xla_extension.Device):
-            device_name = device.device_kind
-        elif isinstance(device, str):
-            # cpu:0, cuda:1 or tpu:3
-            if ":" in device:
-                device_name = device.split(":")[0]
-            else:
-                device_name = device
-        elif device is None:
-            # Jax automatically uses the correct default device
-            device_name = None
-        elif device < 0:
-            device_name = "cpu"
-        elif device >= 0:
-            device_name = "cuda"
-        else:
-            raise ValueError(f"Device {device} is not supported for Flax.")
-        if device_name is not None:
-            jax.config.update("jax_platform_name", device_name)
 
     # Infer the framework from the model
     # Forced if framework already defined, inferred if it's None
@@ -1101,4 +1082,4 @@ def pipeline(
     if device is not None:
         kwargs["device"] = device
 
-    return pipeline_class(model=model, framework=framework, task=task, **kwargs)
+    return pipeline_class(model=model, framework=framework, task=task, use_jit=use_jit, **kwargs)

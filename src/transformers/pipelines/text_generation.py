@@ -11,7 +11,7 @@ if is_tf_available():
     import tensorflow as tf
 
 if is_flax_available():
-    import jax.numpy as jnp
+    import numpy as np
 
 
 class ReturnType(enum.Enum):
@@ -254,7 +254,7 @@ class TextGenerationPipeline(Pipeline):
         if input_ids.shape[1] == 0:
             if self.framework == "flax":
                 B = input_ids.shape[0]
-                input_ids = jnp.zeros((B, 2), dtype=jnp.int32)
+                input_ids = np.zeros((B, 2), dtype=np.int32)
             else:
                 input_ids = None
             attention_mask = None

@@ -751,6 +751,8 @@ PIPELINE_INIT_ARGS = r"""
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
             the associated CUDA device id. You can pass native `torch.device`, `jaxlib.xla_extension.Device` or a `str`
             too.
+        use_jit (`bool`, *optional*, defaults to `False`):
+            Whether or not to use a Just-In-Time compiler. This is only relevant for [`FlaxPreTrainedModel`] models.
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
@@ -796,6 +798,7 @@ class Pipeline(_ScikitCompat):
         task: str = "",
         args_parser: ArgumentHandler = None,
         device: Union[int, str, "torch.device", "jaxlib.xla_extension.Device"] = None,
+        use_jit: bool = False,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
         **kwargs,
@@ -814,7 +817,7 @@ class Pipeline(_ScikitCompat):
         if self.framework == "pt" and device is not None:
             self.model = self.model.to(device=device)
 
-        if self.framework == "flax":
+        if self.framework == "flax" and use_jit:
             self.model.__call__ = jax.jit(self.model.__call__)
 
         if device is None:
@@ -1088,8 +1091,8 @@ class Pipeline(_ScikitCompat):
             elif self.framework == "flax":
                 model_inputs = self._ensure_tensor_on_device(model_inputs, device=self.device)
                 model_outputs = self._forward(model_inputs, **forward_params)
-                # model_outputs = self._ensure_tensor_on_device(model_outputs, device=jax.devices("cpu")[0])
-                # Back to numpy
+
+                # Converting back to numpy array
                 model_outputs = (
                     model_outputs.__class__(
                         **{
