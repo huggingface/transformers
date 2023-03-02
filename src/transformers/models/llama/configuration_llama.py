@@ -1,4 +1,17 @@
-# TODO @thomasw21: Figure out licensing
+# coding=utf-8
+# Copyright 2022 EleutherAI The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """ LLaMa model configuration"""
 
 from ...configuration_utils import PretrainedConfig
@@ -17,8 +30,7 @@ class LLaMaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LLaMaModel`]. It is used to instantiate an
     LLaMa model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the LLaMa
-    [EleutherAI/gpt-neox-20b](https://huggingface.co/EleutherAI/gpt-neox-20b) architecture.
+    with the defaults will yield a similar configuration to that of the LLaMa architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
