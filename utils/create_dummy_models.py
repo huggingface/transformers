@@ -560,7 +560,7 @@ def upload_model(model_dir, organization):
     repo_exist = False
     error = None
     try:
-        create_repo(repo_id=repo_name, organization=organization, exist_ok=False, repo_type="model")
+        create_repo(repo_id=f"{organization}/{repo_name}", exist_ok=False, repo_type="model")
     except Exception as e:
         error = e
         if "You already created" in str(e):
