@@ -25,7 +25,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_llama_fast"] = ["LLaMaTokenizer"]
+    _import_structure["tokenization_llama"] = ["LLaMaTokenizer"]
 
 try:
     if not is_torch_available():
