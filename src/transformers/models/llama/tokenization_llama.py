@@ -57,7 +57,7 @@ class LLaMaTokenizer(PreTrainedTokenizer):
         for special_token, token_id in self.special_tokens.items():
             # special token doesn't exist in the sentencepiece tokenizer
             try:
-                self.sp_model.IdToPiece(special_token)
+                self.sp_model.PieceToId(special_token)
                 assert False
             except IndexError:
                 pass
