@@ -26,6 +26,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_timm_available():
@@ -179,7 +180,7 @@ class ConditionalDetrModelTester:
 
 
 @require_timm
-class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ConditionalDetrModel,
@@ -188,6 +189,11 @@ class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
         )
         if is_timm_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": ConditionalDetrModel, "object-detection": ConditionalDetrForObjectDetection}
+        if is_timm_available()
+        else {}
     )
     is_encoder_decoder = True
     test_torchscript = False

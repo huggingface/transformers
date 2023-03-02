@@ -23,6 +23,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -170,9 +171,14 @@ class Swinv2ModelTester:
 
 
 @require_torch
-class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
+class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (Swinv2Model, Swinv2ForImageClassification, Swinv2ForMaskedImageModeling) if is_torch_available() else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": Swinv2Model, "image-classification": Swinv2ForImageClassification}
+        if is_torch_available()
+        else {}
     )
 
     fx_compatible = False

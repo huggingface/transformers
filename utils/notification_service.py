@@ -16,7 +16,6 @@ import ast
 import collections
 import functools
 import json
-import math
 import operator
 import os
 import re
@@ -25,6 +24,7 @@ import time
 from typing import Dict, List, Optional, Union
 
 import requests
+from get_ci_error_statistics import get_job_links
 from slack_sdk import WebClient
 
 
@@ -206,6 +206,15 @@ class Message:
 
     @property
     def warnings(self) -> Dict:
+        # If something goes wrong, let's avoid the CI report failing to be sent.
+        button_text = "Check warnings (Link not found)"
+        # Use the workflow run link
+        job_link = f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+        if "Extract warnings in CI artifacts" in github_actions_job_links:
+            button_text = "Check warnings"
+            # Use the actual job link
+            job_link = f"{github_actions_job_links['Extract warnings in CI artifacts']}"
+
         return {
             "type": "section",
             "text": {
@@ -215,8 +224,8 @@ class Message:
             },
             "accessory": {
                 "type": "button",
-                "text": {"type": "plain_text", "text": "Check warnings", "emoji": True},
-                "url": f"{github_actions_job_links['Extract warnings in CI artifacts']}",
+                "text": {"type": "plain_text", "text": button_text, "emoji": True},
+                "url": job_link,
             },
         }
 
@@ -577,27 +586,6 @@ class Message:
                     time.sleep(1)
 
 
-def get_job_links():
-    run_id = os.environ["GITHUB_RUN_ID"]
-    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{run_id}/jobs?per_page=100"
-    result = requests.get(url).json()
-    jobs = {}
-
-    try:
-        jobs.update({job["name"]: job["html_url"] for job in result["jobs"]})
-        pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
-
-        for i in range(pages_to_iterate_over):
-            result = requests.get(url + f"&page={i + 2}").json()
-            jobs.update({job["name"]: job["html_url"] for job in result["jobs"]})
-
-        return jobs
-    except Exception as e:
-        print("Unknown error, could not fetch links.", e)
-
-    return {}
-
-
 def retrieve_artifact(name: str, gpu: Optional[str]):
     if gpu not in [None, "single", "multi"]:
         raise ValueError(f"Invalid GPU for artifact. Passed GPU: `{gpu}`.")
@@ -770,7 +758,9 @@ if __name__ == "__main__":
         Message.error_out(title, ci_title)
         raise ValueError("Errored out.")
 
-    github_actions_job_links = get_job_links()
+    github_actions_job_links = get_job_links(
+        workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+    )
     available_artifacts = retrieve_available_artifacts()
 
     modeling_categories = [

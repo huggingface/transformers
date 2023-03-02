@@ -22,6 +22,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -155,8 +156,9 @@ class Swin2SRModelTester:
 
 
 @require_torch
-class Swin2SRModelTest(ModelTesterMixin, unittest.TestCase):
+class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": Swin2SRModel} if is_torch_available() else {}
 
     fx_compatible = False
     test_pruning = False

@@ -199,7 +199,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
             rescaled_image = rescaled_image.astype(np.float32)
         else:
             rescaled_image = rescale(image, scale=scale, data_format=data_format, **kwargs)
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
+        return rescaled_image
 
     def normalize(
         self,

@@ -198,6 +198,7 @@ src/transformers/models/vilt/modeling_vilt.py
 src/transformers/models/vision_encoder_decoder/configuration_vision_encoder_decoder.py
 src/transformers/models/vision_encoder_decoder/modeling_vision_encoder_decoder.py
 src/transformers/models/vision_text_dual_encoder/configuration_vision_text_dual_encoder.py
+src/transformers/models/vision_text_dual_encoder/modeling_tf_vision_text_dual_encoder.py
 src/transformers/models/vit/configuration_vit.py
 src/transformers/models/vit/modeling_vit.py
 src/transformers/models/vit/modeling_tf_vit.py
