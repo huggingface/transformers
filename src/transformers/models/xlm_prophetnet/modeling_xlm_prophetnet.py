@@ -862,14 +862,6 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
         position_ids=None,
     ):
         batch_size, ngram_sequence_length, hidden_size = hidden_states.size()
-        # Dimension Notation #
-        # bs -> Batch Size
-        # T -> Sequence Length
-        # ngram -> Ngram Length
-        # C -> Head Dimension
-        # nh -> Number of Attention Heads
-        # hs -> Hidden Size
-
         assert list(hidden_states.size()) == [batch_size, ngram_sequence_length, hidden_size], (
             f"`hidden_states` should be of shape {batch_size, ngram_sequence_length, hidden_size}, but is of shape"
             f" {hidden_states.shape}"
@@ -906,10 +898,8 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
 
         # saved states are stored with shape (batch_size, num_attn_heads, seq_len, head_dim)
         if past_key_value is not None:
-            # prev_main_key_states = past_key_value[0].view(batch_size * self.num_attn_heads, -1, self.head_dim)
             prev_main_key_states = past_key_value[0]
             main_key_states = torch.cat((prev_main_key_states, main_key_states), dim=2)
-            # prev_main_value_states = past_key_value[1].view(batch_size * self.num_attn_heads, -1, self.head_dim)
             prev_main_value_states = past_key_value[1]
             main_value_states = torch.cat((prev_main_value_states, main_value_states), dim=2)
 
@@ -921,7 +911,8 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
 
         # MAIN-STREAM
         # main attn weights
-        # [batch_size, number_heads, sequence_length, head_dimesion] x [batch_size, number_heads, head_dimesion, sequence_length]
+        # [batch_size, number_heads, sequence_length, head_dimesion]
+        # x [batch_size, number_heads, head_dimesion, sequence_length]
         # -> [batch_size, number_heads, sequence_length, sequence_length]
         main_attn_weights = torch.einsum("bntc,bncs->bnts", main_query_states, main_key_states.transpose(2, 3))
 
@@ -952,7 +943,8 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
 
         main_attn_probs = nn.functional.dropout(main_attn_probs, p=self.attention_dropout, training=self.training)
         # project to attn_output
-        # [batch_size, number_heads, sequence_length, sequence_length] x [batch_size, number_heads, sequence_length, head_dimesion]
+        # [batch_size, number_heads, sequence_length, sequence_length]
+        # x [batch_size, number_heads, sequence_length, head_dimesion]
         # -> [batch_size, number_heads, sequence_length, head_dimesion]
         main_attn_output = torch.einsum("bntc,bncs->bnts", main_attn_probs, main_value_states)
         # reshape so that num_heads dim is merged into last `head_dim` axis
@@ -976,12 +968,13 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
             [torch.cat([main_value_states, v_p], 2).unsqueeze(2) for v_p in predict_value_states_list], 2
         )
 
-        # [batch_size, ngram, number_heads, sequence_length, head_dimesion] x [batch_size, ngram, number_heads, 2*sequence_length, head_dimesion]
+        # [batch_size, ngram, number_heads, sequence_length, head_dimesion]
+        # x [batch_size, ngram, number_heads, 2*sequence_length, head_dimesion]
         # -> [batch_size, ngram, number_heads, sequence_length, 2*sequence_length]
         predict_attn_weights = torch.einsum("bnhtc,bnhsc->bnhts", (predict_query_states, predict_key_states))
 
         # retrieve relative position embeddings for each layer -> see paper for more details
-        # [batch_size, ngram, number_heads, sequence_length, 2*sequence_length]
+        # [batch_size, ngram, number_heads, sequence_length, predict_relative_pos_embeddings]
         predict_relative_pos_embeddings = self.get_predict_relative_pos_embeddings(
             predict_hidden_states, predict_attn_weights, position_ids, predict_relative_position_buckets
         )
@@ -990,11 +983,10 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
         predict_attn_weights = predict_attn_weights + predict_relative_pos_embeddings
 
         if extended_predict_attention_mask is not None:
-            # Permuting Predict attention mask from [batch_size, number_heads, ngram, sequence_length, C]
-            # to [batch_size, ngram, number_heads, sequence_length, C]
-            predict_attn_weights = predict_attn_weights + extended_predict_attention_mask.permute(0, 2, 1, 3, 4).to(
-                predict_attn_weights.dtype
-            )
+            # Permuting Predict attention mask to [batch_size, ngram, number_heads, sequence_length, 2*sequence_length]
+            extended_predict_attention_mask = extended_predict_attention_mask.permute(0, 2, 1, 3, 4)
+            extended_predict_attention_mask = extended_predict_attention_mask.to(predict_attn_weights.dtype)
+            predict_attn_weights = predict_attn_weights + extended_predict_attention_mask
 
         predict_attn_probs = softmax(
             predict_attn_weights,
@@ -1013,7 +1005,8 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
             predict_attn_probs, p=self.attention_dropout, training=self.training
         )
         # project to attention output
-        # [batch_size, ngram, number_heads, sequence_length, 2*sequence_length] x [batch_size, ngram, number_heads, 2*sequence_length, head_dimesion]
+        # [batch_size, ngram, number_heads, sequence_length, 2*sequence_length]
+        # x [batch_size, ngram, number_heads, 2*sequence_length, head_dimesion]
         # -> [batch_size, ngram, number_heads, sequence_length, head_dimesion]
         predict_attn_output = torch.einsum(
             "bnhts,bnhsc->bnhtc", (predict_attn_probs, predict_value_states.transpose(1, 2))
@@ -1038,7 +1031,9 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
     def get_main_relative_pos_embeddings(
         self, hidden_states, attn_weights, position_ids, main_relative_position_buckets
     ):
-        # input hidden_states [B,T,C], input attn_weights [T*head,T,S], input position_ids [B,T] or [1,1]
+        # input hidden_states [batch_size, sequence_length, hidden_size]
+        # input attn_weights [batch_size, num_heads, sequence_length, sequence_length]
+        # input position_ids [batch_size, sequence_length] or [1,1]
         batch_size, num_attn_heads, tgt_len, src_len = attn_weights.shape
         attn_weights = attn_weights.view(batch_size, num_attn_heads, tgt_len, src_len)
         if main_relative_position_buckets is None:
@@ -1050,43 +1045,41 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
                 .repeat(batch_size, sequence_length, 1)
                 .to(position_ids.device)
             )
-            relative_positions = relative_positions - position_ids.unsqueeze(0).repeat(
-                batch_size, sequence_length, 1
-            )  # [B, T, s]
+            # [batch_size, sequence_length, sequence_length+1]
+            relative_positions = relative_positions - position_ids.unsqueeze(0).repeat(batch_size, sequence_length, 1)
             main_relative_position_buckets = compute_relative_buckets(
                 self.num_buckets, self.relative_max_distance, relative_positions, False
             )
 
-        rel_pos_embeddings = self.relative_pos_embeddings(hidden_states)  # [B,T,Buckets*head]
+        # [batch_size, sequence_length, num_buckets * num_heads]
+        rel_pos_embeddings = self.relative_pos_embeddings(hidden_states)
         rel_pos_embeddings = rel_pos_embeddings.view(
             rel_pos_embeddings.shape[:2] + (self.num_buckets, self.num_attn_heads)
-        ).permute(
-            0, 3, 1, 2
-        )  # [B,T,Buckets,head]
-        rel_pos_embeddings = rel_pos_embeddings.reshape(attn_weights.shape[:3] + (-1,))  # [B, head,T,Buckets]
-
-        main_relative_position_buckets = (
-            main_relative_position_buckets.repeat(1, self.num_attn_heads, 1)
-            .view(-1, main_relative_position_buckets.shape[-1])
-            .long()
-        )  # [B*head*T, T]
-        rel_pos_embeddings = rel_pos_embeddings.reshape(-1, rel_pos_embeddings.size(-1))  # [B*head*T,Buckets]
-
-        main_relative_pos_embeddings = torch.gather(
-            rel_pos_embeddings, dim=1, index=main_relative_position_buckets
-        ).view(
-            batch_size,
-            num_attn_heads,
-            tgt_len,
-            -1,
         )
+        rel_pos_embeddings = rel_pos_embeddings.permute(0, 3, 1, 2)
+        # [batch_size, num_heads, sequence_length, num_buckets]
+        rel_pos_embeddings = rel_pos_embeddings.reshape(attn_weights.shape[:3] + (-1,))
 
+        main_relative_position_buckets = main_relative_position_buckets.repeat(1, self.num_attn_heads, 1)
+        # [batch_size * num_heads * sequence_length, sequence_length]
+        main_relative_position_buckets = main_relative_position_buckets.view(
+            -1, main_relative_position_buckets.shape[-1]
+        )
+        main_relative_position_buckets = main_relative_position_buckets.long()
+        # [batch_size * num_heads * sequence_length, sequence_length]
+        rel_pos_embeddings = rel_pos_embeddings.reshape(-1, rel_pos_embeddings.size(-1))
+
+        main_relative_pos_embeddings = torch.gather(rel_pos_embeddings, dim=1, index=main_relative_position_buckets)
+        main_relative_pos_embeddings = main_relative_pos_embeddings.view(batch_size, num_attn_heads, tgt_len, -1)
         return main_relative_pos_embeddings
 
     def get_predict_relative_pos_embeddings(
         self, hidden_states, attn_weights, position_ids, predict_relative_position_buckets
     ):
-        # input hidden_states [ngram, T,B,C], input attn_weights [ngram, B*head,T,S], input position_ids [B,T] or [1,1], input predict_relative_position_buckets [B,T, 2*T] or None
+        # input hidden_states [batch_size, sequence_length, ngram, hidden_size]
+        # input attn_weights [batch_size, ngram, num_heads, sequence_length, 2*sequence_length]
+        # input position_ids [batch_size, sequence_length] or [1,1]
+        # input predict_relative_position_buckets [batch_size, sequence_length, 2*sequence_length] or None
         batch_size, sequence_length = hidden_states.shape[0:2]
 
         if predict_relative_position_buckets is None:
@@ -1125,7 +1118,7 @@ class XLMProphetNetNgramSelfAttention(nn.Module):
         )
         # [ngram * batch_size * num_heads * sequence_length, -1]
         predict_relative_position_buckets = predict_relative_position_buckets.view(
-            1, predict_relative_position_buckets.size(-1)
+            -1, predict_relative_position_buckets.size(-1)
         ).long()
 
         predict_relative_pos_embeddings = torch.gather(
