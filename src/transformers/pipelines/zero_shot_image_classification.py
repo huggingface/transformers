@@ -21,7 +21,6 @@ if is_torch_available():
     pass
 
 if is_tf_available():
-
     from ..tf_utils import stable_softmax
 
 logger = logging.get_logger(__name__)
