@@ -72,11 +72,9 @@ def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
                 print(f"We ignore {original_name} as it stores the rotary embeddings which are not in fact parameters")
                 continue
 
-
             transformers_name = map_original_names_to_transformers_names(original_name)
             transformers_param = model.get_parameter(transformers_name)
 
-            print(original_name, transformers_name,  original_param.shape, transformers_param.shape)
             if original_name.endswith("norm.weight"):
                 transformers_param.copy_(original_param)
                 continue

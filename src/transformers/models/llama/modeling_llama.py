@@ -212,6 +212,8 @@ class LLaMaAttention(nn.Module):
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
         attention_mask = causal_mask * attention_mask
+        if attn_scores.dtype == torch.float16:
+            attn_scores = attn_scores.to(torch.float)
         attn_scores = torch.masked_fill(attn_scores, ~attention_mask, torch.finfo(attn_scores.dtype).min)
 
         attn_weights = nn.functional.softmax(attn_scores, dim=-1, dtype=torch.float)
@@ -394,7 +396,7 @@ class LLaMaModel(LLaMaPreTrainedModel):
         self.layers = nn.ModuleList([LLaMaLayer(config) for _ in range(config.num_hidden_layers)])
         head_size = config.hidden_size // config.num_attention_heads
         self.rotary_emb = RotaryEmbedding(head_size, config.max_position_embeddings)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.final_layer_norm = LLaMaLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
 
