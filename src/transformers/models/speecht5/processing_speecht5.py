@@ -113,36 +113,57 @@ class SpeechT5Processor(ProcessorMixin):
 
     def pad(self, *args, **kwargs):
         """
-        This method forwards all its arguments to SpeechT5FeatureExtractor's [`~SpeechT5FeatureExtractor.pad`] and
-        returns its output.
+        Collates the audio and text inputs, as well as their targets, into a padded batch.
 
-        You can process your labels by using the argument `text` (either in the same call as your audio inputs, or in a
-        separate call). This forwards its arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.pad`].
+        Audio inputs are padded by SpeechT5FeatureExtractor's [`~SpeechT5FeatureExtractor.pad`].
+        Text inputs are padded by SpeechT5Tokenizer's [`~SpeechT5Tokenizer.pad`].
+
+        Valid input combinations are:
+
+        - `input_ids` only
+        - `input_values` only
+        - `labels` only, either log-mel spectrograms or text tokens
+        - `input_ids` and log-mel spectrogram `labels`
+        - `input_values` and text `labels`
 
         Please refer to the docstring of the above two methods for more information.
         """
+        input_values = kwargs.pop("input_values", None)
         input_ids = kwargs.pop("input_ids", None)
-        input_features = kwargs.pop("input_values", None)
         labels = kwargs.pop("labels", None)
 
-        # TODO assertions here like in __call__
-        if len(args) > 0:
-            input_features = args[0]
-            args = args[1:]
+        if input_values is not None and input_ids is not None:
+            raise ValueError(
+                "Cannot process both `input_values` and `input_ids` inputs."
+            )
+        if input_values is None and input_ids is None and labels is None:
+            raise ValueError(
+                "You need to specify either an `input_values`, `input_ids`, or `labels` input to be padded."
+            )
 
-        if input_features is not None:
-            inputs = self.feature_extractor.pad(input_features, *args, **kwargs)
+        if input_values is not None:
+            inputs = self.feature_extractor.pad(input_values, *args, **kwargs)
         elif input_ids is not None:
             inputs = self.tokenizer.pad(input_ids, **kwargs)
         else:
             inputs = None
 
         if labels is not None:
-            targets = self.tokenizer.pad(labels, **kwargs)
-            if inputs is None:
-                return labels
+            if "input_ids" in labels or (isinstance(labels, list) and "input_ids" in labels[0]):
+                targets = self.tokenizer.pad(labels, **kwargs)
+                if inputs is None:
+                    return labels
+                else:
+                    inputs["labels"] = targets["input_ids"]
             else:
-                inputs["labels"] = targets["input_ids"]
+                feature_size_hack = self.feature_extractor.feature_size
+                self.feature_extractor.feature_size = self.feature_extractor.num_mel_bins
+                targets = self.feature_extractor.pad(labels, *args, **kwargs)
+                self.feature_extractor.feature_size = feature_size_hack
+                if inputs is None:
+                    return labels
+                else:
+                    inputs["labels"] = targets["input_values"]
         else:
             targets = None
 
