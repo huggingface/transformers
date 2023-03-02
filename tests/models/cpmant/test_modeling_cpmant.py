@@ -18,7 +18,7 @@ import unittest
 
 from transformers.testing_utils import is_torch_available, require_torch, slow
 
-from ...generation.test_utils import GenerationTesterMixin, torch_device
+from ...generation.test_utils import torch_device
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
@@ -89,7 +89,7 @@ class CPMAntModelTester:
         self.return_dict = return_dict
 
     def prepare_config_and_inputs(self):
-        input_ids = dict()
+        input_ids = {}
         input_ids["input_ids"] = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).type(torch.int32)
         input_ids["use_cache"] = False
 
@@ -104,8 +104,8 @@ class CPMAntModelTester:
             num_layers=self.num_hidden_layers,
             num_heads=self.num_attention_heads,
             dim_ff=self.intermediate_size,
-            position_bias_num_buckets = self.num_buckets,
-            position_bias_max_distance = self.max_distance,
+            position_bias_num_buckets=self.num_buckets,
+            position_bias_max_distance=self.max_distance,
             prompt_types=self.prompt_types,
             prompt_length=self.prompt_length,
             segment_types=self.segment_types,
@@ -131,7 +131,10 @@ class CPMAntModelTester:
         model.eval()
 
         model_output = model(**input_ids)
-        self.parent.assertEqual(model_output.logits.shape, (self.batch_size, self.seq_length, config.vocab_size + config.prompt_types * config.prompt_length))
+        self.parent.assertEqual(
+            model_output.logits.shape,
+            (self.batch_size, self.seq_length, config.vocab_size + config.prompt_types * config.prompt_length),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
@@ -169,12 +172,12 @@ class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_inputs_embeds(self):
         unittest.skip("CPMAnt doesn't support input_embeds.")(self.test_inputs_embeds)
-    
+
     def test_retain_grad_hidden_states_attentions(self):
         unittest.skip(
             "CPMAnt doesn't support retain grad in hidden_states or attentions, because prompt management will peel off the output.hidden_states from graph.\
                  So is attentions. We strongly recommand you use loss to tune model."
-            )(self.test_retain_grad_hidden_states_attentions)
+        )(self.test_retain_grad_hidden_states_attentions)
 
     @slow
     def test_cpmant_model(self):

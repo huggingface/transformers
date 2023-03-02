@@ -20,10 +20,10 @@ import os
 from typing import List, Optional, Tuple, Union
 
 import torch
-from torch.nn import CrossEntropyLoss
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -805,17 +805,17 @@ class CPMAntModel(CPMAntPreTrainedModel):
         )
 
         if past_length == 0:
-            hidden_states = hidden_states[:, self.prompt_length:, :]
+            hidden_states = hidden_states[:, self.prompt_length :, :]
             # drop the prompt
             if all_attentions is not None:
                 new_attentions = ()
                 for attention in all_attentions:
-                    new_attentions += (attention[:, :, self.prompt_length:, self.prompt_length:],)
+                    new_attentions += (attention[:, :, self.prompt_length :, self.prompt_length :],)
                 all_attentions = new_attentions
             if all_hidden_states is not None:
                 new_hidden_states = ()
                 for hidden_state in all_hidden_states:
-                    new_hidden_states += (hidden_state[:, self.prompt_length:, :],)
+                    new_hidden_states += (hidden_state[:, self.prompt_length :, :],)
                 all_hidden_states = new_hidden_states
 
         if not return_dict:
@@ -845,7 +845,9 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         self.cpmant = CPMAntModel(config)
 
         # lm_head.weight is tied to cpmant.input_embedding.weight
-        self.lm_head = nn.Linear(config.dim_model, config.vocab_size + config.prompt_types * config.prompt_length, bias=False)
+        self.lm_head = nn.Linear(
+            config.dim_model, config.vocab_size + config.prompt_types * config.prompt_length, bias=False
+        )
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING)
@@ -886,6 +888,8 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
                 Whether or not to return the attentions tensors of all attention layers.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
+            labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
