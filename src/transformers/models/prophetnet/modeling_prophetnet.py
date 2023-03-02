@@ -28,15 +28,10 @@ from torch.nn import LayerNorm
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import (ModelOutput, add_start_docstrings,
+                      add_start_docstrings_to_model_forward, logging,
+                      replace_return_docstrings)
 from .configuration_prophetnet import ProphetNetConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -904,6 +899,8 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         # MAIN-STREAM
         # main attn weights
+        # [batch_size, number_heads, sequence_length, head_dimesion] x [batch_size, number_heads, head_dimesion, sequence_length]
+        # -> [batch_size, number_heads, sequence_length, sequence_length]
         main_attn_weights = torch.einsum("bntc,bncs->bnts", main_query_states, main_key_states.transpose(2, 3))
 
         # retrieve relative position embeddings for each layer -> see paper for more details
@@ -933,44 +930,47 @@ class ProphetNetNgramSelfAttention(nn.Module):
 
         main_attn_probs = nn.functional.dropout(main_attn_probs, p=self.attention_dropout, training=self.training)
         # project to attn_output
+        # [batch_size, number_heads, sequence_length, sequence_length] x [batch_size, number_heads, sequence_length, head_dimesion]
+        # -> [batch_size, number_heads, sequence_length, head_dimesion]
         main_attn_output = torch.einsum("bntc,bncs->bnts", main_attn_probs, main_value_states)
         # reshape so that num_heads dim is merged into last `head_dim` axis
         main_attn_output = main_attn_output.transpose(1, 2).reshape(batch_size, 1, sequence_length, hidden_size)
         main_attn_output = self.out_proj(main_attn_output)
 
         # PREDICT-STREAM
-        # [B, ngram, head, T, c]
+        # [batch_size, ngram, number_heads, sequence_length, head_dimesion]
         predict_query_states = torch.stack(predict_query_states_list, 1).view(
             batch_size, self.ngram, self.num_attn_heads, sequence_length, self.head_dim
         )
 
-        # [B ,ngram, head, 2*T, c]
+        # [batch_size, ngram, number_heads, 2*sequence_length, head_dimesion]
         predict_key_states = torch.stack([torch.cat([main_key_states, key], 2) for key in predict_key_states_list], 1)
 
-        # [ngram, T, B, C]
+        # [batch_size, sequence_length, ngram, hidden_size]
         predict_hidden_states = torch.stack(hidden_states_predict_list, dim=2)
 
-        # [ngram, B*head, 2*T, c]
+        # [batch_size, number_heads, ngram, 2*sequence_length, head_dimesion]
         predict_value_states = torch.cat(
             [torch.cat([main_value_states, v_p], 2).unsqueeze(2) for v_p in predict_value_states_list], 2
         )
 
-        # [ngram, B*head, T, 2*T]
-        predict_attn_weights = torch.einsum("nbhtc,nbhsc->nbhts", (predict_query_states, predict_key_states))
+        # [batch_size, ngram, number_heads, sequence_length, head_dimesion] x [batch_size, ngram, number_heads, 2*sequence_length, head_dimesion] 
+        # -> [batch_size, ngram, number_heads, sequence_length, 2*sequence_length]
+        predict_attn_weights = torch.einsum("bnhtc,bnhsc->bnhts", (predict_query_states, predict_key_states))
 
-        # return predict_hidden_states, predict_attn_weights, position_ids, predict_relative_position_buckets
 
-        # [ngram, B*head, T, S]
         # retrieve relative position embeddings for each layer -> see paper for more details
+        # [batch_size, ngram, number_heads, sequence_length, 2*sequence_length]
         predict_relative_pos_embeddings = self.get_predict_relative_pos_embeddings(
             predict_hidden_states, predict_attn_weights, position_ids, predict_relative_position_buckets
         )
 
-        # [ngram, B*head, T, 2*T]
+        # [batch_size, ngram, number_heads, sequence_length, 2*sequence_length]
         predict_attn_weights = predict_attn_weights + predict_relative_pos_embeddings
 
         if extended_predict_attention_mask is not None:
-            # Permuting Predict attention mask from [B, Head, ngram, T, C] to [ngram, B, head, T, C]
+            # Permuting Predict attention mask from [batch_size, number_heads, ngram, sequence_length, C] 
+            # to [batch_size, ngram, number_heads, sequence_length, C] 
             predict_attn_weights = predict_attn_weights + extended_predict_attention_mask.permute(0, 2, 1, 3, 4).to(
                 predict_attn_weights.dtype
             )
@@ -992,29 +992,23 @@ class ProphetNetNgramSelfAttention(nn.Module):
             predict_attn_probs, p=self.attention_dropout, training=self.training
         )
         # project to attention output
-        # [b n nh t x] x [b n nh x  hd]-> [b n nh t hd]
-        # return predict_attn_probs, predict_value_states
+        # [batch_size, ngram, number_heads, sequence_length, 2*sequence_length] x [batch_size, ngram, number_heads, 2*sequence_length, head_dimesion] 
+        # -> [batch_size, ngram, number_heads, sequence_length, head_dimesion]
         predict_attn_output = torch.einsum(
             "bnhts,bnhsc->bnhtc", (predict_attn_probs, predict_value_states.transpose(1, 2))
         )
-        # return predict_attn_probs, predict_value_states.transpose(1,2), predict_attn_output
 
         # reshape so that num_heads dim is merged into last `head_dim` axis
-        # [ngram, B, T, C]
-        predict_attn_output = predict_attn_output.transpose(2, 3).reshape(
-            batch_size, self.ngram, sequence_length, hidden_size
-        )
+        # [batch_size, ngram, number_heads, sequence_length, head_dimesion] -> [batch_size, ngram, sequence_length, hidden_size]
+        predict_attn_output = predict_attn_output.transpose(2, 3)
+        predict_attn_output = predict_attn_output.reshape(batch_size, self.ngram, sequence_length, hidden_size)
         predict_attn_output = self.out_proj(predict_attn_output)
-        # return predict_attn_output
 
         # concat to single attn output
-        # [B, (1+ngram)*T, hs]
+        # [batch_size, (1+ngram)*sequence_length, hidden_size]
         attn_output = torch.cat([main_attn_output, predict_attn_output], 1).view(batch_size, -1, hidden_size)
         # reshape into better form for `config.output_attentions`
         main_attn_probs = main_attn_probs.view(batch_size, self.num_attn_heads, sequence_length, -1)
-        # predict_attn_probs = predict_attn_probs.view(
-        #     self.ngram, batch_size, self.num_attn_heads, sequence_length, -1
-        # ).transpose(0, 1)
 
         attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
 
