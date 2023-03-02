@@ -105,7 +105,6 @@ PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent, "src/transform
 transformers_module = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
-@is_pipeline_test
 class PipelineTesterMixin:
     model_tester = None
     pipeline_model_mapping = None
@@ -279,102 +278,127 @@ class PipelineTesterMixin:
 
         run_batch_test(pipeline, examples)
 
+    @is_pipeline_test
     @require_torch
     def test_pipeline_audio_classification(self):
         self.run_task_tests(task="audio-classification")
 
+    @is_pipeline_test
     def test_pipeline_automatic_speech_recognition(self):
         self.run_task_tests(task="automatic-speech-recognition")
 
+    @is_pipeline_test
     def test_pipeline_conversational(self):
         self.run_task_tests(task="conversational")
 
+    @is_pipeline_test
     @require_vision
     @require_timm
     @require_torch
     def test_pipeline_depth_estimation(self):
         self.run_task_tests(task="depth-estimation")
 
+    @is_pipeline_test
     @require_pytesseract
     @require_torch
     @require_vision
     def test_pipeline_document_question_answering(self):
         self.run_task_tests(task="document-question-answering")
 
+    @is_pipeline_test
     def test_pipeline_feature_extraction(self):
         self.run_task_tests(task="feature-extraction")
 
+    @is_pipeline_test
     def test_pipeline_fill_mask(self):
         self.run_task_tests(task="fill-mask")
 
+    @is_pipeline_test
     @require_torch_or_tf
     @require_vision
     def test_pipeline_image_classification(self):
         self.run_task_tests(task="image-classification")
 
+    @is_pipeline_test
     @require_vision
     @require_timm
     @require_torch
     def test_pipeline_image_segmentation(self):
         self.run_task_tests(task="image-segmentation")
 
+    @is_pipeline_test
     @require_vision
     def test_pipeline_image_to_text(self):
         self.run_task_tests(task="image-to-text")
 
+    @is_pipeline_test
     @require_vision
     @require_timm
     @require_torch
     def test_pipeline_object_detection(self):
         self.run_task_tests(task="object-detection")
 
+    @is_pipeline_test
     def test_pipeline_question_answering(self):
         self.run_task_tests(task="question-answering")
 
+    @is_pipeline_test
     def test_pipeline_summarization(self):
         self.run_task_tests(task="summarization")
 
+    @is_pipeline_test
     def test_pipeline_table_question_answering(self):
         self.run_task_tests(task="table-question-answering")
 
+    @is_pipeline_test
     def test_pipeline_text2text_generation(self):
         self.run_task_tests(task="text2text-generation")
 
+    @is_pipeline_test
     def test_pipeline_text_classification(self):
         self.run_task_tests(task="text-classification")
 
+    @is_pipeline_test
     @require_torch_or_tf
     def test_pipeline_text_generation(self):
         self.run_task_tests(task="text-generation")
 
+    @is_pipeline_test
     def test_pipeline_token_classification(self):
         self.run_task_tests(task="token-classification")
 
+    @is_pipeline_test
     def test_pipeline_translation(self):
         self.run_task_tests(task="translation")
 
+    @is_pipeline_test
     @require_torch_or_tf
     @require_vision
     @require_decord
     def test_pipeline_video_classification(self):
         self.run_task_tests(task="video-classification")
 
+    @is_pipeline_test
     @require_torch
     @require_vision
     def test_pipeline_visual_question_answering(self):
         self.run_task_tests(task="visual-question-answering")
 
+    @is_pipeline_test
     def test_pipeline_zero_shot(self):
         self.run_task_tests(task="zero-shot")
 
+    @is_pipeline_test
     @require_torch
     def test_pipeline_zero_shot_audio_classification(self):
         self.run_task_tests(task="zero-shot-audio-classification")
 
+    @is_pipeline_test
     @require_vision
     def test_pipeline_zero_shot_image_classification(self):
         self.run_task_tests(task="zero-shot-image-classification")
 
+    @is_pipeline_test
     @require_vision
     @require_torch
     def test_pipeline_zero_shot_object_detection(self):
