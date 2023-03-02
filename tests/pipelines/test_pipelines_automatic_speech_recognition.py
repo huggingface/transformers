@@ -538,7 +538,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                             "tight-loan cloth that was the only garment he wore, the "
                             "cut"
                         ),
-                        "timestamp": (5.5, 11.94),
+                        "timestamp": (5.5, 11.95),
                     },
                     {
                         "text": (
@@ -546,15 +546,15 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                             "overstrained eyes, even the soaring arena around him "
                             "with"
                         ),
-                        "timestamp": (11.94, 19.6),
+                        "timestamp": (11.95, 19.61),
                     },
                     {
                         "text": " the thousands of spectators, retrievality is not worth thinking about.",
-                        "timestamp": (19.6, 26.66),
+                        "timestamp": (19.61, 25.0),
                     },
                     {
                         "text": " His instant panic was followed by a small, sharp blow high on his chest.",
-                        "timestamp": (26.66, 31.06),
+                        "timestamp": (25.0, 29.4),
                     },
                 ],
                 "text": (
