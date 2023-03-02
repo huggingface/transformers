@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 
-COMMON_ENV_VARIABLES = {"OMP_NUM_THREADS": 1, "TRANSFORMERS_IS_CI": True, "PYTEST_TIMEOUT": 120}
+COMMON_ENV_VARIABLES = {"OMP_NUM_THREADS": 1, "TRANSFORMERS_IS_CI": True, "PYTEST_TIMEOUT": 120, "RUN_PIPELINE_TESTS": False}
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.7.12"}]
 
@@ -64,10 +64,12 @@ class CircleCIJob:
             self.parallelism = 1
 
     def to_dict(self):
+        env = COMMON_ENV_VARIABLES.copy()
+        env.update(self.additional_env)
         job = {
             "working_directory": self.working_directory,
             "docker": self.docker_image,
-            "environment": {**COMMON_ENV_VARIABLES, **self.additional_env},
+            "environment": env,
         }
         if self.resource_class is not None:
             job["resource_class"] = self.resource_class
@@ -239,25 +241,27 @@ flax_job = CircleCIJob(
 
 pipelines_torch_job = CircleCIJob(
     "pipelines_torch",
+    additional_env={"RUN_PIPELINE_TESTS": True},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
         "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
     pytest_options={"rA": None},
-    tests_to_run="tests/pipelines/"
+    marker="is_pipeline_test",
 )
 
 
 pipelines_tf_job = CircleCIJob(
     "pipelines_tf",
+    additional_env={"RUN_PIPELINE_TESTS": True},
     install_steps=[
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece,vision]",
         "pip install tensorflow_probability",
     ],
     pytest_options={"rA": None},
-    tests_to_run="tests/pipelines/"
+    marker="is_pipeline_test",
 )
 
 
