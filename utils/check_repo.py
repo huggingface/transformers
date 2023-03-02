@@ -665,7 +665,8 @@ def check_all_auto_mapping_names_in_config_mapping_names():
         for model_type, class_names in mapping.items():
             if model_type not in CONFIG_MAPPING_NAMES:
                 failures.append(
-                    f"`{model_type}` appears in the mapping `{name}` but it is not defined in the keys of `CONFIG_MAPPING_NAMES`."
+                    f"`{model_type}` appears in the mapping `{name}` but it is not defined in the keys of "
+                    "`CONFIG_MAPPING_NAMES`."
                 )
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
