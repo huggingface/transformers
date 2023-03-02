@@ -119,8 +119,10 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         candidate_labels = model_inputs.pop("candidate_labels")
         text_inputs = model_inputs.pop("text_inputs")
         if isinstance(text_inputs[0], UserDict):
-            text_inputs = [text_inputs]
-        text_inputs = text_inputs[0][0]
+            text_inputs = text_inputs[0]
+        else:
+            # Batching case.
+            text_inputs = text_inputs[0][0]
 
         outputs = self.model(**text_inputs, **model_inputs)
 
