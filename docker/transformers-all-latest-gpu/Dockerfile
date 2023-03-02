@@ -51,7 +51,8 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/acc
 # Add bitsandbytes for mixed int8 testing
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
-RUN python3 -m pip install --no-cache-dir decord
+# For video model testing
+RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 
 # For `dinat` model
 RUN python3 -m pip install --no-cache-dir natten -f https://shi-labs.com/natten/wheels/$CUDA/
