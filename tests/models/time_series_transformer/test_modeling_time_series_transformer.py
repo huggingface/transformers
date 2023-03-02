@@ -408,7 +408,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
         )
         transformer_inputs, loc, scale, _ = model.create_network_inputs(**batch)
 
-        assert (scale == 1.0).all()
+        self.assertTrue((scale == 1.0).all())
         assert (loc == 0.0).all()
 
         ref = torch.arange(max(lags_sequence), history_length, dtype=torch.float32)
