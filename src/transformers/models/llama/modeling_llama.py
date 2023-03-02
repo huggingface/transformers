@@ -321,8 +321,8 @@ class LLaMaLayer(nn.Module):
         outputs = attention_layer_outputs[1:]
 
         attn_output = attn_output + hidden_states
-        FF_output = self.FF(self.post_attention_layernorm(attn_output))
-        hidden_states = FF_output + attn_output
+        ff_output = self.ff(self.post_attention_layernorm(attn_output))
+        hidden_states = ff_output + attn_output
 
         if use_cache:
             outputs = (hidden_states,) + outputs  # hidden_states, present, (attn_weights)
