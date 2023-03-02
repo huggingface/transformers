@@ -656,13 +656,12 @@ def check_all_auto_mapping_names_in_config_mapping_names():
         "IMAGE_PROCESSOR_MAPPING_NAMES": IMAGE_PROCESSOR_MAPPING_NAMES,
         "FEATURE_EXTRACTOR_MAPPING_NAMES": FEATURE_EXTRACTOR_MAPPING_NAMES,
         "PROCESSOR_MAPPING_NAMES": PROCESSOR_MAPPING_NAMES,
-        "MODEL_MAPPING_NAMES": MODEL_MAPPING_NAMES,
-        "TF_MODEL_MAPPING_NAMES": TF_MODEL_MAPPING_NAMES,
-        "FLAX_MODEL_MAPPING_NAMES": FLAX_MODEL_MAPPING_NAMES,
     }
 
+    # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
     for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
         module = getattr(transformers.models.auto, module_name)
+        # all mappings in a single auto modeling file
         mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
         mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
 
