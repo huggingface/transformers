@@ -44,14 +44,16 @@ def generate_config(params_json_path: Path, vocab_size: int) -> LLaMaConfig:
         max_position_embeddings=2048,
         layer_norm_eps=hyperparameters["norm_eps"],
         tie_word_embeddings=False,
-        use_cache=True
+        use_cache=True,
     )
+
 
 def get_tokenzier(tokenizer_path: Path) -> LLaMaTokenizer:
     return LLaMaTokenizer(str(tokenizer_path.absolute()))
 
+
 original_name_to_transformers_name = {
-    "tok_embeddings.weight" : "llama.embed.weight",
+    "tok_embeddings.weight": "llama.embed.weight",
     "norm.weight": "llama.final_layer_norm.weight",
     "output.weight": "lm_head.weight",
     r"layers.(\d*).attention_norm.weight": r"llama.layers.\1.attention_norm.weight",
@@ -64,6 +66,8 @@ original_name_to_transformers_name = {
     r"layers.(\d*).feed_forward.w2.weight": r"llama.layers.\1.ff.wo.weight",
     r"layers.(\d*).feed_forward.w3.weight": r"llama.layers.\1.ff.wi_1.weight",
 }
+
+
 def map_original_names_to_transformers_names(original_name: str):
     for pattern, repl in original_name_to_transformers_name.items():
         if re.match(pattern, original_name) is None:
@@ -71,8 +75,9 @@ def map_original_names_to_transformers_names(original_name: str):
         return re.sub(pattern, repl, original_name)
     raise ValueError(f"Did not expect {original_name}")
 
+
 @torch.no_grad()
-def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
+def convert_model(model_path: Path, config: LLaMaConfig) -> LLaMaForCausalLM:
     # HACK @thomasw21: Bypasses `reset_parameters` which can be quite costly.
     nn.Linear.reset_parameters = lambda *args: None
     model = LLaMaForCausalLM(config=config)
@@ -108,12 +113,16 @@ def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
             # Column linear
             if any(original_name.endswith(suffix) for suffix in [".wq.weight", ".wk.weight", "wv.weight"]):
                 # We fuse all the weights into a single qkv matrix.
-                index, suffix = [(i, suffix) for i, suffix in enumerate([".wq.weight", ".wk.weight", "wv.weight"]) if original_name.endswith(suffix)][0]
+                index, suffix = [
+                    (i, suffix)
+                    for i, suffix in enumerate([".wq.weight", ".wk.weight", "wv.weight"])
+                    if original_name.endswith(suffix)
+                ][0]
                 assert config.num_attention_heads % tp_size == 0
                 heads_per_tp_rank = config.num_attention_heads // tp_size
-                transformer_shard = transformers_param \
-                    .view(config.num_attention_heads, 3, config.hidden_size // config.num_attention_heads, config.hidden_size) \
-                    [tp_rank * heads_per_tp_rank: (tp_rank+1) * heads_per_tp_rank, index]
+                transformer_shard = transformers_param.view(
+                    config.num_attention_heads, 3, config.hidden_size // config.num_attention_heads, config.hidden_size
+                )[tp_rank * heads_per_tp_rank : (tp_rank + 1) * heads_per_tp_rank, index]
                 original_param = original_param.view(*transformer_shard.shape)
             else:
                 output_dim = transformers_param.shape[0]
@@ -121,11 +130,12 @@ def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
                 step = output_dim // tp_size
                 start = tp_rank * step
                 end = (tp_rank + 1) * step
-                transformer_shard = transformers_param[start: end]
+                transformer_shard = transformers_param[start:end]
 
             transformer_shard.copy_(original_param)
 
     return model
+
 
 def main(args):
     tokenizer = get_tokenzier(tokenizer_path=args.checkpoint_directory / "tokenizer.model")
@@ -151,7 +161,10 @@ if __name__ == "__main__":
         "--pytorch-dump-folder-path", type=Path, required=True, help="Path to the output PyTorch model."
     )
     parser.add_argument(
-        "--model-subpath", type=Path, required=True, help="Subpath after going into checkpoint directory where the model checkpoint lies. Typically `7B` or `13B`"
+        "--model-subpath",
+        type=Path,
+        required=True,
+        help="Subpath after going into checkpoint directory where the model checkpoint lies. Typically `7B` or `13B`",
     )
     args = parser.parse_args()
     main(args)

@@ -299,7 +299,6 @@ _import_structure = {
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
-    "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LLaMaConfig"],
     "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
@@ -347,6 +346,7 @@ _import_structure = {
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
+    "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LLaMaConfig"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
@@ -720,7 +720,6 @@ else:
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
-    _import_structure["models.llama"].append("LLaMaTokenizer")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
@@ -728,6 +727,7 @@ else:
     _import_structure["models.layoutlmv3"].append("LayoutLMv3TokenizerFast")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
+    _import_structure["models.llama"].append("LLaMaTokenizer")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
     _import_structure["models.markuplm"].append("MarkupLMTokenizerFast")
@@ -1653,15 +1653,6 @@ else:
             "GPTNeoXPreTrainedModel",
         ]
     )
-    _import_structure["models.llama"].extend(
-        [
-            "LLAMA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "LLaMaForCausalLM",
-            "LLaMaLayer",
-            "LLaMaModel",
-            "LLaMaPreTrainedModel",
-        ]
-    )
     _import_structure["models.gpt_neox_japanese"].extend(
         [
             "GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1804,6 +1795,15 @@ else:
             "LiltForTokenClassification",
             "LiltModel",
             "LiltPreTrainedModel",
+        ]
+    )
+    _import_structure["models.llama"].extend(
+        [
+            "LLAMA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LLaMaForCausalLM",
+            "LLaMaLayer",
+            "LLaMaModel",
+            "LLaMaPreTrainedModel",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -3904,7 +3904,6 @@ if TYPE_CHECKING:
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
-    from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LLaMaConfig
     from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.gptsan_japanese import (
@@ -3951,6 +3950,7 @@ if TYPE_CHECKING:
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
+    from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LLaMaConfig
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config
     from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
@@ -4290,7 +4290,6 @@ if TYPE_CHECKING:
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
-        from .models.llama import LLaMaTokenizer
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
@@ -4298,6 +4297,7 @@ if TYPE_CHECKING:
         from .models.layoutlmv3 import LayoutLMv3TokenizerFast
         from .models.layoutxlm import LayoutXLMTokenizerFast
         from .models.led import LEDTokenizerFast
+        from .models.llama import LLaMaTokenizer
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
         from .models.markuplm import MarkupLMTokenizerFast
@@ -5057,13 +5057,6 @@ if TYPE_CHECKING:
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
         )
-        from .models.llama import (
-            LLAMA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LLaMaForCausalLM,
-            LLaMaLayer,
-            LLaMaModel,
-            LLaMaPreTrainedModel,
-        )
         from .models.gpt_neox_japanese import (
             GPT_NEOX_JAPANESE_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTNeoXJapaneseForCausalLM,
@@ -5177,6 +5170,13 @@ if TYPE_CHECKING:
             LiltForTokenClassification,
             LiltModel,
             LiltPreTrainedModel,
+        )
+        from .models.llama import (
+            LLAMA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LLaMaForCausalLM,
+            LLaMaLayer,
+            LLaMaModel,
+            LLaMaPreTrainedModel,
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

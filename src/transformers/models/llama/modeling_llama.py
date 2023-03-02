@@ -20,6 +20,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from torch.nn import functional as F
 
 from ...file_utils import (
     add_code_sample_docstrings,
@@ -31,7 +32,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_llama import LLaMaConfig
-from torch.nn import functional as F
+
 
 logger = logging.get_logger(__name__)
 
@@ -44,6 +45,7 @@ LLAMA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/llama",
     # See all LLaMa models at https://huggingface.co/models?filter=llama
 ]
+
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->LLaMa
 class LLaMaLayerNorm(nn.Module):
@@ -113,7 +115,7 @@ class LLaMaAttention(nn.Module):
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
-            persistent=False
+            persistent=False,
         )
         self.qkv = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=False)
         self.o = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
@@ -142,7 +144,7 @@ class LLaMaAttention(nn.Module):
         qkv = qkv.view(*new_qkv_shape)
 
         # [batch, seq_len, num_attention_heads, 3, head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
-        query = qkv[..., :self.head_size].permute(0, 2, 1, 3)
+        query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
         key = qkv[..., self.head_size : 2 * self.head_size].permute(0, 2, 1, 3)
         value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
 
@@ -218,7 +220,7 @@ class LLaMaAttention(nn.Module):
             query,
             key.transpose(1, 2),
             beta=0.0,
-            alpha=1.0/math.sqrt(self.head_size),
+            alpha=1.0 / math.sqrt(self.head_size),
         )
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
@@ -250,12 +252,8 @@ class RotaryEmbedding(torch.nn.Module):
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer(
-            "cos_cached", emb.cos()[None, None, :, :], persistent=False
-        )
-        self.register_buffer(
-            "sin_cached", emb.sin()[None, None, :, :], persistent=False
-        )
+        self.register_buffer("cos_cached", emb.cos()[None, None, :, :], persistent=False)
+        self.register_buffer("sin_cached", emb.sin()[None, None, :, :], persistent=False)
 
     def forward(self, seq_len=None):
         device = self.sin_cached.device
@@ -295,7 +293,6 @@ class LLaMaFF(nn.Module):
         self.wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
     def forward(self, hidden_states):
-
         return self.wo(F.silu(self.wi_0(hidden_states)) * self.wi_1(hidden_states))
 
 

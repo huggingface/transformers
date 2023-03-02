@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for LLaMa."""
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional
 
 import sentencepiece as spm
 
@@ -54,12 +54,7 @@ class LLaMaTokenizer(PreTrainedTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
-        self,
-        vocab_file: str,
-        bos_token: str = "<bos>",
-        eos_token: str = "<eos>",
-        unk_token: str = "<unk>",
-        **kwargs
+        self, vocab_file: str, bos_token: str = "<bos>", eos_token: str = "<eos>", unk_token: str = "<unk>", **kwargs
     ) -> None:
         self.sp_model = spm.SentencePieceProcessor(model_file=vocab_file)
 
@@ -70,7 +65,7 @@ class LLaMaTokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             # TODO @thomasw21: Why the fuck is that `-1`?
             # pad_token=self.sp_model.pad_id(),
-            **kwargs
+            **kwargs,
         )
 
         self.vocab_file = vocab_file

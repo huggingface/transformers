@@ -25,12 +25,11 @@ LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class LLaMaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LLaMaModel`]. It is used to instantiate an
-    LLaMa model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the LLaMa architecture.
+    This is the configuration class to store the configuration of a [`LLaMaModel`]. It is used to instantiate an LLaMa
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the LLaMa architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -82,11 +81,9 @@ class LLaMaConfig(PretrainedConfig):
         max_position_embeddings=2048,
         layer_norm_eps=1e-5,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(
-            **kwargs
-        )
+        super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
