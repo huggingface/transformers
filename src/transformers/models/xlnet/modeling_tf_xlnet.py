@@ -629,7 +629,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # Attention mask
         # causal attention mask
         if self.attn_type == "uni":
-            raise FutureWarning(
+            raise warnings.warn(
                 f"`attn_type` {self.attn_type} is not supported anymore and will be removed in version 5 of transformers."
                 "If you want to use transformers XL use the [Transformer XL model](https://huggingface.co/docs/transformers/model_doc/transfo-xl) "
             )
