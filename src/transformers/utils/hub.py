@@ -49,8 +49,6 @@ from huggingface_hub.utils import (
 )
 from requests.exceptions import HTTPError
 
-from transformers.utils.logging import tqdm
-
 from . import __version__, logging
 from .generic import working_or_temp_dir
 from .import_utils import (
@@ -61,6 +59,7 @@ from .import_utils import (
     is_torch_available,
     is_training_run_on_sagemaker,
 )
+from .logging import tqdm
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

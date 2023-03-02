@@ -16,11 +16,9 @@
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
-from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
-
-from ... import is_torch_available
+from ... import PretrainedConfig, PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec
-from ...utils import logging
+from ...utils import TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)

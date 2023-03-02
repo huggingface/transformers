@@ -20,8 +20,8 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
-from transformers.image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from transformers.image_transforms import (
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
     normalize,
@@ -31,7 +31,7 @@ from transformers.image_transforms import (
     to_channel_dimension_format,
     to_numpy_array,
 )
-from transformers.image_utils import (
+from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -40,7 +40,7 @@ from transformers.image_utils import (
     is_batched,
     valid_images,
 )
-from transformers.utils import (
+from ...utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     TensorType,

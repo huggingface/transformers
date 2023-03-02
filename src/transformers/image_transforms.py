@@ -18,7 +18,7 @@ from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.image_utils import (
+from .image_utils import (
     ChannelDimension,
     ImageInput,
     get_channel_dimension_axis,
@@ -26,8 +26,8 @@ from transformers.image_utils import (
     infer_channel_dimension_format,
     to_numpy_array,
 )
-from transformers.utils import ExplicitEnum, TensorType, is_jax_tensor, is_tf_tensor, is_torch_tensor
-from transformers.utils.import_utils import (
+from .utils import ExplicitEnum, TensorType, is_jax_tensor, is_tf_tensor, is_torch_tensor
+from .utils.import_utils import (
     is_flax_available,
     is_tf_available,
     is_torch_available,

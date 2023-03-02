@@ -20,8 +20,6 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-from transformers import shape_list
-
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
@@ -32,6 +30,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
+from ...tf_utils import shape_list
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_convnext import ConvNextConfig
 

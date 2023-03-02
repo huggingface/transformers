@@ -20,9 +20,9 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Un
 
 import numpy as np
 
-from transformers.feature_extraction_utils import BatchFeature
-from transformers.image_processing_utils import BaseImageProcessor, get_size_dict
-from transformers.image_transforms import (
+from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import BaseImageProcessor, get_size_dict
+from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
@@ -34,7 +34,7 @@ from transformers.image_transforms import (
     rgb_to_id,
     to_channel_dimension_format,
 )
-from transformers.image_utils import (
+from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     ChannelDimension,
@@ -48,7 +48,9 @@ from transformers.image_utils import (
     valid_coco_panoptic_annotations,
     valid_images,
 )
-from transformers.utils import (
+from ...utils import (
+    ExplicitEnum,
+    TensorType,
     is_flax_available,
     is_jax_tensor,
     is_scipy_available,
@@ -57,8 +59,8 @@ from transformers.utils import (
     is_torch_available,
     is_torch_tensor,
     is_vision_available,
+    logging,
 )
-from transformers.utils.generic import ExplicitEnum, TensorType
 
 
 if is_torch_available():
@@ -74,6 +76,7 @@ if is_scipy_available():
     import scipy.special
     import scipy.stats
 
+logger = logging.get_logger(__name__)
 
 AnnotationType = Dict[str, Union[int, str, List[Dict]]]
 

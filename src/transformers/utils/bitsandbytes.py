@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from transformers.utils import is_accelerate_available, is_bitsandbytes_available
+from .import_utils import is_accelerate_available, is_bitsandbytes_available
 
 
 if is_bitsandbytes_available():
