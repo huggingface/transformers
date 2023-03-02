@@ -30,6 +30,7 @@ class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         CPMAntTokenizer,
         CPMAntTokenizerFast,
     }
+
     def test_pre_tokenization(self):
         for tokenizer_class in self.all_tokenizer_classes:
             tokenizer = tokenizer_class.from_pretrained("openbmb/cpm-ant-10b")
