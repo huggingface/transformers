@@ -95,7 +95,16 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
             - **label** (`str`) -- The label identified by the model. It is one of the suggested `candidate_label`.
             - **score** (`float`) -- The score attributed by the model for that label (between 0 and 1).
         """
-        return super().__call__(images, **kwargs)
+        batch_size = kwargs.get('batch_size', 1)
+        kwargs['batch_size'] = 1
+        if isinstance(images, list):
+            res = []
+            for i in range(0, len(images), batch_size):
+                batch_images = images[i:i + batch_size]
+                res.extend(super().__call__(batch_images, **kwargs))
+            return res
+        else:
+            return super().__call__(images, **kwargs)
 
     def _sanitize_parameters(self, **kwargs):
         preprocess_params = {}
