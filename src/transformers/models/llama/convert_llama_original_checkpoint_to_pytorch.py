@@ -29,6 +29,7 @@ def generate_config(params_json_path: Path, vocab_size: int) -> LLaMaConfig:
         intermediate_size=intermediate_size,
         max_position_embeddings=2048,
         layer_norm_eps=hyperparameters["norm_eps"],
+        tie_word_embeddings=False,
         use_cache=True
     )
 
