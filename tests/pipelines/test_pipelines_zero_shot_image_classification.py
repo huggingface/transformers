@@ -72,7 +72,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
 
         self.assertEqual(
             nested_simplify(output),
-            [{"score": 0.333, "label": "b"}, {"score": 0.333, "label": "a"}, {"score": 0.333, "label": "c"}],
+            [{"score": 0.333, "label": "a"}, {"score": 0.333, "label": "b"}, {"score": 0.333, "label": "c"}],
         )
 
         output = image_classifier([image] * 5, candidate_labels=["A", "B", "C"], batch_size=2)

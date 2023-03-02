@@ -1,5 +1,5 @@
-from typing import List, Union
 from collections import UserDict
+from typing import List, Union
 
 from ..utils import (
     add_end_docstrings,
@@ -18,10 +18,9 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    import torch
+    pass
 
 if is_tf_available():
-    import tensorflow as tf
 
     from ..tf_utils import stable_softmax
 
