@@ -1639,11 +1639,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             else (past_values - loc) / scale
         )
 
-        if inputs.shape[1] != time_feat.shape[1]:
-            raise ValueError(
-                f"input length {inputs.shape[1]} and time feature lengths {time_feat.shape[1]} does not match"
-            )
-
         # static features
         log_abs_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
         log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
@@ -1668,6 +1663,11 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         lagged_sequence = self.get_lagged_subsequences(sequence=inputs, subsequences_length=subsequences_length)
         lags_shape = lagged_sequence.shape
         reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
+
+        if reshaped_lagged_sequence.shape[1] != time_feat.shape[1]:
+            raise ValueError(
+                f"input length {reshaped_lagged_sequence.shape[1]} and time feature lengths {time_feat.shape[1]} does not match"
+            )
 
         # transformer inputs
         transformer_inputs = torch.cat((reshaped_lagged_sequence, features), dim=-1)
