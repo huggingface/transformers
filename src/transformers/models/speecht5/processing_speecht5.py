@@ -139,6 +139,9 @@ class SpeechT5Processor(ProcessorMixin):
             return labels
         else:
             input_features["labels"] = labels["input_ids"]
+            decoder_attention_mask = labels.get("attention_mask")
+            if decoder_attention_mask is not None:
+                input_features["decoder_attention_mask"] = decoder_attention_mask
             return input_features
 
     def batch_decode(self, *args, **kwargs):
