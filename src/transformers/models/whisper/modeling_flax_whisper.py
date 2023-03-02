@@ -35,6 +35,7 @@ from ...modeling_flax_outputs import (
     FlaxCausalLMOutputWithCrossAttentions,
     FlaxSeq2SeqLMOutput,
     FlaxSeq2SeqModelOutput,
+    FlaxSequenceClassifierOutput,
 )
 from ...modeling_flax_utils import (
     ACT2FN,
@@ -1467,4 +1468,95 @@ overwrite_call_docstring(
 )
 append_replace_return_docstrings(
     FlaxWhisperForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+)
+
+
+class FlaxWhisperForAudioClassificationModule(nn.Module):
+    config: WhisperConfig
+    dtype: jnp.dtype = jnp.float32
+    gradient_checkpointing: bool = False
+
+    def setup(self) -> None:
+        self.encoder = FlaxWhisperEncoder(config=self.config, dtype=self.dtype)
+        num_layers = self.config.num_hidden_layers + 1
+        if self.config.use_weighted_layer_sum:
+            self.layer_weights = jnp.repeat(1 / num_layers, num_layers)
+        self.projector = nn.Dense(self.config.classifier_proj_size)
+        self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
+
+    def __call__(
+        self,
+        input_features,
+        encoder_outputs,
+        labels,
+        output_attenions,
+        output_hidden_states: bool = True,
+        return_dict: bool = True,
+    ):
+        output_attentions = output_attenions if output_attenions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_features,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+
+        if self.config.use_weighted_layer_sum:
+            hidden_states = jnp.stack(encoder_outputs, dim=1)
+            norm_weights = jax.nn.softmax(self.layer_weights, axis=-1)
+            hidden_states = jnp.sum(hidden_states * jnp.reshape(norm_weights, [-1, 1, 1]), axis=1)
+        else:
+            hidden_states = encoder_outputs[0]
+
+        hidden_states = self.projector(hidden_states)
+        pooled_output = jnp.mean(hidden_states, axis=1)
+
+        logits = self.classifier(pooled_output)
+
+        if not return_dict:
+            return (logits,) + encoder_outputs[1:]
+
+        return FlaxSequenceClassifierOutput(
+            logits=logits,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
+@add_start_docstrings("The Whisper Model with an audio classification head on top.", WHISPER_START_DOCSTRING)
+class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
+    module_class = FlaxWhisperForAudioClassificationModule
+    dtype: jnp.dtype = jnp.float32
+
+
+FLAX_WHISPER_AUDIO_CLASSIFICATION_DOCSTRING = r"""
+    Returns:
+
+    Transcription example:
+
+    ```python
+    >>> from transformers import WhisperProcessor, FlaxWhisperForAudioClassification
+    >>> from datasets import load_dataset
+
+    >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+    >>> model = FlaxWhisperForAudioClassification.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="np")
+    >>> input_features = inputs.input_features
+    >>> outputs = model(input_features=input_features)
+    >>> logits = outputs.logit
+    ```
+"""
+
+overwrite_call_docstring(
+    FlaxWhisperForAudioClassification, WHISPER_INPUTS_DOCSTRING + FLAX_WHISPER_AUDIO_CLASSIFICATION_DOCSTRING
+)
+append_replace_return_docstrings(
+    FlaxWhisperForAudioClassification, output_type=FlaxSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC
 )

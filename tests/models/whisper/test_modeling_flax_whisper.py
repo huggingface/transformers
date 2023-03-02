@@ -21,6 +21,7 @@ import unittest
 
 import transformers
 from transformers import WhisperConfig, is_flax_available
+from transformers.models.whisper import FlaxWhisperForAudioClassification
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
@@ -192,7 +193,11 @@ def make_partial_class(full_class, *args, **kwargs):
 
 @require_flax
 class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxWhisperForConditionalGeneration, FlaxWhisperModel) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxWhisperForConditionalGeneration, FlaxWhisperModel, FlaxWhisperForAudioClassification)
+        if is_flax_available()
+        else ()
+    )
     all_generative_model_classes = (FlaxWhisperForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
     test_pruning = False
