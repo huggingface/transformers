@@ -23,6 +23,7 @@ from shutil import copyfile
 
 from huggingface_hub import HfFolder, Repository, create_repo, delete_repo, set_access_token
 from requests.exceptions import HTTPError
+
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,

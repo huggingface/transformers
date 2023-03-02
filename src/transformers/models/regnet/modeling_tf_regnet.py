@@ -247,7 +247,7 @@ class TFRegNetStage(tf.keras.layers.Layer):
 class TFRegNetEncoder(tf.keras.layers.Layer):
     def __init__(self, config: RegNetConfig, **kwargs):
         super().__init__(**kwargs)
-        self.stages = list()
+        self.stages = []
         # based on `downsample_in_first_stage`, the first layer of the first stage may or may not downsample the input
         self.stages.append(
             TFRegNetStage(
@@ -389,7 +389,7 @@ REGNET_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            [`ConveNextImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.

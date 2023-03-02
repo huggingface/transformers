@@ -29,9 +29,8 @@ from typing import Any
 
 from packaging import version
 
-from transformers.utils.versions import importlib_metadata
-
 from . import logging
+from .versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -288,6 +287,10 @@ def is_torch_available():
     return _torch_available
 
 
+def is_torchvision_available():
+    return importlib.util.find_spec("torchvision") is not None
+
+
 def is_pyctcdecode_available():
     return _pyctcdecode_available
 
@@ -490,10 +493,6 @@ def is_datasets_available():
 
 def is_detectron2_available():
     return _detectron2_available
-
-
-def is_more_itertools_available():
-    return importlib.util.find_spec("more_itertools") is not None
 
 
 def is_rjieba_available():
@@ -803,6 +802,14 @@ installation page: https://pytorch.org/get-started/locally/ and follow the ones 
 Please note that you may need to restart your runtime after installation.
 """
 
+
+# docstyle-ignore
+TORCHVISION_IMPORT_ERROR = """
+{0} requires the Torchvision library but it was not found in your environment. Checkout the instructions on the
+installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
+"""
+
 # docstyle-ignore
 PYTORCH_IMPORT_ERROR_WITH_TF = """
 {0} requires the PyTorch library but it was not found in your environment.
@@ -984,6 +991,11 @@ DECORD_IMPORT_ERROR = """
 decord`. Please note that you may need to restart your runtime after installation.
 """
 
+CYTHON_IMPORT_ERROR = """
+{0} requires the Cython library but it was not found in your environment. You can install it with pip: `pip install
+Cython`. Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
@@ -1009,11 +1021,13 @@ BACKENDS_MAPPING = OrderedDict(
         ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
+        ("torchvision", (is_torchvision_available, TORCHVISION_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
+        ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
     ]
 )
 
@@ -1120,3 +1134,22 @@ class _LazyModule(ModuleType):
 
 class OptionalDependencyNotAvailable(BaseException):
     """Internally used error class for signalling an optional dependency was not found."""
+
+
+def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
+    """Imports transformers directly
+
+    Args:
+        path (`str`): The path to the source file
+        file (`str`, optional): The file to join with the path. Defaults to "__init__.py".
+
+    Returns:
+        `ModuleType`: The resulting imported module
+    """
+    name = "transformers"
+    location = os.path.join(path, file)
+    spec = importlib.util.spec_from_file_location(name, location, submodule_search_locations=[path])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module = sys.modules[name]
+    return module

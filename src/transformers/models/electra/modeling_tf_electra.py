@@ -62,7 +62,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/electra-small-discriminator"
 _CONFIG_FOR_DOC = "ElectraConfig"
-_TOKENIZER_FOR_DOC = "ElectraTokenizer"
 
 TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/electra-small-generator",
@@ -885,7 +884,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`ElectraTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -945,7 +944,6 @@ class TFElectraModel(TFElectraPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -1063,9 +1061,9 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import ElectraTokenizer, TFElectraForPreTraining
+        >>> from transformers import AutoTokenizer, TFElectraForPreTraining
 
-        >>> tokenizer = ElectraTokenizer.from_pretrained("google/electra-small-discriminator")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/electra-small-discriminator")
         >>> model = TFElectraForPreTraining.from_pretrained("google/electra-small-discriminator")
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         >>> outputs = model(input_ids)
@@ -1173,7 +1171,6 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/electra-small-generator",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1285,7 +1282,6 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="bhadresh-savani/electra-base-emotion",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1379,7 +1375,6 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1496,7 +1491,6 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="bhadresh-savani/electra-base-discriminator-finetuned-conll03-english",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1578,7 +1572,6 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="bhadresh-savani/electra-base-squad2",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

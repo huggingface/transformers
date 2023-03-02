@@ -40,6 +40,8 @@ src/transformers/models/bloom/configuration_bloom.py
 src/transformers/models/camembert/configuration_camembert.py
 src/transformers/models/canine/configuration_canine.py
 src/transformers/models/canine/modeling_canine.py
+src/transformers/models/clap/configuration_clap.py
+src/transformers/models/clap/modeling_clap.py
 src/transformers/models/clip/configuration_clip.py
 src/transformers/models/clipseg/modeling_clipseg.py
 src/transformers/models/codegen/configuration_codegen.py
@@ -67,6 +69,8 @@ src/transformers/models/deformable_detr/modeling_deformable_detr.py
 src/transformers/models/deit/configuration_deit.py
 src/transformers/models/deit/modeling_deit.py
 src/transformers/models/deit/modeling_tf_deit.py
+src/transformers/models/deta/configuration_deta.py
+src/transformers/models/deta/modeling_deta.py
 src/transformers/models/detr/configuration_detr.py
 src/transformers/models/detr/modeling_detr.py
 src/transformers/models/dinat/configuration_dinat.py
@@ -78,6 +82,8 @@ src/transformers/models/electra/configuration_electra.py
 src/transformers/models/electra/modeling_electra.py
 src/transformers/models/electra/modeling_tf_electra.py
 src/transformers/models/ernie/configuration_ernie.py
+src/transformers/models/ernie_m/configuration_ernie_m.py
+src/transformers/models/ernie_m/modeling_ernie_m.py
 src/transformers/models/flava/configuration_flava.py
 src/transformers/models/fnet/configuration_fnet.py
 src/transformers/models/fsmt/configuration_fsmt.py
@@ -108,6 +114,8 @@ src/transformers/models/longformer/modeling_tf_longformer.py
 src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
 src/transformers/models/markuplm/modeling_markuplm.py
+src/transformers/models/mask2former/configuration_mask2former.py
+src/transformers/models/mask2former/modeling_mask2former.py
 src/transformers/models/maskformer/configuration_maskformer.py
 src/transformers/models/maskformer/modeling_maskformer.py
 src/transformers/models/mbart/configuration_mbart.py
@@ -165,6 +173,8 @@ src/transformers/models/speech_to_text/configuration_speech_to_text.py
 src/transformers/models/speech_to_text/modeling_speech_to_text.py
 src/transformers/models/speech_to_text_2/configuration_speech_to_text_2.py
 src/transformers/models/speech_to_text_2/modeling_speech_to_text_2.py
+src/transformers/models/speecht5/modeling_speecht5.py
+src/transformers/models/speecht5/tokenization_speecht5.py
 src/transformers/models/segformer/modeling_tf_segformer.py
 src/transformers/models/squeezebert/configuration_squeezebert.py
 src/transformers/models/swin/configuration_swin.py
@@ -188,6 +198,7 @@ src/transformers/models/vilt/modeling_vilt.py
 src/transformers/models/vision_encoder_decoder/configuration_vision_encoder_decoder.py
 src/transformers/models/vision_encoder_decoder/modeling_vision_encoder_decoder.py
 src/transformers/models/vision_text_dual_encoder/configuration_vision_text_dual_encoder.py
+src/transformers/models/vision_text_dual_encoder/modeling_tf_vision_text_dual_encoder.py
 src/transformers/models/vit/configuration_vit.py
 src/transformers/models/vit/modeling_vit.py
 src/transformers/models/vit/modeling_tf_vit.py
@@ -210,8 +221,11 @@ src/transformers/models/xlm/configuration_xlm.py
 src/transformers/models/xlm_roberta/configuration_xlm_roberta.py
 src/transformers/models/xlm_roberta_xl/configuration_xlm_roberta_xl.py
 src/transformers/models/xlnet/configuration_xlnet.py
+src/transformers/models/xmod/configuration_xmod.py
+src/transformers/models/xmod/modeling_xmod.py
 src/transformers/models/yolos/configuration_yolos.py
 src/transformers/models/yolos/modeling_yolos.py
 src/transformers/models/x_clip/modeling_x_clip.py
 src/transformers/models/yoso/configuration_yoso.py
+src/transformers/models/timesformer/configuration_timesformer.py
 src/transformers/pipelines/

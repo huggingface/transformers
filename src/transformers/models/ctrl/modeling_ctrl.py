@@ -260,7 +260,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             If `past_key_values` is used, only input IDs that do not have their past calculated should be passed as
             `input_ids`.
 
-            Indices can be obtained using [`CTRLTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -371,10 +371,10 @@ class CTRLModel(CTRLPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import CTRLTokenizer, CTRLModel
+        >>> from transformers import AutoTokenizer, CTRLModel
         >>> import torch
 
-        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ctrl")
         >>> model = CTRLModel.from_pretrained("ctrl")
 
         >>> # CTRL was trained with control codes as the first token
@@ -561,9 +561,9 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import CTRLTokenizer, CTRLLMHeadModel
+        >>> from transformers import AutoTokenizer, CTRLLMHeadModel
 
-        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ctrl")
         >>> model = CTRLLMHeadModel.from_pretrained("ctrl")
 
         >>> # CTRL was trained with control codes as the first token
@@ -624,7 +624,9 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         )
 
     @staticmethod
-    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+    def _reorder_cache(
+        past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
         [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
@@ -632,7 +634,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         """
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-            for layer_past in past
+            for layer_past in past_key_values
         )
 
 
@@ -687,9 +689,9 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import CTRLTokenizer, CTRLForSequenceClassification
+        >>> from transformers import AutoTokenizer, CTRLForSequenceClassification
 
-        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ctrl")
         >>> model = CTRLForSequenceClassification.from_pretrained("ctrl")
 
         >>> # CTRL was trained with control codes as the first token
@@ -722,9 +724,9 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import CTRLTokenizer, CTRLForSequenceClassification
+        >>> from transformers import AutoTokenizer, CTRLForSequenceClassification
 
-        >>> tokenizer = CTRLTokenizer.from_pretrained("ctrl")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ctrl")
         >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", problem_type="multi_label_classification")
 
         >>> # CTRL was trained with control codes as the first token

@@ -19,9 +19,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.utils import is_torch_available, is_torch_tensor, is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
@@ -30,11 +27,11 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging
+from ...utils import TensorType, is_torch_available, is_torch_tensor, is_vision_available, logging
 
 
 if is_vision_available():
@@ -105,7 +102,7 @@ class BeitImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_reduce_labels: bool = False,
-        **kwargs
+        **kwargs,
     ) -> None:
         if "reduce_labels" in kwargs:
             warnings.warn(
@@ -131,6 +128,15 @@ class BeitImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_reduce_labels = do_reduce_labels
 
+    @property
+    def reduce_labels(self) -> bool:
+        warnings.warn(
+            "The `reduce_labels` property is deprecated and will be removed in v4.27. Please use"
+            " `do_reduce_labels` instead.",
+            FutureWarning,
+        )
+        return self.do_reduce_labels
+
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
@@ -148,7 +154,7 @@ class BeitImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to (size["height"], size["width"]).
@@ -175,7 +181,7 @@ class BeitImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Center crop an image to (size["height"], size["width"]). If the input size is smaller than `size` along any
@@ -197,7 +203,7 @@ class BeitImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         scale: Union[int, float],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Rescale an image by a scale factor. image = image * scale.
@@ -218,7 +224,7 @@ class BeitImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
@@ -429,9 +435,9 @@ class BeitImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
-        if not is_batched(images):
-            images = [images]
-            segmentation_maps = [segmentation_maps] if segmentation_maps is not None else None
+        images = make_list_of_images(images)
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if not valid_images(images):
             raise ValueError(

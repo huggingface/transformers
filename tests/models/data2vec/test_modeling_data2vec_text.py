@@ -23,6 +23,7 @@ from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -359,7 +360,7 @@ class Data2VecTextModelTester:
 
 
 @require_torch
-class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Data2VecTextForCausalLM,
@@ -374,6 +375,19 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         else ()
     )
     all_generative_model_classes = (Data2VecTextForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": Data2VecTextModel,
+            "fill-mask": Data2VecTextForMaskedLM,
+            "question-answering": Data2VecTextForQuestionAnswering,
+            "text-classification": Data2VecTextForSequenceClassification,
+            "text-generation": Data2VecTextForCausalLM,
+            "token-classification": Data2VecTextForTokenClassification,
+            "zero-shot": Data2VecTextForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = Data2VecTextModelTester(self)

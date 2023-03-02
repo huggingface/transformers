@@ -59,7 +59,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/wmt19-ru-en"
 _CONFIG_FOR_DOC = "FSMTConfig"
-_TOKENIZER_FOR_DOC = "FSMTTokenizer"
 
 # See all FSMT models at https://huggingface.co/models?filter=fsmt
 
@@ -200,11 +199,11 @@ FSMT_GENERATION_EXAMPLE = r"""
     Translation example::
 
     ```python
-    >>> from transformers import FSMTTokenizer, FSMTForConditionalGeneration
+    >>> from transformers import AutoTokenizer, FSMTForConditionalGeneration
 
     >>> mname = "facebook/wmt19-ru-en"
     >>> model = FSMTForConditionalGeneration.from_pretrained(mname)
-    >>> tokenizer = FSMTTokenizer.from_pretrained(mname)
+    >>> tokenizer = AutoTokenizer.from_pretrained(mname)
 
     >>> src_text = "Машинное обучение - это здорово, не так ли?"
     >>> input_ids = tokenizer(src_text, return_tensors="pt").input_ids
@@ -234,7 +233,7 @@ FSMT_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`FSMTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -1058,7 +1057,6 @@ class FSMTModel(PretrainedFSMTModel):
 
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1188,6 +1186,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         base_model = FSMTModel(config)
         self.model = base_model
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @add_end_docstrings(FSMT_GENERATION_EXAMPLE)
@@ -1275,7 +1276,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         cross_attn_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1293,9 +1294,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         return shift_tokens_right(labels, self.config.pad_token_id)
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = []
-        for layer_past in past:
+        for layer_past in past_key_values:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()

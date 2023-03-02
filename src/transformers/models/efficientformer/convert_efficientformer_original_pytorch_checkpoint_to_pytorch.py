@@ -22,11 +22,11 @@ import argparse
 import re
 from pathlib import Path
 
+import requests
 import torch
 from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
-import requests
 from transformers import (
     EfficientFormerConfig,
     EfficientFormerForImageClassificationWithTeacher,

@@ -27,14 +27,14 @@ from transformers import (
 )
 from transformers.testing_utils import require_tf, require_torch, slow
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
-class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class TranslationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         if isinstance(model.config, MBartConfig):
             src_lang, tgt_lang = list(tokenizer.lang_code_to_id.keys())[:2]
             translator = TranslationPipeline(model=model, tokenizer=tokenizer, src_lang=src_lang, tgt_lang=tgt_lang)

@@ -258,7 +258,6 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(

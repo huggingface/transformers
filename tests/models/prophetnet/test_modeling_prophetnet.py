@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -70,7 +71,6 @@ class ProphetNetModelTester:
         disable_ngram_loss=False,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -437,10 +437,10 @@ class ProphetNetModelTester:
                 decoder_attention_mask=decoder_attention_mask,
                 labels=lm_labels,
             )
-        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(4.5819, device=torch_device), atol=1e-3))
+        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(4.5981, device=torch_device), atol=1e-3))
 
         expected_logit_slice = torch.tensor(
-            [-0.1565, 0.0418, 0.1207, 0.0030, 0.0665, 0.0467, 0.0412], device=torch_device
+            [-0.0648, 0.0790, 0.0360, 0.0089, 0.0039, -0.0639, 0.0131], device=torch_device
         )
         self.parent.assertTrue(torch.allclose(result.logits[0, :, 1], expected_logit_slice, atol=1e-3))
 
@@ -886,9 +886,20 @@ class ProphetNetStandaloneEncoderModelTester:
 
 
 @require_torch
-class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ProphetNetModel, ProphetNetForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (ProphetNetForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": ProphetNetForConditionalGeneration,
+            "feature-extraction": ProphetNetModel,
+            "summarization": ProphetNetForConditionalGeneration,
+            "text2text-generation": ProphetNetForConditionalGeneration,
+            "text-generation": ProphetNetForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_resize_embeddings = False
     is_encoder_decoder = True

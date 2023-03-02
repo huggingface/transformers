@@ -25,7 +25,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     slow_tokenizer_class = None
     rust_tokenizer_class = BloomTokenizerFast
     tokenizer_class = BloomTokenizerFast
@@ -125,7 +124,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_text = list(sample_data.values())
 
         output_tokens = list(map(tokenizer.encode, input_text))
-        predicted_text = list(map(lambda x: tokenizer.decode(x, clean_up_tokenization_spaces=False), output_tokens))
+        predicted_text = [tokenizer.decode(x, clean_up_tokenization_spaces=False) for x in output_tokens]
         self.assertListEqual(predicted_text, input_text)
 
     def test_pretrained_model_lists(self):

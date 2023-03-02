@@ -23,11 +23,11 @@ from transformers.testing_utils import (
     require_torch_or_tf,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 @require_torch_or_tf
-class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class TextGenerationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
@@ -143,7 +143,7 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             ],
         )
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer)
         return text_generator, ["This is a test", "Another test"]
 
@@ -312,3 +312,12 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
 
         pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device=0, torch_dtype=torch.float16)
         pipe("This is a test")
+
+    @require_torch
+    @require_accelerate
+    @require_torch_gpu
+    def test_pipeline_accelerate_top_p(self):
+        import torch
+
+        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto", torch_dtype=torch.float16)
+        pipe("This is a test", do_sample=True, top_p=0.5)

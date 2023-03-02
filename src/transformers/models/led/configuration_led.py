@@ -132,7 +132,7 @@ class LEDConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         attention_window: Union[List[int], int] = 512,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_encoder_position_embeddings = max_encoder_position_embeddings

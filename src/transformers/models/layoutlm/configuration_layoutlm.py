@@ -16,11 +16,9 @@
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
-from transformers import PretrainedConfig, PreTrainedTokenizer, TensorType
-
-from ... import is_torch_available
+from ... import PretrainedConfig, PreTrainedTokenizer
 from ...onnx import OnnxConfig, PatchingSpec
-from ...utils import logging
+from ...utils import TensorType, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -111,9 +109,8 @@ class LayoutLMConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         use_cache=True,
-        classifier_dropout=None,
         max_2d_position_embeddings=1024,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
         self.vocab_size = vocab_size
@@ -130,7 +127,6 @@ class LayoutLMConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
         self.max_2d_position_embeddings = max_2d_position_embeddings
 
 

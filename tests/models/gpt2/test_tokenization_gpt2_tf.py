@@ -28,7 +28,6 @@ if is_tf_available():
 
         @tf.function(input_signature=(tf.TensorSpec((None,), tf.string, name="text"),))
         def serving(self, text):
-
             tokenized = self.tokenizer(text)
             input_ids_dense = tokenized["input_ids"].to_tensor()
 

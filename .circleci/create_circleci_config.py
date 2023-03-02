@@ -359,6 +359,7 @@ exotic_models_job = CircleCIJob(
         "pip install --upgrade pip",
         "pip install .[torch,testing,vision]",
         "pip install torchvision",
+        "pip install scipy",
         "pip install 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install pytesseract",
@@ -367,6 +368,7 @@ exotic_models_job = CircleCIJob(
     tests_to_run=[
         "tests/models/*layoutlmv*",
         "tests/models/*nat",
+        "tests/models/deta",
     ],
     pytest_num_workers=1,
     pytest_options={"durations": 100},
@@ -377,7 +379,7 @@ repo_utils_job = CircleCIJob(
     "repo_utils",
     install_steps=[
         "pip install --upgrade pip",
-        "pip install .[quality,testing]",
+        "pip install .[quality,testing,torch]",
     ],
     parallelism=None,
     pytest_num_workers=1,
@@ -434,7 +436,7 @@ def create_circleci_config(folder=None):
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
         jobs.extend(EXAMPLES_TESTS)
-    
+
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
     if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
         jobs.extend(REPO_UTIL_TESTS)

@@ -52,7 +52,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "EleutherAI/gpt-j-6B"
 _CONFIG_FOR_DOC = "GPTJConfig"
-_TOKENIZER_FOR_DOC = "GPTJTokenizer"
 
 GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EleutherAI/gpt-j-6B",
@@ -387,7 +386,6 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ) -> Union[TFBaseModelOutputWithPast, Tuple[tf.Tensor]]:
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -597,7 +595,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
 
             If `past` is used, only input IDs that do not have their past calculated should be passed as `input_ids`.
 
-            Indices can be obtained using [`GPTJTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -664,7 +662,6 @@ class TFGPTJModel(TFGPTJPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -768,7 +765,6 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -872,7 +868,6 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -995,7 +990,6 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
     @unpack_inputs
     @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

@@ -17,7 +17,7 @@ import unittest
 from transformers import MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING, is_vision_available, pipeline
 from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_vision, slow
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -32,11 +32,10 @@ else:
 
 @require_vision
 @require_torch
-class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
-
+class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         object_detector = pipeline(
             "zero-shot-object-detection", model="hf-internal-testing/tiny-random-owlvit-object-detection"
         )

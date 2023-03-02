@@ -27,9 +27,8 @@ import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.configuration_utils import PretrainedConfig
-
 from ...activations import get_activation
+from ...configuration_utils import PretrainedConfig
 from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -54,7 +53,6 @@ from .configuration_distilbert import DistilBertConfig
 logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
 _CONFIG_FOR_DOC = "DistilBertConfig"
-_TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "distilbert-base-uncased",
@@ -106,15 +104,22 @@ class Embeddings(nn.Module):
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
 
-    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+    def forward(self, input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Parameters:
-            input_ids: torch.tensor(bs, max_seq_length) The token ids to embed.
+            input_ids (torch.Tensor):
+                torch.tensor(bs, max_seq_length) The token ids to embed.
+            input_embeds (*optional*, torch.Tensor):
+                The pre-computed word embeddings. Can only be passed if the input ids are `None`.
+
 
         Returns: torch.tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings, no token_type
         embeddings)
         """
-        seq_length = input_ids.size(1)
+        if input_ids is not None:
+            input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
+
+        seq_length = input_embeds.size(1)
 
         # Setting the position-ids to the registered buffer in constructor, it helps
         # when tracing the model without passing position-ids, solves
@@ -125,10 +130,9 @@ class Embeddings(nn.Module):
             position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
             position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
 
-        word_embeddings = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
-        embeddings = word_embeddings + position_embeddings  # (bs, max_seq_length, dim)
+        embeddings = input_embeds + position_embeddings  # (bs, max_seq_length, dim)
         embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
         embeddings = self.dropout(embeddings)  # (bs, max_seq_length, dim)
         return embeddings
@@ -330,7 +334,6 @@ class Transformer(nn.Module):
         output_hidden_states: bool = False,
         return_dict: Optional[bool] = None,
     ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:  # docstyle-ignore
-
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim) Input sequence embedded.
@@ -428,7 +431,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`DistilBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -538,7 +541,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -576,10 +578,10 @@ class DistilBertModel(DistilBertPreTrainedModel):
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids)  # (bs, seq_length, dim)
+        embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
+
         return self.transformer(
-            x=inputs_embeds,
+            x=embeddings,
             attn_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -638,7 +640,6 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -736,7 +737,6 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -854,7 +854,6 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -971,7 +970,6 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1090,10 +1088,10 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
+        >>> from transformers import AutoTokenizer, DistilBertForMultipleChoice
         >>> import torch
 
-        >>> tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-cased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased")
         >>> model = DistilBertForMultipleChoice.from_pretrained("distilbert-base-cased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
