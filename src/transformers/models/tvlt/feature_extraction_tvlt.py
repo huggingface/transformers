@@ -20,8 +20,8 @@ from typing import List, Optional, Union
 import numpy as np
 from numpy.fft import fft
 
-from transformers.feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
-from transformers.utils import TensorType, logging
+from ...feature_extraction_sequence_utils import BatchFeature, SequenceFeatureExtractor
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
