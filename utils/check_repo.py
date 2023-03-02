@@ -537,9 +537,10 @@ def find_doc_tested_models(documentation_test_file):
     # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
     with open(os.path.join(PATH_TO_TRANSFORMERS, documentation_test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
-    all_models = re.findall(r"(?:configuration_|modeling_|tokenization_).*.py",content)
+    all_models = re.findall(r"(?:configuration_|modeling_|tokenization_).*.py", content)
     # Check with one less parenthesis as well
     return all_models
+
 
 def check_models_are_tested(module, test_file):
     """Check models defined in module are tested in test_file."""
@@ -565,6 +566,7 @@ def check_models_are_tested(module, test_file):
             )
     return failures
 
+
 def check_models_are_doc_tested(module, test_file):
     """Check models defined in module have their documentation tested in documentation_text.txt."""
     # XxxPreTrainedModel are not tested
@@ -588,6 +590,7 @@ def check_models_are_doc_tested(module, test_file):
                 + "in the file `utils/check_repo.py`."
             )
     return failures
+
 
 def check_all_models_are_tested():
     """Check all models are properly tested."""
