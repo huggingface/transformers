@@ -134,11 +134,9 @@ class LLaMaAttention(nn.Module):
         value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
 
         # Compute token offset for rotary embeddings (when decoding)
-        seq_len = key.shape[-2]
         offset = 0
         if has_layer_past:
             offset = layer_past[0].shape[-2]
-            seq_len += offset
         query, key = apply_rotary_pos_emb(query, key, frequency_cos, frequency_sin, offset=offset)
 
         # Cache QKV values
@@ -470,7 +468,11 @@ class LLaMaModel(LLaMaPreTrainedModel):
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
             attention_mask = attention_mask[:, None, None, :].to(torch.bool)
 
-        cos, sin = self.rotary_emb(device=input_ids.device, seq_len=seq_length)
+        # Compute token offset for rotary embeddings (when decoding)
+        all_seq_length = seq_length
+        if past_key_values is not None:
+            all_seq_length += past_key_values[0][0].shape[-2]
+        cos, sin = self.rotary_emb(device=input_ids.device, seq_len=all_seq_length)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
