@@ -1161,6 +1161,13 @@ class FlaxWhisperPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxWhisperForAudioClassificatio(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxXGLMForCausalLM(metaclass=DummyObject):
     _backends = ["flax"]
 
