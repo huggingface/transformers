@@ -1,5 +1,5 @@
+from collections import UserDict
 from typing import List, Union
-from collections import  UserDict
 
 from ..utils import (
     add_end_docstrings,
@@ -18,7 +18,7 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    import torch
+    pass
 
 if is_tf_available():
     import tensorflow as tf
@@ -113,7 +113,7 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
         text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)
-        inputs["text_inputs"] =  [text_inputs]
+        inputs["text_inputs"] = [text_inputs]
         return inputs
 
     def _forward(self, model_inputs):
@@ -135,8 +135,6 @@ class ZeroShotImageClassificationPipeline(Pipeline):
             text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
             logit_scale = self.model.logit_scale.exp()
             logits = (text_embeds * image_embeds.unsqueeze(dim=1)).sum(dim=-1) * logit_scale
-
-
 
         model_outputs = {
             "candidate_labels": candidate_labels,
