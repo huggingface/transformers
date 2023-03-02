@@ -589,11 +589,10 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         ...     '''
         ...     Decode the video with PyAV decoder.
         ...     Args:
-        ...         container (container): PyAV container.
-        ...         start_index (int): the starting frame.
-        ...         end_index (int): the ending frame.
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
         ...     Returns:
-        ...         result (np.ndarray): np array of decoded frames.
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
         ...     '''
         ...     frames = []
         ...     container.seek(0)
@@ -981,11 +980,10 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         ...     '''
         ...     Decode the video with PyAV decoder.
         ...     Args:
-        ...         container (container): PyAV container.
-        ...         start_index (int): the starting frame.
-        ...         end_index (int): the ending frame.
+        ...         container (`av.container.input.InputContainer`): PyAV container.
+        ...         indices (`List[int]`): List of frame indices to decode.
         ...     Returns:
-        ...         result (np.ndarray): np array of decoded frames.
+        ...         result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
         ...     '''
         ...     frames = []
         ...     container.seek(0)
