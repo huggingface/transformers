@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Style utils to preprocess files for doc tests.
+""" 
+    Utils to run the documentation tests without having to overwrite any files.s
 
     The doc precossing function can be run on a list of files and/org
     directories of files. It will recursively check if the files have
@@ -20,7 +21,7 @@
     The script will add a new line before every python code ending ``` line to make
     the docstrings ready for pytest doctests.
     However, we don't want to have empty lines displayed in the
-    official documentation which is why the new code is written to a temporary directory
+    official documentation which is why the new code is written to a temporary directory / is tested on the fly depending on the configuration.
 
     When debugging the doc tests locally, the script should automatically determine which files should
     be processed based on the modified files. It should also run the tests on the fly and delete the
@@ -28,6 +29,28 @@
 
     We will be using the doctest API:
 
+
+    The question is: do we have to modify the files? 
+    - doctest.testfile("./src/transformers/models/whisper/configuration_whisper.py",False,optionflags=doctest.NORMALIZE_WHITESPACE)
+    or 
+    - doctest.testfile( "whisper/configuration_whisper.py",package = "transformers.models",optionflags=doctest.NORMALIZE_WHITESPACE)
+    
+    - doctest.testmod(transformers.models.whisper.configuration_whisper)
+    
+    
+    Another way of doing this is 
+    
+    ```python 
+    def load_tests(loader, tests, ignore):
+        tests.addTests(doctest.DocTestSuite(my_module_with_doctests))
+        return tests
+    ```
+    - a DocTestFinder() will help us find documentation tests : doctest.DocTestFinder(verbose=False, parser=DocTestParser(), recurse=True, exclude_empty=True)
+    - a DocTestParser() can always be passed. We need this in order to process only the part of the code where "python" is stated I guess.
+    
+    
+    
+    
     ```python
     >>>  import doctest
     >>> flags = doctest.REPORT_NDIFF|doctest.FAIL_FAST
