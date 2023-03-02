@@ -18,7 +18,7 @@ def generate_config(params_json_path: Path, vocab_size: int) -> LLaMaConfig:
 
     hidden_size = hyperparameters["dim"]
     multiple_of = hyperparameters["multiple_of"]
-    intermediate_size = int(2 * hidden_size / 3)
+    intermediate_size = int(2 * 4 * hidden_size / 3)
     intermediate_size = multiple_of * ((intermediate_size + multiple_of - 1) // multiple_of)
 
     return LLaMaConfig(

@@ -137,7 +137,7 @@ class LLaMaAttention(nn.Module):
         offset = 0
         if has_layer_past:
             offset = layer_past[0].shape[-2]
-        query, key = apply_rotary_pos_emb(query, key, frequency_cos, frequency_sin, offset=offset)
+        query, key = apply_rotary_pos_emb(q=query, k=key, cos=frequency_cos, sin=frequency_sin, offset=offset)
 
         # Cache QKV values
         if has_layer_past:
@@ -225,13 +225,8 @@ class LLaMaAttention(nn.Module):
         return attn_output, attn_weights
 
 
-def attention_mask_func(attention_scores, ltor_mask):
-    attention_scores.masked_fill_(~ltor_mask, torch.finfo(attention_scores.dtype).min)
-    return attention_scores
-
-
 class RotaryEmbedding(torch.nn.Module):
-    def __init__(self, dim, max_position_embeddings, base=10000, device=None):
+    def __init__(self, dim, max_position_embeddings, base=10000):
         super().__init__()
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float, device=None) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
@@ -242,11 +237,15 @@ class RotaryEmbedding(torch.nn.Module):
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.cos_cached = emb.cos()[None, None, :, :]
-        self.sin_cached = emb.sin()[None, None, :, :]
+        self.register_buffer(
+            "cos_cached", emb.cos()[None, None, :, :], persistent=False
+        )
+        self.register_buffer(
+            "sin_cached", emb.sin()[None, None, :, :], persistent=False
+        )
 
-    def forward(self, device, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
+    def forward(self, seq_len=None):
+        device = self.sin_cached.device
         # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
         if seq_len > self.max_seq_len_cached:
             self.max_seq_len_cached = seq_len
@@ -472,7 +471,7 @@ class LLaMaModel(LLaMaPreTrainedModel):
         all_seq_length = seq_length
         if past_key_values[0] is not None:
             all_seq_length += past_key_values[0][0].shape[-2]
-        cos, sin = self.rotary_emb(device=input_ids.device, seq_len=all_seq_length)
+        cos, sin = self.rotary_emb(seq_len=all_seq_length)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
