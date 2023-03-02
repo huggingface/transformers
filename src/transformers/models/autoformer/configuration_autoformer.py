@@ -161,6 +161,7 @@ class AutoformerConfig(PretrainedConfig):
         use_cache=True,
         # Autoformer arguments
         moving_avg: int = 25,
+        factor: int = 4,
         **kwargs
     ):
         # time series specific configuration
@@ -215,6 +216,10 @@ class AutoformerConfig(PretrainedConfig):
         self.output_hidden_states = False
 
         self.use_cache = use_cache
+
+        # Autoformer
+        self.moving_avg = moving_avg
+        self.factor = factor
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

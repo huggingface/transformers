@@ -62,6 +62,8 @@ class AutoformerModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         lags_sequence=[1, 2, 3, 4, 5],
+        moving_avg=5,
+        factor=5,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -83,6 +85,9 @@ class AutoformerModelTester:
         self.encoder_seq_length = context_length
         self.decoder_seq_length = prediction_length
 
+        self.moving_avg = moving_avg
+        self.factor = factor
+
     def get_config(self):
         return AutoformerConfig(
             encoder_layers=self.num_hidden_layers,
@@ -100,6 +105,7 @@ class AutoformerModelTester:
             num_static_categorical_features=1,
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
+            moving_avg=self.moving_avg,
         )
 
     def prepare_autoformer_inputs_dict(self, config):

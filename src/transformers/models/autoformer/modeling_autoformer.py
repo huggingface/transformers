@@ -554,7 +554,7 @@ class AutoformerAutoCorrelation(nn.Module):
                  factor: int = 5,
                  bias: bool = True,
     ):
-        super(AutoCorrelation, self).__init__()
+        super().__init__()
         self.factor = factor
 
     def time_delay_agg_training(self, values, corr):
@@ -666,7 +666,7 @@ class AutoformerAutoCorrelation(nn.Module):
 class AutoCorrelationLayer(nn.Module):
     def __init__(self, correlation, d_model, n_heads, d_keys=None,
                  d_values=None):
-        super(AutoCorrelationLayer, self).__init__()
+        super().__init__()
 
         d_keys = d_keys or (d_model // n_heads)
         d_values = d_values or (d_model // n_heads)
@@ -709,7 +709,7 @@ class AutoformerSeriesDecompositionLayer(nn.Module):
         x_seasonal = X - x_trend
     """
     def __init__(self, kernel_size):
-        super(AutoformerSeriesDecomposition, self).__init__()
+        super().__init__()
         self.kernel_size = kernel_size
         self.avg = nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
 
@@ -736,7 +736,7 @@ class AutoformerLayernorm(nn.Module):
     AutoformerLayernorm(x) = nn.LayerNorm(x) - torch.mean(nn.LayerNorm(x))
     """
     def __init__(self, channels):
-        super(AutoformerLayernorm, self).__init__()
+        super().__init__()
         self.layernorm = nn.LayerNorm(channels)
 
     def forward(self, x):
