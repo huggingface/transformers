@@ -37,7 +37,7 @@ def get_tokenzier(tokenizer_path: Path) -> LLaMaTokenizer:
 original_name_to_transformers_name = {
     "tok_embeddings.weight" : "llama.embed.weight",
     "norm.weight": "llama.final_layer_norm.weight",
-    "output.bias": "lm_head.weight",
+    "output.weight": "lm_head.weight",
     r"layers.(\d*).attention_norm.weight": r"llama.layers.\1.attention_norm.weight",
     r"layers.(\d*).attention.wq.weight": r"llama.layers.\1.attention.qkv.weight",
     r"layers.(\d*).attention.wk.weight": r"layers.\1.attention.qkv.weight",
@@ -53,16 +53,16 @@ def map_original_names_to_transformers_names(original_name: str):
         if re.match(pattern, original_name) is None:
             continue
         return re.sub(pattern, repl, original_name)
+    raise ValueError(f"Did not expect {original_name}")
 
-
+@torch.no_grad()
 def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
     model = LLaMaForCausalLM(config=config)
 
     paths = sorted(model_path.glob("*.pth"))
     tp_size = len(paths)
     for tp_rank, path in enumerate(paths):
-        with open(path, "r") as fi:
-            weights = torch.load(fi)
+        weights = torch.load(path)
 
         for original_name, original_param in weights.items():
             if original_name.endswith(".attention.inner_attention.rope.freqs"):
