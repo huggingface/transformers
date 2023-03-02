@@ -588,6 +588,8 @@
         title: Speech Encoder Decoder Models
       - local: model_doc/tapas
         title: TAPAS
+      - local: model_doc/trillsson_efficientnet
+        title: TrillssonEfficientNet
       - local: model_doc/trocr
         title: TrOCR
       - local: model_doc/tvlt

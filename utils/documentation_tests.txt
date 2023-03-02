@@ -187,6 +187,8 @@ src/transformers/models/time_series_transformer/modeling_time_series_transformer
 src/transformers/models/timesformer/modeling_timesformer.py
 src/transformers/models/trajectory_transformer/configuration_trajectory_transformer.py
 src/transformers/models/transfo_xl/configuration_transfo_xl.py
+src/transformers/models/trillsson_efficientnet/configuration_trillsson_efficientnet.py
+src/transformers/models/trillsson_efficientnet/modeling_trillsson_efficientnet.py
 src/transformers/models/trocr/configuration_trocr.py
 src/transformers/models/trocr/modeling_trocr.py
 src/transformers/models/unispeech/configuration_unispeech.py

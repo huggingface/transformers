@@ -172,6 +172,7 @@ from . import (
     timesformer,
     trajectory_transformer,
     transfo_xl,
+    trillsson_efficientnet,
     trocr,
     tvlt,
     unispeech,

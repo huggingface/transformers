@@ -1,0 +1,57 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# TrillssonEfficientNet
+
+## Overview
+
+The TrillssonEfficientNet model was proposed in [TRILLsson: Distilled Universal Paralinguistic Speech Representations](https://aps.arxiv.org/abs/2203.00236) by Joel Shor, Subhashini Venugopalan.
+
+The abstract from the paper is the following:
+
+*Recent advances in self-supervision have dramatically improved the quality of speech representations. However,
+deployment of state-of-the-art embedding models on devices has been restricted due to their limited public availability
+and large resource footprint. Our work addresses these issues by publicly releasing a collection of paralinguistic
+speech models that are small and near state-of-the-art performance. Our approach is based on knowledge distillation,
+and our models are distilled on public data only. We explore different architectures and thoroughly evaluate our models
+on the Non-Semantic Speech (NOSS) benchmark. Our largest distilled model is less than 15% the size of the original
+model (314MB vs 2.2GB), achieves over 96% the accuracy on 6 of 7 tasks, and is trained on 6.5% the data.
+The smallest model is 1% in size (22MB) and achieves over 90% the accuracy on 6 of 7 tasks. Our models outperform
+the open source Wav2Vec 2.0 model on 6 of 7 tasks, and our smallest model outperforms the open source Wav2Vec 2.0 on
+both emotion recognition tasks despite being 7% the size.*
+
+Tips:
+
+- TrillssonEfficientNet is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
+
+This model was contributed by [vumichien](https://huggingface.co/vumichien).
+The original code can be found [google-research](https://github.com/google-research/google-research/tree/master/non_semantic_speech_benchmark/trillsson).
+
+
+## TrillssonEfficientNetConfig
+
+[[autodoc]] TrillssonEfficientNetConfig
+
+## TrillssonEfficientNetFeatureExtractor
+
+[[autodoc]] TrillssonEfficientNetFeatureExtractor
+    - __call__
+
+## TrillssonEfficientNetModel
+
+[[autodoc]] TrillssonEfficientNetModel
+    - forward
+
+## TrillssonEfficientNetForSequenceClassification
+
+[[autodoc]] TrillssonEfficientNetForSequenceClassification
+    - forward

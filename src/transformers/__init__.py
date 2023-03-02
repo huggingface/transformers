@@ -461,6 +461,12 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
+    "models.trillsson_efficientnet": [
+        "TRILLSSON_EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TrillssonEfficientNetConfig",
+        "TrillssonEfficientNetFeatureExtractor",
+        "TrillssonEfficientNetForSequenceClassification",
+    ],
     "models.trocr": [
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrOCRConfig",
@@ -2417,6 +2423,14 @@ else:
             "load_tf_weights_in_transfo_xl",
         ]
     )
+    _import_structure["models.trillsson_efficientnet"].extend(
+        [
+            "TRILLSSON_EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TrillssonEfficientNetForSequenceClassification",
+            "TrillssonEfficientNetModel",
+            "TrillssonEfficientNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.trocr"].extend(
         ["TROCR_PRETRAINED_MODEL_ARCHIVE_LIST", "TrOCRForCausalLM", "TrOCRPreTrainedModel"]
     )
@@ -4047,6 +4061,12 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.trillsson_efficientnet import (
+        TRILLSSON_EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TrillssonEfficientNetConfig,
+        TrillssonEfficientNetFeatureExtractor,
+        TrillssonEfficientNetForSequenceClassification,
+    )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
@@ -5659,6 +5679,12 @@ if TYPE_CHECKING:
             TransfoXLModel,
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
+        )
+        from .models.trillsson_efficientnet import (
+            TRILLSSON_EFFICIENTNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TrillssonEfficientNetForSequenceClassification,
+            TrillssonEfficientNetModel,
+            TrillssonEfficientNetPreTrainedModel,
         )
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.tvlt import (
