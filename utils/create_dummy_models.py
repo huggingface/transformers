@@ -410,7 +410,10 @@ def convert_processors(processors, tiny_config, output_folder, result):
         elif isinstance(processor, ProcessorMixin):
             # Currently, we only have these 2 possibilities
             tokenizers.append(processor.tokenizer)
-            feature_extractors.append(processor.feature_extractor)
+            if hasattr(processor, "image_processor"):
+                feature_extractors.append(processor.image_processor)
+            elif hasattr(processor, "feature_extractor"):
+                feature_extractors.append(processor.feature_extractor)
 
     # check the built processors have the unique type
     num_types = len({x.__class__.__name__ for x in feature_extractors})
@@ -557,7 +560,7 @@ def upload_model(model_dir, organization):
     repo_exist = False
     error = None
     try:
-        create_repo(repo_id=repo_name, organization=organization, exist_ok=False, repo_type="model")
+        create_repo(repo_id=f"{organization}/{repo_name}", exist_ok=False, repo_type="model")
     except Exception as e:
         error = e
         if "You already created" in str(e):
@@ -778,7 +781,15 @@ def get_config_overrides(config_class, processors):
     model_tester_kwargs = {"vocab_size": vocab_size}
     # CLIP-like models have `text_model_tester` and `vision_model_tester`, and we need to pass `vocab_size` to
     # `text_model_tester` via `text_kwargs`. The same trick is also necessary for `Flava`.
-    if config_class.__name__ in ["CLIPConfig", "GroupViTConfig", "OwlViTConfig", "XCLIPConfig", "FlavaConfig"]:
+    if config_class.__name__ in [
+        "CLIPConfig",
+        "GroupViTConfig",
+        "OwlViTConfig",
+        "XCLIPConfig",
+        "FlavaConfig",
+        "BlipConfig",
+        "Blip2Config",
+    ]:
         del model_tester_kwargs["vocab_size"]
         model_tester_kwargs["text_kwargs"] = {"vocab_size": vocab_size}
     # `FSMTModelTester` accepts `src_vocab_size` and `tgt_vocab_size` but not `vocab_size`.
