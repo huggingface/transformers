@@ -24,7 +24,7 @@ from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
-from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer
+from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr
 
 
 logger = logging.get_logger(__name__)
@@ -475,3 +475,12 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         forced_tokens = self.prefix_tokens[1:]
         forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_tokens)]
         return forced_decoder_ids
+
+    def _decode_asr(self, model_outputs, *, return_timestamps, return_language, time_precision):
+        return _decode_asr(
+            self,
+            model_outputs,
+            return_timestamps=return_timestamps,
+            return_language=return_language,
+            time_precision=time_precision,
+        )

@@ -1589,14 +1589,11 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         sequence_length = sequence.shape[1]
         indices = [lag - shift for lag in self.config.lags_sequence]
 
-        try:
-            assert max(indices) + subsequences_length <= sequence_length, (
+        if max(indices) + subsequences_length > sequence_length:
+            raise ValueError(
                 f"lags cannot go further than history length, found lag {max(indices)} "
                 f"while history length is only {sequence_length}"
             )
-        except AssertionError as e:
-            e.args += (max(indices), sequence_length)
-            raise
 
         lagged_values = []
         for lag_index in indices:
@@ -1642,23 +1639,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             else (past_values - loc) / scale
         )
 
-        inputs_length = (
-            self._past_length + self.config.prediction_length if future_values is not None else self._past_length
-        )
-        try:
-            assert inputs.shape[1] == inputs_length, (
-                f"input length {inputs.shape[1]} and dynamic feature lengths {inputs_length} does not match",
-            )
-        except AssertionError as e:
-            e.args += (inputs.shape[1], inputs_length)
-            raise
-
-        subsequences_length = (
-            self.config.context_length + self.config.prediction_length
-            if future_values is not None
-            else self.config.context_length
-        )
-
         # static features
         log_abs_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
         log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
@@ -1675,10 +1655,21 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         features = torch.cat((expanded_static_feat, time_feat), dim=-1)
 
         # lagged features
+        subsequences_length = (
+            self.config.context_length + self.config.prediction_length
+            if future_values is not None
+            else self.config.context_length
+        )
         lagged_sequence = self.get_lagged_subsequences(sequence=inputs, subsequences_length=subsequences_length)
         lags_shape = lagged_sequence.shape
         reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
 
+        if reshaped_lagged_sequence.shape[1] != time_feat.shape[1]:
+            raise ValueError(
+                f"input length {reshaped_lagged_sequence.shape[1]} and time feature lengths {time_feat.shape[1]} does not match"
+            )
+
+        # transformer inputs
         transformer_inputs = torch.cat((reshaped_lagged_sequence, features), dim=-1)
 
         return transformer_inputs, loc, scale, static_feat

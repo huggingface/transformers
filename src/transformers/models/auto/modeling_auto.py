@@ -43,7 +43,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot", "BlenderbotModel"),
         ("blenderbot-small", "BlenderbotSmallModel"),
         ("blip", "BlipModel"),
-        ("blip_2", "Blip2Model"),
+        ("blip-2", "Blip2Model"),
         ("bloom", "BloomModel"),
         ("bridgetower", "BridgeTowerModel"),
         ("camembert", "CamembertModel"),
@@ -64,7 +64,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaModel"),
         ("deberta-v2", "DebertaV2Model"),
         ("decision_transformer", "DecisionTransformerModel"),
-        ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
         ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
         ("deta", "DetaModel"),
@@ -129,7 +128,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mvp", "MvpModel"),
         ("nat", "NatModel"),
         ("nezha", "NezhaModel"),
-        ("nllb", "M2M100Model"),
         ("nystromformer", "NystromformerModel"),
         ("oneformer", "OneFormerModel"),
         ("openai-gpt", "OpenAIGPTModel"),
@@ -499,6 +497,8 @@ MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
+        ("blip", "BlipForConditionalGeneration"),
+        ("blip-2", "Blip2ForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
     ]
 )
