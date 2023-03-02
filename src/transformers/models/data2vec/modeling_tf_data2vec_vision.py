@@ -1045,9 +1045,11 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
             return_dict=return_dict,
             training=training,
         )
-        breakpoint()
+        
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
+        
         logits = self.classifier(pooled_output)
+        
         loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
         if not return_dict:
