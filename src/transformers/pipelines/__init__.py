@@ -306,7 +306,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("laion/clap-htsat-fused", "f39917b"),
+                "pt": ("laion/clap-htsat-fused", "973b6e5"),
             }
         },
         "type": "multimodal",
