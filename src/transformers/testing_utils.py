@@ -209,7 +209,7 @@ def is_pipeline_test(test_case):
     skipped.
     """
     if not _run_pipeline_tests:
-        return unittest.skip("test is staging test")(test_case)
+        return unittest.skip("test is pipeline test")(test_case)
     else:
         try:
             import pytest  # We don't need a hard dependency on pytest in the main library
