@@ -41,13 +41,13 @@ original_name_to_transformers_name = {
     "output.weight": "lm_head.weight",
     r"layers.(\d*).attention_norm.weight": r"llama.layers.\1.attention_norm.weight",
     r"layers.(\d*).attention.wq.weight": r"llama.layers.\1.attention.qkv.weight",
-    r"layers.(\d*).attention.wk.weight": r"layers.\1.attention.qkv.weight",
-    r"layers.(\d*).attention.wv.weight": r"layers.\1.attention.qkv.weight",
-    r"layers.(\d*).attention.wo.weight": r"layers.\1.attention.o.weight",
-    r"layers.(\d*).ffn_norm.weight": r"layers.\1.ff_norm.weight",
-    r"layers.(\d*).feed_forward.w1.weight": r"layers.\1.ff.wi_0.weight",
-    r"layers.(\d*).feed_forward.w2.weight": r"layers.\1.ff.wo.weight",
-    r"layers.(\d*).feed_forward.w3.weight": r"layers.\1.ff.wi_1.weight",
+    r"layers.(\d*).attention.wk.weight": r"llama.layers.\1.attention.qkv.weight",
+    r"layers.(\d*).attention.wv.weight": r"llama.layers.\1.attention.qkv.weight",
+    r"layers.(\d*).attention.wo.weight": r"llama.layers.\1.attention.o.weight",
+    r"layers.(\d*).ffn_norm.weight": r"llama.layers.\1.ff_norm.weight",
+    r"layers.(\d*).feed_forward.w1.weight": r"llama.layers.\1.ff.wi_0.weight",
+    r"layers.(\d*).feed_forward.w2.weight": r"llama.layers.\1.ff.wo.weight",
+    r"layers.(\d*).feed_forward.w3.weight": r"llama.layers.\1.ff.wi_1.weight",
 }
 def map_original_names_to_transformers_names(original_name: str):
     for pattern, repl in original_name_to_transformers_name.items():
