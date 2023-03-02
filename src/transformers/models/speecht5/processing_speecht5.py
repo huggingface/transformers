@@ -87,27 +87,27 @@ class SpeechT5Processor(ProcessorMixin):
             inputs = None
 
         if audio_target is not None:
-            audio_target_features = self.feature_extractor(
+            targets = self.feature_extractor(
                 audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs
             )
             if inputs is None:
-                return audio_target_features
+                return targets
             else:
-                inputs["labels"] = audio_target_features["input_values"]
-                inputs["stop_labels"] = audio_target_features["stop_labels"]
-                decoder_attention_mask = audio_target_features.get("attention_mask")
-                if decoder_attention_mask is not None:
-                    inputs["decoder_attention_mask"] = decoder_attention_mask
-
-        if text_target is not None:
-            encodings_target = self.tokenizer(text_target, **kwargs)
+                inputs["labels"] = targets["input_values"]
+                inputs["stop_labels"] = targets["stop_labels"]
+        elif text_target is not None:
+            targets = self.tokenizer(text_target, **kwargs)
             if inputs is None:
-                return encodings_target
+                return targets
             else:
-                inputs["labels"] = encodings_target["input_ids"]
-                decoder_attention_mask = encodings_target.get("attention_mask")
-                if decoder_attention_mask is not None:
-                    inputs["decoder_attention_mask"] = decoder_attention_mask
+                inputs["labels"] = targets["input_ids"]
+        else:
+            targets = None
+
+        if targets is not None:
+            decoder_attention_mask = targets.get("attention_mask")
+            if decoder_attention_mask is not None:
+                inputs["decoder_attention_mask"] = decoder_attention_mask
 
         return inputs
 
@@ -121,28 +121,37 @@ class SpeechT5Processor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        input_ids = kwargs.pop("input_ids", None)
         input_features = kwargs.pop("input_values", None)
         labels = kwargs.pop("labels", None)
 
+        # TODO assertions here like in __call__
         if len(args) > 0:
             input_features = args[0]
             args = args[1:]
 
         if input_features is not None:
-            input_features = self.feature_extractor.pad(input_features, *args, **kwargs)
-        if labels is not None:
-            labels = self.tokenizer.pad(labels, **kwargs)
-
-        if labels is None:
-            return input_features
-        elif input_features is None:
-            return labels
+            inputs = self.feature_extractor.pad(input_features, *args, **kwargs)
+        elif input_ids is not None:
+            inputs = self.tokenizer.pad(input_ids, **kwargs)
         else:
-            input_features["labels"] = labels["input_ids"]
-            decoder_attention_mask = labels.get("attention_mask")
+            inputs = None
+
+        if labels is not None:
+            targets = self.tokenizer.pad(labels, **kwargs)
+            if inputs is None:
+                return labels
+            else:
+                inputs["labels"] = targets["input_ids"]
+        else:
+            targets = None
+
+        if targets is not None:
+            decoder_attention_mask = targets.get("attention_mask")
             if decoder_attention_mask is not None:
-                input_features["decoder_attention_mask"] = decoder_attention_mask
-            return input_features
+                inputs["decoder_attention_mask"] = decoder_attention_mask
+
+        return inputs
 
     def batch_decode(self, *args, **kwargs):
         """
