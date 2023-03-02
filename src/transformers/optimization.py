@@ -31,6 +31,8 @@ from .utils.versions import require_version
 
 logger = logging.get_logger(__name__)
 
+def _get_constant_schedule_lr_lambda(_):
+    return 1
 
 def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
     """
@@ -46,7 +48,8 @@ def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
-    return LambdaLR(optimizer, lambda _: 1, last_epoch=last_epoch)
+    lr_lambda = partial(_get_constant_schedule_lr_lambda)
+    return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
 
 
 def _get_constant_schedule_with_warmup_lr_lambda(current_step: int, *, num_warmup_steps: int):
