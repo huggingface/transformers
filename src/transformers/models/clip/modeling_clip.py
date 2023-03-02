@@ -1143,8 +1143,6 @@ class CLIPModel(CLIPPreTrainedModel):
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        print(text_embeds.shape, image_embeds.shape)
-
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
         logits_per_image = logits_per_text.t()
 

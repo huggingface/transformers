@@ -1,5 +1,5 @@
-from collections import UserDict
 from typing import List, Union
+from collections import UserDict
 
 from ..utils import (
     add_end_docstrings,
@@ -18,7 +18,7 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    pass
+    import torch
 
 if is_tf_available():
     import tensorflow as tf
@@ -121,24 +121,13 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         text_inputs = model_inputs.pop("text_inputs")
         if isinstance(text_inputs[0], UserDict):
             text_inputs = [text_inputs]
-        text_embeds = self.model.get_text_features(**text_inputs[0][0])
-        image_embeds = self.model.get_image_features(**model_inputs)
+        text_inputs = text_inputs[0][0]
 
-        if self.framework == "tf":
-            # normalized features
-            image_embeds = image_embeds / tf.norm(tensor=image_embeds, ord="euclidean", axis=-1, keepdims=True)
-            text_embeds = text_embeds / tf.norm(tensor=text_embeds, ord="euclidean", axis=-1, keepdims=True)
-            logit_scale = tf.math.exp(self.model.clip.logit_scale)
-            logits = tf.math.reduce_sum(text_embeds * tf.expand_dims(image_embeds, 1), -1) * logit_scale
-        else:
-            image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
-            text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
-            logit_scale = self.model.logit_scale.exp()
-            logits = (text_embeds * image_embeds.unsqueeze(dim=1)).sum(dim=-1) * logit_scale
+        outputs = self.model(**text_inputs, **model_inputs)
 
         model_outputs = {
             "candidate_labels": candidate_labels,
-            "logits": logits,
+            "logits": outputs.logits_per_image,
         }
         return model_outputs
 
