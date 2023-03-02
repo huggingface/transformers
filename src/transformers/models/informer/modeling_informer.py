@@ -444,8 +444,8 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.marian.modeling_marian.MarianSinusoidalPositionalEmbedding with Marian->TimeSeries
-class TimeSeriesSinusoidalPositionalEmbedding(nn.Embedding):
+# Copied from transformers.models.marian.modeling_marian.MarianSinusoidalPositionalEmbedding with Marian->Informer
+class InformerSinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
@@ -1451,7 +1451,7 @@ class InformerEncoder(InformerPreTrainedModel):
             raise ValueError("The `prediction_length` config needs to be specified.")
 
         self.value_embedding = ValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
-        self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
+        self.embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         )
         self.layers = nn.ModuleList([InformerEncoderLayer(config) for _ in range(config.encoder_layers)])
@@ -1601,7 +1601,7 @@ class InformerDecoder(InformerPreTrainedModel):
             raise ValueError("The `prediction_length` config needs to be specified.")
 
         self.value_embedding = ValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
-        self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
+        self.embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         )
         self.layers = nn.ModuleList([InformerDecoderLayer(config) for _ in range(config.decoder_layers)])
