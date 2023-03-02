@@ -44,7 +44,7 @@ CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with BERT -> load_tf_weights_in_cpmant
+# Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert -> cpmant
 def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -403,7 +403,6 @@ class CPMAntTransformerBlock(nn.Module):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
         """
-        current_key_value = None
         hidden_states = self.self_att(
             hidden_states,
             attention_mask=attention_mask,
@@ -485,7 +484,7 @@ class CPMAntEncoder(nn.Module):
         return hidden_states, current_key_values, all_hidden_states, all_self_attns
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert -> CPMAnt
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with bert -> cpmant
 class CPMAntIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -505,7 +504,6 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
     def __init__(
         self,
         config: CPMAntConfig,
-        bidirectional: bool = True,
     ):
         super().__init__()
 
@@ -513,7 +511,6 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         self.num_buckets = config.position_bias_num_buckets
         self.max_distance = config.position_bias_max_distance
         self.num_segments = config.segment_types
-        self.bidirectional = bidirectional
 
         self.relative_attention_bias = torch.nn.parameter.Parameter(
             torch.empty(
@@ -558,7 +555,6 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
             absolute_position_bucket = self._position_bucket(
                 torch.arange(keylen, dtype=torch.int32, device=relative_position_bucket.device)[None, :]
                 - torch.arange(querylen, dtype=torch.int32, device=relative_position_bucket.device)[:, None],
-                bidirectional=self.bidirectional,
                 num_buckets=self.num_buckets,
                 max_distance=self.max_distance,
             )
@@ -577,14 +573,12 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
     def _segment_relative_position_bucket(self, query_segment, key_segment):
         return query_segment * self.num_segments + key_segment
 
-    def _position_bucket(self, relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+    def _position_bucket(self, relative_position, num_buckets=32, max_distance=128):
         relative_buckets = 0
-        if bidirectional:
-            num_buckets //= 2
-            relative_buckets = (relative_position > 0).to(torch.int32) * num_buckets
-            relative_position = torch.abs(relative_position)
-        else:
-            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
+        # always bidirectional in CPMAnt
+        num_buckets //= 2
+        relative_buckets = (relative_position > 0).to(torch.int32) * num_buckets
+        relative_position = torch.abs(relative_position)
         max_exact = num_buckets // 2
         is_small = relative_position < max_exact
         relative_postion_if_large = max_exact + (
@@ -600,7 +594,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         return relative_buckets
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert -> CPMAnt
+# Copied from transformers.models.bert.modeling_bert.BertOutput with bert -> cpmant
 class CPMAntOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -753,7 +747,7 @@ class CPMAntModel(CPMAntPreTrainedModel):
 
         # add prompts ahead
         if input_ids.dtype != torch.int32:
-            input_ids = input_ids.int()
+            input_ids = input_ids.to(torch.int32)
         dtype, device = input_ids.dtype, input_ids.device
         segment = torch.where(input_ids != 0, 2, 0).to(dtype=dtype, device=device)
         length = (segment != 0).sum(-1).to(dtype=dtype, device=device)

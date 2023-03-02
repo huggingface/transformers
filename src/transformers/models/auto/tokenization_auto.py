@@ -122,7 +122,7 @@ else:
                     "CpmTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            ("cpmant", ("CPMAntTokenizer", "CPMAntTokenizer" if is_tokenizers_available() else None)),
+            ("cpmant", ("CPMAntTokenizer", "CPMAntTokenizerFast" if is_tokenizers_available() else None)),
             ("ctrl", ("CTRLTokenizer", None)),
             ("data2vec-text", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("deberta", ("DebertaTokenizer", "DebertaTokenizerFast" if is_tokenizers_available() else None)),

@@ -37,10 +37,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "openbmb/cpm-ant-10b": "https://huggingface.co/cpm-ant-10b/resolve/main/vocab.txt",
-    },
-    "tokenizer_file": {
-        "openbmb/cpm-ant-10b": "https://huggingface.co/cpm-ant-10b/resolve/main/tokenizer.json",
+        "openbmb/cpm-ant-10b": "https://huggingface.co/openbmb/cpm-ant-10b/blob/main/vocab.txt",
     },
 }
 
@@ -99,22 +96,22 @@ class CPMAntTokenizerFast(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
-        bod_token (`str`):
+        bod_token (`str`, *optional*, defaults to `<d>`):
             The beginning of document token.
-        eod_token (`str`):
+        eod_token (`str`, *optional*, defaults to `</d>`):
             The end of document token.
-        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `<s>`):
             The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `</s>`):
             The end of sequence token.
-        pad_token (`str`):
+        pad_token (`str`, *optional*, defaults to `<pad>`):
             The token used for padding.
-        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        unk_token (`str`, *optional*, defaults to `<unk>`):
             The unknown token.
-        line_token (`str`):
-            the line token.
-        space_token (`str`):
-            the space token.
+        line_token (`str`, *optional*, defaults to `</n>`):
+            The line token.
+        space_token (`str`, *optional*, defaults to `</_>`):
+            The space token.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

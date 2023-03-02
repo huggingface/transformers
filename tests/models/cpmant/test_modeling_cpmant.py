@@ -180,16 +180,19 @@ class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
         )(self.test_retain_grad_hidden_states_attentions)
 
     @slow
+    @unittest.skip("skip this test as the model is very large for our daily runner")
     def test_cpmant_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_cpmant_model(config, inputs)
 
     @slow
+    @unittest.skip("skip this test as the model is very large for our daily runner")
     def test_cpmant_lm_head_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(config, inputs)
 
     @slow
+    @unittest.skip("skip this test as the model is very large for our daily runner")
     def test_simple_generation(self):
         model_path = "openbmb/cpm-ant-10b"
         model = CPMAntForCausalLM.from_pretrained(model_path)
@@ -202,6 +205,7 @@ class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(expected_output, output_texts)
 
     @slow
+    @unittest.skip("skip this test as the model is very large for our daily runner")
     def test_batch_generation(self):
         model_path = "openbmb/cpm-ant-10b"
         model = CPMAntForCausalLM.from_pretrained(model_path)
@@ -220,6 +224,7 @@ class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class CPMAntModelIntegrationTest(unittest.TestCase):
     @slow
+    @unittest.skip("skip this test as the model is very large for our daily runner")
     def test_inference_masked_lm(self):
         texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
@@ -237,6 +242,7 @@ class CPMAntModelIntegrationTest(unittest.TestCase):
 @require_torch
 class CPMAntForCausalLMlIntegrationTest(unittest.TestCase):
     @slow
+    @unittest.skip("skip this test as the model is very large for our daily runner")
     def test_inference_casual(self):
         texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
