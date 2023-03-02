@@ -781,7 +781,7 @@ def get_config_overrides(config_class, processors):
     model_tester_kwargs = {"vocab_size": vocab_size}
     # CLIP-like models have `text_model_tester` and `vision_model_tester`, and we need to pass `vocab_size` to
     # `text_model_tester` via `text_kwargs`. The same trick is also necessary for `Flava`.
-    if config_class.__name__ in ["CLIPConfig", "GroupViTConfig", "OwlViTConfig", "XCLIPConfig", "FlavaConfig", "BlipConfig"]:
+    if config_class.__name__ in ["CLIPConfig", "GroupViTConfig", "OwlViTConfig", "XCLIPConfig", "FlavaConfig", "BlipConfig", "Blip2Config"]:
         del model_tester_kwargs["vocab_size"]
         model_tester_kwargs["text_kwargs"] = {"vocab_size": vocab_size}
     # `FSMTModelTester` accepts `src_vocab_size` and `tgt_vocab_size` but not `vocab_size`.
