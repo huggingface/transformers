@@ -217,6 +217,7 @@ class FeaturesManager:
         "codegen": supported_features_mapping(
             "default",
             "causal-lm",
+            "causal-lm-with-past",
             onnx_config_cls="models.codegen.CodeGenOnnxConfig",
         ),
         "convbert": supported_features_mapping(
