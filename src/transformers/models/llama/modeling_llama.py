@@ -96,7 +96,7 @@ class LLaMaAttention(nn.Module):
         self.head_size = self.hidden_size // self.num_attention_heads
         max_positions = config.max_position_embeddings
         self.register_buffer(
-            "bias",
+            "causal_mask",
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
@@ -193,7 +193,7 @@ class LLaMaAttention(nn.Module):
         batch_size, num_attention_heads, query_length, attn_head_size = query.shape
         key_length = key.shape[-2]
 
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+        causal_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length]
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
@@ -321,7 +321,7 @@ class LLaMaLayer(nn.Module):
         outputs = attention_layer_outputs[1:]
 
         attn_output = attn_output + hidden_states
-        ff_output = self.ff(self.post_attention_layernorm(attn_output))
+        ff_output = self.ff(self.ff_norm(attn_output))
         hidden_states = ff_output + attn_output
 
         if use_cache:
