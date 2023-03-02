@@ -23,9 +23,8 @@ from itertools import chain
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 
-import transformers.models.auto as auto_module
-from transformers.models.auto.configuration_auto import model_type_to_module_name
-
+from ..models import auto as auto_module
+from ..models.auto.configuration_auto import model_type_to_module_name
 from ..utils import is_flax_available, is_tf_available, is_torch_available, logging
 from . import BaseTransformersCLICommand
 
@@ -1556,6 +1555,8 @@ def get_user_input():
                 "What will be the name of the image processor class for this model? ",
                 default_value=f"{model_camel_cased}ImageProcessor",
             )
+        else:
+            image_processor_class = None
         if old_feature_extractor_class is not None:
             feature_extractor_class = get_user_field(
                 "What will be the name of the feature extractor class for this model? ",

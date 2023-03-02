@@ -14,9 +14,8 @@
 # limitations under the License.
 """ MarkupLM model configuration"""
 
-from transformers.utils import logging
-
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -126,7 +125,7 @@ class MarkupLMConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,

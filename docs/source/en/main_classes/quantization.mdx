@@ -1,0 +1,150 @@
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Quantize 🤗 Transformers models
+
+## `bitsandbytes` Integration
+
+🤗 Transformers is closely integrated with most used modules on `bitsandbytes`. You can load your model in 8-bit precision with few lines of code.
+This is supported by most of the GPU hardwares since the `0.37.0` release of `bitsandbytes`.
+
+Learn more about the quantization method in the [LLM.int8()](https://arxiv.org/abs/2208.07339) paper, or the [blogpost](https://huggingface.co/blog/hf-bitsandbytes-integration) about the collaboration.
+
+Here are the things you can do using `bitsandbytes` integration
+
+### Load a large model in 8bit
+
+You can load a model by roughly halving the memory requirements by using `load_in_8bit=True` argument when calling `.from_pretrained` method
+
+
+```python
+# pip install transformers accelerate bitsandbytes
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_id = "bigscience/bloom-1b7"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map == "auto", load_in_8bit=True)
+```
+
+Then, use your model as you would usually use a [`PreTrainedModel`].
+
+You can check the memory footprint of your model with `get_memory_footprint` method.
+
+```python
+print(model.get_memory_footprint())
+```
+
+With this integration we were able to load large models on smaller devices and run them without any issue.  
+
+<Tip warning={true}>
+
+Note that once a model has been loaded in 8-bit it is currently not possible to push the quantized weights on the Hub. Note also that you cannot train 8-bit weights as this is not supported yet. However you can use 8-bit models to train extra parameters, this will be covered in the next section.
+
+</Tip>
+
+### Advanced usecases
+
+This section is intended to advanced users, that want to explore what it is possible to do beyond loading and running 8-bit models.
+
+#### Offload between `cpu` and `gpu`
+
+One of the advanced usecase of this is being able to load a model and dispatch the weights between `CPU` and `GPU`. Note that the weights that will be dispatched on CPU **will not** be converted in 8-bit, thus kept in `float32`. This feature is intended for users that want to fit a very large model and dispatch the model between GPU and CPU.
+
+First, load a `BitsAndBytesConfig` from `transformers` and set the attribute `llm_int8_enable_fp32_cpu_offload` to `True`:
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+quantization_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
+```
+
+Let's say you want to load `bigscience/bloom-1b7` model, and you have just enough GPU RAM to fit the entire model except the `lm_head`. Therefore write a custom device_map as follows:
+```python
+device_map = {
+    "transformer.word_embeddings": 0,
+    "transformer.word_embeddings_layernorm": 0,
+    "lm_head": "cpu",
+    "transformer.h": 0,
+    "transformer.ln_f": 0,
+}
+```
+
+And load your model as follows:
+```python
+model_8bit = AutoModelForCausalLM.from_pretrained(
+    "bigscience/bloom-1b7",
+    device_map=device_map,
+    quantization_config=quantization_config,
+)
+```
+
+And that's it! Enjoy your model!
+
+#### Play with `llm_int8_threshold`
+
+You can play with the `llm_int8_threshold` argument to change the threshold of the outliers. An "outlier" is a hidden state value that is greater than a certain threshold. 
+This corresponds to the outlier threshold for outlier detection as described in `LLM.int8()` paper. Any hidden states value that is above this threshold will be considered an outlier and the operation on those values will be done in fp16. Values are usually normally distributed, that is, most values are in the range [-3.5, 3.5], but there are some exceptional systematic outliers that are very differently distributed for large models. These outliers are often in the interval [-60, -6] or [6, 60]. Int8 quantization works well for values of magnitude ~5, but beyond that, there is a significant performance penalty. A good default threshold is 6, but a lower threshold might be needed for more unstable models (small models, fine-tuning).
+This argument can impact the inference speed of the model. We suggest to play with this parameter to find which one is the best for your usecase.
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+model_id = "bigscience/bloom-1b7"
+
+quantization_config = BitsAndBytesConfig(
+    llm_int8_threshold=10,
+)
+
+model_8bit = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    device_map=device_map,
+    quantization_config=quantization_config,
+)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+```
+
+#### Skip the conversion of some modules
+
+Some models has several modules that needs to be not converted in 8-bit to ensure stability. For example Jukebox model has several `lm_head` modules that should be skipped. Play with `llm_int8_skip_modules` 
+
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+model_id = "bigscience/bloom-1b7"
+
+quantization_config = BitsAndBytesConfig(
+    llm_int8_skip_modules=["lm_head"],
+)
+
+model_8bit = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    device_map=device_map,
+    quantization_config=quantization_config,
+)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+```
+
+#### Fine-tune a model that has been loaded in 8-bit
+
+With the official support of adapters in the Hugging Face ecosystem, you can fine-tune models that have been loaded in 8-bit. 
+This enables fine-tuning large models such as `flan-t5-large` or `facebook/opt-6.7b` in a single google Colab. Please have a look at [`peft`](https://github.com/huggingface/peft) library for more details.
+
+### BitsAndBytesConfig
+
+[[autodoc]] BitsAndBytesConfig
+
+
+## Quantization with 🤗 `optimum` 
+
+Please have a look at [Optimum documentation](https://huggingface.co/docs/optimum/index) to learn more about quantization methods that are supported by `optimum` and see if these are applicable for your usecase.
+

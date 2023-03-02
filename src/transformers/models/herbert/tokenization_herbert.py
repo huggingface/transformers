@@ -320,9 +320,8 @@ class HerbertTokenizer(PreTrainedTokenizer):
         ],
         lang2id=None,
         id2lang=None,
-        **kwargs
+        **kwargs,
     ):
-
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -349,10 +348,10 @@ class HerbertTokenizer(PreTrainedTokenizer):
         self.sm = sacremoses
 
         # cache of sm.MosesPunctNormalizer instance
-        self.cache_moses_punct_normalizer = dict()
+        self.cache_moses_punct_normalizer = {}
         # cache of sm.MosesTokenizer instance
-        self.cache_moses_tokenizer = dict()
-        self.lang_with_custom_tokenizer = set(["zh", "th", "ja"])
+        self.cache_moses_tokenizer = {}
+        self.lang_with_custom_tokenizer = {"zh", "th", "ja"}
         # True for current supported model (v1.2.0), False for XLM-17 & 100
         self.do_lowercase_and_remove_accent = do_lowercase_and_remove_accent
         self.lang2id = lang2id
@@ -486,13 +485,12 @@ class HerbertTokenizer(PreTrainedTokenizer):
         return word
 
     def _tokenize(self, text):
-
         pre_tokens = self.bert_pre_tokenizer.tokenize(text)
 
         split_tokens = []
         for token in pre_tokens:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens
 

@@ -18,8 +18,6 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     center_crop,
@@ -35,11 +33,11 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    is_batched,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
 )
-from ...utils import logging
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -98,7 +96,7 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 256}
@@ -122,7 +120,7 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
@@ -149,7 +147,7 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Center crop an image to (size["height"], size["width"]). If the input size is smaller than `size` along any
@@ -194,7 +192,7 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         mean: Union[float, List[float]],
         std: Union[float, List[float]],
         data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
@@ -288,8 +286,7 @@ class MobileNetV1ImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        if not is_batched(images):
-            images = [images]
+        images = make_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(

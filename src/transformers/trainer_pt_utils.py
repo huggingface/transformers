@@ -189,6 +189,8 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
+        if isinstance(tensor, Mapping):
+            return type(tensor)({k: distributed_concat(t, num_total_examples) for k, t in tensor.items()})
         tensor = atleast_1d(tensor).contiguous()
         output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensor)
@@ -532,7 +534,7 @@ def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, genera
     indices = torch.randperm(len(lengths), generator=generator)
     megabatch_size = mega_batch_mult * batch_size
     megabatches = [indices[i : i + megabatch_size].tolist() for i in range(0, len(lengths), megabatch_size)]
-    megabatches = [list(sorted(megabatch, key=lambda i: lengths[i], reverse=True)) for megabatch in megabatches]
+    megabatches = [sorted(megabatch, key=lambda i: lengths[i], reverse=True) for megabatch in megabatches]
 
     # The rest is to get the biggest batch first.
     # Since each megabatch is sorted by descending length, the longest element is the first
@@ -595,6 +597,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
     Distributed Sampler that samples indices in a way that groups together features of the dataset of roughly the same
     length while keeping a bit of randomness.
     """
+
     # Copied and adapted from PyTorch DistributedSampler.
     def __init__(
         self,

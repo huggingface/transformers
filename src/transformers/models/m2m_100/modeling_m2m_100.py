@@ -46,7 +46,6 @@ from .configuration_m2m_100 import M2M100Config
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "M2M100Config"
-_TOKENIZER_FOR_DOC = "M2M100Tokenizer"
 _CHECKPOINT_FOR_DOC = "facebook/m2m100_418M"
 
 
@@ -173,7 +172,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         if max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
-        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds, past_key_values_length):
         """
@@ -285,8 +284,8 @@ class M2M100Attention(nn.Module):
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -332,7 +331,7 @@ class M2M100Attention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
@@ -340,7 +339,7 @@ class M2M100Attention(nn.Module):
         attn_output = attn_output.transpose(1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
+        # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -459,11 +458,11 @@ class M2M100DecoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -577,10 +576,10 @@ M2M_100_GENERATION_EXAMPLE = r"""
     Translation example:
 
     ```python
-    >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
+    >>> from transformers import AutoTokenizer, M2M100ForConditionalGeneration
 
     >>> model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
-    >>> tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/m2m100_418M")
 
     >>> text_to_translate = "Life is like a box of chocolates"
     >>> model_inputs = tokenizer(text_to_translate, return_tensors="pt")
@@ -597,7 +596,7 @@ M2M_100_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -611,7 +610,7 @@ M2M_100_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -734,7 +733,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -915,7 +914,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`M2M100Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1025,6 +1024,13 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting" " `use_cache=False`..."
+                )
+                use_cache = False
+
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1056,13 +1062,6 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
                 if self.gradient_checkpointing and self.training:
 
-                    if use_cache:
-                        logger.warning(
-                            "`use_cache=True` is incompatible with gradient checkpointing. Setting"
-                            " `use_cache=False`..."
-                        )
-                        use_cache = False
-
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
                             # None for past_key_value
@@ -1081,7 +1080,6 @@ class M2M100Decoder(M2M100PreTrainedModel):
                         None,
                     )
                 else:
-
                     layer_outputs = decoder_layer(
                         hidden_states,
                         attention_mask=combined_attention_mask,
@@ -1172,7 +1170,6 @@ class M2M100Model(M2M100PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(M2M_100_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1399,8 +1396,8 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

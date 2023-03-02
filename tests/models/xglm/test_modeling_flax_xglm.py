@@ -26,10 +26,10 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 
 
 if is_flax_available():
-    import numpy as np
-
     import jax
     import jax.numpy as jnp
+    import numpy as np
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -196,7 +196,6 @@ class FlaxXGLMModelTester:
 @require_sentencepiece
 @require_flax
 class FlaxXGLMModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxXGLMModel, FlaxXGLMForCausalLM) if is_flax_available() else ()
     all_generative_model_classes = (FlaxXGLMForCausalLM,) if is_flax_available() else ()
 

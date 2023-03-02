@@ -26,6 +26,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -34,7 +35,7 @@ if is_torch_available():
     from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerModel
 
     if is_vision_available():
-        from transformers import MaskFormerImageProcessor
+        from transformers import Mask2FormerImageProcessor
 
 if is_vision_available():
     from PIL import Image
@@ -172,9 +173,9 @@ class Mask2FormerModelTester:
 
 
 @require_torch
-class Mask2FormerModelTest(ModelTesterMixin, unittest.TestCase):
-
+class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Mask2FormerModel, Mask2FormerForUniversalSegmentation) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": Mask2FormerModel} if is_torch_available() else {}
 
     is_encoder_decoder = False
     test_pruning = False
@@ -325,7 +326,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_feature_extractor(self):
-        return MaskFormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
+        return Mask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = Mask2FormerModel.from_pretrained(self.model_checkpoints).to(torch_device)

@@ -35,7 +35,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/biogpt"
 _CONFIG_FOR_DOC = "BioGptConfig"
-_TOKENIZER_FOR_DOC = "BioGptTokenizer"
 
 BIOGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/biogpt",
@@ -191,8 +190,8 @@ class BioGptAttention(nn.Module):
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -238,7 +237,7 @@ class BioGptAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
@@ -246,7 +245,7 @@ class BioGptAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
+        # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -385,7 +384,7 @@ BIOGPT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BioGptTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -487,7 +486,6 @@ class BioGptModel(BioGptPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIOGPT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -542,6 +540,13 @@ class BioGptModel(BioGptPreTrainedModel):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = None
@@ -559,12 +564,6 @@ class BioGptModel(BioGptPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
 
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
@@ -580,7 +579,6 @@ class BioGptModel(BioGptPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -644,7 +642,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BIOGPT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
@@ -706,22 +703,31 @@ class BioGptForCausalLM(BioGptPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask, past_key_values=None, **kwargs):
-
+    def prepare_inputs_for_generation(
+        self, input_ids, attention_mask, inputs_embeds=None, past_key_values=None, **kwargs
+    ):
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache"),
-        }
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+            }
+        )
+
+        return model_inputs
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

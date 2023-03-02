@@ -56,7 +56,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "xlnet-base-cased"
 _CONFIG_FOR_DOC = "XLNetConfig"
-_TOKENIZER_FOR_DOC = "XLNetTokenizer"
 
 TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlnet-base-cased",
@@ -402,13 +401,13 @@ class TFXLNetLayer(tf.keras.layers.Layer):
 class TFXLNetLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
-        self.vocab_size = config.vocab_size
+        self.config = config
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super().build(input_shape)
 
     def get_output_embeddings(self):
@@ -423,7 +422,7 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -598,7 +597,6 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ):
-
         if training and use_mems is None:
             use_mems = self.use_mems_train
         else:
@@ -1065,7 +1063,7 @@ XLNET_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`XLNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1145,7 +1143,6 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1289,9 +1286,9 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         ```python
         >>> import tensorflow as tf
         >>> import numpy as np
-        >>> from transformers import XLNetTokenizer, TFXLNetLMHeadModel
+        >>> from transformers import AutoTokenizer, TFXLNetLMHeadModel
 
-        >>> tokenizer = XLNetTokenizer.from_pretrained("xlnet-large-cased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-large-cased")
         >>> model = TFXLNetLMHeadModel.from_pretrained("xlnet-large-cased")
 
         >>> # We show how to setup inputs to predict a next token using a bi-directional context.
@@ -1385,7 +1382,6 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForSequenceClassificationOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1491,7 +1487,6 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForMultipleChoiceOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1612,7 +1607,6 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForTokenClassificationOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1698,7 +1692,6 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForQuestionAnsweringSimpleOutput,
         config_class=_CONFIG_FOR_DOC,

@@ -1,4 +1,4 @@
-<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -17,8 +17,8 @@ specific language governing permissions and limitations under the License.
 Before you can train a model on a dataset, it needs to be preprocessed into the expected model input format. Whether your data is text, images, or audio, they need to be converted and assembled into batches of tensors. 🤗 Transformers provides a set of preprocessing classes to help prepare your data for the model. In this tutorial, you'll learn that for:
 
 * Text, use a [Tokenizer](./main_classes/tokenizer) to convert text into a sequence of tokens, create a numerical representation of the tokens, and assemble them into tensors.
-* Image inputs use a [ImageProcessor](./main_classes/image) to convert images into tensors.
 * Speech and audio, use a [Feature extractor](./main_classes/feature_extractor) to extract sequential features from audio waveforms and convert them into tensors.
+* Image inputs use a [ImageProcessor](./main_classes/image) to convert images into tensors.
 * Multimodal inputs, use a [Processor](./main_classes/processors) to combine a tokenizer and a feature extractor or image processor.
 
 <Tip>
@@ -320,7 +320,21 @@ The sample lengths are now the same and match the specified maximum length. You 
 
 ## Computer vision
 
-For computer vision tasks, you'll need an [image processor](main_classes/image_processor) to prepare your dataset for the model. The image processor is designed to preprocess images, and convert them into tensors.
+For computer vision tasks, you'll need an [image processor](main_classes/image_processor) to prepare your dataset for the model.
+Image preprocessing consists of several steps that convert images into the input expected by the model. These steps
+include but are not limited to resizing, normalizing, color channel correction, and converting images to tensors.
+
+<Tip>
+
+Image preprocessing often follows some form of image augmentation. Both image preprocessing and image augmentation
+transform image data, but they serve different purposes:
+
+* Image augmentation alters images in a way that can help prevent overfitting and increase the robustness of the model. You can get creative in how you augment your data - adjust brightness and colors, crop, rotate, resize, zoom, etc. However, be mindful not to change the meaning of the images with your augmentations.
+* Image preprocessing guarantees that the images match the model’s expected input format. When fine-tuning a computer vision model, images must be preprocessed exactly as when the model was initially trained.
+
+You can use any library you like for image augmentation. For image preprocessing, use the `ImageProcessor` associated with the model.
+
+</Tip>
 
 Load the [food101](https://huggingface.co/datasets/food101) dataset (see the 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) for more details on how to load a dataset) to see how you can use an image processor with computer vision datasets:
 
@@ -354,29 +368,45 @@ Load the image processor with [`AutoImageProcessor.from_pretrained`]:
 >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 ```
 
-For computer vision tasks, it is common to add some type of data augmentation to the images as a part of preprocessing. You can add augmentations with any library you'd like, but in this tutorial, you'll use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module. If you're interested in using another data augmentation library, learn how in the [Albumentations](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_albumentations.ipynb) or [Kornia notebooks](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_kornia.ipynb).
+First, let's add some image augmentation. You can use any library you prefer, but in this tutorial, we'll use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module. If you're interested in using another data augmentation library, learn how in the [Albumentations](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_albumentations.ipynb) or [Kornia notebooks](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_kornia.ipynb).
 
-1. Normalize the image with the image processor and use [`Compose`](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html) to chain some transforms - [`RandomResizedCrop`](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html) and [`ColorJitter`](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html) - together:
+1. Here we use [`Compose`](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html) to chain together a couple of
+transforms - [`RandomResizedCrop`](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html) and [`ColorJitter`](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html).
+Note that for resizing, we can get the image size requirements from the `image_processor`. For some models, an exact height and
+width are expected, for others only the `shortest_edge` is defined.
 
 ```py
->>> from torchvision.transforms import Compose, Normalize, RandomResizedCrop, ColorJitter, ToTensor
+>>> from torchvision.transforms import RandomResizedCrop, ColorJitter, Compose
 
->>> normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
 >>> size = (
 ...     image_processor.size["shortest_edge"]
 ...     if "shortest_edge" in image_processor.size
 ...     else (image_processor.size["height"], image_processor.size["width"])
 ... )
->>> _transforms = Compose([RandomResizedCrop(size), ColorJitter(brightness=0.5, hue=0.5), ToTensor(), normalize])
+
+>>> _transforms = Compose([RandomResizedCrop(size), ColorJitter(brightness=0.5, hue=0.5)])
 ```
 
-2. The model accepts [`pixel_values`](model_doc/visionencoderdecoder#transformers.VisionEncoderDecoderModel.forward.pixel_values) as its input, which is generated by the image processor. Create a function that generates `pixel_values` from the transforms:
+2. The model accepts [`pixel_values`](model_doc/visionencoderdecoder#transformers.VisionEncoderDecoderModel.forward.pixel_values)
+as its input. `ImageProcessor` can take care of normalizing the images, and generating appropriate tensors.
+Create a function that combines image augmentation and image preprocessing for a batch of images and generates `pixel_values`:
 
 ```py
 >>> def transforms(examples):
-...     examples["pixel_values"] = [_transforms(image.convert("RGB")) for image in examples["image"]]
+...     images = [_transforms(img.convert("RGB")) for img in examples["image"]]
+...     examples["pixel_values"] = image_processor(images, do_resize=False, return_tensors="pt")["pixel_values"]
 ...     return examples
 ```
+
+<Tip>
+
+In the example above we set `do_resize=False` because we have already resized the images in the image augmentation transformation,
+and leveraged the `size` attribute from the appropriate `image_processor`. If you do not resize images during image augmentation,
+leave this parameter out. By default, `ImageProcessor` will handle the resizing.
+
+If you wish to normalize images as a part of the augmentation transformation, use the `image_processor.image_mean`,
+and `image_processor.image_std` values.
+</Tip>
 
 3. Then use 🤗 Datasets [`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform) to apply the transforms on the fly:
 
@@ -403,6 +433,32 @@ Here is what the image looks like after the transforms are applied. The image ha
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/preprocessed_image.png"/>
 </div>
+
+<Tip>
+
+For tasks like object detection, semantic segmentation, instance segmentation, and panoptic segmentation, `ImageProcessor`
+offers post processing methods. These methods convert model's raw outputs into meaningful predictions such as bounding boxes,
+or segmentation maps.
+
+</Tip>
+
+### Pad
+
+In some cases, for instance, when fine-tuning [DETR](./model_doc/detr), the model applies scale augmentation at training
+time. This may cause images to be different sizes in a batch. You can use [`DetrImageProcessor.pad_and_create_pixel_mask`]
+from [`DetrImageProcessor`] and define a custom `collate_fn` to batch images together.
+
+```py
+>>> def collate_fn(batch):
+...     pixel_values = [item["pixel_values"] for item in batch]
+...     encoding = image_processor.pad_and_create_pixel_mask(pixel_values, return_tensors="pt")
+...     labels = [item["labels"] for item in batch]
+...     batch = {}
+...     batch["pixel_values"] = encoding["pixel_values"]
+...     batch["pixel_mask"] = encoding["pixel_mask"]
+...     batch["labels"] = labels
+...     return batch
+```
 
 ## Multimodal
 

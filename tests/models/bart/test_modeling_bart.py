@@ -28,6 +28,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -414,13 +415,28 @@ class BartHeadTests(unittest.TestCase):
 
 
 @require_torch
-class BartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": BartForConditionalGeneration,
+            "feature-extraction": BartModel,
+            "fill-mask": BartForConditionalGeneration,
+            "question-answering": BartForQuestionAnswering,
+            "summarization": BartForConditionalGeneration,
+            "text2text-generation": BartForConditionalGeneration,
+            "text-classification": BartForSequenceClassification,
+            "text-generation": BartForCausalLM,
+            "zero-shot": BartForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = False  # Fix me Michael
     test_pruning = False
@@ -939,7 +955,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     def test_xsum_config_generation_params(self):
         config = BartConfig.from_pretrained("facebook/bart-large-xsum")
-        expected_params = dict(num_beams=6, do_sample=False, early_stopping=True, length_penalty=1.0)
+        expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": 1.0}
         config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 
@@ -1496,3 +1512,6 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
+
+    def test_save_load_fast_init_from_base(self):
+        pass

@@ -24,14 +24,14 @@ from typing import Dict, List, Optional, Union
 
 import datasets
 import torch
+from accelerate import Accelerator
+from accelerate.logging import get_logger
 from datasets import DatasetDict, concatenate_datasets, load_dataset
+from huggingface_hub import Repository, create_repo
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator
-from accelerate.logging import get_logger
-from huggingface_hub import Repository
 from transformers import (
     AdamW,
     SchedulerType,
@@ -422,7 +422,8 @@ def main():
                 repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
             else:
                 repo_name = args.hub_model_id
-            repo = Repository(args.output_dir, clone_from=repo_name)
+            create_repo(repo_name, exist_ok=True, token=args.hub_token)
+            repo = Repository(args.output_dir, clone_from=repo_name, token=args.hub_token)
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -640,7 +641,6 @@ def main():
 
             # update step
             if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
-
                 # compute grad norm for monitoring
                 scale = (
                     accelerator.scaler._scale.item()

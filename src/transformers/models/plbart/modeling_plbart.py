@@ -48,16 +48,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "uclanlp/plbart-base"
 _CONFIG_FOR_DOC = "PLBartConfig"
-_TOKENIZER_FOR_DOC = "PLBartTokenizer"
-
-# Base model docstring
-_EXPECTED_OUTPUT_SHAPE = [1, 8, 768]
-
-# SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-plbart"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.69
-
 
 PLBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uclanlp/plbart-base",
@@ -234,8 +224,8 @@ class PLBartAttention(nn.Module):
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -281,7 +271,7 @@ class PLBartAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
@@ -289,7 +279,7 @@ class PLBartAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
+        # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -551,10 +541,10 @@ PLBART_GENERATION_EXAMPLE = r"""
     Mask-filling example:
 
     ```python
-    >>> from transformers import PLBartTokenizer, PLBartForConditionalGeneration
+    >>> from transformers import AutoTokenizer, PLBartForConditionalGeneration
 
     >>> model = PLBartForConditionalGeneration.from_pretrained("uclanlp/plbart-base")
-    >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-base")
+    >>> tokenizer = AutoTokenizer.from_pretrained("uclanlp/plbart-base")
 
     >>> # en_XX is the language symbol id <LID> for English
     >>> TXT = "<s> Is 0 the <mask> Fibonacci number ? </s> en_XX"
@@ -576,7 +566,7 @@ PLBART_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`PLBartTokenizer`] or [`PLBartMultiTokenizer`] depending on the checkpoint.
+            Indices can be obtained using [`AutoTokenizer`] or [`PLBartMultiTokenizer`] depending on the checkpoint.
             See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -590,7 +580,7 @@ PLBART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`PLBartTokenizer`] or [`PLBartMultiTokenizer`] depending on the checkpoint.
+            Indices can be obtained using [`AutoTokenizer`] or [`PLBartMultiTokenizer`] depending on the checkpoint.
             See [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -729,7 +719,7 @@ class PLBartEncoder(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PLBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -928,7 +918,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PLBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1031,6 +1021,13 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1058,12 +1055,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
             if self.gradient_checkpointing and self.training:
 
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
@@ -1082,7 +1073,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -1161,7 +1151,6 @@ class PLBartModel(PLBartPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(PLBART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1382,7 +1371,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        **kwargs  # TODO: Check if this is needed. It is unused?
+        **kwargs,  # TODO: Check if this is needed. It is unused?
     ) -> Dict[str, Any]:
         # cut decoder_input_ids if past is used
         if past_key_values is not None:
@@ -1404,9 +1393,9 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
         return shift_tokens_right(labels, self.config.pad_token_id)
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
@@ -1433,17 +1422,15 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
             config.num_labels,
             config.classifier_dropout,
         )
-        self.model._init_weights(self.classification_head.dense)
-        self.model._init_weights(self.classification_head.out_proj)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(PLBART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
@@ -1616,7 +1603,7 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`PLBartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1681,9 +1668,9 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import PLBartTokenizer, PLBartForCausalLM
+        >>> from transformers import AutoTokenizer, PLBartForCausalLM
 
-        >>> tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("uclanlp/plbart-base")
         >>> model = PLBartForCausalLM.from_pretrained("uclanlp/plbart-base", add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -1755,8 +1742,8 @@ class PLBartForCausalLM(PLBartPreTrainedModel):
         }
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past

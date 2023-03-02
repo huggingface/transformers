@@ -29,9 +29,6 @@ import numpy as np
 from .import_utils import is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
 
 
-if is_tf_available():
-    import tensorflow as tf
-
 if is_flax_available():
     import jax.numpy as jnp
 
@@ -369,13 +366,14 @@ def can_return_loss(model_class):
     Args:
         model_class (`type`): The class of the model.
     """
-    model_name = model_class.__name__
-    if model_name.startswith("TF"):
-        signature = inspect.signature(model_class.call)
-    elif model_name.startswith("Flax"):
-        signature = inspect.signature(model_class.__call__)
+    base_classes = str(inspect.getmro(model_class))
+
+    if "keras.engine.training.Model" in base_classes:
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif "torch.nn.modules.module.Module" in base_classes:
+        signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
-        signature = inspect.signature(model_class.forward)
+        signature = inspect.signature(model_class.__call__)  # Flax models
 
     for p in signature.parameters:
         if p == "return_loss" and signature.parameters[p].default is True:
@@ -392,12 +390,15 @@ def find_labels(model_class):
         model_class (`type`): The class of the model.
     """
     model_name = model_class.__name__
-    if model_name.startswith("TF"):
-        signature = inspect.signature(model_class.call)
-    elif model_name.startswith("Flax"):
-        signature = inspect.signature(model_class.__call__)
+    base_classes = str(inspect.getmro(model_class))
+
+    if "keras.engine.training.Model" in base_classes:
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif "torch.nn.modules.module.Module" in base_classes:
+        signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
-        signature = inspect.signature(model_class.forward)
+        signature = inspect.signature(model_class.__call__)  # Flax models
+
     if "QuestionAnswering" in model_name:
         return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
     else:
@@ -437,6 +438,8 @@ def transpose(array, axes=None):
     elif is_torch_tensor(array):
         return array.T if axes is None else array.permute(*axes)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.transpose(array, perm=axes)
     elif is_jax_tensor(array):
         return jnp.transpose(array, axes=axes)
@@ -454,6 +457,8 @@ def reshape(array, newshape):
     elif is_torch_tensor(array):
         return array.reshape(*newshape)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.reshape(array, newshape)
     elif is_jax_tensor(array):
         return jnp.reshape(array, newshape)
@@ -471,6 +476,8 @@ def squeeze(array, axis=None):
     elif is_torch_tensor(array):
         return array.squeeze() if axis is None else array.squeeze(dim=axis)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.squeeze(array, axis=axis)
     elif is_jax_tensor(array):
         return jnp.squeeze(array, axis=axis)
@@ -488,6 +495,8 @@ def expand_dims(array, axis):
     elif is_torch_tensor(array):
         return array.unsqueeze(dim=axis)
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.expand_dims(array, axis=axis)
     elif is_jax_tensor(array):
         return jnp.expand_dims(array, axis=axis)
@@ -504,6 +513,8 @@ def tensor_size(array):
     elif is_torch_tensor(array):
         return array.numel()
     elif is_tf_tensor(array):
+        import tensorflow as tf
+
         return tf.size(array)
     elif is_jax_tensor(array):
         return array.size

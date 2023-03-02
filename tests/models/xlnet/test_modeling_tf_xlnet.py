@@ -23,6 +23,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -331,8 +332,7 @@ class TFXLNetModelTester:
 
 
 @require_tf
-class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFXLNetModel,
@@ -348,6 +348,18 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (TFXLNetLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFXLNetModel,
+            "question-answering": TFXLNetForQuestionAnsweringSimple,
+            "text-classification": TFXLNetForSequenceClassification,
+            "text-generation": TFXLNetLMHeadModel,
+            "token-classification": TFXLNetForTokenClassification,
+            "zero-shot": TFXLNetForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
 
@@ -401,7 +413,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
                 # The number of elements in the loss should be the same as the number of elements in the label
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 added_label = prepared_for_class[
-                    sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
+                    sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)[0]
                 ]
                 expected_loss_size = added_label.shape.as_list()[:1]
 

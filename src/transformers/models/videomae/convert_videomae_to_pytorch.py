@@ -17,11 +17,11 @@
 import argparse
 import json
 
+import gdown
 import numpy as np
 import torch
-
-import gdown
 from huggingface_hub import hf_hub_download
+
 from transformers import (
     VideoMAEConfig,
     VideoMAEFeatureExtractor,

@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "Swinv2Config"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/swinv2-tiny-patch4-window8-256"
@@ -816,7 +815,6 @@ class Swinv2Stage(nn.Module):
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
-
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             layer_outputs = layer_module(
@@ -990,8 +988,8 @@ SWINV2_START_DOCSTRING = r"""
 SWINV2_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -1043,7 +1041,6 @@ class Swinv2Model(Swinv2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SWINV2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Swinv2ModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1251,7 +1248,6 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SWINV2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=Swinv2ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

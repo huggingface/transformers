@@ -54,7 +54,6 @@ from .openfold_utils import (
 logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "facebook/esmfold_v1"
 _CONFIG_FOR_DOC = "EsmConfig"
-_TOKENIZER_FOR_DOC = "EsmTokenizer"
 
 
 @dataclass
@@ -143,7 +142,7 @@ ESMFOLD_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`EsmTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -202,9 +201,9 @@ def collate_dense_tensors(samples: List[torch.Tensor], pad_v: float = 0) -> torc
     """
     if len(samples) == 0:
         return torch.Tensor()
-    if len(set(x.dim() for x in samples)) != 1:
+    if len({x.dim() for x in samples}) != 1:
         raise RuntimeError(f"Samples has varying dimensions: {[x.dim() for x in samples]}")
-    (device,) = tuple(set(x.device for x in samples))  # assumes all on same device
+    (device,) = tuple({x.device for x in samples})  # assumes all on same device
     max_shape = [max(lst) for lst in zip(*[x.shape for x in samples])]
     result = torch.empty(len(samples), *max_shape, dtype=samples[0].dtype, device=device)
     result.fill_(pad_v)
