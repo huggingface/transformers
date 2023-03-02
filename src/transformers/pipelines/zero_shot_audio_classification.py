@@ -32,7 +32,7 @@ class ZeroShotAudioClassificationPipeline(ChunkPipeline):
 
     >>> dataset = load_dataset("ashraq/esc50")
     >>> audio = next(iter(dataset["train"]["audio"]))["array"]
-    >>> classifier = pipeline(task="zero-shot-audio-classification", model="laion-ai/clap-htsat-tiny")
+    >>> classifier = pipeline(task="zero-shot-audio-classification", model="laion/clap-htsat-unfused")
     >>> classifier(audio, candidate_labels=["Sound of a dog", "Sound of vaccum cleaner"])
     ```
 

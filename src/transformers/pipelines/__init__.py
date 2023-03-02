@@ -302,11 +302,11 @@ SUPPORTED_TASKS = {
     },
     "zero-shot-audio-classification": {
         "impl": ZeroShotAudioClassificationPipeline,
-        "tf": (TFAutoModel,) if is_tf_available() else (),
+        "tf": (),
         "pt": (AutoModel,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("laion/clap-htsat-fused", "f39917b"),
+                "pt": ("laion/clap-htsat-fused", "973b6e5"),
             }
         },
         "type": "multimodal",

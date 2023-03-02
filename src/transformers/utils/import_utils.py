@@ -29,9 +29,8 @@ from typing import Any
 
 from packaging import version
 
-from transformers.utils.versions import importlib_metadata
-
 from . import logging
+from .versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

@@ -175,6 +175,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/xlm_prophetnet/test_modeling_xlm_prophetnet.py",
     "models/xlm_roberta/test_modeling_xlm_roberta.py",
     "models/vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py",
+    "models/vision_text_dual_encoder/test_modeling_tf_vision_text_dual_encoder.py",
     "models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
     "models/decision_transformer/test_modeling_decision_transformer.py",
 ]
@@ -183,6 +184,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
+    "AlignTextModel",
+    "AlignVisionModel",
     "ClapTextModel",
     "ClapTextModelWithProjection",
     "ClapAudioModel",
