@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 
 import torch
+from torch import nn
 
 from transformers import LLaMaConfig, LLaMaForCausalLM, LLaMaTokenizer
 
@@ -57,6 +58,8 @@ def map_original_names_to_transformers_names(original_name: str):
 
 @torch.no_grad()
 def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
+    # HACK @thomasw21: Bypasses `reset_parameters` which can be quite costly.
+    nn.Linear.reset_parameters = lambda *args: None
     model = LLaMaForCausalLM(config=config)
 
     paths = sorted(model_path.glob("*.pth"))
@@ -98,6 +101,7 @@ def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
                 transformer_shard = transformers_param \
                     .view(config.num_attention_heads, 3, config.hidden_size // config.num_attention_heads, config.hidden_size) \
                     [tp_rank * heads_per_tp_rank: (tp_rank+1) * heads_per_tp_rank, index]
+                original_param = original_param.view(*transformer_shard.shape)
             else:
                 output_dim = transformers_param.shape[0]
                 assert output_dim % tp_size == 0
