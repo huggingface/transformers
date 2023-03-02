@@ -658,13 +658,15 @@ def check_all_auto_mapping_names_in_config_mapping_names():
         "PROCESSOR_MAPPING_NAMES": PROCESSOR_MAPPING_NAMES,
         "MODEL_MAPPING_NAMES": MODEL_MAPPING_NAMES,
         "TF_MODEL_MAPPING_NAMES": TF_MODEL_MAPPING_NAMES,
-        "FLAX_MODEL_MAPPING_NAMES": FLAX_MODEL_MAPPING_NAMES
+        "FLAX_MODEL_MAPPING_NAMES": FLAX_MODEL_MAPPING_NAMES,
     }
 
     for name, mapping in mapping_to_check.items():
         for model_type, class_names in mapping.items():
             if model_type not in CONFIG_MAPPING_NAMES:
-                failures.append(f"`{model_type}` appears in the mapping `{name}` but it is not defined in the library.")
+                failures.append(
+                    f"`{model_type}` appears in the mapping `{name}` but it is not defined in the library."
+                )
     if len(failures) > 0:
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
