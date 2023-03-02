@@ -553,7 +553,7 @@ class FunnelRelMultiheadAttention(nn.Module):
         # query has shape batch_size x seq_len x d_model
         # key and value have shapes batch_size x context_len x d_model
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
-        print(position_embeds.shape, token_type_mat.shape.attention_mask.shape, cls_mask.shape)
+        print(cls_mask.shape)
 
         batch_size, seq_len, _ = query.shape
         context_len = key.shape[1]
