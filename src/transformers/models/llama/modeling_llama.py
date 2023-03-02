@@ -122,13 +122,13 @@ class LLaMaAttention(nn.Module):
         #   --> [batch, seq_len, (np * 3 * head_size)]
         qkv = self.qkv(hidden_states)
 
-        # [batch, seq_len, (3 * num_heads * head_size)]
-        #   --> [batch, seq_len, 3, num_heads, head_size]
-        new_qkv_shape = qkv.size()[:-1] + (3, self.num_attention_heads, self.head_size)
+        # [batch, seq_len, (num_heads * 3 * head_size)]
+        #   --> [batch, seq_len, num_heads, 3 * head_size]
+        new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
         qkv = qkv.view(*new_qkv_shape)
 
-        # [batch, seq_len, 3, num_attention_heads, head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
-        query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
+        # [batch, seq_len, num_attention_heads, 3, head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
+        query = qkv[..., self.head_size].permute(0, 2, 1, 3)
         key = qkv[..., self.head_size : 2 * self.head_size].permute(0, 2, 1, 3)
         value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
 
