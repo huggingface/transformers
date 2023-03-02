@@ -20,6 +20,7 @@ import random
 from pathlib import Path
 
 from transformers.testing_utils import (
+    is_pipeline_test,
     require_decord,
     require_pytesseract,
     require_timm,
@@ -104,6 +105,7 @@ PATH_TO_TRANSFORMERS = os.path.join(Path(__file__).parent.parent, "src/transform
 transformers_module = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 
+@is_pipeline_test
 class PipelineTesterMixin:
     model_tester = None
     pipeline_model_mapping = None

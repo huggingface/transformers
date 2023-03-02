@@ -22,9 +22,17 @@ from transformers import (
     TFAutoModelForTableQuestionAnswering,
     pipeline,
 )
-from transformers.testing_utils import require_pandas, require_tensorflow_probability, require_tf, require_torch, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    require_pandas,
+    require_tensorflow_probability,
+    require_tf,
+    require_torch,
+    slow,
+)
 
 
+@is_pipeline_test
 class TQAPipelineTests(unittest.TestCase):
     # Putting it there for consistency, but TQA do not have fast tokenizer
     # which are needed to generate automatic tests
