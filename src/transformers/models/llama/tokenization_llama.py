@@ -1,6 +1,6 @@
 # TODO @thomasw21: Figure out licensing
 """Tokenization classes for LLaMa."""
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 import sentencepiece as spm
 
@@ -49,17 +49,6 @@ class LLaMaTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> None:
         self.sp_model = spm.SentencePieceProcessor(model_file=vocab_file)
-        self.special_token_to_id = {
-            bos_token: self.sp_model.bos_id(),
-            eos_token: self.sp_model.eos_id(),
-            unk_token: self.sp_model.unk_id()
-        }
-        self.special_id_to_token = {v: k for k, v in self.special_token_to_id.items()}
-        assert len(self.special_id_to_token) == len(self.special_token_to_id)
-        for special_token, token_id in self.special_token_to_id.items():
-            # special token doesn't exist in the sentencepiece tokenizer
-            assert self.sp_model.unk_id() == self.sp_model.piece_to_id(special_token)
-            assert token_id >= 0
 
         # TODO @thomasw21: Understand if I need to have <bos> and such since they are not part of the official LLaMa model
         super().__init__(
@@ -85,18 +74,55 @@ class LLaMaTokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        return [self.bos_token] + self.sp_model.encode(text, out_type=str)
+        return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token: str):
         """Converts a token (str) in an id using the vocab."""
-        # TODO @thomasw21: This means that you can't get the tokens from <bos>/<eos>/<unk>
-        # The issue is that you can tokenizer <
-        if token in self.special_token_to_id:
-            return self.special_token_to_id[token]
         return self.sp_model.piece_to_id(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.special_id_to_token:
-            return self.special_id_to_token[index]
         return self.sp_model.IdToPiece(index)
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A sequence has the following format:
+
+        - single sequence: `X </s>`
+        - pair of sequences: `A </s> B </s>`
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        result = [self.sp_model.bos_id()] + token_ids_0
+        if token_ids_1 is not None:
+            result += token_ids_1
+        return result
+
+    def convert_tokens_to_string(self, tokens: List[str]):
+        """Converts a sequence of tokens (string) in a single string."""
+        current_sub_tokens = []
+        out_string = ""
+        prev_is_special = False
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                if not prev_is_special:
+                    out_string += " "
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                prev_is_special = True
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+                prev_is_special = False
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string.strip()
