@@ -470,7 +470,7 @@ class LLaMaModel(LLaMaPreTrainedModel):
 
         # Compute token offset for rotary embeddings (when decoding)
         all_seq_length = seq_length
-        if past_key_values is not None:
+        if past_key_values[0] is not None:
             all_seq_length += past_key_values[0][0].shape[-2]
         cos, sin = self.rotary_emb(device=input_ids.device, seq_len=all_seq_length)
 
