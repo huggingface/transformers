@@ -140,14 +140,15 @@ class TFBeitEmbeddings(tf.keras.layers.Layer):
             trainable=True,
             name="cls_token",
         )
-        
-        self.mask_token = self.add_weight(
+        if self.config.use_mask_token:
+            self.mask_token = self.add_weight(
                 shape=(1, 1, self.config.hidden_size),
                 initializer=tf.random_normal_initializer(stddev=self.config.initializer_range),
                 trainable=True,
                 name="mask_token",
-        )
-        
+            )
+        else:
+            self.use_mask_token = None
 
         if self.config.use_absolute_position_embeddings:
             self.position_embeddings = self.add_weight(
@@ -1056,11 +1057,11 @@ class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificati
             return_dict=return_dict,
             training=training,
         )
-        
+
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
-        
+
         logits = self.classifier(pooled_output)
-        
+
         loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
         if not return_dict:

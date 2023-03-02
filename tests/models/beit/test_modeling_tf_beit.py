@@ -494,7 +494,9 @@ class TFBeitModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            BeitImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True) if is_vision_available() else None
+            BeitImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k", from_pt=True)
+            if is_vision_available()
+            else None
         )
 
     @slow

@@ -152,7 +152,7 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
                 name="mask_token",
             )
         else:
-            self.mask_token = None
+            self.use_mask_token = None
 
         if self.config.use_absolute_position_embeddings:
             self.position_embeddings = self.add_weight(
@@ -824,7 +824,7 @@ class TFData2VecVisionPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPreTrainedModel with Beit->Data2VecVision,beit->data2vec_vision
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitPreTrainedModel with Beit->Data2VecVision, beit->data2vec_vision
 class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -929,7 +929,7 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     "The bare Data2VecVision Model transformer outputting raw hidden-states without any specific head on top.",
     DATA2VEC_VISION_START_DOCSTRING,
 )
-# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision, _FEAT_EXTRACTOR->_IMAGE_PROCESSOR
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitModel with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -994,8 +994,8 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     """,
     DATA2VEC_VISION_START_DOCSTRING,
 )
+# Copied from transformers.models.beit.modeling_tf_beit.TFBeitForImageClassification with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
 class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TFSequenceClassificationLoss):
-    # Copied from transformers.models.beit.modeling_tf_beit.TFBeitForImageClassification.__init__ with Beit->Data2VecVision, BEIT->DATA2VEC_VISION, beit->data2vec_vision
     def __init__(self, config: Data2VecVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1045,11 +1045,11 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
             return_dict=return_dict,
             training=training,
         )
-        
+
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
-        
+
         logits = self.classifier(pooled_output)
-        
+
         loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
         if not return_dict:
@@ -1567,7 +1567,7 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        outputs = self.beit(
+        outputs = self.data2vec_vision(
             pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
