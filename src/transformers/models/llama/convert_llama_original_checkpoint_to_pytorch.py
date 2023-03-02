@@ -122,15 +122,15 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint-directory",
-        type=str,
+        type=Path,
         required=True,
         help="Path to the checkpoint path containing `tokenizer.json` and different model size checkpoints.",
     )
     parser.add_argument(
-        "--pytorch-dump-folder-path", type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch-dump-folder-path", type=Path, required=True, help="Path to the output PyTorch model."
     )
     parser.add_argument(
-        "--model-subpath", type=str, required=True, help="Subpath after going into checkpoint directory where the model checkpoint lies. Typically `7B` or `13B`"
+        "--model-subpath", type=Path, required=True, help="Subpath after going into checkpoint directory where the model checkpoint lies. Typically `7B` or `13B`"
     )
     args = parser.parse_args()
     main(args)
