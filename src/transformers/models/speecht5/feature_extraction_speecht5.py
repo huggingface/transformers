@@ -331,7 +331,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
                 return inputs_target
             else:
                 inputs["labels"] = inputs_target["input_values"]
-                inputs["stop_labels"] = inputs_target["stop_labels"]
                 decoder_attention_mask = inputs_target.get("attention_mask")
                 if decoder_attention_mask is not None:
                     inputs["decoder_attention_mask"] = decoder_attention_mask
@@ -418,15 +417,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_values"] = self.zero_mean_unit_var_norm(
                 padded_inputs["input_values"], attention_mask=attention_mask, padding_value=self.padding_value
             )
-
-        if is_target:
-            # make labels for stop prediction
-            stop_labels = []
-            for i, l in enumerate(fbank_sizes):
-                labels = np.zeros(len(padded_inputs["input_values"][i]))
-                labels[l - 1 :] = 1.0
-                stop_labels.append(labels)
-            padded_inputs["stop_labels"] = stop_labels
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

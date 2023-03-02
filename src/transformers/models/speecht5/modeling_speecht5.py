@@ -2544,7 +2544,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        stop_labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2566,11 +2565,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             Float values of target mel spectrogram. Timesteps set to `-100.0` are ignored (masked) for the loss
             computation. Spectrograms can be obtained using [`SpeechT5Processor`]. See [`SpeechT5Processor.__call__`]
             for details.
-        stop_labels (`torch.FloatTensor` of shape `(batch_size, unreduced_sequence_length)`, *optional*):
-            Labels for computing the stop token loss. Values are 0.0 until the end of the sequence, after which they
-            become 1.0. The sequence length of this tensor is `config.reduction_factor` times larger than the length of
-            the target mel spectrogram. Labels can be obtained using [`SpeechT5Processor`]. See
-            [`SpeechT5Processor.__call__`] for details.
 
         Returns:
 
@@ -2598,6 +2592,10 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
+            # replace -100 in the spectrogram otherwise model gives nan
+            padding_mask = (labels != -100.0)
+            labels[~padding_mask] = 0.0
+
             if decoder_input_values is None:
                 decoder_input_values = shift_spectrograms_right(labels, self.config.reduction_factor)
 
@@ -2621,13 +2619,13 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         outputs_before_postnet, outputs_after_postnet, logits = self.speech_decoder_postnet(outputs[0])
 
         loss = None
-        if labels is not None and stop_labels is not None:
+        if labels is not None:
             loss = self._compute_loss(
+                padding_mask,
                 outputs_before_postnet,
                 outputs_after_postnet,
                 logits,
                 labels,
-                stop_labels,
             )
 
         if not return_dict:
@@ -2648,25 +2646,30 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
     def _compute_loss(
         self,
+        padding_mask: torch.Tensor,
         outputs_before_postnet: torch.FloatTensor,
         outputs_after_postnet: torch.FloatTensor,
         logits: torch.FloatTensor,
         labels: torch.FloatTensor,
-        stop_labels: torch.FloatTensor,
     ):
         # mask out the padded portions
-        masks = (stop_labels != -100).unsqueeze(-1)
-        labels = labels.masked_select(masks)
-        outputs_before_postnet = outputs_before_postnet.masked_select(masks)
-        outputs_after_postnet = outputs_after_postnet.masked_select(masks)
-        stop_labels = stop_labels.masked_select(masks[:, :, 0])
-        logits = logits.masked_select(masks[:, :, 0])
+        labels = labels.masked_select(padding_mask)
+        outputs_before_postnet = outputs_before_postnet.masked_select(padding_mask)
+        outputs_after_postnet = outputs_after_postnet.masked_select(padding_mask)
 
+        # spectrogram loss
         l1_criterion = L1Loss()
         l1_loss = l1_criterion(outputs_after_postnet, labels) + l1_criterion(outputs_before_postnet, labels)
 
+        # construct stop labels from the padding mask
+        masks = padding_mask[:, :, 0]
+        stop_labels = torch.cat([~masks * 1.0, torch.ones(masks.size(0), 1).to(masks.device)], dim=1)
+        stop_labels = stop_labels[:, 1:].masked_select(masks)
+        logits = logits.masked_select(masks)
+
+        # stop token loss
         bce_criterion = BCEWithLogitsLoss(pos_weight=torch.tensor(5.0))
-        bce_loss = bce_criterion(logits.view(-1), stop_labels.view(-1))
+        bce_loss = bce_criterion(logits, stop_labels)
 
         loss = l1_loss + bce_loss
         return loss
@@ -2776,7 +2779,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        stop_labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -2794,11 +2796,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             Tensor containing the speaker embeddings.
         labels (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_mel_bins)`, *optional*):
             Float values of target mel spectrogram. Spectrograms can be obtained using [`SpeechT5Processor`]. See
-            [`SpeechT5Processor.__call__`] for details.
-        stop_labels (`torch.FloatTensor` of shape `(batch_size, unreduced_sequence_length)`, *optional*):
-            Labels for computing the stop token loss. Values are 0.0 until the end of the sequence, after which they
-            become 1.0. The sequence length of this tensor is `config.reduction_factor` times larger than the length of
-            the target mel spectrogram. Labels can be obtained using [`SpeechT5Processor`]. See
             [`SpeechT5Processor.__call__`] for details.
 
         Returns:

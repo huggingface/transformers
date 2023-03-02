@@ -94,7 +94,6 @@ class SpeechT5Processor(ProcessorMixin):
                 return targets
             else:
                 inputs["labels"] = targets["input_values"]
-                inputs["stop_labels"] = targets["stop_labels"]
         elif text_target is not None:
             targets = self.tokenizer(text_target, **kwargs)
             if inputs is None:
