@@ -156,7 +156,7 @@ _deps = [
     "ruff>=0.0.241",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
-    "safetensors>=0.2.1",
+    "safetensors==0.3.0rc1",
     "sagemaker>=2.31.0",
     "scikit-learn",
     "sentencepiece>=0.1.91,!=0.1.92",
@@ -244,6 +244,7 @@ class DepsTableUpdateCommand(Command):
         print(f"updating {target}")
         with open(target, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(content))
+
 
 extras = {}
 
