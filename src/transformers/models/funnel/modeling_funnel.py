@@ -507,10 +507,14 @@ class FunnelRelMultiheadAttention(nn.Module):
             r_head = torch.einsum("td,dnh->tnh", r, w_r)
             # Shape batch_size x n_head x seq_len x max_rel_len
             positional_attn = torch.einsum("binh,tnh->bnit", q_head + v, r_head)
+            print(positional_attn.shape)
             # Shape batch_size x n_head x seq_len x context_len
             positional_attn = _relative_shift_gather(positional_attn, context_len, shift)
+            print(positional_attn)
 
         if cls_mask is not None:
+            print(positional_attn.shape)
+            print(cls_mask.shape)
             positional_attn *= cls_mask
         return positional_attn
 
@@ -549,6 +553,7 @@ class FunnelRelMultiheadAttention(nn.Module):
         # query has shape batch_size x seq_len x d_model
         # key and value have shapes batch_size x context_len x d_model
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
+        print(position_embeds.shape, token_type_mat.shape.attention_mask.shape, cls_mask.shape)
 
         batch_size, seq_len, _ = query.shape
         context_len = key.shape[1]
