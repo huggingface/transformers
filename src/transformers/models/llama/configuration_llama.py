@@ -84,7 +84,10 @@ class LLaMaConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         use_cache=True,
     ):
-        super().__init__()
+        super().__init__(
+            tie_word_embeddings=False,
+            is_decoder=True
+        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

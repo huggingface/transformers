@@ -71,11 +71,11 @@ class LLaMaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=0.02)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=0.02)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -89,12 +89,11 @@ class LLaMaPreTrainedModel(PreTrainedModel):
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention with GPTNeoX->LLaMa
 class LLaMaAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LLaMaConfig):
         super().__init__()
         self.num_attention_heads = config.num_attention_heads
         self.hidden_size = config.hidden_size
         self.head_size = self.hidden_size // self.num_attention_heads
-        self.rotary_ndims = int(self.head_size * config.rotary_pct)
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
@@ -123,21 +122,15 @@ class LLaMaAttention(nn.Module):
         #   --> [batch, seq_len, (np * 3 * head_size)]
         qkv = self.qkv(hidden_states)
 
-        # [batch, seq_len, (num_heads * 3 * head_size)]
-        #   --> [batch, seq_len, num_heads, 3 * head_size]
-        new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
+        # [batch, seq_len, (3 * num_heads * head_size)]
+        #   --> [batch, seq_len, 3, num_heads, head_size]
+        new_qkv_shape = qkv.size()[:-1] + (3, self.num_attention_heads, self.head_size)
         qkv = qkv.view(*new_qkv_shape)
 
-        # [batch, seq_len, num_attention_heads, 3 * head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
+        # [batch, seq_len, 3, num_attention_heads, head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
         query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
         key = qkv[..., self.head_size : 2 * self.head_size].permute(0, 2, 1, 3)
         value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
-
-        # Compute rotary embeddings on rotary_ndims
-        query_rot = query[..., : self.rotary_ndims]
-        query_pass = query[..., self.rotary_ndims :]
-        key_rot = key[..., : self.rotary_ndims]
-        key_pass = key[..., self.rotary_ndims :]
 
         # Compute token offset for rotary embeddings (when decoding)
         seq_len = key.shape[-2]
@@ -145,9 +138,7 @@ class LLaMaAttention(nn.Module):
         if has_layer_past:
             offset = layer_past[0].shape[-2]
             seq_len += offset
-        query, key = apply_rotary_pos_emb(query_rot, key_rot, frequency_cos, frequency_sin, offset=offset)
-        query = torch.cat((query, query_pass), dim=-1)
-        key = torch.cat((key, key_pass), dim=-1)
+        query, key = apply_rotary_pos_emb(query, key, frequency_cos, frequency_sin, offset=offset)
 
         # Cache QKV values
         if has_layer_past:
@@ -282,8 +273,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXMLP with GPTNeoX->LLaMa
-class LLaMaMLP(nn.Module):
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXFF with GPTNeoX->LLaMa
+class LLaMaFF(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.wi_0 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
@@ -302,7 +293,7 @@ class LLaMaLayer(nn.Module):
         self.attention_norm = LLaMaLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = LLaMaAttention(config)
         self.ff_norm = LLaMaLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.ff = LLaMaMLP(config)
+        self.ff = LLaMaFF(config)
 
     def forward(
         self,
@@ -329,8 +320,8 @@ class LLaMaLayer(nn.Module):
         outputs = attention_layer_outputs[1:]
 
         attn_output = attn_output + hidden_states
-        mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
-        hidden_states = mlp_output + attn_output
+        FF_output = self.FF(self.post_attention_layernorm(attn_output))
+        hidden_states = FF_output + attn_output
 
         if use_cache:
             outputs = (hidden_states,) + outputs  # hidden_states, present, (attn_weights)
@@ -394,14 +385,14 @@ LLAMA_INPUTS_DOCSTRING = r"""
 )
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel with GPTNeoX->LLaMa,GPT_NEOX->LLAMA
 class LLaMaModel(LLaMaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LLaMaConfig):
         super().__init__(config)
         self.config = config
 
-        self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.embed = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([LLaMaLayer(config) for _ in range(config.num_hidden_layers)])
         self.rotary_emb = RotaryEmbedding(
-            self.rotary_ndims, config.max_position_embeddings, base=config.rotary_emb_base
+            config.hidden_size, config.max_position_embeddings, base=config.rotary_emb_base
         )
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -411,10 +402,10 @@ class LLaMaModel(LLaMaPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embed_in
+        return self.embed
 
     def set_input_embeddings(self, value):
-        self.embed_in = value
+        self.embed = value
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -487,7 +478,7 @@ class LLaMaModel(LLaMaPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_in(input_ids)
+            inputs_embeds = self.embed(input_ids)
 
         hidden_states = inputs_embeds
 
@@ -566,16 +557,13 @@ class LLaMaForCausalLM(LLaMaPreTrainedModel):
         super().__init__(config)
 
         self.llama = LLaMaModel(config)
-        self.embed_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.embed_out
-
-    def set_output_embeddings(self, new_embeddings):
-        self.embed_out = new_embeddings
+        return self.lm_head
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -645,7 +633,7 @@ class LLaMaForCausalLM(LLaMaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        lm_logits = self.embed_out(hidden_states)
+        lm_logits = self.lm_head(hidden_states)
 
         lm_loss = None
         if labels is not None:
