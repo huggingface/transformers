@@ -618,9 +618,6 @@ class Trainer:
                         self.scaler = GradScaler()
                     else:
                         self.scaler = torch.cuda.amp.GradScaler()
-                elif self.fsdp is not None:
-                    self.use_cuda_amp = False
-                    self.amp_dtype = None
             elif args.half_precision_backend == "cpu_amp":
                 self.use_cpu_amp = True
                 self.amp_dtype = torch.bfloat16
