@@ -69,6 +69,10 @@ class CPMAntConfig(PretrainedConfig):
             The type of segment.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use cache.
+        init_std (`float`, *optional*, defaults to 1.0):
+            Initialize parameters with std = init_std.
+        return_dict (`bool`, *optional*, defaults to `True`):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Example:
 
