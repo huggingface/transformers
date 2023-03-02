@@ -90,20 +90,19 @@ class SpeechT5Processor(ProcessorMixin):
             targets = self.feature_extractor(
                 audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs
             )
-            if inputs is None:
-                return targets
-            else:
-                inputs["labels"] = targets["input_values"]
+            labels = targets["input_values"]
         elif text_target is not None:
             targets = self.tokenizer(text_target, **kwargs)
-            if inputs is None:
-                return targets
-            else:
-                inputs["labels"] = targets["input_ids"]
+            labels = targets["input_ids"]
         else:
             targets = None
 
+        if inputs is None:
+            return targets
+
         if targets is not None:
+            inputs["labels"] = labels
+
             decoder_attention_mask = targets.get("attention_mask")
             if decoder_attention_mask is not None:
                 inputs["decoder_attention_mask"] = decoder_attention_mask
@@ -150,23 +149,22 @@ class SpeechT5Processor(ProcessorMixin):
         if labels is not None:
             if "input_ids" in labels or (isinstance(labels, list) and "input_ids" in labels[0]):
                 targets = self.tokenizer.pad(labels, **kwargs)
-                if inputs is None:
-                    return labels
-                else:
-                    inputs["labels"] = targets["input_ids"]
+                labels = targets["input_ids"]
             else:
                 feature_size_hack = self.feature_extractor.feature_size
                 self.feature_extractor.feature_size = self.feature_extractor.num_mel_bins
                 targets = self.feature_extractor.pad(labels, *args, **kwargs)
                 self.feature_extractor.feature_size = feature_size_hack
-                if inputs is None:
-                    return labels
-                else:
-                    inputs["labels"] = targets["input_values"]
+                labels = targets["input_values"]
         else:
             targets = None
 
+        if inputs is None:
+            return targets
+
         if targets is not None:
+            inputs["labels"] = labels
+
             decoder_attention_mask = targets.get("attention_mask")
             if decoder_attention_mask is not None:
                 inputs["decoder_attention_mask"] = decoder_attention_mask
