@@ -31,8 +31,10 @@ from .utils.versions import require_version
 
 logger = logging.get_logger(__name__)
 
+
 def _get_constant_schedule_lr_lambda(_):
     return 1
+
 
 def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
     """

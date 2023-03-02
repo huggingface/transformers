@@ -17,11 +17,12 @@
 import os
 import tempfile
 import unittest
+from typing import Type
+
+from torch.optim.lr_scheduler import LambdaLR
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch
-from torch.optim.lr_scheduler import LambdaLR
-from typing import Type
 
 
 if is_torch_available():
@@ -172,8 +173,10 @@ class ScheduleInitTest(unittest.TestCase):
             lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
             self.assertListEqual(lrs_1, lrs_2, msg=f"failed for {scheduler_func} in save and reload")
 
+
 class LambdaScheduleWrapper:
     """See https://github.com/huggingface/transformers/issues/21689"""
+
     def __init__(self, fn):
         self.fn = fn
 
