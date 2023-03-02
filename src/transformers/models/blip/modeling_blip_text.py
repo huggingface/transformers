@@ -22,20 +22,19 @@ import torch.utils.checkpoint
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
-from transformers.activations import ACT2FN
-from transformers.modeling_outputs import (
+from ...activations import ACT2FN
+from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
 )
-from transformers.modeling_utils import (
+from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from transformers.utils import logging
-
+from ...utils import logging
 from .configuration_blip import BlipTextConfig
 
 

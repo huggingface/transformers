@@ -33,8 +33,6 @@ import tensorflow as tf
 from huggingface_hub import Repository, list_repo_files
 from packaging.version import parse
 
-from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
-
 from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
@@ -63,6 +61,7 @@ from .utils import (
     requires_backends,
     working_or_temp_dir,
 )
+from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 
 if parse(tf.__version__) >= parse("2.11.0"):
