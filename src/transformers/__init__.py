@@ -6625,7 +6625,7 @@ if TYPE_CHECKING:
             FlaxWhisperForConditionalGeneration,
             FlaxWhisperModel,
             FlaxWhisperPreTrainedModel,
-            FlaxWhisperForAudioClassification
+            FlaxWhisperForAudioClassification,
         )
         from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
         from .models.xlm_roberta import (
