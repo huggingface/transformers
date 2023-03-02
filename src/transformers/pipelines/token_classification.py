@@ -69,7 +69,7 @@ class AggregationStrategy(ExplicitEnum):
             DEPRECATED, use `aggregation_strategy` instead. Whether or not to group the tokens corresponding to the
             same entity together in the predictions or not.
         stride (`int`, *optional*, defaults to `None`):
-            If stride is provided, the pipeline is applied on the whole text. The text is split into chunks of size
+            If stride is provided, the pipeline is applied on all the text. The text is split into chunks of size
             model_max_length and for each token the returned predictions is the highest score among the chunks. Works
             only with fast tokenizers.
         aggregation_strategy (`str`, *optional*, defaults to `"none"`):
