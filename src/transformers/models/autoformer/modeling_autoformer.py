@@ -535,13 +535,12 @@ class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
 class SampleTimeSeriesPredictionOutput(ModelOutput):
     sequences: torch.FloatTensor = None
 
-
 # Eli to Kashif: class based on
 # https://github.com/thuml/Autoformer/blob/c6a0694ff484753f2d986cc0bb1f99ee850fc1a8/layers/Autoformer_EncDec.py#L39
-# where AutoformerSeriesDecomposition is series_decomp + moving_avg
-class AutoformerSeriesDecomposition(nn.Module):
+# where AutoformerSeriesDecompositionLayer is series_decomp + moving_avg
+class AutoformerSeriesDecompositionLayer(nn.Module):
     """
-    Series Decomposition block, to highlight the trend of time series:
+    Highlight the trend and the seasonal parts of the time series. Calculated as:
 
         x_trend = AvgPool(Padding(X))
         x_seasonal = X - x_trend
@@ -1490,6 +1489,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         # transformer encoder-decoder and mask initializer
         self.encoder = AutoformerEncoder(config)
         self.decoder = AutoformerDecoder(config)
+        self.decomposition_layer = AutoformerSeriesDecompositionLayer(config.moving_avg)
 
         # Initialize weights and apply final processing
         self.post_init()

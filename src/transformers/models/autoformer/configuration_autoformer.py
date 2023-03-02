@@ -159,6 +159,8 @@ class AutoformerConfig(PretrainedConfig):
         num_parallel_samples: int = 100,
         init_std: float = 0.02,
         use_cache=True,
+        # Autoformer arguments
+        moving_avg: int = 25,
         **kwargs
     ):
         # time series specific configuration
