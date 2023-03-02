@@ -84,7 +84,7 @@ def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
                 step = output_dim // tp_size
                 start = tp_rank * step
                 end = (tp_rank + 1) * step
-                transformers_param[start:end].copy_(original_param)
+                transformers_param[:, start:end].copy_(original_param)
                 continue
 
             # Column linear
@@ -93,14 +93,16 @@ def convert_model(model_path: Path, config:LLaMaConfig) -> LLaMaForCausalLM:
                 index, suffix = [(i, suffix) for i, suffix in enumerate([".wq.weight", ".wk.weight", "wv.weight"]) if original_name.endswith(suffix)][0]
                 assert config.num_attention_heads % tp_size == 0
                 heads_per_tp_rank = config.num_attention_heads // tp_size
-                transformer_shard = transformers_param.view(config.hidden_size, config.num_attention_heads, 3, config.hidden_size // config.num_attention_heads)[:, tp_rank * heads_per_tp_rank: (tp_rank+1) * heads_per_tp_rank, index, :]
+                transformer_shard = transformers_param \
+                    .view(config.num_attention_heads, 3, config.hidden_size // config.num_attention_heads, config.hidden_size) \
+                    [tp_rank * heads_per_tp_rank: (tp_rank+1) * heads_per_tp_rank, index, :]
             else:
                 input_dim = transformers_param.shape[-1]
                 assert input_dim % tp_size == 0
                 step = input_dim // tp_size
                 start = tp_rank * step
                 end = (tp_rank + 1) * step
-                transformer_shard = transformers_param[:, start: end]
+                transformer_shard = transformers_param[start: end]
 
             transformer_shard.copy_(original_param)
 
