@@ -32,7 +32,7 @@ def generate_config(params_json_path: Path, vocab_size: int) -> LLaMaConfig:
     )
 
 def get_tokenzier(tokenizer_path: Path) -> LLaMaTokenizer:
-    return LLaMaTokenizer(tokenizer_path)
+    return LLaMaTokenizer(str(tokenizer_path.absolute()))
 
 original_name_to_transformers_name = {
     "tok_embeddings.weight" : "llama.embed.weight",

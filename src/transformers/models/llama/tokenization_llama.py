@@ -82,7 +82,7 @@ class LLaMaTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             # TODO @thomasw21: Why the fuck is that `-1`?
-            pad_token=self.sp_model.pad_id(),
+            # pad_token=self.sp_model.pad_id(),
         )
 
         self.vocab_file = vocab_file
