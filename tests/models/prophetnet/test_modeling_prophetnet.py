@@ -25,18 +25,13 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
 
-    from transformers import (
-        ProphetNetDecoder,
-        ProphetNetEncoder,
-        ProphetNetForCausalLM,
-        ProphetNetForConditionalGeneration,
-        ProphetNetModel,
-        ProphetNetTokenizer,
-    )
+    from transformers import (ProphetNetDecoder, ProphetNetEncoder,
+                              ProphetNetForCausalLM,
+                              ProphetNetForConditionalGeneration,
+                              ProphetNetModel, ProphetNetTokenizer)
     from transformers.modeling_outputs import BaseModelOutput
 
 
@@ -1306,7 +1301,7 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         EXPECTED_QUESTIONS = [
             "along with paul allen, who founded microsoft?",
             "what year was microsoft founded?",
-            "on what date was microsoft founded?",
+            "when was microsoft founded?",
         ]
 
         self.assertListEqual(
