@@ -29,7 +29,7 @@ from transformers import (
     is_torch_available,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_flax, require_tf, require_torch
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_flax, require_tf, require_torch
 
 
 if is_torch_available():
@@ -42,6 +42,7 @@ if is_flax_available():
     import jax.numpy as jnp
 
 
+@is_pipeline_test
 class FeatureExtractionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
     tf_model_mapping = TF_MODEL_MAPPING

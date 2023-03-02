@@ -23,6 +23,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
+    is_pipeline_test,
     nested_simplify,
     require_flax,
     require_pytesseract,
@@ -46,6 +47,7 @@ else:
             pass
 
 
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch

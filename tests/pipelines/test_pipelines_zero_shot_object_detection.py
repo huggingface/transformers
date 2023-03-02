@@ -15,7 +15,15 @@
 import unittest
 
 from transformers import MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING, is_vision_available, pipeline
-from transformers.testing_utils import nested_simplify, require_flax, require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_flax,
+    require_tf,
+    require_torch,
+    require_vision,
+    slow,
+)
 
 from .test_pipelines_common import ANY
 
@@ -30,6 +38,7 @@ else:
             pass
 
 
+@is_pipeline_test
 @require_vision
 @require_torch
 class ZeroShotObjectDetectionPipelineTests(unittest.TestCase):

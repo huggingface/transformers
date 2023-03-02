@@ -27,6 +27,7 @@ from transformers import (
 )
 from transformers.pipelines import AggregationStrategy, TokenClassificationArgumentHandler
 from transformers.testing_utils import (
+    is_pipeline_test,
     nested_simplify,
     require_flax,
     require_tf,
@@ -41,6 +42,7 @@ from .test_pipelines_common import ANY
 VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is quite a bit longer"]]
 
 
+@is_pipeline_test
 class TokenClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING

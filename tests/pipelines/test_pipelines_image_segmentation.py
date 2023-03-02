@@ -35,6 +35,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
+    is_pipeline_test,
     nested_simplify,
     require_flax,
     require_tf,
@@ -75,6 +76,7 @@ def mask_to_test_readable_only_shape(mask: Image) -> Dict:
     return {"shape": shape}
 
 
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch

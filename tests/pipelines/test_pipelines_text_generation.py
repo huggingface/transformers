@@ -22,6 +22,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
+    is_pipeline_test,
     require_accelerate,
     require_flax,
     require_tf,
@@ -33,6 +34,7 @@ from transformers.testing_utils import (
 from .test_pipelines_common import ANY
 
 
+@is_pipeline_test
 @require_torch_or_tf
 class TextGenerationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_CAUSAL_LM_MAPPING

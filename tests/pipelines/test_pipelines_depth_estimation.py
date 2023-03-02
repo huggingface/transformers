@@ -18,6 +18,7 @@ import unittest
 from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_torch_available, is_vision_available
 from transformers.pipelines import DepthEstimationPipeline, pipeline
 from transformers.testing_utils import (
+    is_pipeline_test,
     nested_simplify,
     require_flax,
     require_tf,
@@ -48,6 +49,7 @@ def hashimage(image: Image) -> str:
     return m.hexdigest()
 
 
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch

@@ -23,6 +23,7 @@ from transformers import (
 )
 from transformers.pipelines import PipelineException
 from transformers.testing_utils import (
+    is_pipeline_test,
     nested_simplify,
     require_flax,
     require_tf,
@@ -34,6 +35,7 @@ from transformers.testing_utils import (
 from .test_pipelines_common import ANY
 
 
+@is_pipeline_test
 class FillMaskPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MASKED_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_MASKED_LM_MAPPING

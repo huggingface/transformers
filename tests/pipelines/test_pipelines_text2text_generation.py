@@ -21,7 +21,7 @@ from transformers import (
     Text2TextGenerationPipeline,
     pipeline,
 )
-from transformers.testing_utils import require_flax, require_tf, require_torch
+from transformers.testing_utils import is_pipeline_test, require_flax, require_tf, require_torch
 from transformers.utils import is_torch_available
 
 from .test_pipelines_common import ANY
@@ -31,6 +31,7 @@ if is_torch_available():
     import torch
 
 
+@is_pipeline_test
 class Text2TextGenerationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
