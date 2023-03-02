@@ -371,7 +371,6 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         # convert into correct format for padding
         if is_target:
             features = [self._extract_fbank_features(waveform) for waveform in speech]
-            fbank_sizes = [len(x) for x in features]
             encoded_inputs = BatchFeature({"input_values": features})
             self.feature_size = self.num_mel_bins
         else:

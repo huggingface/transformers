@@ -87,9 +87,7 @@ class SpeechT5Processor(ProcessorMixin):
             inputs = None
 
         if audio_target is not None:
-            targets = self.feature_extractor(
-                audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs
-            )
+            targets = self.feature_extractor(audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs)
             labels = targets["input_values"]
         elif text_target is not None:
             targets = self.tokenizer(text_target, **kwargs)
@@ -113,8 +111,8 @@ class SpeechT5Processor(ProcessorMixin):
         """
         Collates the audio and text inputs, as well as their targets, into a padded batch.
 
-        Audio inputs are padded by SpeechT5FeatureExtractor's [`~SpeechT5FeatureExtractor.pad`].
-        Text inputs are padded by SpeechT5Tokenizer's [`~SpeechT5Tokenizer.pad`].
+        Audio inputs are padded by SpeechT5FeatureExtractor's [`~SpeechT5FeatureExtractor.pad`]. Text inputs are padded
+        by SpeechT5Tokenizer's [`~SpeechT5Tokenizer.pad`].
 
         Valid input combinations are:
 
@@ -131,9 +129,7 @@ class SpeechT5Processor(ProcessorMixin):
         labels = kwargs.pop("labels", None)
 
         if input_values is not None and input_ids is not None:
-            raise ValueError(
-                "Cannot process both `input_values` and `input_ids` inputs."
-            )
+            raise ValueError("Cannot process both `input_values` and `input_ids` inputs.")
         if input_values is None and input_ids is None and labels is None:
             raise ValueError(
                 "You need to specify either an `input_values`, `input_ids`, or `labels` input to be padded."

@@ -2593,7 +2593,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         if labels is not None:
             # replace -100 in the spectrogram otherwise model gives nan
-            padding_mask = (labels != -100.0)
+            padding_mask = labels != -100.0
             labels[~padding_mask] = 0.0
 
             if decoder_input_values is None:
