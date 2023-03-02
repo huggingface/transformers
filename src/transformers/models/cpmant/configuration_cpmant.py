@@ -98,10 +98,12 @@ class CPMAntConfig(PretrainedConfig):
         position_bias_num_buckets: int = 512,
         position_bias_max_distance: int = 2048,
         eps: int = 1e-6,
+        init_std: float = 1.0,
         prompt_types: int = 32,
         prompt_length: int = 32,
         segment_types: int = 32,
         use_cache: bool = True,
+        return_dict: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -119,3 +121,5 @@ class CPMAntConfig(PretrainedConfig):
         self.eps = eps
         self.use_cache = use_cache
         self.vocab_size = vocab_size
+        self.return_dict = return_dict
+        self.init_std = init_std

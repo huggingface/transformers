@@ -20,6 +20,7 @@ import os
 from typing import List, Optional, Tuple, Union
 
 import torch
+from torch.nn import CrossEntropyLoss
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
@@ -125,13 +126,12 @@ class CPMAntLayerNorm(nn.Module):
     def __init__(
         self,
         config: CPMAntConfig,
-        init_var: float = 1.0,
     ):
         super().__init__()
 
         self.eps = config.eps
         self.dim_norm = config.dim_model
-        self.weight = torch.nn.parameter.Parameter(torch.full((config.dim_model,), init_var))
+        self.weight = torch.nn.parameter.Parameter(torch.empty(config.dim_model))
 
     def forward(self, hidden_states: torch.Tensor):
         """
@@ -174,7 +174,7 @@ class CPMAntAttention(nn.Module):
         position_bias: torch.Tensor,
         output_attentions: Optional[bool] = False,
         past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        use_cache: Optional[bool] = False,
+        use_cache: Optional[bool] = None,
     ):
         """
         Args:
@@ -267,7 +267,7 @@ class CPMAntSelfAttentionBlock(nn.Module):
         position_bias: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        use_cache: Optional[bool] = False,
+        use_cache: Optional[bool] = None,
     ):
         """
         Args:
@@ -385,7 +385,7 @@ class CPMAntTransformerBlock(nn.Module):
         position_bias: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        use_cache: Optional[bool] = False,
+        use_cache: Optional[bool] = None,
     ):
         """
         Args:
@@ -436,7 +436,7 @@ class CPMAntEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         past_key_values: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        use_cache: Optional[bool] = False,
+        use_cache: Optional[bool] = None,
     ):
         """
         Args:
@@ -458,8 +458,8 @@ class CPMAntEncoder(nn.Module):
         """
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        current_key_values = [] if use_cache else None
 
-        current_key_values = []
         for i, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -630,16 +630,20 @@ class CPMAntPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, CPMAntLayerNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, CPMAntSegmentPositionEmbedding):
+            module.relative_attention_bias.data.normal_(mean=0.0, std=self.config.init_std)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, CPMAntEncoder):
@@ -697,18 +701,13 @@ class CPMAntModel(CPMAntPreTrainedModel):
         self.prompt_length = config.prompt_length
         self.vocab_size = config.vocab_size
 
+        self.post_init()
+
     def get_input_embeddings(self):
-        embeddings = {
-            "segment": self.segment_embedding,
-            "input_ids": self.input_embedding,
-            "position": self.position_bias,
-        }
-        return embeddings
+        return self.input_embedding
 
     def set_input_embeddings(self, embeddings, **kwargs):
-        self.segment_embedding = embeddings["segment"]
-        self.input_embedding = embeddings["input_ids"]
-        self.position_bias = embeddings["position"]
+        self.input_embedding = embeddings
 
     def _prepare_attention_mask(self, input_ids, span, context, length):
         batch = input_ids.size(0)
@@ -741,8 +740,8 @@ class CPMAntModel(CPMAntPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        use_cache: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
+        use_cache: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -806,7 +805,18 @@ class CPMAntModel(CPMAntPreTrainedModel):
         )
 
         if past_length == 0:
-            hidden_states = hidden_states[:, self.prompt_length :, :]
+            hidden_states = hidden_states[:, self.prompt_length:, :]
+            # drop the prompt
+            if all_attentions is not None:
+                new_attentions = ()
+                for attention in all_attentions:
+                    new_attentions += (attention[:, :, self.prompt_length:, self.prompt_length:],)
+                all_attentions = new_attentions
+            if all_hidden_states is not None:
+                new_hidden_states = ()
+                for hidden_state in all_hidden_states:
+                    new_hidden_states += (hidden_state[:, self.prompt_length:, :],)
+                all_hidden_states = new_hidden_states
 
         if not return_dict:
             return tuple(
@@ -835,7 +845,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         self.cpmant = CPMAntModel(config)
 
         # lm_head.weight is tied to cpmant.input_embedding.weight
-        self.lm_head = nn.Linear(config.dim_model, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.dim_model, config.vocab_size + config.prompt_types * config.prompt_length, bias=False)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING)
@@ -849,11 +859,13 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
-        use_cache: Optional[bool] = True,
-        output_attentions: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = True,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
         attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -905,11 +917,17 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
 
         logits = self.lm_head(hidden_states)
 
+        loss = None
+        if labels is not None:
+            loss_func = CrossEntropyLoss()
+            loss = loss_func(logits.view(-1, logits.size(-1)), labels.view(-1))
+
         if not return_dict:
-            output = (logits,) + model_output
-            return output
+            output = (logits,) + model_output[1:]
+            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutputWithPast(
+            loss=loss,
             logits=logits,
             past_key_values=model_output.past_key_values,
             hidden_states=model_output.hidden_states,

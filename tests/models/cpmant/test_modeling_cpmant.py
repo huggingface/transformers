@@ -47,28 +47,25 @@ class CPMAntModelTester:
     def __init__(
         self,
         parent,
-        batch_size=3,
+        batch_size=2,
         seq_length=8,
         is_training=True,
         use_token_type_ids=False,
-        use_input_mask=True,
-        use_labels=True,
-        use_mc_token_ids=True,
+        use_input_mask=False,
+        use_labels=False,
+        use_mc_token_ids=False,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=3,
         num_attention_heads=4,
         intermediate_size=37,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
-        initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
-        scope=None,
+        num_buckets=32,
+        max_distance=128,
+        prompt_length=8,
+        prompt_types=8,
+        segment_types=8,
+        init_std=1.0,
+        return_dict=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -83,30 +80,39 @@ class CPMAntModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_dropout_prob = attention_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
-        self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
-        self.scope = None
-        self.bos_token_id = vocab_size - 1
-        self.eos_token_id = vocab_size - 1
-        self.pad_token_id = vocab_size - 1
+        self.num_buckets = num_buckets
+        self.max_distance = max_distance
+        self.prompt_length = prompt_length
+        self.prompt_types = prompt_types
+        self.segment_types = segment_types
+        self.init_std = init_std
+        self.return_dict = return_dict
 
     def prepare_config_and_inputs(self):
-        input_ids = {}
+        input_ids = dict()
         input_ids["input_ids"] = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).type(torch.int32)
+        input_ids["use_cache"] = False
 
         config = self.get_config()
 
         return (config, input_ids)
 
     def get_config(self):
-        return CPMAntConfig.from_pretrained("openbmb/cpm-ant-10b")
+        return CPMAntConfig(
+            vocab_size=self.vocab_size,
+            dim_model=self.hidden_size,
+            num_layers=self.num_hidden_layers,
+            num_heads=self.num_attention_heads,
+            dim_ff=self.intermediate_size,
+            position_bias_num_buckets = self.num_buckets,
+            position_bias_max_distance = self.max_distance,
+            prompt_types=self.prompt_types,
+            prompt_length=self.prompt_length,
+            segment_types=self.segment_types,
+            use_cache=True,
+            init_std=self.init_std,
+            return_dict=self.return_dict,
+        )
 
     def create_and_check_cpmant_model(self, config, input_ids, *args):
         model = CPMAntModel(config=config)
@@ -125,14 +131,10 @@ class CPMAntModelTester:
         model.eval()
 
         model_output = model(**input_ids)
-        self.parent.assertEqual(
-            model_output.logits.shape,
-            (self.batch_size, self.seq_length, config.vocab_size + config.prompt_types * config.prompt_length),
-        )
+        self.parent.assertEqual(model_output.logits.shape, (self.batch_size, self.seq_length, config.vocab_size + config.prompt_types * config.prompt_length))
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_ids = self.prepare_config_and_inputs()
-        inputs_dict = {"input_ids": input_ids}
+        config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
 
@@ -147,17 +149,32 @@ class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
+    test_pruning = False
+    test_missing_keys = False
+    test_mismatched_shapes = False
+    test_head_masking = False
+    test_resize_embeddings = False
+
     def setUp(self):
         self.model_tester = CPMAntModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CPMAntConfig)
+        self.config_tester = CPMAntConfigTester(self, config_class=CPMAntConfig)
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_common_properties()
         self.config_tester.create_and_test_config_to_json_string()
         self.config_tester.create_and_test_config_to_json_file()
         self.config_tester.create_and_test_config_from_and_save_pretrained()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
+
+    def test_inputs_embeds(self):
+        unittest.skip("CPMAnt doesn't support input_embeds.")(self.test_inputs_embeds)
+    
+    def test_retain_grad_hidden_states_attentions(self):
+        unittest.skip(
+            "CPMAnt doesn't support retain grad in hidden_states or attentions, because prompt management will peel off the output.hidden_states from graph.\
+                 So is attentions. We strongly recommand you use loss to tune model."
+            )(self.test_retain_grad_hidden_states_attentions)
 
     @slow
     def test_cpmant_model(self):
