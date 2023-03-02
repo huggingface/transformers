@@ -49,18 +49,16 @@ class LLaMaTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> None:
         self.sp_model = spm.SentencePieceProcessor(model_file=vocab_file)
-        self.special_tokens = {
+        self.special_token_to_id = {
             bos_token: self.sp_model.bos_id(),
             eos_token: self.sp_model.eos_id(),
             unk_token: self.sp_model.unk_id()
         }
-        for special_token, token_id in self.special_tokens.items():
+        self.special_id_to_token = {v: k for k, v in self.special_token_to_id.items()}
+        assert len(self.special_id_to_token) == len(self.special_token_to_id)
+        for special_token, token_id in self.special_token_to_id.items():
             # special token doesn't exist in the sentencepiece tokenizer
-            try:
-                self.sp_model.PieceToId(special_token)
-                assert False
-            except IndexError:
-                pass
+            assert self.sp_model.unk_id() == self.sp_model.piece_to_id(special_token)
             assert token_id >= 0
 
         # TODO @thomasw21: Understand if I need to have <bos> and such since they are not part of the official LLaMa model
@@ -93,10 +91,12 @@ class LLaMaTokenizer(PreTrainedTokenizer):
         """Converts a token (str) in an id using the vocab."""
         # TODO @thomasw21: This means that you can't get the tokens from <bos>/<eos>/<unk>
         # The issue is that you can tokenizer <
-        if token in self.special_tokens:
-            return self.special_tokens
+        if token in self.special_token_to_id:
+            return self.special_token_to_id[token]
         return self.sp_model.piece_to_id(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
+        if index in self.special_id_to_token:
+            return self.special_id_to_token[index]
         return self.sp_model.IdToPiece(index)
