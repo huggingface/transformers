@@ -338,10 +338,16 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
 
+        if return_attention_mask:
+            # rescale from sample (48000) to feature (3000)
+            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
+
         # zero-mean and unit-variance normalization
         if do_normalize:
             padded_inputs["input_features"] = self.zero_mean_unit_var_norm(
-                padded_inputs["input_features"], attention_mask=None, padding_value=self.padding_value
+                padded_inputs["input_features"],
+                attention_mask=padded_inputs["attention_mask"],
+                padding_value=self.padding_value,
             )
 
         input_features = [self._np_extract_fbank_features(waveform) for waveform in input_features[0]]
