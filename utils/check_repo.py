@@ -652,7 +652,7 @@ def check_all_auto_mapping_names_in_config_mapping_names():
     failures = []
 
     # `TOKENIZER_PROCESSOR_MAPPING_NAMES` and `AutoTokenizer` is special, and don't need to follow the rule.
-    mapping_to_check = {
+    mappings_to_check = {
         "IMAGE_PROCESSOR_MAPPING_NAMES": IMAGE_PROCESSOR_MAPPING_NAMES,
         "FEATURE_EXTRACTOR_MAPPING_NAMES": FEATURE_EXTRACTOR_MAPPING_NAMES,
         "PROCESSOR_MAPPING_NAMES": PROCESSOR_MAPPING_NAMES,
@@ -661,7 +661,12 @@ def check_all_auto_mapping_names_in_config_mapping_names():
         "FLAX_MODEL_MAPPING_NAMES": FLAX_MODEL_MAPPING_NAMES,
     }
 
-    for name, mapping in mapping_to_check.items():
+    for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
+        module = getattr(transformers.models.auto, module_name)
+        mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
+        mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
+
+    for name, mapping in mappings_to_check.items():
         for model_type, class_names in mapping.items():
             if model_type not in CONFIG_MAPPING_NAMES:
                 failures.append(
