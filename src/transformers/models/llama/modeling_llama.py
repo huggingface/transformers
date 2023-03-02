@@ -100,6 +100,7 @@ class LLaMaAttention(nn.Module):
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
+            persistent=False
         )
         self.qkv = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=False)
         self.o = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
@@ -200,7 +201,7 @@ class LLaMaAttention(nn.Module):
             1,
             dtype=query.dtype,
             device=key.device,
-        ).expand_as(query)
+        ).expand(batch_size * num_attention_heads, query_length, key_length)
         attn_scores = torch.baddbmm(
             attn_scores,
             query,
@@ -233,7 +234,7 @@ class RotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings, base=10000, device=None):
         super().__init__()
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float, device=None) / dim))
-        self.register_buffer("inv_freq", inv_freq)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
         self.max_seq_len_cached = max_position_embeddings
@@ -392,9 +393,7 @@ class LLaMaModel(LLaMaPreTrainedModel):
         self.embed = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([LLaMaLayer(config) for _ in range(config.num_hidden_layers)])
         head_size = config.hidden_size // config.num_attention_heads
-        self.rotary_emb = RotaryEmbedding(
-            head_size, config.max_position_embeddings
-        )
+        self.rotary_emb = RotaryEmbedding(head_size, config.max_position_embeddings)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
@@ -467,7 +466,7 @@ class LLaMaModel(LLaMaPreTrainedModel):
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, None, None, :]
+            attention_mask = attention_mask[:, None, None, :].to(torch.bool)
 
         cos, sin = self.rotary_emb(device=input_ids.device, seq_len=seq_length)
 
