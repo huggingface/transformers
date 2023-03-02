@@ -722,29 +722,17 @@ class XLMProphetNetAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
         src_len = key_states.size(2)
         attn_weights = torch.einsum("bsij,bsjk->bsik", query_states, key_states.transpose(2, 3))
-        assert attn_weights.size() == (
-            batch_size,
-            self.num_attn_heads,
-            tgt_len,
-            src_len,
-        ), (
-            f"`attn_weights` should be of size {batch_size * self.num_attn_heads, tgt_len, src_len}, but is of size"
-            f" {attn_weights.shape}"
-        )
+        expected_shape = (batch_size, self.num_attn_heads, tgt_len, src_len)
+        if attn_weights.size() != expected_shape:
+            raise ValueError(f"Attention weights should have size {expected_shape}, but is {attn_weights.size()}")
 
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if attention_mask is not None and attention_mask.dim() == 0:
             attention_mask = None
-        assert attention_mask is None or attention_mask.size() == (
-            batch_size,
-            self.num_attn_heads,
-            1,
-            src_len,
-        ), (
-            "`attention_mask` should be `None` or of shape attention_mask.size() =="
-            f" {batch_size, self.num_attn_heads, 1, src_len}, but is {attention_mask.shape}"
-        )
 
+        expected_shape = (batch_size, self.num_attn_heads, 1, src_len)
+        if attention_mask is not None and attention_mask.size() != expected_shape:
+            raise ValueError(f"Attention mask should have size {expected_shape}, but is {attention_mask.size()}")
         if attention_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights + attention_mask
         if output_attentions:
@@ -772,17 +760,11 @@ class XLMProphetNetAttention(nn.Module):
             training=self.training,
         )
         attn_output = torch.einsum("bsij,bsjk->bsik", attn_probs, value_states)
-        assert attn_output.size() == (
-            batch_size,
-            self.num_attn_heads,
-            tgt_len,
-            self.head_dim,
-        ), (
-            f"`attn_output` should be of shape {batch_size,  self.num_attn_heads, tgt_len, self.head_dim}, but is of"
-            f" shape {attn_output.size()}"
-        )
-        attn_output = attn_output.transpose(1, 2).reshape(batch_size, tgt_len, hidden_size)
+        expected_shape = (batch_size, self.num_attn_heads, tgt_len, self.head_dim)
+        if attn_output.size() != expected_shape:
+            raise ValueError(f"`attn_output` should have shape {expected_shape}, but is of shape {attn_output.size()}")
 
+        attn_output = attn_output.transpose(1, 2).reshape(batch_size, tgt_len, hidden_size)
         attn_output = self.out_proj(attn_output)
 
         attn_output = nn.functional.dropout(attn_output, p=self.dropout, training=self.training)
