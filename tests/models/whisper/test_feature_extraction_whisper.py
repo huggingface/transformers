@@ -200,7 +200,6 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
     def _load_datasamples(self, num_samples):
-
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
@@ -223,7 +222,6 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feaure_extractor = WhisperFeatureExtractor()
         input_features = feaure_extractor(input_speech, return_tensors="pt").input_features
         self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
-
 
     def test_zero_mean_unit_variance_normalization_trunc_np_longest(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())

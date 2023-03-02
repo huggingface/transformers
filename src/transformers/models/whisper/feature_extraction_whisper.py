@@ -249,7 +249,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
         do_normalize: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
