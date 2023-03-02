@@ -162,7 +162,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         """
         base_vocab = self._tokenizer.get_vocab(with_added_tokens=False)
         full_vocab = self._tokenizer.get_vocab(with_added_tokens=True)
-        added_vocab = dict((tok, index) for tok, index in full_vocab.items() if tok not in base_vocab)
+        added_vocab = {tok: index for tok, index in full_vocab.items() if tok not in base_vocab}
         return added_vocab
 
     def __len__(self) -> int:
@@ -346,7 +346,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 The stride to use when handling overflow.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
         """
         _truncation = self._tokenizer.truncation
         _padding = self._tokenizer.padding
@@ -411,7 +411,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
-
         if not isinstance(batch_text_or_text_pairs, (tuple, list)):
             raise TypeError(
                 f"batch_text_or_text_pairs has to be a list or a tuple (got {type(batch_text_or_text_pairs)})"
@@ -495,9 +494,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         batched_input = [(text, text_pair)] if text_pair else [text]
         batched_output = self._batch_encode_plus(
             batched_input,
@@ -542,7 +540,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
-        **kwargs
+        **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 

@@ -64,7 +64,6 @@ def _generate_supported_model_class_names(
     model_name: Type[PretrainedConfig],
     supported_tasks: Optional[Union[str, List[str]]] = None,
 ) -> List[str]:
-
     task_mapping = {
         "default": MODEL_MAPPING_NAMES,
         "pretraining": MODEL_FOR_PRETRAINING_MAPPING_NAMES,
@@ -101,6 +100,7 @@ def _generate_supported_model_class_names(
 
 
 _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
+    "altclip",
     "albert",
     "bart",
     "bert",
@@ -156,6 +156,9 @@ _SPECIAL_SUPPORTED_MODELS = [
     "CLIPTextModelWithProjection",
     "CLIPVisionModel",
     "CLIPVisionModelWithProjection",
+    "AltCLIPTextModel",
+    "AltCLIPVisionModel",
+    "GitVisionModel",
     "GPT2DoubleHeadsModel",
     "Speech2Text2Decoder",
     "TrOCRDecoder",
@@ -688,7 +691,6 @@ class HFTracer(Tracer):
     ]
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
-
         super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
 
         if not is_torch_fx_available():
@@ -709,7 +711,6 @@ class HFTracer(Tracer):
         inputs_dict = {}
 
         if input_name in ["labels", "start_positions", "end_positions"]:
-
             batch_size = shape[0]
             if model_class_name in [
                 *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
@@ -983,7 +984,13 @@ class HFTracer(Tracer):
                     continue
                 if param.default is inspect.Parameter.empty:
                     raise ValueError(f"You need to specify a default value for the parameter {param.name}.")
-            concrete_args.update({p.name: p.default for p in sig.parameters.values() if p.name not in dummy_inputs})
+            concrete_args.update(
+                {
+                    p.name: p.default
+                    for p in sig.parameters.values()
+                    if (p.name not in dummy_inputs and p.name not in concrete_args)
+                }
+            )
 
         input_names = sig.parameters.keys() - concrete_args.keys()
 
@@ -1143,7 +1150,6 @@ def symbolic_trace(
     input_names: Optional[List[str]] = None,
     disable_check: bool = False,
 ) -> GraphModule:
-
     """
     Performs symbolic tracing on the model.
 

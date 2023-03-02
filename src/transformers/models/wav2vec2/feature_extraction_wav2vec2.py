@@ -39,7 +39,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, defaults to 1):
             The feature dimension of the extracted features.
         sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding values.
         do_normalize (`bool`, *optional*, defaults to `True`):
@@ -71,7 +71,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         padding_value=0.0,
         return_attention_mask=False,
         do_normalize=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.return_attention_mask = return_attention_mask
@@ -109,7 +109,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
@@ -136,7 +136,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.

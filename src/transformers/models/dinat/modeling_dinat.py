@@ -57,7 +57,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "DinatConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "shi-labs/dinat-mini-in1k-224"
@@ -338,7 +337,6 @@ class NeighborhoodAttention(nn.Module):
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
-
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -679,8 +677,8 @@ DINAT_START_DOCSTRING = r"""
 DINAT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -730,7 +728,6 @@ class DinatModel(DinatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DINAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=DinatModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -810,7 +807,6 @@ class DinatForImageClassification(DinatPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(DINAT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=DinatImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -903,7 +899,7 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
             self.out_feature_channels[stage] = num_features[i]
 
         # Add layer norms to hidden states of out_features
-        hidden_states_norms = dict()
+        hidden_states_norms = {}
         for stage, num_channels in zip(self.out_features, self.channels):
             hidden_states_norms[stage] = nn.LayerNorm(num_channels)
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)

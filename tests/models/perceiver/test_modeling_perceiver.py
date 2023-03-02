@@ -32,6 +32,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -166,9 +167,11 @@ class PerceiverModelTester:
             audio = torch.randn(
                 (self.batch_size, self.num_frames * self.audio_samples_per_frame, 1), device=torch_device
             )
-            inputs = dict(
-                image=images, audio=audio, label=torch.zeros((self.batch_size, self.num_labels), device=torch_device)
-            )
+            inputs = {
+                "image": images,
+                "audio": audio,
+                "label": torch.zeros((self.batch_size, self.num_labels), device=torch_device),
+            }
         else:
             raise ValueError(f"Model class {model_class} not supported")
 
@@ -262,8 +265,7 @@ class PerceiverModelTester:
 
 
 @require_torch
-class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
-
+class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             PerceiverModel,
@@ -277,6 +279,21 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": PerceiverModel,
+            "fill-mask": PerceiverForMaskedLM,
+            "image-classification": (
+                PerceiverForImageClassificationConvProcessing,
+                PerceiverForImageClassificationFourier,
+                PerceiverForImageClassificationLearned,
+            ),
+            "text-classification": PerceiverForSequenceClassification,
+            "zero-shot": PerceiverForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_head_masking = False
@@ -735,11 +752,10 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
                 continue
 
             config, inputs, input_mask, _, _ = self.model_tester.prepare_config_and_inputs(model_class=model_class)
-            inputs_dict = dict(inputs=inputs, attention_mask=input_mask)
+            inputs_dict = {"inputs": inputs, "attention_mask": input_mask}
 
             for problem_type in problem_types:
                 with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
-
                     config.problem_type = problem_type["title"]
                     config.num_labels = problem_type["num_labels"]
 
@@ -849,7 +865,6 @@ def extract_image_patches(x, kernel, stride=1, dilation=1):
 class PerceiverModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-
         tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
         model = PerceiverForMaskedLM.from_pretrained("deepmind/language-perceiver")
         model.to(torch_device)
@@ -884,7 +899,6 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification(self):
-
         feature_extractor = PerceiverFeatureExtractor()
         model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
         model.to(torch_device)
@@ -909,7 +923,6 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_fourier(self):
-
         feature_extractor = PerceiverFeatureExtractor()
         model = PerceiverForImageClassificationFourier.from_pretrained("deepmind/vision-perceiver-fourier")
         model.to(torch_device)
@@ -934,7 +947,6 @@ class PerceiverModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_conv(self):
-
         feature_extractor = PerceiverFeatureExtractor()
         model = PerceiverForImageClassificationConvProcessing.from_pretrained("deepmind/vision-perceiver-conv")
         model.to(torch_device)

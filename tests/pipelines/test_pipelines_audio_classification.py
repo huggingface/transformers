@@ -20,15 +20,15 @@ from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_torchaudio, slow
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 @require_torch
-class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        audio_classifier = AudioClassificationPipeline(model=model, feature_extractor=feature_extractor)
+    def get_test_pipeline(self, model, tokenizer, processor):
+        audio_classifier = AudioClassificationPipeline(model=model, feature_extractor=processor)
 
         # test with a raw waveform
         audio = np.zeros((34000,))

@@ -15,11 +15,10 @@
 """ Flax RoBERTa-PreLayerNorm model."""
 from typing import Callable, Optional, Tuple
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning
@@ -47,7 +46,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "andreasmadsen/efficient_mlm_m0.40"
 _CONFIG_FOR_DOC = "RobertaPreLayerNormConfig"
-_TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 remat = nn_partitioning.remat
 
@@ -104,7 +102,7 @@ ROBERTA_PRELAYERNORM_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -321,7 +319,7 @@ class FlaxRobertaPreLayerNormSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -743,7 +741,7 @@ class FlaxRobertaPreLayerNormPreTrainedModel(FlaxPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
         gradient_checkpointing: bool = False,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -1000,7 +998,6 @@ class FlaxRobertaPreLayerNormModel(FlaxRobertaPreLayerNormPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxRobertaPreLayerNormModel,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxBaseModelOutputWithPooling,
     _CONFIG_FOR_DOC,
@@ -1078,7 +1075,6 @@ class FlaxRobertaPreLayerNormForMaskedLM(FlaxRobertaPreLayerNormPreTrainedModel)
 
 append_call_sample_docstring(
     FlaxRobertaPreLayerNormForMaskedLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxBaseModelOutputWithPooling,
     _CONFIG_FOR_DOC,
@@ -1153,7 +1149,6 @@ class FlaxRobertaPreLayerNormForSequenceClassification(FlaxRobertaPreLayerNormPr
 
 append_call_sample_docstring(
     FlaxRobertaPreLayerNormForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1240,7 +1235,6 @@ overwrite_call_docstring(
 )
 append_call_sample_docstring(
     FlaxRobertaPreLayerNormForMultipleChoice,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMultipleChoiceModelOutput,
     _CONFIG_FOR_DOC,
@@ -1321,7 +1315,6 @@ class FlaxRobertaPreLayerNormForTokenClassification(FlaxRobertaPreLayerNormPreTr
 
 append_call_sample_docstring(
     FlaxRobertaPreLayerNormForTokenClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxTokenClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1400,7 +1393,6 @@ class FlaxRobertaPreLayerNormForQuestionAnswering(FlaxRobertaPreLayerNormPreTrai
 
 append_call_sample_docstring(
     FlaxRobertaPreLayerNormForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
@@ -1515,7 +1507,6 @@ class FlaxRobertaPreLayerNormForCausalLM(FlaxRobertaPreLayerNormPreTrainedModel)
 
 append_call_sample_docstring(
     FlaxRobertaPreLayerNormForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,

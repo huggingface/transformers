@@ -5,8 +5,8 @@ from unittest import TestCase
 from unittest.mock import patch
 
 import pytest
-
 from parameterized import parameterized
+
 from transformers import AutoConfig, PreTrainedTokenizerBase, is_tf_available, is_torch_available
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,

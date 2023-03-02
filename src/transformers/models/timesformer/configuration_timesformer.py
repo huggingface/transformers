@@ -78,7 +78,7 @@ class TimesformerConfig(PretrainedConfig):
     >>> # Initializing a TimeSformer timesformer-base style configuration
     >>> configuration = TimesformerConfig()
 
-    >>> # Randomly initializing a model from the configuration
+    >>> # Initializing a model from the configuration
     >>> model = TimesformerModel(configuration)
 
     >>> # Accessing the model configuration
@@ -104,7 +104,7 @@ class TimesformerConfig(PretrainedConfig):
         qkv_bias=True,
         attention_type="divided_space_time",
         drop_path_rate=0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 

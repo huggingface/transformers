@@ -44,7 +44,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "SwinConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "AutoImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "microsoft/swin-tiny-patch4-window7-224"
@@ -644,8 +643,12 @@ class SwinLayer(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
+        always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        self.set_shift_and_window_size(input_dimensions)
+        if not always_partition:
+            self.set_shift_and_window_size(input_dimensions)
+        else:
+            pass
         height, width = input_dimensions
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
@@ -734,13 +737,15 @@ class SwinStage(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
+        always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
-
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+            layer_outputs = layer_module(
+                hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -790,6 +795,7 @@ class SwinEncoder(nn.Module):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         output_hidden_states_before_downsampling: Optional[bool] = False,
+        always_partition: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, SwinEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
@@ -819,7 +825,9 @@ class SwinEncoder(nn.Module):
                     create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
                 )
             else:
-                layer_outputs = layer_module(hidden_states, input_dimensions, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
+                )
 
             hidden_states = layer_outputs[0]
             hidden_states_before_downsampling = layer_outputs[1]
@@ -901,8 +909,8 @@ SWIN_START_DOCSTRING = r"""
 SWIN_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`AutoImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
@@ -953,7 +961,6 @@ class SwinModel(SwinPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SwinModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1158,7 +1165,6 @@ class SwinForImageClassification(SwinPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SWIN_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=SwinImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1253,7 +1259,7 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
             self.out_feature_channels[stage] = num_features[i]
 
         # Add layer norms to hidden states of out_features
-        hidden_states_norms = dict()
+        hidden_states_norms = {}
         for stage, num_channels in zip(self.out_features, self.channels):
             hidden_states_norms[stage] = nn.LayerNorm(num_channels)
         self.hidden_states_norms = nn.ModuleDict(hidden_states_norms)
@@ -1315,6 +1321,7 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
             output_attentions=output_attentions,
             output_hidden_states=True,
             output_hidden_states_before_downsampling=True,
+            always_partition=True,
             return_dict=True,
         )
 

@@ -42,7 +42,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "ViTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "ViTImageProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224-in21k"
@@ -249,7 +248,6 @@ class ViTSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -305,7 +303,6 @@ class ViTIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -452,17 +449,17 @@ class ViTPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, ViTEmbeddings):
-            nn.init.trunc_normal_(
-                module.position_embeddings,
+            module.position_embeddings.data = nn.init.trunc_normal_(
+                module.position_embeddings.data.to(torch.float32),
                 mean=0.0,
                 std=self.config.initializer_range,
-            )
+            ).to(module.position_embeddings.dtype)
 
-            nn.init.trunc_normal_(
-                module.cls_token,
+            module.cls_token.data = nn.init.trunc_normal_(
+                module.cls_token.data.to(torch.float32),
                 mean=0.0,
                 std=self.config.initializer_range,
-            )
+            ).to(module.cls_token.dtype)
 
     def _set_gradient_checkpointing(self, module: ViTEncoder, value: bool = False) -> None:
         if isinstance(module, ViTEncoder):
@@ -483,7 +480,7 @@ VIT_START_DOCSTRING = r"""
 VIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViTImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -536,7 +533,6 @@ class ViTModel(ViTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -666,7 +662,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import ViTImageProcessor, ViTForMaskedImageModeling
+        >>> from transformers import AutoImageProcessor, ViTForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -674,7 +670,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
         >>> model = ViTForMaskedImageModeling.from_pretrained("google/vit-base-patch16-224-in21k")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
@@ -765,7 +761,6 @@ class ViTForImageClassification(ViTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,

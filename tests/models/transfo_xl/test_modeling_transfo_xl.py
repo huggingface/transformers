@@ -23,6 +23,7 @@ from transformers.testing_utils import require_torch, require_torch_multi_gpu, s
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -251,11 +252,21 @@ class TransfoXLModelTester:
 
 
 @require_torch
-class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TransfoXLModel, TransfoXLLMHeadModel, TransfoXLForSequenceClassification) if is_torch_available() else ()
     )
     all_generative_model_classes = (TransfoXLLMHeadModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TransfoXLModel,
+            "text-classification": TransfoXLForSequenceClassification,
+            "text-generation": TransfoXLLMHeadModel,
+            "zero-shot": TransfoXLForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_resize_embeddings = True
     test_mismatched_shapes = False
@@ -347,7 +358,7 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             # Retrieve the cutoffs and copy them
             copied_cutoffs = copy.copy(model_embed.cutoffs)
 
-            test_layers = [x for x in range(config.div_val)]
+            test_layers = list(range(config.div_val))
             for layer in test_layers:
                 # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
                 model_embed = model.resize_token_embeddings(model_vocab_size + 10, layer)

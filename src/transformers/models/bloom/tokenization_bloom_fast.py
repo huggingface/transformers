@@ -113,7 +113,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         pad_token="<pad>",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,

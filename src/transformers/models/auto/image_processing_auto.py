@@ -37,9 +37,12 @@ logger = logging.get_logger(__name__)
 
 IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("align", "EfficientNetImageProcessor"),
         ("beit", "BeitImageProcessor"),
         ("bit", "BitImageProcessor"),
         ("blip", "BlipImageProcessor"),
+        ("blip-2", "BlipImageProcessor"),
+        ("bridgetower", "BridgeTowerImageProcessor"),
         ("chinese_clip", "ChineseCLIPImageProcessor"),
         ("clip", "CLIPImageProcessor"),
         ("clipseg", "ViTImageProcessor"),
@@ -49,17 +52,22 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "BeitImageProcessor"),
         ("deformable_detr", "DeformableDetrImageProcessor"),
         ("deit", "DeiTImageProcessor"),
+        ("deta", "DetaImageProcessor"),
         ("detr", "DetrImageProcessor"),
         ("dinat", "ViTImageProcessor"),
         ("donut-swin", "DonutImageProcessor"),
         ("dpt", "DPTImageProcessor"),
+        ("efficientformer", "EfficientFormerImageProcessor"),
+        ("efficientnet", "EfficientNetImageProcessor"),
         ("flava", "FlavaImageProcessor"),
+        ("git", "CLIPImageProcessor"),
         ("glpn", "GLPNImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),
         ("imagegpt", "ImageGPTImageProcessor"),
         ("layoutlmv2", "LayoutLMv2ImageProcessor"),
         ("layoutlmv3", "LayoutLMv3ImageProcessor"),
         ("levit", "LevitImageProcessor"),
+        ("mask2former", "Mask2FormerImageProcessor"),
         ("maskformer", "MaskFormerImageProcessor"),
         ("mobilenet_v1", "MobileNetV1ImageProcessor"),
         ("mobilenet_v2", "MobileNetV2ImageProcessor"),
@@ -67,6 +75,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MobileViTImageProcessor"),
         ("mobilevit", "MobileViTImageProcessor"),
         ("nat", "ViTImageProcessor"),
+        ("oneformer", "OneFormerImageProcessor"),
         ("owlvit", "OwlViTImageProcessor"),
         ("perceiver", "PerceiverImageProcessor"),
         ("poolformer", "PoolFormerImageProcessor"),
@@ -78,6 +87,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("swinv2", "ViTImageProcessor"),
         ("table-transformer", "DetrImageProcessor"),
         ("timesformer", "VideoMAEImageProcessor"),
+        ("upernet", "SegformerImageProcessor"),
         ("van", "ConvNextImageProcessor"),
         ("videomae", "VideoMAEImageProcessor"),
         ("vilt", "ViltImageProcessor"),
@@ -351,6 +361,7 @@ class AutoImageProcessor:
                 image_processor_class = get_class_from_dynamic_module(
                     pretrained_model_name_or_path, module_file + ".py", class_name, **kwargs
                 )
+                image_processor_class.register_for_auto_class()
             else:
                 image_processor_class = image_processor_class_from_name(image_processor_class)
 

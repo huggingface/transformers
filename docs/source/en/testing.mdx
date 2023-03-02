@@ -176,6 +176,15 @@ If you want to include only tests that include both patterns, `and` is to be use
 ```bash
 pytest -k "test and ada" tests/test_optimization.py
 ```
+
+### Run `accelerate` tests
+
+Sometimes you need to run `accelerate` tests on your models. For that you can just add `-m accelerate_tests` to your command, if let's say you want to run these tests on `OPT` run:
+```bash
+RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py 
+```
+
+
 ### Run documentation tests 
 
 In order to test whether the documentation examples are correct, you should check that the `doctests` are passing. 

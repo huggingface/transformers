@@ -24,6 +24,7 @@ from transformers.utils import cached_property
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -223,9 +224,20 @@ class BlenderbotModelTester:
 
 
 @require_torch
-class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (BlenderbotModel, BlenderbotForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": BlenderbotForConditionalGeneration,
+            "feature-extraction": BlenderbotModel,
+            "summarization": BlenderbotForConditionalGeneration,
+            "text2text-generation": BlenderbotForConditionalGeneration,
+            "text-generation": BlenderbotForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = True
     test_pruning = False
@@ -299,8 +311,8 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
 
     @slow
     def test_generation_from_short_input_same_as_parlai_3B(self):
-        FASTER_GEN_KWARGS = dict(num_beams=1, early_stopping=True, min_length=15, max_length=25)
-        TOK_DECODE_KW = dict(skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        FASTER_GEN_KWARGS = {"num_beams": 1, "early_stopping": True, "min_length": 15, "max_length": 25}
+        TOK_DECODE_KW = {"skip_special_tokens": True, "clean_up_tokenization_spaces": True}
 
         torch.cuda.empty_cache()
         model = BlenderbotForConditionalGeneration.from_pretrained(self.ckpt).half().to(torch_device)

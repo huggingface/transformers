@@ -340,7 +340,7 @@ def main():
     model.config.id2label = id2label
 
     # Preprocessing the dataset
-    # The processor does everything for us (prepare the image using LayoutLMv3FeatureExtractor
+    # The processor does everything for us (prepare the image using LayoutLMv3ImageProcessor
     # and prepare the words, boxes and word-level labels using LayoutLMv3TokenizerFast)
     def prepare_examples(examples):
         images = examples[image_column_name]

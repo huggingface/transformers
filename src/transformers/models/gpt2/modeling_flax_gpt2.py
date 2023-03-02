@@ -37,7 +37,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
-_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 
 GPT2_START_DOCSTRING = r"""
@@ -80,7 +79,7 @@ GPT2_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length`. Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPT2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -200,7 +199,6 @@ class FlaxGPT2Attention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
@@ -255,7 +253,7 @@ class FlaxGPT2Attention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e4).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -670,7 +668,6 @@ class FlaxGPT2Model(FlaxGPT2PreTrainedModel):
 
 append_call_sample_docstring(
     FlaxGPT2Model,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
     _CONFIG_FOR_DOC,
@@ -774,7 +771,6 @@ class FlaxGPT2LMHeadModel(FlaxGPT2PreTrainedModel):
 
 append_call_sample_docstring(
     FlaxGPT2LMHeadModel,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,

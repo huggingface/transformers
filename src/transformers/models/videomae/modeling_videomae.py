@@ -106,6 +106,7 @@ class VideoMAEForPreTrainingOutput(ModelOutput):
 # https://github.com/jadore801120/attention-is-all-you-need-pytorch/blob/master/transformer/Models.py#L31
 def get_sinusoid_encoding_table(n_position, d_hid):
     """Sinusoid position encoding table"""
+
     # TODO: make it with torch instead of numpy
     def get_position_angle_vec(position):
         return [position / np.power(10000, 2 * (hid_j // 2) / d_hid) for hid_j in range(d_hid)]
@@ -236,7 +237,6 @@ class VideoMAESelfAttention(nn.Module):
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-
         k_bias = torch.zeros_like(self.v_bias, requires_grad=False) if self.q_bias is not None else None
         keys = nn.functional.linear(input=hidden_states, weight=self.key.weight, bias=k_bias)
         values = nn.functional.linear(input=hidden_states, weight=self.value.weight, bias=self.v_bias)
@@ -286,7 +286,6 @@ class VideoMAESelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -344,7 +343,6 @@ class VideoMAEIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
@@ -510,7 +508,7 @@ VIDEOMAE_START_DOCSTRING = r"""
 VIDEOMAE_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`VideoMAEImageProcessor`]. See
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`VideoMAEImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -581,7 +579,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> from decord import VideoReader, cpu
         >>> import numpy as np
 
-        >>> from transformers import VideoMAEImageProcessor, VideoMAEModel
+        >>> from transformers import AutoImageProcessor, VideoMAEModel
         >>> from huggingface_hub import hf_hub_download
 
 
@@ -605,7 +603,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> image_processor = VideoMAEImageProcessor.from_pretrained("MCG-NJU/videomae-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = VideoMAEModel.from_pretrained("MCG-NJU/videomae-base")
 
         >>> # prepare video for the model
@@ -765,14 +763,14 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import VideoMAEImageProcessor, VideoMAEForPreTraining
+        >>> from transformers import AutoImageProcessor, VideoMAEForPreTraining
         >>> import numpy as np
         >>> import torch
 
         >>> num_frames = 16
         >>> video = list(np.random.randn(16, 3, 224, 224))
 
-        >>> image_processor = VideoMAEImageProcessor.from_pretrained("MCG-NJU/videomae-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base")
 
         >>> pixel_values = image_processor(video, return_tensors="pt").pixel_values
@@ -819,11 +817,15 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         loss = None
         with torch.no_grad():
             # calculate the labels to be predicted
-            # first, unnormalize the frames
-            device = pixel_values.device
-            mean = torch.as_tensor(IMAGENET_DEFAULT_MEAN).to(device)[None, None, :, None, None]
-            std = torch.as_tensor(IMAGENET_DEFAULT_STD).to(device)[None, None, :, None, None]
-            frames = pixel_values * std + mean  # in [0, 1]
+            if self.config.num_channels != 3:
+                # Can't unnormalize with default means/stds
+                frames = pixel_values
+            else:
+                # first, unnormalize the frames
+                device = pixel_values.device
+                mean = torch.as_tensor(IMAGENET_DEFAULT_MEAN).to(device)[None, None, :, None, None]
+                std = torch.as_tensor(IMAGENET_DEFAULT_STD).to(device)[None, None, :, None, None]
+                frames = pixel_values * std + mean  # in [0, 1]
 
             batch_size, time, num_channels, height, width = frames.shape
             tubelet_size, patch_size = self.config.tubelet_size, self.config.patch_size
@@ -859,6 +861,10 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
                     tubelet_size * patch_size * patch_size * num_channels,
                 )
             else:
+                if self.config.num_channels != 3:
+                    raise ValueError(
+                        "Can't unnormalize non-RGB images. Consider setting config.norm_pix_loss to False."
+                    )
                 # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
                 frames = frames.view(
                     batch_size,
@@ -898,8 +904,8 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
 
 @add_start_docstrings(
-    """VideoMAE Model transformer with a video classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.""",
+    """VideoMAE Model transformer with a video classification head on top (a linear layer on top of the average pooled hidden
+    states of all tokens) e.g. for ImageNet.""",
     VIDEOMAE_START_DOCSTRING,
 )
 class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
@@ -942,7 +948,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         >>> import torch
         >>> import numpy as np
 
-        >>> from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification
+        >>> from transformers import AutoImageProcessor, VideoMAEForVideoClassification
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
@@ -968,7 +974,7 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(videoreader))
         >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> image_processor = VideoMAEImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
         >>> model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
 
         >>> inputs = image_processor(list(video), return_tensors="pt")

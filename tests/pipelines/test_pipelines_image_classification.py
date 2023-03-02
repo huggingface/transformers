@@ -30,7 +30,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -45,12 +45,12 @@ else:
 
 @require_torch_or_tf
 @require_vision
-class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ImageClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        image_classifier = ImageClassificationPipeline(model=model, feature_extractor=feature_extractor, top_k=2)
+    def get_test_pipeline(self, model, tokenizer, processor):
+        image_classifier = ImageClassificationPipeline(model=model, image_processor=processor, top_k=2)
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
             "http://images.cocodataset.org/val2017/000000039769.jpg",
