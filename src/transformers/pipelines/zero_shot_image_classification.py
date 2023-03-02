@@ -1,4 +1,5 @@
 from typing import List, Union
+from collections import  UserDict
 
 from ..utils import (
     add_end_docstrings,
@@ -8,7 +9,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, ChunkPipeline
+from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_vision_available():
@@ -28,7 +29,7 @@ logger = logging.get_logger(__name__)
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
-class ZeroShotImageClassificationPipeline(ChunkPipeline):
+class ZeroShotImageClassificationPipeline(Pipeline):
     """
     Zero shot image classification pipeline using `CLIPModel`. This pipeline predicts the class of an image when you
     provide an image and a set of `candidate_labels`.
@@ -95,16 +96,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
             - **label** (`str`) -- The label identified by the model. It is one of the suggested `candidate_label`.
             - **score** (`float`) -- The score attributed by the model for that label (between 0 and 1).
         """
-        batch_size = kwargs.get("batch_size", 1)
-        kwargs["batch_size"] = 1
-        if isinstance(images, list):
-            res = []
-            for i in range(0, len(images), batch_size):
-                batch_images = images[i : i + batch_size]
-                res.extend(super().__call__(batch_images, **kwargs))
-            return res
-        else:
-            return super().__call__(images, **kwargs)
+        return super().__call__(images, **kwargs)
 
     def _sanitize_parameters(self, **kwargs):
         preprocess_params = {}
@@ -117,35 +109,50 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
 
     def preprocess(self, image, candidate_labels=None, hypothesis_template="This is a photo of {}."):
         image = load_image(image)
-        sequences = [hypothesis_template.format(x) for x in candidate_labels]
-        inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)
-        images = self.image_processor(images=[image], return_tensors=self.framework)
-        inputs["pixel_values"] = images.pixel_values
+        inputs = self.image_processor(images=[image], return_tensors=self.framework)
         inputs["candidate_labels"] = candidate_labels
-        inputs["is_last"] = True
-        yield inputs
+        sequences = [hypothesis_template.format(x) for x in candidate_labels]
+        text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)
+        inputs["text_inputs"] =  [text_inputs]
+        return inputs
 
     def _forward(self, model_inputs):
-        is_last = model_inputs.pop("is_last")
         candidate_labels = model_inputs.pop("candidate_labels")
-        outputs = self.model(**model_inputs)
+        text_inputs = model_inputs.pop("text_inputs")
+        if isinstance(text_inputs[0], UserDict):
+            text_inputs = [text_inputs]
+        text_embeds = self.model.get_text_features(**text_inputs[0][0])
+        image_embeds = self.model.get_image_features(**model_inputs)
+
+        if self.framework == "tf":
+            # normalized features
+            image_embeds = image_embeds / tf.norm(tensor=image_embeds, ord="euclidean", axis=-1, keepdims=True)
+            text_embeds = text_embeds / tf.norm(tensor=text_embeds, ord="euclidean", axis=-1, keepdims=True)
+            logit_scale = tf.math.exp(self.model.clip.logit_scale)
+            logits = tf.math.reduce_sum(text_embeds * tf.expand_dims(image_embeds, 1), -1) * logit_scale
+        else:
+            image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
+            text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
+            logit_scale = self.model.logit_scale.exp()
+            logits = (text_embeds * image_embeds.unsqueeze(dim=1)).sum(dim=-1) * logit_scale
+
+
 
         model_outputs = {
-            "is_last": is_last,
             "candidate_labels": candidate_labels,
-            "logits_per_image": outputs.logits_per_image,
+            "logits": logits,
         }
         return model_outputs
 
     def postprocess(self, model_outputs):
-        candidate_labels = model_outputs[0].pop("candidate_labels")
-        logits = model_outputs[0]["logits_per_image"]
+        candidate_labels = model_outputs.pop("candidate_labels")
+        logits = model_outputs["logits"][0]
         if self.framework == "pt":
-            probs = logits.softmax(dim=1)
-            scores = probs[0].tolist()
+            probs = logits.softmax(dim=-1).squeeze(-1)
+            scores = probs.tolist()
         else:
-            probs = stable_softmax(logits, axis=1)
-            scores = probs[0].numpy().tolist()
+            probs = stable_softmax(logits, axis=-1)
+            scores = probs.numpy().tolist()
 
         result = [
             {"score": score, "label": candidate_label}
