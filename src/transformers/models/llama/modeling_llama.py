@@ -391,8 +391,9 @@ class LLaMaModel(LLaMaPreTrainedModel):
 
         self.embed = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([LLaMaLayer(config) for _ in range(config.num_hidden_layers)])
+        head_size = config.hidden_size // config.num_attention_heads
         self.rotary_emb = RotaryEmbedding(
-            config.hidden_size, config.max_position_embeddings
+            head_size, config.max_position_embeddings
         )
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
