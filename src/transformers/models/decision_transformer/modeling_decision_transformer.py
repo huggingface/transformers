@@ -554,12 +554,11 @@ class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
         else:
             past_length = past_key_values[0][0].size(-2)
 
-
-        if attention_mask is not None and len(attention_mask.shape)==2 and position_ids is None:
+        if attention_mask is not None and len(attention_mask.shape) == 2 and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_length>0:
+            if past_length > 0:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         elif position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
