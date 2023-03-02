@@ -357,7 +357,8 @@ Often, readers will try out the example before even going through the function
 or class definitions. Therefore, it is of utmost importance that the example 
 works as expected.
 
-## Docstring testing
+## Docstring testing 
+#TODO this will be completly changed!
 
 To do so each example should be included in the doctests. 
 We use pytests' [doctest integration](https://docs.pytest.org/doctest.html) to verify that all of our examples run correctly. 
