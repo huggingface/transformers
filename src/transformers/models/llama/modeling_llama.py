@@ -154,7 +154,7 @@ class LLaMaAttention(nn.Module):
 
         # Reshape outputs
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_size)
-        attn_output = self.dense(attn_output)
+        attn_output = self.o(attn_output)
 
         outputs = (attn_output, present)
         if output_attentions:
