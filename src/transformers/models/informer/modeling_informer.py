@@ -1601,7 +1601,7 @@ class InformerDecoder(InformerPreTrainedModel):
             raise ValueError("The `prediction_length` config needs to be specified.")
 
         self.value_embedding = ValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
-        self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
+        self.embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         )
         self.layers = nn.ModuleList([InformerDecoderLayer(config) for _ in range(config.decoder_layers)])
