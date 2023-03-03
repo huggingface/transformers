@@ -43,7 +43,7 @@ class MegaConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Mega model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MegaModel`] or [`TFMegaModel`].
+            `inputs_ids` passed when calling [`MegaModel`].
         hidden_size (`int`, *optional*, defaults to 128):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 4):
@@ -54,8 +54,8 @@ class MegaConfig(PretrainedConfig):
         ema_projection_size (`int`, *optional*, defaults to 16):
             Dimensionality of the MultiHeadEMA
         bidirectional (`bool`, *optional*, defaults to `True`):
-            Whether the MultiHeadEMA used in Mega's self-attention should work bidirectionally (True) or
-            unidirectionally (False). Bidirectional EMA is incompatible with causal decoding, so this should be False
+            Whether the MultiHeadEMA used in Mega's self-attention should work bidirectionally (`True`) or
+            unidirectionally (`False`). Bidirectional EMA is incompatible with causal decoding, so this should be False
             if you intend to use the model as a decoder.
         shared_representation_size (`int`, *optional*, defaults to 64):
             Dimensionality of the linear projection for shared representation after silu gating (Z in the Mega paper).
@@ -88,8 +88,8 @@ class MegaConfig(PretrainedConfig):
         use_feature_dropout (`bool`, *optional*, defaults to `False`):
             Whether to use feature-based (True) or standard dropout (False)
         use_normalized_ffn (`bool`, *optional*, defaults to `True`):
-            Whether to use the normalized feed-forward sub-layer in Mega blocks (True) or pass Mega encoder output
-            as-is (False)
+            Whether to use the normalized feed-forward sub-layer in Mega blocks (`True`) or pass Mega encoder output
+            as-is (`False`)
         nffn_hidden_size (`int`, *optional*, defaults to 256):
             If using the NFFN layer (use_normalized_ffn = True), this is the hidden size of the NFFN
         normalize_before_ffn (`bool`, *optional*, defaults to `True`):
@@ -214,9 +214,9 @@ class MegaConfig(PretrainedConfig):
         self.add_token_type_embeddings = add_token_type_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
-        self.ema_delta_alpha_range = ema_delta_alpha_range  # 0.2
-        self.ema_beta_range = ema_beta_range  # 0.02
-        self.ema_gamma_omega_range = ema_gamma_omega_range  # 1.0
+        self.ema_delta_alpha_range = ema_delta_alpha_range
+        self.ema_beta_range = ema_beta_range
+        self.ema_gamma_omega_range = ema_gamma_omega_range
         self.relative_positional_bias = relative_positional_bias
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
