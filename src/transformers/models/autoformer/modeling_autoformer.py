@@ -862,11 +862,11 @@ class AutoformerAttention(nn.Module):
         attn_weights = torch.fft.irfft(attn_weights, dim=1)  # Autocorrelation "corr"
 
         src_len = key_states.size(1)
-        # attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        channel = key_states.size(2)
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, self.embed_dim):
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, channel):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, self.embed_dim)}, but is"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, channel)}, but is"
                 f" {attn_weights.size()}"
             )
 
@@ -904,7 +904,24 @@ class AutoformerAttention(nn.Module):
         # attn_output = torch.bmm(attn_probs, value_states)
 
         if self.training:
-            time_delay_agg_training()
+            # time_delay_agg_training()
+            time_length = value_states.size(1)
+            autocorrelations = attn_weights.view(bsz, self.num_heads, channel, src_len)
+
+            # find top k autocorrelations
+            top_k = int(self.factor * math.log(length))
+            mean_on_head_channel = torch.mean(torch.mean(autocorrelations, dim=1), dim=1)  # bsz x src_len
+            mean_on_bsz = torch.mean(mean_on_head_channel, dim=0)
+            top_k_autocorrelations = torch.topk(mean_on_bsz, top_k)[1]
+
+            # stack them together
+            weights_list = [mean_on_head_channel[:, top_k_autocorrelations[i]] for i in range(top_k)]
+            weights = torch.stack(weights_list, dim=-1)  # bsz x top_k todo: think can be without dim=-1
+
+            tmp_corr = torch.softmax(weights, dim=-1)
+
+            # aggregation
+
         else:
             time_delay_agg_inference()
 
