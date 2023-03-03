@@ -41,6 +41,7 @@ def generate_config(params_json_path: Path, vocab_size: int) -> LLaMaConfig:
         num_hidden_layers=hyperparameters["n_layers"],
         num_attention_heads=hyperparameters["n_heads"],
         intermediate_size=intermediate_size,
+        torch_dtype=torch.float16,
         max_position_embeddings=2048,
         layer_norm_eps=hyperparameters["norm_eps"],
         tie_word_embeddings=False,
