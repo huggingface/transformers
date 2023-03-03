@@ -41,7 +41,7 @@ class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         reconstructed_text = tokenizer.decode(input_jieba_tokens)
         self.assertEqual(reconstructed_text, normalized_text)
 
-    def test_pre_tokenization_fast(self):
+    def test_pre_fast_tokenization(self):
         tokenizer = CPMAntTokenizerFast.from_pretrained("openbmb/cpm-ant-10b")
         texts = "今天天气真好！"
         jieba_tokens = ["今天", "天气", "真", "好", "！"]
