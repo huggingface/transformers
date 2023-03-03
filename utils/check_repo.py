@@ -628,7 +628,9 @@ def check_all_auto_object_names_being_defined():
 
     # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
     for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
-        module = getattr(transformers.models.auto, module_name)
+        module = getattr(transformers.models.auto, module_name, None)
+        if module is None:
+            continue
         # all mappings in a single auto modeling file
         mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
         mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
@@ -667,7 +669,9 @@ def check_all_auto_mapping_names_in_config_mapping_names():
 
     # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
     for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
-        module = getattr(transformers.models.auto, module_name)
+        module = getattr(transformers.models.auto, module_name, None)
+        if module is None:
+            continue
         # all mappings in a single auto modeling file
         mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
         mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
