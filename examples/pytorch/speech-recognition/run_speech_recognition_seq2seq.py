@@ -113,6 +113,27 @@ class ModelArguments:
     suppress_tokens: List[int] = field(
         default=None, metadata={"help": "A list of tokens that will be suppressed at generation."}
     )
+    apply_spec_augment: bool = field(
+        default=False, metadata={"help": "Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder."}
+    )
+    mask_time_prob: float = field(
+        default=0.05, metadata={"help": "Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking procecure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector span to be masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment == True`."}
+    )
+    mask_time_length: int = field(
+        default=10, metadata={"help": "Length of vector span along the time axis."}
+    )
+    mask_time_min_masks: int = field(
+        default=2, metadata={"help": "The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step, irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length < mask_time_min_masks''"}
+    )
+    mask_feature_prob: float = field(
+        default=0.0, metadata={"help": "Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`."}
+    )
+    mask_feature_length: int = field(
+        default=10, metadata={"help": "Length of vector span along the feature axis."}
+    )
+    mask_feature_min_masks: int = field(
+        default=0, metadata={"help": "The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time step, irrespectively of `mask_feature_prob`. Only relevant if `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`."}
+    )
 
 
 @dataclass
@@ -227,10 +248,13 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             The processor used for processing the data.
         decoder_start_token_id (`int`)
             The begin-of-sentence of the decoder.
+        return_attention_mask (`bool`)
+            Whether to return attention_mask.
     """
 
     processor: Any
     decoder_start_token_id: int
+    return_attention_mask: bool
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
@@ -240,6 +264,9 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
+
+        if self.return_attention_mask:
+            batch["attention_mask"] = torch.LongTensor([feature["attention_mask"] for feature in features])
 
         labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
 
@@ -365,7 +392,19 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
-    config.update({"forced_decoder_ids": model_args.forced_decoder_ids, "suppress_tokens": model_args.suppress_tokens})
+    config.update(
+        {
+            "forced_decoder_ids": model_args.forced_decoder_ids,
+            "suppress_tokens": model_args.suppress_tokens,
+            "apply_spec_augment": model_args.apply_spec_augment,
+            "mask_time_prob": model_args.mask_time_prob,
+            "mask_time_length": model_args.mask_time_length,
+            "mask_time_min_masks": model_args.mask_time_min_masks,
+            "mask_feature_prob": model_args.mask_feature_prob,
+            "mask_feature_length": model_args.mask_feature_length,
+            "mask_feature_min_masks": model_args.mask_feature_min_masks,
+        }
+    )
 
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.feature_extractor_name if model_args.feature_extractor_name else model_args.model_name_or_path,
@@ -418,6 +457,8 @@ def main():
     text_column_name = data_args.text_column_name
     model_input_name = feature_extractor.model_input_names[0]
     do_lower_case = data_args.do_lower_case
+    # if SpecAugment is used, return attention_mask to guide the mask along time axis
+    return_attention_mask = model_args.apply_spec_augment
 
     if data_args.max_train_samples is not None:
         raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
@@ -428,10 +469,12 @@ def main():
     def prepare_dataset(batch):
         # process audio
         sample = batch[audio_column_name]
-        inputs = feature_extractor(sample["array"], sampling_rate=sample["sampling_rate"])
+        inputs = feature_extractor(sample["array"], sampling_rate=sample["sampling_rate"], return_attention_mask=return_attention_mask)
         # process audio length
         batch[model_input_name] = inputs.get(model_input_name)[0]
         batch["input_length"] = len(sample["array"])
+        if return_attention_mask:
+            batch["attention_mask"] = inputs.get("attention_mask")[0]
 
         # process targets
         input_str = batch[text_column_name].lower() if do_lower_case else batch[text_column_name]
@@ -496,6 +539,7 @@ def main():
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(
         processor=processor,
         decoder_start_token_id=model.config.decoder_start_token_id,
+        return_attention_mask=return_attention_mask,
     )
 
     # 11. Initialize Trainer
