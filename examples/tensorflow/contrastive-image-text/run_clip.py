@@ -36,12 +36,12 @@ import transformers
 from transformers import (
     AutoImageProcessor,
     TFAutoModel,
+    Dual
     AutoTokenizer,
     HfArgumentParser,
     TFTrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
@@ -62,6 +62,15 @@ class ModelArguments:
 
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
+        default=None
+    )
+    image_model_name_or_path: str = field(
+        metadata={"help": "Path to pretrained image model or model identifier from huggingface.co/models"},
+        default=None
+    )
+    text_model_name_or_path: str = field(
+        metadata={"help": "Path to pretrained text model or model identifier from huggingface.co/models"},
+        default=None
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -229,9 +238,20 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.model_name_or_path is not None:
+        if model_args.image_model_name_or_path is not None or model_args.text_model_name_or_path is not None:
+            raise ValueError("If using model_name_or_path, you cannot specify separate image/text model paths as well!")
+
+    if model_args.image_model_name_or_path is not None or model_args.text_model_name_or_path is not None:
+        if model_args.model_name_or_path is not None:
+            raise ValueError("If using separate image/text model paths, you cannot specify model_name_or_path as well!")
+        if not (model_args.image_model_name_or_path is not None and model_args.text_model_name_or_path is not None):
+            raise ValueError("If using separate image/text model paths, you must specify both image_model_name_or_path "
+                             "and text_model_name_or_path!")
+
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_clip", model_args, data_args)
+    # information sent is the one passed as arguments along with your Python/TensorFlow versions.
+    send_example_telemetry("run_clip", model_args, data_args, framework="tensorflow")
 
     # 2. Setup logging
     logging.basicConfig(
@@ -325,31 +345,58 @@ def main():
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
-    # Load image_processor, in this script we only use this to get the mean and std for normalization.
-    image_processor = AutoImageProcessor.from_pretrained(
-        model_args.image_processor_name or model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
+    if model_args.model_name_or_path:
+        # Load image_processor, in this script we only use this to get the mean and std for normalization.
+        image_processor = AutoImageProcessor.from_pretrained(
+            model_args.image_processor_name or model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
 
-    model = TFAutoModel.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
-    )
-    config = model.config
+        model = TFAutoModel.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+        config = model.config
+    else:
+        # Load image_processor, in this script we only use this to get the mean and std for normalization.
+        image_processor = AutoImageProcessor.from_pretrained(
+            model_args.image_processor_name or model_args.image_model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
 
-    def _freeze_params(module):
-        for param in module.parameters():
-            param.requires_grad = False
+        image_model = TFAutoModel.from_pretrained(
+            model_args.image_model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+
+        text_model = TFAutoModel.from_pretrained(
+            model_args.text_model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+
+        model = TFImageText.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
+        )
+        config = model.config
 
     if model_args.freeze_vision_model:
-        _freeze_params(model.vision_model)
+        model.vision_model.trainable = False
 
     if model_args.freeze_text_model:
-        _freeze_params(model.text_model)
+        model.text_model.trainable = False
 
     # set seed for torch dataloaders
     set_seed(training_args.seed)

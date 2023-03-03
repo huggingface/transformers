@@ -86,7 +86,7 @@ Finally, we can run the example script to train the model:
 ```bash
 python examples/tensorflow/contrastive-image-text/run_clip.py \
     --output_dir ./clip-roberta-finetuned \
-    --model_name_or_path ./clip-roberta \
+    --model_name_or_path clip-roberta \
     --data_dir $PWD/data \
     --dataset_name ydshieh/coco_dataset_script \
     --dataset_config_name=2017 \
