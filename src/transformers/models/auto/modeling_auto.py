@@ -303,7 +303,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("mpnet", "MPNetForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
         ("nezha", "NezhaForMaskedLM"),
-        ("nllb", "M2M100ForConditionalGeneration"),
         ("nystromformer", "NystromformerForMaskedLM"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
         ("pegasus_x", "PegasusXForConditionalGeneration"),
@@ -496,6 +495,8 @@ MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
+        ("blip", "BlipForConditionalGeneration"),
+        ("blip-2", "Blip2ForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
     ]
 )
@@ -592,7 +593,6 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForConditionalGeneration"),
         ("mt5", "MT5ForConditionalGeneration"),
         ("mvp", "MvpForConditionalGeneration"),
-        ("nllb", "M2M100ForConditionalGeneration"),
         ("pegasus", "PegasusForConditionalGeneration"),
         ("pegasus_x", "PegasusXForConditionalGeneration"),
         ("plbart", "PLBartForConditionalGeneration"),
@@ -936,7 +936,6 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("bit", "BitBackbone"),
         ("convnext", "ConvNextBackbone"),
         ("dinat", "DinatBackbone"),
-        ("efficientnet", "EfficientNetBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("nat", "NatBackbone"),
         ("resnet", "ResNetBackbone"),
