@@ -283,6 +283,8 @@
         title: ESM
       - local: model_doc/flan-t5
         title: FLAN-T5
+      - local: model_doc/flan-ul2
+        title: FLAN-UL2
       - local: model_doc/flaubert
         title: FlauBERT
       - local: model_doc/fnet
