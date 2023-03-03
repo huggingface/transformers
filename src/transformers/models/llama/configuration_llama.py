@@ -83,6 +83,11 @@ class LLaMaConfig(PretrainedConfig):
         use_cache=True,
         **kwargs,
     ):
+        if "tie_word_embeddings" in kwargs:
+            assert kwargs["tie_word_embeddings"] is False, "LLaMa doesn't have tied embeddings layer"
+        else:
+            # Make sure that we set it at False
+            kwargs["tie_word_embeddings"] = False
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
