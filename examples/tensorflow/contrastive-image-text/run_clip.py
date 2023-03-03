@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2022 The HuggingFace Team All rights reserved.
+# Copyright 2023 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,17 +29,20 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
+import tensorflow as tf
 from datasets import load_dataset
 from PIL import Image
 
 import transformers
 from transformers import (
     AutoImageProcessor,
-    TFAutoModel,
-    Dual
     AutoTokenizer,
     HfArgumentParser,
+    PushToHubCallback,
+    TFAutoModel,
     TFTrainingArguments,
+    TFVisionTextDualEncoderModel,
+    create_optimizer,
     set_seed,
 )
 from transformers.utils import check_min_version, send_example_telemetry
@@ -61,16 +64,14 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
-        default=None
+        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}, default=None
     )
-    image_model_name_or_path: str = field(
+    vision_model_name_or_path: str = field(
         metadata={"help": "Path to pretrained image model or model identifier from huggingface.co/models"},
-        default=None
+        default=None,
     )
     text_model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained text model or model identifier from huggingface.co/models"},
-        default=None
+        metadata={"help": "Path to pretrained text model or model identifier from huggingface.co/models"}, default=None
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -194,34 +195,39 @@ dataset_name_mapping = {
 }
 
 
-# # We use tf.data for faster image pre-processing.
-# class Transform(torch.nn.Module):
-#     def __init__(self, image_size, mean, std):
-#         super().__init__()
-#         self.transforms = torch.nn.Sequential(
-#             Resize([image_size], interpolation=InterpolationMode.BICUBIC),
-#             CenterCrop(image_size),
-#             ConvertImageDtype(torch.float),
-#             Normalize(mean, std),
-#         )
-#
-#     def forward(self, x) -> torch.Tensor:
-#         """`x` should be an instance of `PIL.Image.Image`"""
-#         with torch.no_grad():
-#             x = self.transforms(x)
-#         return x
-#
-#
-# def collate_fn(examples):
-#     pixel_values = torch.stack([example["pixel_values"] for example in examples])
-#     input_ids = torch.tensor([example["input_ids"] for example in examples], dtype=torch.long)
-#     attention_mask = torch.tensor([example["attention_mask"] for example in examples], dtype=torch.long)
-#     return {
-#         "pixel_values": pixel_values,
-#         "input_ids": input_ids,
-#         "attention_mask": attention_mask,
-#         "return_loss": True,
-#     }
+def crop_to_square(image):
+    height, width = tf.shape(image)[0], tf.shape(image)[1]
+    if height > width:
+        image = tf.image.crop_to_bounding_box(image, (height - width) // 2, 0, width, width)
+    elif width > height:
+        image = tf.image.crop_to_bounding_box(image, 0, (width - height) // 2, height, height)
+    return image
+
+
+def load_as_tf_dataset(dataset, image_column, image_size, mean, std, batch_size, shuffle):
+    dataset = dataset.with_format("tensorflow")[:]  # Load the dataset as tensor slices, but not the images yet!
+    tf_dataset = tf.data.Dataset.from_tensor_slices(dataset)
+
+    def load_image(sample):
+        image_path = sample[image_column]
+        image = tf.io.read_file(image_path)
+        image = tf.image.decode_image(image, channels=3, expand_animations=False)
+        image = crop_to_square(image)
+        image = tf.image.resize(image, [image_size, image_size], method="bicubic", antialias=True)
+        image = image / 255.0
+        image = (image - mean) / std
+        image = tf.transpose(image, perm=[2, 0, 1])  # Convert to channels-first
+        sample["pixel_values"] = image
+        del sample[image_column]
+        return sample
+
+    if shuffle:
+        tf_dataset = tf_dataset.shuffle(len(tf_dataset))
+    tf_dataset = tf_dataset.map(load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    tf_dataset = tf_dataset.batch(batch_size, drop_remainder=shuffle)
+    tf_dataset = tf_dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
+    return tf_dataset
 
 
 def main():
@@ -239,15 +245,21 @@ def main():
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if model_args.model_name_or_path is not None:
-        if model_args.image_model_name_or_path is not None or model_args.text_model_name_or_path is not None:
-            raise ValueError("If using model_name_or_path, you cannot specify separate image/text model paths as well!")
+        if model_args.vision_model_name_or_path is not None or model_args.text_model_name_or_path is not None:
+            raise ValueError(
+                "If using model_name_or_path, you cannot specify separate image/text model paths as well!"
+            )
 
-    if model_args.image_model_name_or_path is not None or model_args.text_model_name_or_path is not None:
+    if model_args.vision_model_name_or_path is not None or model_args.text_model_name_or_path is not None:
         if model_args.model_name_or_path is not None:
-            raise ValueError("If using separate image/text model paths, you cannot specify model_name_or_path as well!")
-        if not (model_args.image_model_name_or_path is not None and model_args.text_model_name_or_path is not None):
-            raise ValueError("If using separate image/text model paths, you must specify both image_model_name_or_path "
-                             "and text_model_name_or_path!")
+            raise ValueError(
+                "If using separate image/text model paths, you cannot specify model_name_or_path as well!"
+            )
+        if not (model_args.vision_model_name_or_path is not None and model_args.text_model_name_or_path is not None):
+            raise ValueError(
+                "If using separate image/text model paths, you must specify both vision_model_name_or_path "
+                "and text_model_name_or_path!"
+            )
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/TensorFlow versions.
@@ -280,7 +292,6 @@ def main():
     # 3. Detecting last checkpoint and eventualy continue from last checkpoint
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
-        last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
@@ -339,6 +350,10 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
+    elif model_args.text_model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.text_model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+        )
     else:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
@@ -360,37 +375,22 @@ def main():
             revision=model_args.model_revision,
             use_auth_token=True if model_args.use_auth_token else None,
         )
-        config = model.config
     else:
         # Load image_processor, in this script we only use this to get the mean and std for normalization.
         image_processor = AutoImageProcessor.from_pretrained(
-            model_args.image_processor_name or model_args.image_model_name_or_path,
+            model_args.image_processor_name or model_args.vision_model_name_or_path,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
             use_auth_token=True if model_args.use_auth_token else None,
         )
 
-        image_model = TFAutoModel.from_pretrained(
-            model_args.image_model_name_or_path,
+        model = TFVisionTextDualEncoderModel.from_vision_text_pretrained(
+            vision_model_name_or_path=model_args.vision_model_name_or_path,
+            text_model_name_or_path=model_args.text_model_name_or_path,
             cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
             use_auth_token=True if model_args.use_auth_token else None,
         )
-
-        text_model = TFAutoModel.from_pretrained(
-            model_args.text_model_name_or_path,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-
-        model = TFImageText.from_pretrained(
-            model_args.model_name_or_path,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-        config = model.config
+    config = model.config
 
     if model_args.freeze_vision_model:
         model.vision_model.trainable = False
@@ -433,23 +433,13 @@ def main():
             )
 
     # # 7. Preprocessing the datasets.
-    # # Initialize torchvision transforms and jit it for faster processing.
-    # image_transformations = Transform(
-    #     config.vision_config.image_size, image_processor.image_mean, image_processor.image_std
-    # )
 
-    # Preprocessing the datasets.
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples):
         captions = list(examples[caption_column])
         text_inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True)
         examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask
-        return examples
-
-    def transform_images(examples):
-        images = [read_image(image_file, mode=ImageReadMode.RGB) for image_file in examples[image_column]]
-        examples["pixel_values"] = [image_transformations(image) for image in images]
         return examples
 
     def filter_corrupt_images(examples):
@@ -483,10 +473,15 @@ def main():
             desc="Running tokenizer on train dataset",
         )
 
-        breakpoint()
-
-        # Transform images on the fly as doing it on the whole dataset takes too much time.
-        train_dataset.set_transform(transform_images)
+        tf_train_dataset = load_as_tf_dataset(
+            dataset=train_dataset,
+            batch_size=training_args.per_device_train_batch_size,
+            image_column=image_column,
+            image_size=config.vision_config.image_size,
+            mean=image_processor.image_mean,
+            std=image_processor.image_std,
+            shuffle=True,
+        )
 
     if training_args.do_eval:
         if "validation" not in dataset:
@@ -508,74 +503,82 @@ def main():
             desc="Running tokenizer on validation dataset",
         )
 
-        # Transform images on the fly as doing it on the whole dataset takes too much time.
-        eval_dataset.set_transform(transform_images)
-
-    if training_args.do_predict:
-        if "test" not in dataset:
-            raise ValueError("--do_predict requires a test dataset")
-        test_dataset = dataset["test"]
-        if data_args.max_eval_samples is not None:
-            max_eval_samples = min(len(test_dataset), data_args.max_eval_samples)
-            test_dataset = test_dataset.select(range(max_eval_samples))
-
-        test_dataset = test_dataset.filter(
-            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
-        )
-        test_dataset = test_dataset.map(
-            function=tokenize_captions,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=[col for col in column_names if col != image_column],
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on test dataset",
+        tf_eval_dataset = load_as_tf_dataset(
+            dataset=eval_dataset,
+            batch_size=training_args.per_device_eval_batch_size,
+            image_column=image_column,
+            image_size=config.vision_config.image_size,
+            mean=image_processor.image_mean,
+            std=image_processor.image_std,
+            shuffle=False,
         )
 
-        # Transform images on the fly as doing it on the whole dataset takes too much time.
-        test_dataset.set_transform(transform_images)
-
-    # 8. Initalize our trainer
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=eval_dataset if training_args.do_eval else None,
-        data_collator=collate_fn,
-    )
-
-    # 9. Training
-    if training_args.do_train:
-        checkpoint = None
-        if training_args.resume_from_checkpoint is not None:
-            checkpoint = training_args.resume_from_checkpoint
-        elif last_checkpoint is not None:
-            checkpoint = last_checkpoint
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        trainer.save_model()
-        trainer.log_metrics("train", train_result.metrics)
-        trainer.save_metrics("train", train_result.metrics)
-        trainer.save_state()
-
-    # 10. Evaluation
-    if training_args.do_eval:
-        metrics = trainer.evaluate()
-        trainer.log_metrics("eval", metrics)
-        trainer.save_metrics("eval", metrics)
-
-    # 11. Write Training Stats and push to hub.
-    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "contrastive-image-text-modeling"}
-    if data_args.dataset_name is not None:
-        kwargs["dataset_tags"] = data_args.dataset_name
-        if data_args.dataset_config_name is not None:
-            kwargs["dataset_args"] = data_args.dataset_config_name
-            kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+    # 8. Preparing push_to_hub and model card
+    push_to_hub_model_id = training_args.push_to_hub_model_id
+    model_name = model_args.model_name_or_path.split("/")[-1]
+    if not push_to_hub_model_id:
+        if data_args.dataset_name is not None:
+            push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
         else:
-            kwargs["dataset"] = data_args.dataset_name
+            push_to_hub_model_id = f"{model_name}-finetuned-token-classification"
+
+    model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "token-classification"}
+    if data_args.dataset_name is not None:
+        model_card_kwargs["dataset_tags"] = data_args.dataset_name
+        if data_args.dataset_config_name is not None:
+            model_card_kwargs["dataset_args"] = data_args.dataset_config_name
+            model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+        else:
+            model_card_kwargs["dataset"] = data_args.dataset_name
 
     if training_args.push_to_hub:
-        trainer.push_to_hub(**kwargs)
+        callbacks = [
+            PushToHubCallback(
+                output_dir=training_args.output_dir,
+                model_id=push_to_hub_model_id,
+                organization=training_args.push_to_hub_organization,
+                token=training_args.push_to_hub_token,
+                tokenizer=tokenizer,
+                **model_card_kwargs,
+            )
+        ]
     else:
-        trainer.create_model_card(**kwargs)
+        callbacks = []
+
+    # # 9. Training
+    if training_args.do_train:
+        num_train_steps = int(len(tf_train_dataset) * int(training_args.num_train_epochs))
+        if training_args.warmup_steps > 0:
+            num_warmup_steps = training_args.warmup_steps
+        elif training_args.warmup_ratio > 0:
+            num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+        else:
+            num_warmup_steps = 0
+        optimizer, lr_schedule = create_optimizer(
+            init_lr=training_args.learning_rate,
+            num_train_steps=num_train_steps,
+            num_warmup_steps=num_warmup_steps,
+            adam_beta1=training_args.adam_beta1,
+            adam_beta2=training_args.adam_beta2,
+            adam_epsilon=training_args.adam_epsilon,
+            weight_decay_rate=training_args.weight_decay,
+            adam_global_clipnorm=training_args.max_grad_norm,
+        )
+        model.compile(optimizer=optimizer, jit_compile=training_args.xla)
+
+        if not training_args.do_eval:
+            tf_eval_dataset = None
+        model.fit(
+            tf_train_dataset,
+            validation_data=tf_eval_dataset,
+            epochs=int(training_args.num_train_epochs),
+            callbacks=callbacks,
+        )
+
+    # # 10. Evaluation
+
+    if training_args.do_eval and not training_args.do_train:
+        model.evaluate(tf_eval_dataset)
 
 
 if __name__ == "__main__":
