@@ -349,7 +349,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
         if isinstance(is_longer, List):
             is_longer = [[longer] for longer in is_longer]
-            
+
         input_features = {"input_features": input_mel, "is_longer": is_longer}
         input_features = BatchFeature(input_features)
 
