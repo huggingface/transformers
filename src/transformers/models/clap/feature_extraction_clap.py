@@ -347,8 +347,8 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         if isinstance(input_mel[0], List):
             input_mel = [np.asarray(feature, dtype=np.float64) for feature in input_mel]
 
-        if isinstance(is_longer, List):
-            is_longer = [[longer] for longer in is_longer]
+        # is_longer is a list of bool
+        is_longer = [[longer] for longer in is_longer]
 
         input_features = {"input_features": input_mel, "is_longer": is_longer}
         input_features = BatchFeature(input_features)
