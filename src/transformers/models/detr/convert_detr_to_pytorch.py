@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team.
+# Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -348,9 +348,6 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     original_outputs = detr(pixel_values)
     outputs = model(pixel_values)
 
-    print("Logits:", outputs.logits[0, :3, :3])
-    print("Original logits:", original_outputs["pred_logits"][0, :3, :3])
-
     assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-3)
     assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-3)
     if is_panoptic:
@@ -375,7 +372,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--model_name", default="detr-resnet-50", type=str, help="Name of the DETR model you'd like to convert."
+        "--model_name",
+        default="detr-resnet-50",
+        type=str,
+        choices=["detr-resnet-50", "detr-resnet-101"],
+        help="Name of the DETR model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
