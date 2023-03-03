@@ -788,6 +788,7 @@ class MBartEncoder(MBartPreTrainedModel):
             input = input_ids
             input_shape = input.shape
             input_ids = input_ids.view(-1, input_shape[-1])
+            self.warn_if_pad_token_in_input_ids_no_attention_mask(input_ids, attention_mask)
         elif inputs_embeds is not None:
             input = inputs_embeds[:, :, -1]
         else:
@@ -1019,6 +1020,7 @@ class MBartDecoder(MBartPreTrainedModel):
             input = input_ids
             input_shape = input.size()
             input_ids = input_ids.view(-1, input_shape[-1])
+            self.warn_if_pad_token_in_input_ids_no_attention_mask(input_ids, attention_mask)
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
             input = inputs_embeds[:, :, -1]

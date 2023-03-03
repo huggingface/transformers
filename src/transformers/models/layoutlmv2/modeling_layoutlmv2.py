@@ -868,6 +868,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         input_shape = self._get_input_shape(input_ids, inputs_embeds)
+        self.warn_if_pad_token_in_input_ids_no_attention_mask(input_ids, attention_mask)
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         visual_shape = list(input_shape)

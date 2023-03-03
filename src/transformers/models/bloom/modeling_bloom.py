@@ -671,6 +671,7 @@ class BloomModel(BloomPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
+            self.warn_if_pad_token_in_input_ids_no_attention_mask(input_ids, attention_mask)
         elif inputs_embeds is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
         else:

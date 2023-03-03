@@ -173,6 +173,7 @@ class FlaubertModel(XLMModel):
         # removed: src_enc=None, src_len=None
         if input_ids is not None:
             bs, slen = input_ids.size()
+            self.warn_if_pad_token_in_input_ids_no_attention_mask(input_ids, attention_mask)
         else:
             bs, slen = inputs_embeds.size()[:-1]
 

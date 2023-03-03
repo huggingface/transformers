@@ -819,6 +819,7 @@ class ConvBertModel(ConvBertPreTrainedModel):
         elif input_ids is not None:
             input_shape = input_ids.size()
             batch_size, seq_length = input_shape
+            self.warn_if_pad_token_in_input_ids_no_attention_mask(input_ids, attention_mask)
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
