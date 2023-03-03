@@ -100,7 +100,7 @@ def convert_model(model_path: Path, config: LLaMaConfig) -> LLaMaForCausalLM:
                 continue
 
             # weights are sharded across TP
-            if any(original_name.endswith(suffix) for suffix in [".feed_forward.w2.weight", ".attention.wo.weight"]):
+            if any(original_name.endswith(suffix) for suffix in [".feed_forward.w2.weight", ".attention.wo.weight",  "tok_embeddings.weight"]):
                 # Row Linear weight
                 input_dim = transformers_param.shape[1]
                 assert input_dim % tp_size == 0
