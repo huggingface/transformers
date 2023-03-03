@@ -15,7 +15,7 @@
 
 import unittest
 
-from transformers.testing_utils import custom_tokenizers, is_torch_available
+from transformers.testing_utils import is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
