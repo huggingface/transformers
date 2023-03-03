@@ -81,7 +81,8 @@ def map_original_names_to_transformers_names(original_name: str):
 def convert_model(model_path: Path, config: LLaMaConfig) -> LLaMaForCausalLM:
     # HACK @thomasw21: Bypasses `reset_parameters` which can be quite costly.
     nn.Linear.reset_parameters = lambda *args: None
-    model = LLaMaForCausalLM(config=config)
+    model = LLaMaForCausalLM(config=config).to(config.torch_dtype)
+    print(f"Saving weights in {config.torch_dtype}")
 
     paths = sorted(model_path.glob("*.pth"))
     tp_size = len(paths)
