@@ -515,14 +515,19 @@ def main():
 
     # 8. Preparing push_to_hub and model card
     push_to_hub_model_id = training_args.push_to_hub_model_id
-    model_name = model_args.model_name_or_path.split("/")[-1]
+    if model_args.model_name_or_path is not None:
+        model_name = model_args.model_name_or_path.split("/")[-1]
+    else:
+        vision_name = model_args.vision_model_name_or_path.split("/")[-1]
+        text_name = model_args.text_model_name_or_path.split("/")[-1]
+        model_name = f"{vision_name}-{text_name}"
     if not push_to_hub_model_id:
         if data_args.dataset_name is not None:
             push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
         else:
-            push_to_hub_model_id = f"{model_name}-finetuned-token-classification"
+            push_to_hub_model_id = f"{model_name}-finetuned-contrastive-image-text-modeling"
 
-    model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "token-classification"}
+    model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "contrastive-image-text-modeling"}
     if data_args.dataset_name is not None:
         model_card_kwargs["dataset_tags"] = data_args.dataset_name
         if data_args.dataset_config_name is not None:
