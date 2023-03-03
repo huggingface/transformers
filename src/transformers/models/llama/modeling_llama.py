@@ -277,10 +277,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
     cos = cos[..., offset : q.shape[-2] + offset, :]
     sin = sin[..., offset : q.shape[-2] + offset, :]
     # q[...,::2] is considered the real part, q[...,1::2] is the imaginary part
-    q_real = q[...,::2].float()
-    q_imag = q[...,1::2].float()
-    k_real = k[...,::2].float()
-    k_imag = k[...,1::2].float()
+    q_float = q.float()
+    k_float = k.float()
+    q_real = q_float[...,::2].float()
+    q_imag = q_float[...,1::2].float()
+    k_real = k_float[...,::2].float()
+    k_imag = k_float[...,1::2].float()
     q_embed = torch.stack([q_real * cos - (q_imag * sin), q_real * sin + q_imag * cos], dim=-1).view(q.shape)
     k_embed = torch.stack([k_real * cos - (k_imag * sin), k_real * sin + k_imag * cos], dim=-1).view(k.shape)
     return q_embed.type_as(q), k_embed.type_as(k)

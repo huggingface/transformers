@@ -14,7 +14,7 @@
 # limitations under the License.
 import unittest
 
-from transformers import SPIECE_UNDERLINE, LLaMaTokenizer, LLaMaTokenizerFast
+from transformers import SPIECE_UNDERLINE, LLaMaTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
 from transformers.utils import is_tf_available, is_torch_available
 
@@ -35,8 +35,6 @@ else:
 @require_tokenizers
 class LLaMaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LLaMaTokenizer
-    rust_tokenizer_class = LLaMaTokenizerFast
-    test_rust_tokenizer = True
     test_sentencepiece = True
 
     def setUp(self):
