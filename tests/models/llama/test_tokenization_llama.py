@@ -36,6 +36,7 @@ else:
 class LLaMaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LLaMaTokenizer
     test_sentencepiece = True
+    test_rust_tokenizer = False
 
     def setUp(self):
         super().setUp()

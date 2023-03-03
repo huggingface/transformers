@@ -481,12 +481,6 @@ class LLaMaModel(LLaMaPreTrainedModel):
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
             attention_mask = attention_mask[:, None, None, :].to(torch.bool)
 
-        # Compute token offset for rotary embeddings (when decoding)
-        all_seq_length = seq_length
-        if past_key_values[0] is not None:
-            all_seq_length += past_key_values[0][0].shape[-2]
-        cos, sin = self.rotary_emb(device=input_ids.device, seq_len=all_seq_length)
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -496,6 +490,12 @@ class LLaMaModel(LLaMaPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed(input_ids)
+
+        # Compute token offset for rotary embeddings (when decoding)
+        all_seq_length = seq_length
+        if past_key_values[0] is not None:
+            all_seq_length += past_key_values[0][0].shape[-2]
+        cos, sin = self.rotary_emb(device=inputs_embeds.device, seq_len=all_seq_length)
 
         hidden_states = inputs_embeds
 
