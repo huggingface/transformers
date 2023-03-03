@@ -463,7 +463,7 @@ def main():
     model_input_name = feature_extractor.model_input_names[0]
     do_lower_case = data_args.do_lower_case
     # if SpecAugment is used, return attention_mask to guide the mask along time axis
-    return_attention_mask = model_args.apply_spec_augment
+    return_attention_mask = model_args.apply_spec_augment and model_args.mask_time_prob > 0
 
     if data_args.max_train_samples is not None:
         raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
