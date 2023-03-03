@@ -24,7 +24,7 @@ if is_torch_available():
     from transformers.models.cpmant import CPMAntTokenizer, CPMAntTokenizerFast
 
 
-@custom_tokenizers
+@unittest.skip("CPMAntTokenizer/-Fast process vocab in list format, so we skip the common test.")
 class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_pre_tokenization(self):
         tokenizer = CPMAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
