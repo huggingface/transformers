@@ -844,17 +844,29 @@ class AutoformerAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         # (1) period-based dependencies discovery
+
+        # Resize (truncation or zero filling)
+        # B, L, H, E = queries.shape
+        # _, S, _, D = values.shape
+        # if L > S:
+        #     zeros = torch.zeros_like(queries[:, :(L - S), :]).float()
+        #     values = torch.cat([values, zeros], dim=1)
+        #     keys = torch.cat([keys, zeros], dim=1)
+        # else:
+        #     values = values[:, :L, :, :]
+        #     keys = keys[:, :L, :, :]
+
         query_states_fft = torch.fft.rfft(query_states, dim=1)
         key_states_fft = torch.fft.rfft(key_states, dim=1)
         attn_weights = query_states_fft * torch.conj(key_states_fft)
-        attn_weights = torch.fft.irfft(attn_weights, dim=1)  # corr
+        attn_weights = torch.fft.irfft(attn_weights, dim=1)  # Autocorrelation "corr"
 
         src_len = key_states.size(1)
         # attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, self.embed_dim):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, self.embed_dim)}, but is"
                 f" {attn_weights.size()}"
             )
 

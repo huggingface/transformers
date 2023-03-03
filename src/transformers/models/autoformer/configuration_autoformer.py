@@ -161,7 +161,7 @@ class AutoformerConfig(PretrainedConfig):
         use_cache=True,
         # Autoformer arguments
         moving_avg: int = 25,
-        factor: int = 4,
+        factor: int =1, # between 1 and 3
         **kwargs
     ):
         # time series specific configuration
