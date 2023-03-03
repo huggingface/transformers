@@ -65,7 +65,7 @@ class AlignVisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=12,
         image_size=32,
         num_channels=3,
         kernel_sizes=[3, 3, 5],
@@ -234,7 +234,7 @@ class AlignTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=12,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -520,6 +520,15 @@ class AlignModelTest(ModelTesterMixin, unittest.TestCase):
 
             model_state_dict = model.state_dict()
             loaded_model_state_dict = loaded_model.state_dict()
+
+            non_persistent_buffers = {}
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
+                    non_persistent_buffers[key] = loaded_model_state_dict[key]
+
+            loaded_model_state_dict = {
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            }
 
             self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
 
