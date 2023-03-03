@@ -44,7 +44,7 @@ CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert -> cpmant
+# Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with Bert->CPMAnt
 def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -484,7 +484,7 @@ class CPMAntEncoder(nn.Module):
         return hidden_states, current_key_values, all_hidden_states, all_self_attns
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with bert -> cpmant
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->CPMAnt
 class CPMAntIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -595,7 +595,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         return relative_buckets
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with bert -> cpmant
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->CPMAnt
 class CPMAntOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
