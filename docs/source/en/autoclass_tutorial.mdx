@@ -136,4 +136,22 @@ Easily reuse the same checkpoint to load an architecture for a different task:
 
 Generally, we recommend using the `AutoTokenizer` class and the `TFAutoModelFor` class to load pretrained instances of models. This will ensure you load the correct architecture every time. In the next [tutorial](preprocessing), learn how to use your newly loaded tokenizer, image processor, feature extractor and processor to preprocess a dataset for fine-tuning.
 </tf>
+<jax>
+Finally, the `FlaxAutoModelFor` classes let you load a pretrained model for a given task (see [here](model_doc/auto) for a complete list of available tasks). For example, load a model for sequence classification with [`FlaxAutoModelForSequenceClassification.from_pretrained`]:
+
+```py
+>>> from transformers import FlaxAutoModelForSequenceClassification
+
+>>> model = FlaxAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+```
+
+Easily reuse the same checkpoint to load an architecture for a different task:
+
+```py
+>>> from transformers import FlaxAutoModelForTokenClassification
+
+>>> model = FlaxAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
+```
+
+Generally, we recommend using the `AutoTokenizer` class and the `FlaxAutoModelFor` class to load pretrained instances of models. This will ensure you load the correct architecture every time. In the next [tutorial](preprocessing), learn how to use your newly loaded tokenizer, image processor, feature extractor and processor to preprocess a dataset for fine-tuning.
 </frameworkcontent>

@@ -197,6 +197,16 @@ Use the end-of-sequence token as the padding token and set `mlm=False`. This wil
 ```
 
 </tf>
+<jax>
+Use the end-of-sequence token as the padding token and set `mlm=False`. This will use the inputs as labels shifted to the right by one element:
+
+```py
+>>> from transformers import DataCollatorForLanguageModeling
+
+>>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="jax")
+```
+
+</jax>
 </frameworkcontent>
 
 
@@ -411,4 +421,30 @@ Decode the generated token ids back into text:
 ['Somatic hypermutation allows the immune system to detect the presence of other viruses as they become more prevalent. Therefore, researchers have identified a high proportion of human viruses. The proportion of virus-associated viruses in our study increases with age. Therefore, we propose a simple algorithm to detect the presence of these new viruses in our samples as a sign of improved immunity. A first study based on this algorithm, which will be published in Science on Friday, aims to show that this finding could translate into the development of a better vaccine that is more effective for']
 ```
 </tf>
+<jax>
+Tokenize the text and return the `input_ids` as JAX Array:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_eli5_clm-model")
+>>> inputs = tokenizer(prompt, return_tensors="jax").input_ids
+```
+
+Use the [`~transformers.generation_jax_utils.FlaxGenerationMixin.generate`] method to create the summarization. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text generation strategies](../generation_strategies) page.
+
+```py
+>>> from transformers import FlaxAutoModelForCausalLM
+
+>>> model = FlaxAutoModelForCausalLM.from_pretrained("my_awesome_eli5_clm-model")
+>>> outputs = model.generate(inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95)
+```
+
+Decode the generated token ids back into text:
+
+```py
+>>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+['Somatic hypermutation allows the immune system to detect the presence of other viruses as they become more prevalent. Therefore, researchers have identified a high proportion of human viruses. The proportion of virus-associated viruses in our study increases with age. Therefore, we propose a simple algorithm to detect the presence of these new viruses in our samples as a sign of improved immunity. A first study based on this algorithm, which will be published in Science on Friday, aims to show that this finding could translate into the development of a better vaccine that is more effective for']
+```
+</jax>
 </frameworkcontent>

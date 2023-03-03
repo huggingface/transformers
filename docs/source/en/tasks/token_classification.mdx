@@ -173,6 +173,13 @@ Now create a batch of examples using [`DataCollatorWithPadding`]. It's more effi
 >>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
 ```
 </tf>
+<jax>
+```py
+>>> from transformers import DataCollatorForTokenClassification
+
+>>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="jax")
+```
+</jax>
 </frameworkcontent>
 
 ## Evaluate
@@ -555,4 +562,48 @@ Get the class with the highest probability, and use the model's `id2label` mappi
  'O']
 ```
 </tf>
+<jax>
+Tokenize the text and return JAX array:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_wnut_model")
+>>> inputs = tokenizer(text, return_tensors="jax")
+```
+
+Pass your inputs to the model and return the `logits`:
+
+```py
+>>> from transformers import FlaxAutoModelForTokenClassification
+
+>>> model = FlaxAutoModelForTokenClassification.from_pretrained("stevhliu/my_awesome_wnut_model")
+>>> logits = model(**inputs).logits
+```
+
+Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a text label:
+
+```py
+>>> predicted_token_class_ids = np.argmax(logits, axis=-1)
+>>> predicted_token_class = [model.config.id2label[t] for t in predicted_token_class_ids[0].tolist()]
+>>> predicted_token_class
+['O',
+ 'O',
+ 'B-location',
+ 'I-location',
+ 'B-group',
+ 'O',
+ 'O',
+ 'O',
+ 'O',
+ 'O',
+ 'O',
+ 'O',
+ 'O',
+ 'B-location',
+ 'B-location',
+ 'O',
+ 'O']
+```
+</jax>
 </frameworkcontent>

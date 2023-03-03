@@ -135,6 +135,13 @@ Now create a batch of examples using [`DataCollatorForSeq2Seq`]. It's more effic
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint, return_tensors="tf")
 ```
 </tf>
+<jax>
+```py
+>>> from transformers import DataCollatorForSeq2Seq
+
+>>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint, return_tensors="jax")
+```
+</jax>
 </frameworkcontent>
 
 ## Evaluate
@@ -396,4 +403,30 @@ Decode the generated token ids back into text:
 'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
 ```
 </tf>
+<jax>
+Tokenize the text and return the `input_ids` as JAX tensors:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_billsum_model")
+>>> inputs = tokenizer(text, return_tensors="jax").input_ids
+```
+
+Use the [`~transformers.generation_jax_utils.FlaxGenerationMixin.generate`] method to create the summarization. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](./main_classes/text_generation) API.
+
+```py
+>>> from transformers import FlaxAutoModelForSeq2SeqLM
+
+>>> model = FlaxAutoModelForSeq2SeqLM.from_pretrained("stevhliu/my_awesome_billsum_model")
+>>> outputs = model.generate(inputs, max_new_tokens=100, do_sample=False)
+```
+
+Decode the generated token ids back into text:
+
+```py
+>>> tokenizer.decode(outputs[0], skip_special_tokens=True)
+'the inflation reduction act lowers prescription drug costs, health care costs, and energy costs. it's the most aggressive action on tackling the climate crisis in american history. it will ask the ultra-wealthy and corporations to pay their fair share.'
+```
+</jax>
 </frameworkcontent>

@@ -192,6 +192,16 @@ Use the end-of-sequence token as the padding token and specify `mlm_probability`
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15, return_tensors="tf")
 ```
 </tf>
+<jax>
+
+Use the end-of-sequence token as the padding token and specify `mlm_probability` to randomly mask tokens each time you iterate over the data:
+
+```py
+>>> from transformers import DataCollatorForLanguageModeling
+
+>>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15, return_tensors="jax")
+```
+</jax>
 </frameworkcontent>
 
 ## Train
@@ -430,4 +440,37 @@ The Milky Way is a massive galaxy.
 The Milky Way is a small galaxy.
 ```
 </tf>
+<jax>
+Tokenize the text and return the `input_ids` as JAX tensors. You'll also need to specify the position of the `<mask>` token:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_eli5_mlm_model")
+>>> inputs = tokenizer(text, return_tensors="jax")
+>>> mask_token_index = jnp.where(inputs["input_ids"] == tokenizer.mask_token_id)[0, 1]
+```
+
+Pass your inputs to the model and return the `logits` of the masked token:
+
+```py
+>>> from transformers import FlaxAutoModelForMaskedLM
+
+>>> model = FlaxAutoModelForMaskedLM.from_pretrained("stevhliu/my_awesome_eli5_mlm_model")
+>>> logits = model(**inputs).logits
+>>> mask_token_logits = logits[0, mask_token_index, :]
+```
+
+Then return the three masked tokens with the highest probability and print them out:
+
+```py
+>>> top_3_tokens = jnp.argsort(mask_token_logits)[-3:]
+
+>>> for token in top_3_tokens:
+...     print(text.replace(tokenizer.mask_token, tokenizer.decode([token])))
+The Milky Way is a spiral galaxy.
+The Milky Way is a massive galaxy.
+The Milky Way is a small galaxy.
+```
+</jax>
 </frameworkcontent>

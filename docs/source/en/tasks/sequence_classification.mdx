@@ -114,6 +114,13 @@ Now create a batch of examples using [`DataCollatorWithPadding`]. It's more effi
 >>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
 ```
 </tf>
+<jax>
+```py
+>>> from transformers import DataCollatorWithPadding
+
+>>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="jax")
+```
+</jax>
 </frameworkcontent>
 
 ## Evaluate
@@ -390,4 +397,32 @@ Get the class with the highest probability, and use the model's `id2label` mappi
 'POSITIVE'
 ```
 </tf>
+<jax>
+Tokenize the text and return JAX Array:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_model")
+>>> inputs = tokenizer(text, return_tensors="jax")
+```
+
+Pass your inputs to the model and return the `logits`:
+
+```py
+>>> from transformers import FlaxAutoModelForSequenceClassification
+
+>>> model = FlaxAutoModelForSequenceClassification.from_pretrained("stevhliu/my_awesome_model")
+>>> logits = model(**inputs).logits
+```
+
+Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a text label:
+
+```py
+>>> predicted_class_id = int(np.argmax(logits, axis=-1)[0])
+>>> model.config.id2label[predicted_class_id]
+'POSITIVE'
+```
+
+
 </frameworkcontent>

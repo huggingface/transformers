@@ -35,6 +35,11 @@ pip install torch
 pip install tensorflow
 ```
 </tf>
+<jax>
+```bash
+pip install flax
+```
+</jax>
 </frameworkcontent>
 
 ## Pipeline
@@ -152,6 +157,16 @@ Use [`TFAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the p
 >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 ```
 </tf>
+<jax>
+Use [`FlaxAutoModelForSequenceClassification`] and [`AutoTokenizer`] to load the pretrained model and it's associated tokenizer (more on an `FlaxAutoClass` in the next section):
+
+```py
+>>> from transformers import AutoTokenizer, FlaxAutoModelForSequenceClassification
+
+>>> model = FlaxAutoModelForSequenceClassification.from_pretrained(model_name)
+>>> tokenizer = AutoTokenizer.from_pretrained(model_name)
+```
+</jax>
 </frameworkcontent>
 
 Specify the model and tokenizer in the [`pipeline`], and now you can apply the `classifier` on French text:
@@ -225,6 +240,17 @@ A tokenizer can also accept a list of inputs, and pad and truncate the text to r
 ... )
 ```
 </tf>
+<jax>
+```py
+>>> jax_batch = tokenizer(
+...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
+...     padding=True,
+...     truncation=True,
+...     max_length=512,
+...     return_tensors="jax",
+... )
+```
+</jax>
 </frameworkcontent>
 
 <Tip>
@@ -281,7 +307,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 <Tip>
 
-See the [task summary](./task_summary) for tasks supported by an [`AutoModel`] class.
+See the [task summary](./task_summary) for tasks supported by an [`TFAutoModel`] class.
 
 </Tip>
 
@@ -300,6 +326,37 @@ The model outputs the final activations in the `logits` attribute. Apply the sof
 >>> tf_predictions  # doctest: +IGNORE_RESULT
 ```
 </tf>
+<jax>
+🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`FlaxAutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`FlaxAutoModel`] for the task. For text (or sequence) classification, you should load [`AutoModelForSequenceClassification`]:
+
+```py
+>>> from transformers import FlaxAutoModelForSequenceClassification
+
+>>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
+>>> flax_model = FlaxAutoModelForSequenceClassification.from_pretrained(model_name)
+```
+
+<Tip>
+
+See the [task summary](./task_summary) for tasks supported by an [`FlaxAutoModel`] class.
+
+</Tip>
+
+Now pass your preprocessed batch of inputs directly to the model by passing the dictionary keys directly to the tensors:
+
+```py
+>>> flax_outputs = flax_model(jax_batch)
+```
+
+The model outputs the final activations in the `logits` attribute. Apply the softmax function to the `logits` to retrieve the probabilities:
+
+```py
+>>> import jax
+
+>>> flax_predictions = jax.nn.softmax(flax_outputs.logits, axis=-1)
+>>> flax_predictions  # doctest: +IGNORE_RESULT
+```
+</jax>
 </frameworkcontent>
 
 <Tip>
@@ -342,6 +399,21 @@ When you are ready to use the model again, reload it with [`TFPreTrainedModel.fr
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("./tf_save_pretrained")
 ```
 </tf>
+<jax>
+Once your model is fine-tuned, you can save it with its tokenizer using [`FlaxPreTrainedModel.save_pretrained`]:
+
+```py
+>>> flax_save_directory = "./flax_save_pretrained"
+>>> tokenizer.save_pretrained(flax_save_directory)  # doctest: +IGNORE_RESULT
+>>> flax_model.save_pretrained(flax_save_directory)
+```
+
+When you are ready to use the model again, reload it with [`FlaxPreTrainedModel.from_pretrained`]:
+
+```py
+>>> flax_model = FlaxAutoModelForSequenceClassification.from_pretrained("./flax_save_pretrained")
+```
+</jax>
 </frameworkcontent>
 
 One particularly cool 🤗 Transformers feature is the ability to save a model and reload it as either a PyTorch or TensorFlow model. The `from_pt` or `from_tf` parameter can convert the model from one framework to the other:
@@ -363,6 +435,14 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 >>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
 </tf>
+<jax>
+```py
+>>> from transformers import FlaxAutoModel
+
+>>> tokenizer = AutoTokenizer.from_pretrained(flax_save_directory)
+>>> flax_model = FlaxAutoModelForSequenceClassification.from_pretrained(flax_save_directory, from_pt=True)
+```
+</jax>
 </frameworkcontent>
 
 ## Custom model builds
@@ -396,6 +476,15 @@ Create a model from your custom configuration with [`TFAutoModel.from_config`]:
 >>> my_model = TFAutoModel.from_config(my_config)
 ```
 </tf>
+<jax>
+Create a model from your custom configuration with [`FlaxAutoModel.from_config`]:
+
+```py
+>>> from transformers import FlaxAutoModel
+
+>>> my_model = FlaxAutoModel.from_config(my_config)
+```
+</jax>
 </frameworkcontent>
 
 Take a look at the [Create a custom architecture](./create_a_model) guide for more information about building custom configurations.

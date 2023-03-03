@@ -131,6 +131,13 @@ Now create a batch of examples using [`DataCollatorForSeq2Seq`]. It's more effic
 >>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint, return_tensors="tf")
 ```
 </tf>
+<jax>
+```py
+>>> from transformers import DataCollatorForSeq2Seq
+
+>>> data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=checkpoint, return_tensors="jax")
+```
+</jax>
 </frameworkcontent>
 
 ## Evaluate
@@ -404,4 +411,30 @@ Decode the generated token ids back into text:
 'Les lugumes partagent les ressources avec des bactéries fixatrices d'azote.'
 ```
 </tf>
+<jax>
+Tokenize the text and return the `input_ids` as JAX tensors:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_opus_books_model")
+>>> inputs = tokenizer(text, return_tensors="jax").input_ids
+```
+
+Use the [`~transformers.generation_jax_utils.FlaxGenerationMixin.generate`] method to create the translation. For more details about the different text generation strategies and parameters for controlling generation, check out the [Text Generation](./main_classes/text_generation) API.
+
+```py
+>>> from transformers import FlaxAutoModelForSeq2SeqLM
+
+>>> model = FlaxAutoModelForSeq2SeqLM.from_pretrained("my_awesome_opus_books_model")
+>>> outputs = model.generate(inputs, max_new_tokens=40, do_sample=True, top_k=30, top_p=0.95)
+```
+
+Decode the generated token ids back into text:
+
+```py
+>>> tokenizer.decode(outputs[0], skip_special_tokens=True)
+'Les lignées partagent des ressources avec des bactéries enfixant l'azote.'
+```
+</jax>
 </frameworkcontent>

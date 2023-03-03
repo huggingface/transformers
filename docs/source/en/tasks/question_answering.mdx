@@ -184,6 +184,13 @@ Now create a batch of examples using [`DefaultDataCollator`]. Unlike other data 
 >>> data_collator = DefaultDataCollator(return_tensors="tf")
 ```
 </tf>
+<jax>
+```py
+>>> from transformers import DefaultDataCollator
+
+>>> data_collator = DefaultDataCollator(return_tensors="jax")
+```
+</jax>
 </frameworkcontent>
 
 ## Train
@@ -425,4 +432,38 @@ Decode the predicted tokens to get the answer:
 '176 billion parameters and can generate text in 46 languages natural languages and 13'
 ```
 </tf>
+<jax>
+Tokenize the text and return JAX tensors:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_qa_model")
+>>> inputs = tokenizer(question, text, return_tensors="jax")
+```
+
+Pass your inputs to the model and return the `logits`:
+
+```py
+>>> from transformers import FlaxAutoModelForQuestionAnswering
+
+>>> model = FlaxAutoModelForQuestionAnswering.from_pretrained("my_awesome_qa_model")
+>>> outputs = model(**inputs)
+```
+
+Get the highest probability from the model output for the start and end positions:
+
+```py
+>>> answer_start_index = int(np.argmax(outputs.start_logits, axis=-1)[0])
+>>> answer_end_index = int(np.argmax(outputs.end_logits, axis=-1)[0])
+```
+
+Decode the predicted tokens to get the answer:
+
+```py
+>>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+>>> tokenizer.decode(predict_answer_tokens)
+'176 billion parameters and can generate text in 46 languages natural languages and 13'
+```
+</jax>
 </frameworkcontent>

@@ -157,6 +157,30 @@ When you load pretrained weights, the default model configuration is automatical
 >>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
 ```
 </tf>
+<jax>
+Load your custom configuration attributes into the model:
+
+```py
+>>> from transformers import FlaxDistilBertModel
+
+>>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
+>>> flax_model = FlaxDistilBertModel(my_config)
+```
+
+This creates a model with random values instead of pretrained weights. You won't be able to use this model for anything useful yet until you train it. Training is a costly and time-consuming process. It is generally better to use a pretrained model to obtain better results faster, while using only a fraction of the resources required for training.
+
+Create a pretrained model with [`~FlaxPreTrainedModel.from_pretrained`]:
+
+```py
+>>> flax_model = FlaxDistilBertModel.from_pretrained("distilbert-base-uncased")
+```
+
+When you load pretrained weights, the default model configuration is automatically loaded if the model is provided by 🤗 Transformers. However, you can still replace - some or all of - the default model configuration attributes with your own if you'd like:
+
+```py
+>>> flax_model = FlaxDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
+```
+</jax>
 </frameworkcontent>
 
 ### Model heads
@@ -198,6 +222,23 @@ Easily reuse this checkpoint for another task by switching to a different model 
 >>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
 ```
 </tf>
+<jax>
+For example, [`FlaxDistilBertForSequenceClassification`] is a base DistilBERT model with a sequence classification head. The sequence classification head is a linear layer on top of the pooled outputs.
+
+```py
+>>> from transformers import FlaxDistilBertForSequenceClassification
+
+>>> flax_model = FlaxDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
+```
+
+Easily reuse this checkpoint for another task by switching to a different model head. For a question answering task, you would use the [`FlaxDistilBertForQuestionAnswering`] model head. The question answering head is similar to the sequence classification head except it is a linear layer on top of the hidden states output.
+
+```py
+>>> from transformers import FlaxDistilBertForQuestionAnswering
+
+>>> flax_model = FlaxDistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
+```
+</jax>
 </frameworkcontent>
 
 ## Tokenizer

@@ -116,6 +116,23 @@ python examples/tensorflow/summarization/run_summarization.py  \
     --do_eval
 ```
 </tf>
+<jax>
+The example script downloads and preprocesses a dataset from the 🤗 [Datasets](https://huggingface.co/docs/datasets/) library. Then the script fine-tunes a dataset using JAX on an architecture that supports summarization. The following example shows how to fine-tune [T5-small](https://huggingface.co/t5-small) on the [CNN/DailyMail](https://huggingface.co/datasets/cnn_dailymail) dataset. The T5 model requires an additional `source_prefix` argument due to how it was trained. This prompt lets T5 know this is a summarization task.
+
+```bash
+python examples/flax/summarization/run_summarization_flax.py \
+    --model_name_or_path t5-small \
+    --do_train \
+    --do_eval \
+    --dataset_name cnn_dailymail \
+    --dataset_config "3.0.0" \
+    --source_prefix "summarize: " \
+    --output_dir /tmp/tst-summarization \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
+    --predict_with_generate
+```
 </frameworkcontent>
 
 ## Distributed training and mixed precision
@@ -183,6 +200,22 @@ python run_summarization.py  \
     --do_eval
 ```
 </tf>
+<jax>
+Tensor Processing Units (TPUs) are specifically designed to accelerate performance. If TPU is available, JAX will automatically use it.
+
+```bash
+python run_summarization_flax.py  \
+    --model_name_or_path t5-small \
+    --dataset_name cnn_dailymail \
+    --dataset_config "3.0.0" \
+    --output_dir /tmp/tst-summarization  \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 16 \
+    --num_train_epochs 3 \
+    --do_train \
+    --do_eval
+```
+</jax>
 </frameworkcontent>
 
 ## Run a script with 🤗 Accelerate

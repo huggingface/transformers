@@ -540,3 +540,33 @@ Get the predicted label with the highest probability, and use the model's `id2la
 
 </tf>
 </frameworkcontent>
+
+<frameworkcontent>
+<jax>
+Load an image processor to preprocess the image and return the `input` as JAX tensors:
+
+```py
+>>> from transformers import AutoImageProcessor
+
+>>> image_processor = AutoImageProcessor.from_pretrained("my_awesome_food_model")
+>>> inputs = image_processor(image, return_tensors="jax")
+```
+
+Pass your inputs to the model and return the logits:
+
+```py
+>>> from transformers import FlaxAutoModelForImageClassification
+
+>>> model = FlaxAutoModelForImageClassification.from_pretrained("my_awesome_food_model")
+>>> logits = model(**inputs).logits
+```
+
+Get the predicted label with the highest probability, and use the model's `id2label` mapping to convert it to a label:
+
+```py
+>>> predicted_label = logits.argmax(-1).item()
+>>> model.config.id2label[predicted_label]
+'beignets'
+```
+</jax>
+</frameworkcontent>
