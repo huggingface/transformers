@@ -19,7 +19,7 @@ Flan-UL2 is an encoder decoder model based on the T5 architecture. It uses the s
 ```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2")
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2", laod_in_8bit = True, device_map = "auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
 
 >>> inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt")
