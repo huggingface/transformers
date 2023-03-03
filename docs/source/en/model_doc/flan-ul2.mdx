@@ -31,9 +31,9 @@ One can refer to [T5's documentation page](t5) for all tips, code examples and n
 The original checkpoints can be found [here](https://github.com/google-research/t5x/blob/main/docs/models.md#flan-ul2-checkpoints).
 
 
-## Running on low ressources
-The model is pretty heavy (~20GB) so if you just want to run the model, make sure you load in 8bits, and use `device_map="auto"` to make sure 
-you don't have OOM issue!
+## Running on low ressources devices
+
+The model is pretty heavy (~40GB in half precision) so if you just want to run the model, make sure you load your model in 8bit, and use `device_map="auto"` to make sure  you don't have any OOM issue!
 
 ```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -47,18 +47,6 @@ you don't have OOM issue!
 ['In a large skillet, brown the ground beef and onion over medium heat. Add the garlic']
 ```
 
-## Running on low ressources
-```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
->>> model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2", load_in_8bit=True, device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
-
->>> inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt")
->>> outputs = model.generate(**inputs)
->>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['In a large skillet, brown the ground beef and onion over medium heat. Add the garlic']
-```
 
 
 
