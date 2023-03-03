@@ -17,7 +17,7 @@ from typing import List, Optional, Union
 
 import sentencepiece as spm
 
-from ... import PreTrainedTokenizer, AddedToken
+from ... import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -78,25 +78,27 @@ class LLaMaTokenizer(PreTrainedTokenizer):
         new_tokens = [tok for tok in new_tokens if tok not in [self.bos_token, self.eos_token, self.unk_token]]
         return super()._add_tokens(new_tokens=new_tokens, special_tokens=special_tokens)
 
-
     def bos_token_id(self) -> Optional[int]:
         result = self.sp_model.bos_id()
         if result >= 0:
             return result
         else:
             return None
+
     def eos_token_id(self) -> Optional[int]:
         result = self.sp_model.eos_id()
         if result >= 0:
             return result
         else:
             return None
+
     def unk_token_id(self) -> Optional[int]:
         result = self.sp_model.unk_id()
         if result >= 0:
             return result
         else:
             return None
+
     def pad_token_id(self) -> Optional[int]:
         result = self.sp_model.pad_id()
         if result >= 0:
