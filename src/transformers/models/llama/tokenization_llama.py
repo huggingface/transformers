@@ -15,7 +15,7 @@
 """Tokenization classes for LLaMa."""
 import os
 from shutil import copyfile
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 
 import sentencepiece as spm
 
