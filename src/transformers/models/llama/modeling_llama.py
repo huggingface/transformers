@@ -279,8 +279,8 @@ def rotate_half(x):
 def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
     cos = cos[..., offset : q.shape[-2] + offset, :]
     sin = sin[..., offset : q.shape[-2] + offset, :]
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = (rotate_half(q) * sin) + (q * cos)
+    k_embed = (rotate_half(k) * sin) + (k * cos)
     return q_embed, k_embed
 
 
@@ -577,6 +577,9 @@ class LLaMaForCausalLM(LLaMaPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def set_output_embeddings(self, value):
+        self.lm_head = value
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

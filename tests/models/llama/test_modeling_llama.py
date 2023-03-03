@@ -107,7 +107,8 @@ class LLaMaModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
+            # TODO @thomasw21: I don't why this was set to False by default
+            is_decoder=True,
             initializer_range=self.initializer_range,
         )
 
