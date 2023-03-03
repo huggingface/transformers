@@ -335,7 +335,7 @@ def check_missing_backends():
         missing = ", ".join(missing_backends)
         if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
             raise Exception(
-                "Full quality checks require all backends to be installed (with `pip install -e .[dev]` in the "
+                "Full repo consistency checks require all backends to be installed (with `pip install -e .[dev]` in the "
                 f"Transformers repo, the following are missing: {missing}."
             )
         else:
