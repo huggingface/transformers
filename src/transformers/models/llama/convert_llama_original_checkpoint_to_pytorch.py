@@ -53,18 +53,18 @@ def get_tokenzier(tokenizer_path: Path) -> LLaMaTokenizer:
 
 
 original_name_to_transformers_name = {
-    "tok_embeddings.weight": "llama.embed.weight",
-    "norm.weight": "llama.final_layer_norm.weight",
-    "output.weight": "lm_head.weight",
-    r"layers.(\d*).attention_norm.weight": r"llama.layers.\1.attention_norm.weight",
-    r"layers.(\d*).attention.wq.weight": r"llama.layers.\1.attention.qkv.weight",
-    r"layers.(\d*).attention.wk.weight": r"llama.layers.\1.attention.qkv.weight",
-    r"layers.(\d*).attention.wv.weight": r"llama.layers.\1.attention.qkv.weight",
-    r"layers.(\d*).attention.wo.weight": r"llama.layers.\1.attention.o.weight",
-    r"layers.(\d*).ffn_norm.weight": r"llama.layers.\1.ff_norm.weight",
-    r"layers.(\d*).feed_forward.w1.weight": r"llama.layers.\1.ff.wi_0.weight",
-    r"layers.(\d*).feed_forward.w2.weight": r"llama.layers.\1.ff.wo.weight",
-    r"layers.(\d*).feed_forward.w3.weight": r"llama.layers.\1.ff.wi_1.weight",
+    r"^tok_embeddings.weight$": "llama.embed.weight",
+    r"^norm.weight$": "llama.final_layer_norm.weight",
+    r"^output.weight$": "lm_head.weight",
+    r"^layers.(\d*).attention_norm.weight$": r"llama.layers.\1.attention_norm.weight",
+    r"^layers.(\d*).attention.wq.weight$": r"llama.layers.\1.attention.qkv.weight",
+    r"^layers.(\d*).attention.wk.weight$": r"llama.layers.\1.attention.qkv.weight",
+    r"^layers.(\d*).attention.wv.weight$": r"llama.layers.\1.attention.qkv.weight",
+    r"^layers.(\d*).attention.wo.weight$": r"llama.layers.\1.attention.o.weight",
+    r"^layers.(\d*).ffn_norm.weight$": r"llama.layers.\1.ff_norm.weight",
+    r"^layers.(\d*).feed_forward.w1.weight$": r"llama.layers.\1.ff.wi_0.weight",
+    r"^layers.(\d*).feed_forward.w2.weight$": r"llama.layers.\1.ff.wo.weight",
+    r"^layers.(\d*).feed_forward.w3.weight$": r"llama.layers.\1.ff.wi_1.weight",
 }
 
 
