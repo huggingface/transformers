@@ -12,15 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import json
-import os
-import re
-import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, LLaMaTokenizer, LLaMaTokenizerFast
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
-from transformers.utils import cached_property, is_tf_available, is_torch_available
+from transformers import SPIECE_UNDERLINE, LLaMaTokenizer, LLaMaTokenizerFast
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
+from transformers.utils import is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -143,12 +139,17 @@ class LLaMaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
         tokenized_string_bos = tokenizer(["<s>"])
         self.assertListEqual(
-            tokenized_string_bos["input_ids"], [1, ]
+            tokenized_string_bos["input_ids"],
+            [
+                1,
+            ],
         )
 
     def test_tokenized_text_always_starts_with_bos_token(self):
         tokenizer = self.get_tokenizer()
-        tokenized_texts = tokenizer(["<s>", "", "Hello my name is John.", "If you want to use bos token, add \"<s>\" in your text input."])
+        tokenized_texts = tokenizer(
+            ["<s>", "", "Hello my name is John.", 'If you want to use bos token, add "<s>" in your text input.']
+        )
         for tokenized_text in tokenized_texts["input_ids"]:
             self.assertGreaterEqual(len(tokenized_text), 1)
             self.assertEqual(tokenized_text[0], tokenizer.bos_token_id())
