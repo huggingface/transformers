@@ -272,10 +272,10 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         ```python
         >>> from transformers import TFVisionTextDualEncoderModel, AutoTokenizer
 
-        >>> model = TFVisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
+        >>> model = TFVisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian", from_pt=True)
         >>> tokenizer = AutoTokenizer.from_pretrained("clip-italian/clip-italian")
 
-        >>> inputs = tokenizer(["una foto di un gatto", "una foto di un cane"], padding=True, return_tensors="pt")
+        >>> inputs = tokenizer(["una foto di un gatto", "una foto di un cane"], padding=True, return_tensors="np")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         text_outputs = self.text_model(
@@ -313,7 +313,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         >>> import requests
         >>> from transformers import TFVisionTextDualEncoderModel, AutoImageProcessor
 
-        >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
+        >>> model = TFVisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian", from_pt=True)
         >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -380,7 +380,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         ... ]
         >>> images = [Image.open(requests.get(url, stream=True).raw) for url in urls]
         >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], images=images, return_tensors="pt", padding=True
+        ...     text=["a photo of a cat", "a photo of a dog"], images=images, return_tensors="np", padding=True
         ... )
         >>> outputs = model(
         ...     input_ids=inputs.input_ids,
@@ -586,6 +586,8 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
             raise ValueError("vision model must be created with the name `vision_model`.")
         if text_model.name != "text_model":
             raise ValueError("text model must be created with the name `text_model`.")
+
+        model(model.dummy_inputs)  # Ensure model is fully built
 
         return model
 
