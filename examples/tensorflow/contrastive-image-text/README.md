@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# VisionTextDualEncoder and CLIP model training examples
+# TFVisionTextDualEncoder and CLIP model training examples
 
 The following example showcases how to train a CLIP-like vision-text dual encoder model
 using a pre-trained vision and text encoder.
@@ -55,7 +55,7 @@ We can either load a CLIP-like vision-text dual encoder model from an existing d
 by using a pre-trained vision encoder model and a pre-trained text encoder model.
 
 If you wish to load an existing dual encoder model, please use the `--model_name_or_path` argument. If
-you want to use a pre-trained vision encoder model and a pre-trained text encoder model, please use the
+you want to use separate pre-trained vision and text models, please use the
 `--vision_model_name_or_path` and `--text_model_name_or_path` arguments instead.
 
 ### Train the model
