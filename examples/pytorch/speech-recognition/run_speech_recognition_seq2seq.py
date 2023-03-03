@@ -114,25 +114,34 @@ class ModelArguments:
         default=None, metadata={"help": "A list of tokens that will be suppressed at generation."}
     )
     apply_spec_augment: bool = field(
-        default=False, metadata={"help": "Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder."}
+        default=False,
+        metadata={"help": "Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder."},
     )
     mask_time_prob: float = field(
-        default=0.05, metadata={"help": "Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking procecure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector span to be masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment == True`."}
+        default=0.05,
+        metadata={
+            "help": "Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking procecure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector span to be masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment == True`."
+        },
     )
-    mask_time_length: int = field(
-        default=10, metadata={"help": "Length of vector span along the time axis."}
-    )
+    mask_time_length: int = field(default=10, metadata={"help": "Length of vector span along the time axis."})
     mask_time_min_masks: int = field(
-        default=2, metadata={"help": "The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step, irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length < mask_time_min_masks''"}
+        default=2,
+        metadata={
+            "help": "The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step, irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length < mask_time_min_masks''"
+        },
     )
     mask_feature_prob: float = field(
-        default=0.0, metadata={"help": "Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`."}
+        default=0.0,
+        metadata={
+            "help": "Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`."
+        },
     )
-    mask_feature_length: int = field(
-        default=10, metadata={"help": "Length of vector span along the feature axis."}
-    )
+    mask_feature_length: int = field(default=10, metadata={"help": "Length of vector span along the feature axis."})
     mask_feature_min_masks: int = field(
-        default=0, metadata={"help": "The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time step, irrespectively of `mask_feature_prob`. Only relevant if `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`."}
+        default=0,
+        metadata={
+            "help": "The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time step, irrespectively of `mask_feature_prob`. Only relevant if `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`."
+        },
     )
 
 
@@ -465,7 +474,9 @@ def main():
     def prepare_dataset(batch):
         # process audio
         sample = batch[audio_column_name]
-        inputs = feature_extractor(sample["array"], sampling_rate=sample["sampling_rate"], return_attention_mask=return_attention_mask)
+        inputs = feature_extractor(
+            sample["array"], sampling_rate=sample["sampling_rate"], return_attention_mask=return_attention_mask
+        )
         # process audio length
         batch[model_input_name] = inputs.get(model_input_name)[0]
         batch["input_length"] = len(sample["array"])
