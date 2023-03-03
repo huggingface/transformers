@@ -130,8 +130,8 @@ class CPMAntLayerNorm(nn.Module):
         super().__init__()
 
         self.eps = config.eps
-        self.dim_norm = config.dim_model
-        self.weight = torch.nn.parameter.Parameter(torch.empty(config.dim_model))
+        self.dim_norm = config.hidden_size
+        self.weight = torch.nn.parameter.Parameter(torch.empty(config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor):
         """
@@ -149,8 +149,8 @@ class CPMAntLayerNorm(nn.Module):
 class CPMAntAttention(nn.Module):
     def __init__(self, config: CPMAntConfig):
         super().__init__()
-        self.dim_model = config.dim_model
-        self.num_heads = config.num_heads
+        self.dim_model = config.hidden_size
+        self.num_heads = config.num_attention_heads
         self.dim_head = config.dim_head
 
         self.project_q = nn.Linear(self.dim_model, self.num_heads * self.dim_head, bias=False)
@@ -302,8 +302,8 @@ class CPMAntSelfAttentionBlock(nn.Module):
 class DenseGatedACT(nn.Module):
     def __init__(self, config: CPMAntConfig):
         super().__init__()
-        self.w_0 = nn.Linear(config.dim_model, config.dim_ff, bias=False)
-        self.w_1 = nn.Linear(config.dim_model, config.dim_ff, bias=False)
+        self.w_0 = nn.Linear(config.hidden_size, config.dim_ff, bias=False)
+        self.w_1 = nn.Linear(config.hidden_size, config.dim_ff, bias=False)
         self.act = torch.nn.GELU()
 
     def forward(self, hidden_states: torch.Tensor):
@@ -328,7 +328,7 @@ class CPMAntFeedForward(nn.Module):
         else:
             self.dropout = None
 
-        self.w_out = nn.Linear(config.dim_ff, config.dim_model, bias=False)
+        self.w_out = nn.Linear(config.dim_ff, config.hidden_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor):
         """
@@ -422,7 +422,7 @@ class CPMAntTransformerBlock(nn.Module):
 class CPMAntEncoder(nn.Module):
     def __init__(self, config: CPMAntConfig):
         super().__init__()
-        self.num_layers = config.num_layers
+        self.num_layers = config.num_hidden_layers
         self.layers = nn.ModuleList([CPMAntTransformerBlock(config) for ith in range(self.num_layers)])
 
         self.output_layernorm = CPMAntLayerNorm(config)
@@ -507,14 +507,15 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
     ):
         super().__init__()
 
-        self.num_heads = config.num_heads
+        self.num_heads = config.num_attention_heads
         self.num_buckets = config.position_bias_num_buckets
         self.max_distance = config.position_bias_max_distance
         self.num_segments = config.segment_types
 
         self.relative_attention_bias = torch.nn.parameter.Parameter(
             torch.empty(
-                config.segment_types * config.segment_types + config.position_bias_num_buckets, config.num_heads
+                config.segment_types * config.segment_types + config.position_bias_num_buckets,
+                config.num_attention_heads,
             )
         )
 
@@ -687,9 +688,9 @@ class CPMAntModel(CPMAntPreTrainedModel):
     def __init__(self, config: CPMAntConfig):
         super().__init__(config)
         self.encoder = CPMAntEncoder(config)
-        self.segment_embedding = nn.Embedding(config.segment_types, config.dim_model)
+        self.segment_embedding = nn.Embedding(config.segment_types, config.hidden_size)
         self.input_embedding = nn.Embedding(
-            config.vocab_size + config.prompt_types * config.prompt_length, config.dim_model
+            config.vocab_size + config.prompt_types * config.prompt_length, config.hidden_size
         )
         self.position_bias = CPMAntSegmentPositionEmbedding(config)
         self.prompt_length = config.prompt_length
@@ -840,7 +841,7 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
 
         # lm_head.weight is tied to cpmant.input_embedding.weight
         self.lm_head = nn.Linear(
-            config.dim_model, config.vocab_size + config.prompt_types * config.prompt_length, bias=False
+            config.hidden_size, config.vocab_size + config.prompt_types * config.prompt_length, bias=False
         )
         self.post_init()
 

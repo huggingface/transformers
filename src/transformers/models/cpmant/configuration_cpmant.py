@@ -40,15 +40,15 @@ class CPMAntConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 30720):
             Vocabulary size of the CPMAnt model. Defines the number of different tokens that can be represented by the
             `input` passed when calling [`~CPMAntModel`].
-        dim_model (`int`, *optional*, defaults to 4096):
+        hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the encoder layers.
-        num_heads (`int`, *optional*, defaults to 32):
+        num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads in the Transformer encoder.
         dim_head (`int`, *optional*, defaults to 128):
             Dimension of attention heads for each attention layer in the Transformer encoder.
         dim_ff (`int`, *optional*, defaults to 10240):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_layers (`int`, *optional*, defaults to 48):
+        num_hidden_layers (`int`, *optional*, defaults to 48):
             Number of layers of the Transformer encoder.
         dropout_p (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder.
@@ -59,8 +59,6 @@ class CPMAntConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        half (`bool`, *optional*, defaults to False):
-            The dtype of tensor.
         prompt_types (`int`, *optional*, defaults to 32):
             The type of prompt.
         prompt_length (`int`, *optional*, defaults to 32):
@@ -93,11 +91,11 @@ class CPMAntConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size: int = 30720,
-        dim_model: int = 4096,
-        num_heads: int = 32,
+        hidden_size: int = 4096,
+        num_attention_heads: int = 32,
         dim_head: int = 128,
         dim_ff: int = 10240,
-        num_layers: int = 48,
+        num_hidden_layers: int = 48,
         dropout_p: int = 0.0,
         position_bias_num_buckets: int = 512,
         position_bias_max_distance: int = 2048,
@@ -114,11 +112,11 @@ class CPMAntConfig(PretrainedConfig):
         self.prompt_types = prompt_types
         self.prompt_length = prompt_length
         self.segment_types = segment_types
-        self.dim_model = dim_model
-        self.num_heads = num_heads
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
         self.dim_head = dim_head
         self.dim_ff = dim_ff
-        self.num_layers = num_layers
+        self.num_hidden_layers = num_hidden_layers
         self.position_bias_num_buckets = position_bias_num_buckets
         self.position_bias_max_distance = position_bias_max_distance
         self.dropout_p = dropout_p

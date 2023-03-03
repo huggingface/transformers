@@ -34,14 +34,6 @@ if is_torch_available():
     )
 
 
-class CPMAntConfigTester(ConfigTester):
-    def create_and_test_config_common_properties(self):
-        config = self.config_class(**self.inputs_dict)
-        self.parent.assertTrue(hasattr(config, "dim_model"))
-        self.parent.assertTrue(hasattr(config, "num_heads"))
-        self.parent.assertTrue(hasattr(config, "dim_head"))
-
-
 @require_torch
 class CPMAntModelTester:
     def __init__(
@@ -100,9 +92,9 @@ class CPMAntModelTester:
     def get_config(self):
         return CPMAntConfig(
             vocab_size=self.vocab_size,
-            dim_model=self.hidden_size,
-            num_layers=self.num_hidden_layers,
-            num_heads=self.num_attention_heads,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
             dim_ff=self.intermediate_size,
             position_bias_num_buckets=self.num_buckets,
             position_bias_max_distance=self.max_distance,
@@ -160,7 +152,7 @@ class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CPMAntModelTester(self)
-        self.config_tester = CPMAntConfigTester(self, config_class=CPMAntConfig)
+        self.config_tester = ConfigTester(self, config_class=CPMAntConfig)
 
     def test_config(self):
         self.config_tester.create_and_test_config_common_properties()
