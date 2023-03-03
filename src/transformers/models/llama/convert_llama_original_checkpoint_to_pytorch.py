@@ -96,6 +96,7 @@ def convert_model(model_path: Path, config: LLaMaConfig) -> LLaMaForCausalLM:
 
             transformers_name = map_original_names_to_transformers_names(original_name)
             transformers_param = model.get_parameter(transformers_name)
+            assert original_param.dtype == transformers_param.dtype, f"Expected dtypes to match. Got {original_param.dtype} and {transformers_param.dtype}"
 
             if original_name.endswith("norm.weight"):
                 transformers_param.copy_(original_param)
