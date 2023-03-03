@@ -55,7 +55,7 @@ class LLaMaTokenizer(PreTrainedTokenizer):
     padding_side: str = "left"
 
     def __init__(
-        self, vocab_file: str, bos_token: str = "<bos>", eos_token: str = "<eos>", unk_token: str = "<unk>", **kwargs
+        self, vocab_file: str, bos_token: str = "<s>", eos_token: str = "</s>", unk_token: str = "<unk>", **kwargs
     ) -> None:
         self.sp_model = spm.SentencePieceProcessor(model_file=vocab_file)
 
@@ -94,13 +94,6 @@ class LLaMaTokenizer(PreTrainedTokenizer):
 
     def unk_token_id(self) -> Optional[int]:
         result = self.sp_model.unk_id()
-        if result >= 0:
-            return result
-        else:
-            return None
-
-    def pad_token_id(self) -> Optional[int]:
-        result = self.sp_model.pad_id()
         if result >= 0:
             return result
         else:
