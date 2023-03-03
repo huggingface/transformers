@@ -1487,10 +1487,10 @@ class FlaxWhisperForAudioClassificationModule(nn.Module):
     def __call__(
         self,
         input_features,
-        encoder_outputs,
-        labels,
-        output_attenions,
+        encoder_outputs=None,
+        output_attenions=None,
         output_hidden_states: bool = True,
+        decoder_input_ids=None,
         return_dict: bool = True,
     ):
         output_attentions = output_attenions if output_attenions is not None else self.config.output_attentions
@@ -1533,6 +1533,35 @@ class FlaxWhisperForAudioClassificationModule(nn.Module):
 class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
     module_class = FlaxWhisperForAudioClassificationModule
     dtype: jnp.dtype = jnp.float32
+
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+        # init input tensors
+        input_features = jnp.zeros(input_shape, dtype="f4")
+        input_features = input_features.at[(..., -1)].set(self.config.eos_token_id)
+
+        decoder_input_ids = jnp.zeros((input_shape[0], 1), dtype="i4")
+        jnp.ones_like(decoder_input_ids)
+
+        batch_size, sequence_length = decoder_input_ids.shape
+        jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        random_params = self.module.init(
+            rngs,
+            input_features=input_features,
+        )["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
 
 
 FLAX_WHISPER_AUDIO_CLASSIFICATION_DOCSTRING = r"""
