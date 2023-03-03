@@ -385,12 +385,12 @@ Convert your datasets to the `tf.data.Dataset` format using the [`~datasets.Data
 ```py
 >>> # converting our train dataset to tf.data.Dataset
 >>> tf_train_dataset = food["train"].to_tf_dataset(
-...     columns=["pixel_values"], label_cols=["label"], shuffle=True, batch_size=batch_size, collate_fn=data_collator
+...     columns="pixel_values", label_cols="label", shuffle=True, batch_size=batch_size, collate_fn=data_collator
 ... )
 
 >>> # converting our test dataset to tf.data.Dataset
 >>> tf_eval_dataset = food["test"].to_tf_dataset(
-...     columns=["pixel_values"], label_cols=["label"], shuffle=True, batch_size=batch_size, collate_fn=data_collator
+...     columns="pixel_values", label_cols="label", shuffle=True, batch_size=batch_size, collate_fn=data_collator
 ... )
 ```
 
