@@ -31,9 +31,9 @@ One can refer to [T5's documentation page](t5) for all tips, code examples and n
 The original checkpoints can be found [here](https://github.com/google-research/t5x/blob/main/docs/models.md#flan-ul2-checkpoints).
 
 
-## Running on low ressources
-The model is pretty heavy (~20GB) so if you just want to run the model, make sure you load in 8bits, and use `device_map="auto"` to make sure 
-you don't have OOM issue!
+## Running on low ressources devices
+
+The model is pretty heavy (~40GB in half precision) so if you just want to run the model, make sure you load your model in 8bit, and use `device_map="auto"` to make sure  you don't have any OOM issue!
 
 ```python
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -46,105 +46,7 @@ you don't have OOM issue!
 >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['In a large skillet, brown the ground beef and onion over medium heat. Add the garlic']
 ```
-
-## Running on low ressources
-```python
->>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
->>> model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2", load_in_8bit=True, device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
-
->>> inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt")
->>> outputs = model.generate(**inputs)
->>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['In a large skillet, brown the ground beef and onion over medium heat. Add the garlic']
-```
-
-
-
-
-<a id='inference'></a>
 
 ## Inference
 
-At inference time, it is recommended to use [`~generation.GenerationMixin.generate`]. This
-method takes care of encoding the input and feeding the encoded hidden states via cross-attention layers to the decoder
-and auto-regressively generates the decoder output. Check out [this blog post](https://huggingface.co/blog/how-to-generate) to know all the details about generating text with Transformers.
-There's also [this blog post](https://huggingface.co/blog/encoder-decoder#encoder-decoder) which explains how
-generation works in general in encoder-decoder models.
-
-
-Note that T5 uses the `pad_token_id` as the `decoder_start_token_id`, so when doing generation without using
-[`~generation.GenerationMixin.generate`], make sure you start it with the `pad_token_id`.
-
-The example above only shows a single example. You can also do batched inference, like so:
-
-```python
->>> from transformers import T5Tokenizer, T5ForConditionalGeneration
-
->>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
->>> model = T5ForConditionalGeneration.from_pretrained("t5-small")
-
->>> task_prefix = "translate English to German: "
->>> # use different length sentences to test batching
->>> sentences = ["The house is wonderful.", "I like to work in NYC."]
-
->>> inputs = tokenizer([task_prefix + sentence for sentence in sentences], return_tensors="pt", padding=True)
-
->>> output_sequences = model.generate(
-...     input_ids=inputs["input_ids"],
-...     attention_mask=inputs["attention_mask"],
-...     do_sample=False,  # disable sampling to test if batching affects output
-... )
-
->>> print(tokenizer.batch_decode(output_sequences, skip_special_tokens=True))
-['Das Haus ist wunderbar.', 'Ich arbeite gerne in NYC.']
-```
-
-
-
-## Resources
-
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with T5. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
-<PipelineTag pipeline="text-classification"/>
-
-- A notebook for how to [finetune T5 for classification and multiple choice](https://colab.research.google.com/github/patil-suraj/exploring-T5/blob/master/t5_fine_tuning.ipynb).
-- A notebook for how to [finetune T5 for sentiment span extraction](https://colab.research.google.com/github/enzoampil/t5-intro/blob/master/t5_qa_training_pytorch_span_extraction.ipynb). 🌎
-
-<PipelineTag pipeline="token-classification"/>
-
-- A notebook for how to [finetune T5 for named entity recognition](https://colab.research.google.com/drive/1obr78FY_cBmWY5ODViCmzdY6O1KB65Vc?usp=sharing). 🌎
-
-<PipelineTag pipeline="text-generation"/>
-
-- A notebook for [Finetuning CodeT5 for generating docstrings from Ruby code](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/T5/Fine_tune_CodeT5_for_generating_docstrings_from_Ruby_code.ipynb).
-
-<PipelineTag pipeline="summarization"/>
-
-- A notebook to [Finetune T5-base-dutch to perform Dutch abstractive summarization on a TPU](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/T5/Fine_tuning_Dutch_T5_base_on_CNN_Daily_Mail_for_summarization_(on_TPU_using_HuggingFace_Accelerate).ipynb).
-- A notebook for how to [finetune T5 for summarization in PyTorch and track experiments with WandB](https://colab.research.google.com/github/abhimishra91/transformers-tutorials/blob/master/transformers_summarization_wandb.ipynb#scrollTo=OKRpFvYhBauC). 🌎
-- A blog post on [Distributed Training: Train BART/T5 for Summarization using 🤗 Transformers and Amazon SageMaker](https://huggingface.co/blog/sagemaker-distributed-training-seq2seq).
-- [`T5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb).
-- [`TFT5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb).
-- [`FlaxT5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/summarization).
-- [Summarization](https://huggingface.co/course/chapter7/5?fw=pt#summarization) chapter of the 🤗 Hugging Face course.
-- [Summarization task guide](./tasks/summarization)
-
-<PipelineTag pipeline="fill-mask"/>
-
-- [`FlaxT5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#t5-like-span-masked-language-modeling) for training T5 with a span-masked language model objective. The script also shows how to train a T5 tokenizer. [`FlaxT5ForConditionalGeneration`] is also supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
-
-<PipelineTag pipeline="translation"/>
-
-- [`T5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/translation) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation.ipynb).
-- [`TFT5ForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/translation) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb).
-- [Translation task guide](./tasks/translation)
-
-<PipelineTag pipeline="question-answering"/>
-
-- A notebook on how to [finetune T5 for question answering with TensorFlow 2](https://colab.research.google.com/github/snapthat/TF-T5-text-to-text/blob/master/snapthatT5/notebooks/TF-T5-Datasets%20Training.ipynb). 🌎
-- A notebook on how to [finetune T5 for question answering on a TPU](https://colab.research.google.com/github/patil-suraj/exploring-T5/blob/master/T5_on_TPU.ipynb#scrollTo=QLGiFCDqvuil).
-
-🚀 **Deploy**
-- A blog post on how to deploy [T5 11B for inference for less than $500](https://www.philschmid.de/deploy-t5-11b).
+The inference protocol is exaclty the same as any `T5` model, please have a look at the [T5's documentation page](t5) for more details.
