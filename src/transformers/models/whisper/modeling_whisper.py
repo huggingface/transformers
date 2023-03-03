@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch Whisper model."""
 
-
+import warnings
 import math
 import random
 from typing import Optional, Tuple, Union
@@ -1414,7 +1414,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         stopping_criteria=None,
         prefix_allowed_tokens_fn=None,
         synced_gpus=False,
-        return_timestamps=None,
+        return_timestamps=False,
         task=None,
         language=None,
         is_multilingual=None,
@@ -1515,6 +1515,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if language is not None:
             generation_config.language = language
 
+        
         forced_decoder_ids = []
 
         if hasattr(generation_config, "is_multilingual") and generation_config.is_multilingual:
@@ -1528,6 +1529,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             else:
                 forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))
 
+        
+        # Legacy code for backward compatibility
+        if forced_decoder_ids != self.config.forced_decoder_ids and forced_decoder_ids is not None:
+            warnings.warn(
+                "You have modified the pretrained model configuration to control generation. This is a"
+                " deprecated strategy to control generation and will be removed soon, in a future version."
+                " Please use a generation configuration file (see"
+                " https://huggingface.co/docs/transformers/main_classes/text_generation)"
+            )
+            forced_decoder_ids = self.config.forced_decoder_ids
+            
         if (
             hasattr(generation_config, "return_timestamps") and generation_config.return_timestamps
         ) or return_timestamps:
