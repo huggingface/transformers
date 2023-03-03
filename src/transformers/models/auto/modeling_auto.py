@@ -936,7 +936,6 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("bit", "BitBackbone"),
         ("convnext", "ConvNextBackbone"),
         ("dinat", "DinatBackbone"),
-        ("efficientnet", "EfficientNetBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("nat", "NatBackbone"),
         ("resnet", "ResNetBackbone"),
