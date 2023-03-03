@@ -387,7 +387,7 @@ repo_utils_job = CircleCIJob(
     ],
     parallelism=None,
     pytest_num_workers=1,
-    resource_class=None,
+    resource_class="large",
     tests_to_run="tests/repo_utils",
 )
 
