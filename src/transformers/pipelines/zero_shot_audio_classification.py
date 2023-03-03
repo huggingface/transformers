@@ -118,6 +118,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
         sequences = [hypothesis_template.format(x) for x in candidate_labels]
         text_inputs = self.tokenizer(sequences, return_tensors=self.framework, padding=True)
         inputs["text_inputs"] = [text_inputs]
+        return inputs
 
     def _forward(self, model_inputs):
         candidate_labels = model_inputs.pop("candidate_labels")
@@ -131,8 +132,8 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
         outputs = self.model(**text_inputs, **model_inputs)
 
         model_outputs = {
-            "candidate_label": candidate_labels,
-            "logits_per_audio": outputs.logits_per_audio,
+            "candidate_labels": candidate_labels,
+            "logits": outputs.logits_per_audio,
         }
         return model_outputs
 
