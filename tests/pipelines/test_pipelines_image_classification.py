@@ -22,6 +22,7 @@ from transformers import (
 )
 from transformers.pipelines import ImageClassificationPipeline, pipeline
 from transformers.testing_utils import (
+    is_pipeline_test,
     nested_simplify,
     require_tf,
     require_torch,
@@ -43,6 +44,7 @@ else:
             pass
 
 
+@is_pipeline_test
 @require_torch_or_tf
 @require_vision
 class ImageClassificationPipelineTests(unittest.TestCase):
