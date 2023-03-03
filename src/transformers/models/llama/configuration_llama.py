@@ -100,3 +100,4 @@ class LLaMaConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
+        self.initializer_range = initializer_range
