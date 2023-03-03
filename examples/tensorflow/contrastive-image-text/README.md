@@ -51,34 +51,12 @@ ds = datasets.load_dataset("ydshieh/coco_dataset_script", "2017", data_dir=COCO_
 ```
 
 ### Create a model from a vision encoder model and a text encoder model
-Next, we create a [TFVisionTextDualEncoderModel](https://huggingface.co/docs/transformers/model_doc/vision-text-dual-encoder#tfvisiontextdualencoder).
-The `TFVisionTextDualEncoderModel` class lets you load any vision and text encoder model to create a dual encoder.
-Here is an example of how to load the model using pre-trained vision and text models.
+We can either load a CLIP-like vision-text dual encoder model from an existing dual encoder model, or
+by using a pre-trained vision encoder model and a pre-trained text encoder model.
 
-```python3
-from transformers import (
-    TFVisionTextDualEncoderModel,
-    VisionTextDualEncoderProcessor,
-    AutoTokenizer,
-    AutoImageProcessor
-)
-
-model = TFVisionTextDualEncoderModel.from_vision_text_pretrained(
-    "openai/clip-vit-base-patch32", "roberta-base"
-)
-
-tokenizer = AutoTokenizer.from_pretrained("roberta-base")
-image_processor = AutoImageProcessor.from_pretrained("openai/clip-vit-base-patch32")
-processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
-
-# save the model and processor
-model.save_pretrained("clip-roberta")
-processor.save_pretrained("clip-roberta")
-```
-
-This loads both the text and vision encoders using pre-trained weights, the projection layers are randomly
-initialized except for CLIP's vision model. If you use CLIP to initialize the vision model then the vision projection weights are also
-loaded using the pre-trained weights.
+If you wish to load an existing dual encoder model, please use the `--model_name_or_path` argument. If
+you want to use a pre-trained vision encoder model and a pre-trained text encoder model, please use the
+`--vision_model_name_or_path` and `--text_model_name_or_path` arguments instead.
 
 ### Train the model
 Finally, we can run the example script to train the model:
@@ -86,7 +64,8 @@ Finally, we can run the example script to train the model:
 ```bash
 python examples/tensorflow/contrastive-image-text/run_clip.py \
     --output_dir ./clip-roberta-finetuned \
-    --model_name_or_path clip-roberta \
+    --vision_model_name_or_path openai/clip-vit-base-patch32 \
+    --text_model_name_or_path roberta-base \
     --data_dir $PWD/data \
     --dataset_name ydshieh/coco_dataset_script \
     --dataset_config_name=2017 \
