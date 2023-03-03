@@ -248,45 +248,42 @@ class LLaMaAttention(nn.Module):
 class RotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings, base=10000):
         super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float, device=None) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        assert dim % 2 == 0
+        self.inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float, device=None)[:dim//2] / dim))
 
         # Build here to make `torch.jit.trace` work.
         self.max_seq_len_cached = max_position_embeddings
         t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos()[None, None, :, :], persistent=False)
-        self.register_buffer("sin_cached", emb.sin()[None, None, :, :], persistent=False)
+        # We don't register as a buffer as this needs to be kept in fp32 at all time.
+        self.fp32_cos_cached = freqs.cos()[None, None, :, :]
+        self.fp32_sin_cached = freqs.sin()[None, None, :, :]
 
-    def forward(self, seq_len=None):
-        device = self.sin_cached.device
+    def forward(self, device, seq_len=None):
+        self.inv_freq = self.inv_freq.to(device)
+
         # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
         if seq_len > self.max_seq_len_cached:
             self.max_seq_len_cached = seq_len
             t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
             freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            # Different from paper, but it uses a different permutation in order to obtain the same calculation
-            emb = torch.cat((freqs, freqs), dim=-1).to(device)
-            self.cos_cached = emb.cos()[None, None, :, :]
-            self.sin_cached = emb.sin()[None, None, :, :]
-        return self.cos_cached[:seq_len, ...].to(device), self.sin_cached[:seq_len, ...].to(device)
+            self.fp32_cos_cached = freqs.cos()[None, None, :, :]
+            self.fp32_sin_cached = freqs.sin()[None, None, :, :]
 
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+        return self.fp32_cos_cached.to(device)[:seq_len, ...], self.fp32_sin_cached.to(device)[:seq_len, ...]
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
     cos = cos[..., offset : q.shape[-2] + offset, :]
     sin = sin[..., offset : q.shape[-2] + offset, :]
-    q_embed = (rotate_half(q) * sin) + (q * cos)
-    k_embed = (rotate_half(k) * sin) + (k * cos)
-    return q_embed, k_embed
+    # q[...,::2] is considered the real part, q[...,1::2] is the imaginary part
+    q_real = q[...,::2].float()
+    q_imag = q[...,1::2].float()
+    k_real = k[...,::2].float()
+    k_imag = k[...,1::2].float()
+    q_embed = torch.stack([q_real * cos - (q_imag * sin), q_real * sin + q_imag * cos], dim=-1).view(q.shape)
+    k_embed = torch.stack([k_real * cos - (k_imag * sin), k_real * sin + k_imag * cos], dim=-1).view(k.shape)
+    return q_embed.type_as(q), k_embed.type_as(k)
 
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXFF with GPTNeoX->LLaMa
@@ -486,7 +483,7 @@ class LLaMaModel(LLaMaPreTrainedModel):
         all_seq_length = seq_length
         if past_key_values[0] is not None:
             all_seq_length += past_key_values[0][0].shape[-2]
-        cos, sin = self.rotary_emb(seq_len=all_seq_length)
+        cos, sin = self.rotary_emb(device=input_ids.device, seq_len=all_seq_length)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
