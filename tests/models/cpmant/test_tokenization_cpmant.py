@@ -26,23 +26,32 @@ if is_torch_available():
 
 @custom_tokenizers
 class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    all_tokenizer_classes = {
-        CPMAntTokenizer,
-        CPMAntTokenizerFast,
-    }
-
     def test_pre_tokenization(self):
-        for tokenizer_class in self.all_tokenizer_classes:
-            tokenizer = tokenizer_class.from_pretrained("openbmb/cpm-ant-10b")
-            texts = "今天天气真好！"
-            jieba_tokens = ["今天", "天气", "真", "好", "！"]
-            tokens = tokenizer.tokenize(texts)
-            self.assertListEqual(tokens, jieba_tokens)
-            normalized_text = "今天天气真好！"
-            input_tokens = [tokenizer.bos_token] + tokens
+        tokenizer = CPMAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
+        texts = "今天天气真好！"
+        jieba_tokens = ["今天", "天气", "真", "好", "！"]
+        tokens = tokenizer.tokenize(texts)
+        self.assertListEqual(tokens, jieba_tokens)
+        normalized_text = "今天天气真好！"
+        input_tokens = [tokenizer.bos_token] + tokens
 
-            input_jieba_tokens = [6, 9802, 14962, 2082, 831, 244]
-            self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_jieba_tokens)
+        input_jieba_tokens = [6, 9802, 14962, 2082, 831, 244]
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_jieba_tokens)
 
-            reconstructed_text = tokenizer.decode(input_jieba_tokens)
-            self.assertEqual(reconstructed_text, normalized_text)
+        reconstructed_text = tokenizer.decode(input_jieba_tokens)
+        self.assertEqual(reconstructed_text, normalized_text)
+
+    def test_pre_tokenization_fast(self):
+        tokenizer = CPMAntTokenizerFast.from_pretrained("openbmb/cpm-ant-10b")
+        texts = "今天天气真好！"
+        jieba_tokens = ["今天", "天气", "真", "好", "！"]
+        tokens = tokenizer.tokenize(texts)
+        self.assertListEqual(tokens, jieba_tokens)
+        normalized_text = "今天天气真好！"
+        input_tokens = [tokenizer.bos_token] + tokens
+
+        input_jieba_tokens = [6, 9802, 14962, 2082, 831, 244]
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_jieba_tokens)
+
+        reconstructed_text = tokenizer.decode(input_jieba_tokens)
+        self.assertEqual(reconstructed_text, normalized_text)
