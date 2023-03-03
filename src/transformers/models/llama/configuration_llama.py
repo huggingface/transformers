@@ -78,9 +78,12 @@ class LLaMaConfig(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=32,
         intermediate_size=11008,
+        # TODO @thomasw21: I don't thing we need this at all.
         max_position_embeddings=2048,
         layer_norm_eps=1e-5,
         use_cache=True,
+        # Test fails is we don't provide these values.
+        initializer_range=0.02,
         **kwargs,
     ):
         if "tie_word_embeddings" in kwargs:

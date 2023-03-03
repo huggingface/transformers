@@ -86,11 +86,11 @@ class LLaMaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -224,7 +224,12 @@ class LLaMaAttention(nn.Module):
         )
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
-        attention_mask = causal_mask * attention_mask
+        # Build attention mask
+        if attention_mask is not None:
+            attention_mask = causal_mask * attention_mask
+        else:
+            attention_mask = causal_mask
+
         if attn_scores.dtype == torch.float16:
             attn_scores = attn_scores.to(torch.float)
         attn_scores = torch.masked_fill(attn_scores, ~attention_mask, torch.finfo(attn_scores.dtype).min)
