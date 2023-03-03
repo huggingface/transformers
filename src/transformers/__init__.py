@@ -665,6 +665,7 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizer")
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
+    _import_structure["models.llama"].append("LLaMaTokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
@@ -727,7 +728,7 @@ else:
     _import_structure["models.layoutlmv3"].append("LayoutLMv3TokenizerFast")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
-    _import_structure["models.llama"].append("LLaMaTokenizer")
+    _import_structure["models.llama"].append("LLaMaTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
     _import_structure["models.markuplm"].append("MarkupLMTokenizerFast")
@@ -4243,6 +4244,7 @@ if TYPE_CHECKING:
         from .models.fnet import FNetTokenizer
         from .models.gpt_sw3 import GPTSw3Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
+        from .models.llama import LLaMaTokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBart50Tokenizer, MBartTokenizer
@@ -4297,7 +4299,7 @@ if TYPE_CHECKING:
         from .models.layoutlmv3 import LayoutLMv3TokenizerFast
         from .models.layoutxlm import LayoutXLMTokenizerFast
         from .models.led import LEDTokenizerFast
-        from .models.llama import LLaMaTokenizer
+        from .models.llama import LLaMaTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
         from .models.markuplm import MarkupLMTokenizerFast

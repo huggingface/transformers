@@ -13,6 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
+from ... import is_sentencepiece_available
 from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
 from ...utils import OptionalDependencyNotAvailable
 
@@ -20,12 +21,20 @@ from ...utils import OptionalDependencyNotAvailable
 _import_structure = {"configuration_llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LLaMaConfig"]}
 
 try:
-    if not is_tokenizers_available():
+    if not is_sentencepiece_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["tokenization_llama"] = ["LLaMaTokenizer"]
+
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_llama_fast"] = ["LLaMaTokenizerFast"]
 
 try:
     if not is_torch_available():

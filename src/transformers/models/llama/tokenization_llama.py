@@ -52,6 +52,7 @@ class LLaMaTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    padding_side: str = "left"
 
     def __init__(
         self, vocab_file: str, bos_token: str = "<bos>", eos_token: str = "<eos>", unk_token: str = "<unk>", **kwargs
@@ -99,8 +100,8 @@ class LLaMaTokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A sequence has the following format:
 
-        - single sequence: `X </s>`
-        - pair of sequences: `A </s> B </s>`
+        - single sequence: `<bos> X`
+        - pair of sequences: `<bos> A B`
 
         Args:
             token_ids_0 (`List[int]`):
