@@ -1116,19 +1116,6 @@ class MarkupLMConverter(Converter):
 
         return tokenizer
 
-class LLaMaConverter(SpmConverter):
-    def vocab(self, proto):
-        return [(piece.piece, piece.score) for piece in proto.pieces]
-
-    def post_processor(self):
-        return processors.TemplateProcessing(
-            single=["<bos>", "$A"],
-            pair=["<bos>", "$A", "$B"],
-            special_tokens=[
-                ("<bos>", self.original_tokenizer.sp_model.bos_id()),
-            ],
-        )
-
 
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
@@ -1156,7 +1143,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "LayoutLMv2Tokenizer": BertConverter,
     "LayoutLMv3Tokenizer": RobertaConverter,
     "LayoutXLMTokenizer": XLMRobertaConverter,
-    "LLaMaTokenizer": LLaMaConverter,
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
     "LxmertTokenizer": BertConverter,

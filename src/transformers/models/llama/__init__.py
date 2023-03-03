@@ -29,14 +29,6 @@ else:
     _import_structure["tokenization_llama"] = ["LLaMaTokenizer"]
 
 try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_llama_fast"] = ["LLaMaTokenizerFast"]
-
-try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
