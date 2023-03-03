@@ -329,8 +329,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         offset_mapping = outputs.pop("offset_mapping", None)
 
         if offset_mapping is None:
-            offset_mapping = all_outputs[0].pop("offset_mapping", None)
-            offset_mapping = offset_mapping[0] if offset_mapping is not None else None
+            offset_mapping = all_outputs[0].pop("offset_mapping", [None])
 
         aggregated_entities = []
         for i in range(num_chunks):
