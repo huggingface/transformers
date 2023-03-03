@@ -56,7 +56,19 @@ class LLaMaLayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-        return F.layer_norm(hidden_states, normalized_shape=self.weight.shape, weight=self.weight, bias=None, eps=self.variance_epsilon)
+        # LLaMaLayerNorm uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
+        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus variance is calculated
+        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
+        # half-precision inputs is done in fp32
+
+        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+
+        # convert into half-precision if necessary
+        if self.weight.dtype in [torch.float16, torch.bfloat16]:
+            hidden_states = hidden_states.to(self.weight.dtype)
+
+        return self.weight * hidden_states
 
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXPreTrainedModel with GPTNeoX->LLaMa,gpt_neox->llama
