@@ -337,7 +337,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
         is_longer = []
         for mel, longer in padded_inputs:
             input_mel.append(mel)
-            is_longer.append(longer)
+            is_longer.append([longer])
 
         if truncation == "fusion" and sum(is_longer) == 0:
             # if no audio is longer than 10s, then randomly select one audio to be longer
