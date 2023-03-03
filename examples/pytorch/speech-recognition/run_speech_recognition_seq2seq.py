@@ -397,19 +397,20 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
-    config.update(
-        {
-            "forced_decoder_ids": model_args.forced_decoder_ids,
-            "suppress_tokens": model_args.suppress_tokens,
-            "apply_spec_augment": model_args.apply_spec_augment,
-            "mask_time_prob": model_args.mask_time_prob,
-            "mask_time_length": model_args.mask_time_length,
-            "mask_time_min_masks": model_args.mask_time_min_masks,
-            "mask_feature_prob": model_args.mask_feature_prob,
-            "mask_feature_length": model_args.mask_feature_length,
-            "mask_feature_min_masks": model_args.mask_feature_min_masks,
-        }
-    )
+    config.update({"forced_decoder_ids": model_args.forced_decoder_ids, "suppress_tokens": model_args.suppress_tokens})
+
+    if config.model_type == "whisper":
+        config.update(
+            {
+                "apply_spec_augment": model_args.apply_spec_augment,
+                "mask_time_prob": model_args.mask_time_prob,
+                "mask_time_length": model_args.mask_time_length,
+                "mask_time_min_masks": model_args.mask_time_min_masks,
+                "mask_feature_prob": model_args.mask_feature_prob,
+                "mask_feature_length": model_args.mask_feature_length,
+                "mask_feature_min_masks": model_args.mask_feature_min_masks,
+            }
+        )
 
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.feature_extractor_name if model_args.feature_extractor_name else model_args.model_name_or_path,
@@ -463,7 +464,9 @@ def main():
     model_input_name = feature_extractor.model_input_names[0]
     do_lower_case = data_args.do_lower_case
     # if SpecAugment is used, return attention_mask to guide the mask along time axis
-    return_attention_mask = model_args.apply_spec_augment and model_args.mask_time_prob > 0
+    return_attention_mask = (
+        config.model_type == "whisper" and model_args.apply_spec_augment and model_args.mask_time_prob > 0
+    )
 
     if data_args.max_train_samples is not None:
         raw_datasets["train"] = raw_datasets["train"].select(range(data_args.max_train_samples))
