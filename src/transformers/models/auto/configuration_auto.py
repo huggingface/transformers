@@ -429,6 +429,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ernie_m", "ErnieM"),
         ("esm", "ESM"),
         ("flan-t5", "FLAN-T5"),
+        ("flan-ul2", "FLAN-UL2"),
         ("flaubert", "FlauBERT"),
         ("flava", "FLAVA"),
         ("fnet", "FNet"),

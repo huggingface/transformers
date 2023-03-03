@@ -74,6 +74,14 @@ Based on the original T5 model, Google has released some follow-up works:
 - **byT5**: byT5 is a T5 model pre-trained on byte sequences rather than SentencePiece subword token sequences. Refer
   to the documentation of byT5 which can be found [here](byt5).
 
+- **UL2**: UL2 is a T5 like model pretrained on various denoising objectives
+
+- **Flan-T5**: Flan is a pretraining methods that is based on prompting. The Flan-T5 are T5 models trained on the Flan collection of 
+    datasets which include: `taskmaster2`, `djaym7/wiki_dialog`, `deepmind/code_contests`, `lambada`, `gsm8k`, `aqua_rat`, `esnli`, `quasc` and `qed`.
+
+- **FLan-UL2** : the UL2 model finetuned using the "Flan" prompt tuning and dataset collection.
+
+
 All checkpoints can be found on the [hub](https://huggingface.co/models?search=t5).
 
 This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/google-research/text-to-text-transfer-transformer).
