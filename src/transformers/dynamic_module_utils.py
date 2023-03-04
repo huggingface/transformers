@@ -116,6 +116,9 @@ def check_imports(filename):
     with open(filename, "r", encoding="utf-8") as f:
         content = f.read()
 
+    # filter out try/except block so in custom code we can have try/except imports
+    content = re.sub(r"\s*try\s*:\s*.*?\s*except\s*:", "", content, flags=re.MULTILINE)
+
     # Imports of the form `import xxx`
     imports = re.findall(r"^\s*import\s+(\S+)\s*$", content, flags=re.MULTILINE)
     # Imports of the form `from xxx import yyy`
