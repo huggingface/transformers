@@ -208,18 +208,19 @@ class LLaMaAttention(nn.Module):
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
-        attn_scores = torch.empty(
-            1,
-            dtype=query.dtype,
-            device=key.device,
-        ).expand(batch_size * num_attention_heads, query_length, key_length)
-        attn_scores = torch.baddbmm(
-            attn_scores,
-            query,
-            key.transpose(1, 2),
-            beta=0.0,
-            alpha=1.0 / math.sqrt(self.head_size),
-        )
+        # attn_scores = torch.empty(
+        #     1,
+        #     dtype=query.dtype,
+        #     device=key.device,
+        # ).expand(batch_size * num_attention_heads, query_length, key_length)
+        # attn_scores = torch.baddbmm(
+        #     attn_scores,
+        #     query,
+        #     key.transpose(1, 2),
+        #     beta=0.0,
+        #     alpha=1.0 / math.sqrt(self.head_size),
+        # )
+        attn_scores = torch.matmul(query, key.transpose(1,2)) / math.sqrt(self.head_size)
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
         # Build attention mask
@@ -269,7 +270,7 @@ class RotaryEmbedding(torch.nn.Module):
     def forward(self, device, seq_len=None):
         if seq_len > self.max_seq_len_cached or self.device != device:
             self.build_new_freq(
-                length = max(self.max_seq_len_cached, seq_len),
+                length=max(self.max_seq_len_cached, seq_len),
                 device=device
             )
 
