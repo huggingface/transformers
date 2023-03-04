@@ -1,0 +1,181 @@
+import argparse
+import json
+import os
+import shutil
+
+import torch
+
+"""
+Sample usage:
+
+    python src/transformers/models/llama/convert_llama_weights_to_hf.py \
+        --input_dir /path/to/downloaded/llama/weights --model_size 7B --output_dir /output/path
+
+"""
+
+INTERMEDIATE_SIZE_MAP = {
+    "7B": 11008,
+    "13B": 13824,
+    "30B": 17920,
+    "65B": 22016,
+}
+
+
+def read_json(path):
+    with open(path, "r") as f:
+        return json.loads(f.read())
+
+
+def write_json(text, path):
+    with open(path, "w") as f:
+        f.write(json.dumps(text))
+
+
+def write_model(model_path, input_base_path, model_size):
+    # WIP: Currently only support 7B
+    assert model_size == "7B"
+    os.makedirs(model_path, exist_ok=True)
+
+    params = read_json(os.path.join(input_base_path, "params.json"))
+    checkpoint = torch.load(os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu")
+
+    param_count = 0
+    index_dict = {"weight_map": {}}
+    for layer_i in range(params["n_layers"]):
+        filename = "pytorch_model-{:05d}-of-{:05d}.bin".format(
+            layer_i,
+            params["n_layers"] + 1,
+        )
+        state_dict = {
+            f"model.decoder.layers.{layer_i}.self_attn.q_proj.weight": checkpoint[
+                f"layers.{layer_i}.attention.wq.weight"
+            ],
+            f"model.decoder.layers.{layer_i}.self_attn.k_proj.weight": checkpoint[
+                f"layers.{layer_i}.attention.wk.weight"
+            ],
+            f"model.decoder.layers.{layer_i}.self_attn.v_proj.weight": checkpoint[
+                f"layers.{layer_i}.attention.wv.weight"
+            ],
+            f"model.decoder.layers.{layer_i}.self_attn.o_proj.weight": checkpoint[
+                f"layers.{layer_i}.attention.wo.weight"
+            ],
+            f"model.decoder.layers.{layer_i}.feed_forward.w1.weight": checkpoint[
+                f"layers.{layer_i}.feed_forward.w1.weight"
+            ],
+            f"model.decoder.layers.{layer_i}.feed_forward.w2.weight": checkpoint[
+                f"layers.{layer_i}.feed_forward.w2.weight"
+            ],
+            f"model.decoder.layers.{layer_i}.feed_forward.w3.weight": checkpoint[
+                f"layers.{layer_i}.feed_forward.w3.weight"
+            ],
+            f"model.decoder.layers.{layer_i}.attention_norm.weight": checkpoint[
+                f"layers.{layer_i}.attention_norm.weight"
+            ],
+            f"model.decoder.layers.{layer_i}.ffn_norm.weight": checkpoint[f"layers.{layer_i}.ffn_norm.weight"],
+        }
+
+        for k, v in state_dict.items():
+            index_dict["weight_map"][k] = filename
+            param_count += v.numel()
+        torch.save(state_dict, os.path.join(model_path, filename))
+
+    filename = "pytorch_model-{:05d}-of-{:05d}.bin".format(
+        params["n_layers"],
+        params["n_layers"] + 1,
+    )
+    state_dict = {
+        "model.decoder.embed_tokens.weight": checkpoint["tok_embeddings.weight"],
+        "model.decoder.norm.weight": checkpoint["norm.weight"],
+        "lm_head.weight": checkpoint["output.weight"],
+    }
+
+    for k, v in state_dict.items():
+        index_dict["weight_map"][k] = filename
+        param_count += v.numel()
+    torch.save(state_dict, os.path.join(model_path, filename))
+
+    # Write configs
+    index_dict["metadata"] = {"total_size": param_count * 2}
+    write_json(index_dict, os.path.join(model_path, "pytorch_model.bin.index.json"))
+    config_out = {
+        "architectures": ["LLaMAForCausalLM"],
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "hidden_act": "silu",
+        "hidden_size": params["dim"],
+        "intermediate_size": INTERMEDIATE_SIZE_MAP[model_size],
+        "initializer_range": 0.02,
+        "max_sequence_length": 2048,
+        "model_type": "llama",
+        "num_attention_heads": params["n_heads"],
+        "num_hidden_layers": params["n_layers"],
+        "pad_token_id": -1,
+        "rms_norm_eps": params["norm_eps"],
+        "torch_dtype": "float16",
+        "transformers_version": "4.27.0.dev0",
+        "type_vocab_size": 2,
+        "use_cache": True,
+        "vocab_size": 32000,
+    }
+    write_json(
+        config_out,
+        os.path.join(model_path, "config.json"),
+    )
+    generation_config = {
+        "_from_model_config": True,
+        "bos_token_id": 0,
+        "eos_token_id": 1,
+        "pad_token_id": -1,
+        "transformers_version": "4.27.0.dev0",
+    }
+    write_json(
+        generation_config,
+        os.path.join(model_path, "generation_config.json"),
+    )
+
+
+def write_tokenizer(tokenizer_path, input_tokenizer_path):
+    os.makedirs(tokenizer_path, exist_ok=True)
+    write_json({}, os.path.join(tokenizer_path, "special_tokens_map.json"))
+    write_json(
+        {
+            "bos_token": "",
+            "eos_token": "",
+            "model_max_length": int(1e30),
+            "tokenizer_class": "LLaMATokenizer",
+            "unk_token": "",
+        },
+        os.path.join(tokenizer_path, "special_tokens_map.json"),
+    )
+    shutil.copyfile(input_tokenizer_path, os.path.join(tokenizer_path, "tokenizer.model"))
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input_dir",
+        help="Location of LLaMA weights, which contains tokenizer.model and model folders",
+    )
+    parser.add_argument(
+        "--model_size",
+        # choices=['7B', '13B', '30B', '65B'],
+        choices=["7B"],
+    )
+    parser.add_argument(
+        "--output_dir",
+        help="Location to write HF model and tokenizer",
+    )
+    args = parser.parse_args()
+    write_model(
+        model_path=os.path.join(args.output_dir, "llama-{}".format(args.model_size).lower()),
+        input_base_path=os.path.join(args.input_dir, args.model_size),
+        model_size=args.model_size,
+    )
+    write_tokenizer(
+        tokenizer_path=os.path.join(args.output_dir, "tokenizer"),
+        input_tokenizer_path=os.path.join(args.input_dir, "tokenizer.model"),
+    )
+
+
+if __name__ == "__main__":
+    main()
