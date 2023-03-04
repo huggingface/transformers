@@ -16,6 +16,7 @@
 """ PyTorch Autoformer model."""
 
 import random
+import math
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -759,6 +760,7 @@ class AutoformerAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        factor: int = 3,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -778,6 +780,8 @@ class AutoformerAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+        self.factor = factor
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -800,7 +804,8 @@ class AutoformerAttention(nn.Module):
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
+        # query_states = self.q_proj(hidden_states) * self.scaling # TODO remove
+        query_states = self.q_proj(hidden_states)
         # get key, value proj
         # `past_key_value[0].shape[2] == key_value_states.shape[1]`
         # is checking that the `sequence_length` of the `past_key_value` is the same as
@@ -859,7 +864,7 @@ class AutoformerAttention(nn.Module):
         query_states_fft = torch.fft.rfft(query_states, dim=1)
         key_states_fft = torch.fft.rfft(key_states, dim=1)
         attn_weights = query_states_fft * torch.conj(key_states_fft)
-        attn_weights = torch.fft.irfft(attn_weights, dim=1)  # Autocorrelation "corr"
+        attn_weights = torch.fft.irfft(attn_weights, dim=1)  # Autocorrelation(Q,K)
 
         src_len = key_states.size(1)
         channel = key_states.size(2)
@@ -899,30 +904,36 @@ class AutoformerAttention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
+        # attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         # attn_output = torch.bmm(attn_probs, value_states)
 
         self.training = True
         if self.training:
-            # time_delay_agg_training()
             time_length = value_states.size(1)
             autocorrelations = attn_weights.view(bsz, self.num_heads, tgt_len, channel)
 
-            # find top k autocorrelations
+            # find top k autocorrelations delays
             top_k = int(self.factor * math.log(time_length))
-            mean_on_head_channel = torch.mean(torch.mean(autocorrelations, dim=1), dim=2)  # bsz x tgt_len
-            mean_on_bsz = torch.mean(mean_on_head_channel, dim=0)
-            top_k_autocorrelations = torch.topk(mean_on_bsz, top_k)[1]
+            autocorrelations_mean_on_head_channel = torch.mean(torch.mean(autocorrelations, dim=1), dim=2)  # bsz x tgt_len
+            autocorrelations_mean_on_bsz = torch.mean(autocorrelations_mean_on_head_channel, dim=0)
+            top_k_delays = torch.topk(autocorrelations_mean_on_bsz, top_k)[1]
 
-            # stack them together
-            weights_list = [mean_on_head_channel[:, top_k_autocorrelations[i]] for i in range(top_k)]
-            weights = torch.stack(weights_list, dim=-1)  # bsz x top_k todo: think can be without dim=-1
+            # stack autocorrelations together and apply softmax
+            top_k_autocorrelations = [autocorrelations_mean_on_head_channel[:, top_k_delays[i]] for i in range(top_k)]
+            top_k_autocorrelations = torch.stack(top_k_autocorrelations, dim=-1)
+            top_k_autocorrelations = torch.softmax(top_k_autocorrelations, dim=-1)  # bsz x top_k
 
-            tmp_corr = torch.softmax(weights, dim=-1)
+            # compute aggregation: value_states.roll(delay) * top_k_autocorrelations(delay)
+            delays_agg = torch.zeros_like(value_states).float()  # bsz x time_length x channel
+            for i in range(top_k):
+                # compute at_delay
+                value_states_roll_delay = value_states.roll(shifts=-int(top_k_delays[i]), dims=1)
+                top_k_autocorrelations_at_delay = top_k_autocorrelations[:, i].unsqueeze(1).unsqueeze(1).unsqueeze(1).repeat(1, self.num_heads, tgt_len, channel)
+                top_k_autocorrelations_at_delay = top_k_autocorrelations_at_delay.view(bsz * self.num_heads, tgt_len, channel)
+                # aggregate
+                delays_agg += value_states_roll_delay * top_k_autocorrelations_at_delay
 
-            # aggregation
-
+            attn_output = delays_agg
         else:
             time_delay_agg_inference()
 
@@ -954,6 +965,7 @@ class AutoformerEncoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
+            factor=config.factor,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -1025,6 +1037,7 @@ class AutoformerDecoderLayer(nn.Module):
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            factor=config.factor,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -1036,6 +1049,7 @@ class AutoformerDecoderLayer(nn.Module):
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            factor=config.factor,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
