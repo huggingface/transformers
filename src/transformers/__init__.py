@@ -1799,7 +1799,6 @@ else:
     )
     _import_structure["models.llama"].extend(
         [
-            "LLAMA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "LLaMaForCausalLM",
             "LLaMaLayer",
             "LLaMaModel",
@@ -5172,7 +5171,6 @@ if TYPE_CHECKING:
             LiltPreTrainedModel,
         )
         from .models.llama import (
-            LLAMA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LLaMaForCausalLM,
             LLaMaLayer,
             LLaMaModel,

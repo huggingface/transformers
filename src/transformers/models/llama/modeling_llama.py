@@ -36,16 +36,7 @@ from .configuration_llama import LLaMaConfig
 
 logger = logging.get_logger(__name__)
 
-# TODO @thomasw21: Provide checkpoint for documentation
-_CHECKPOINT_FOR_DOC = "facebook/llama"
-_REAL_CHECKPOINT_FOR_DOC = "facebook/llama"
 _CONFIG_FOR_DOC = "LLaMaConfig"
-
-LLAMA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/llama",
-    # See all LLaMa models at https://huggingface.co/models?filter=llama
-]
-
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->LLaMa
 class LLaMaLayerNorm(nn.Module):
@@ -207,6 +198,7 @@ class LLaMaAttention(nn.Module):
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
 
+        # TODO @thomasw21: Use `baddbmm` in order to fuse the kernels together. This comes with a loss of precision compared to original inference code
         attn_scores = torch.matmul(query, key.transpose(1, 2)) / math.sqrt(self.head_size)
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
@@ -404,8 +396,6 @@ class LLaMaModel(LLaMaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )

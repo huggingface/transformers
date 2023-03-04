@@ -35,7 +35,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_llama"] = [
-        "LLAMA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LLaMaForCausalLM",
         "LLaMaLayer",
         "LLaMaModel",
@@ -61,7 +60,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_llama import (
-            LLAMA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LLaMaForCausalLM,
             LLaMaLayer,
             LLaMaModel,
