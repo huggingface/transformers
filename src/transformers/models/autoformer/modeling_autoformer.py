@@ -907,35 +907,47 @@ class AutoformerAttention(nn.Module):
         # attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         # attn_output = torch.bmm(attn_probs, value_states)
 
-        self.training = True
-        if self.training:
-            time_length = value_states.size(1)
-            autocorrelations = attn_weights.view(bsz, self.num_heads, tgt_len, channel)
+        # time delay aggregation
+        time_length = value_states.size(1)
+        autocorrelations = attn_weights.view(bsz, self.num_heads, tgt_len, channel)
 
-            # find top k autocorrelations delays
-            top_k = int(self.factor * math.log(time_length))
-            autocorrelations_mean_on_head_channel = torch.mean(torch.mean(autocorrelations, dim=1), dim=2)  # bsz x tgt_len
+        # find top k autocorrelations delays
+        top_k = int(self.factor * math.log(time_length))
+        autocorrelations_mean_on_head_channel = torch.mean(torch.mean(autocorrelations, dim=1), dim=2)  # bsz x tgt_len
+        if self.training:
             autocorrelations_mean_on_bsz = torch.mean(autocorrelations_mean_on_head_channel, dim=0)
             top_k_delays_index = torch.topk(autocorrelations_mean_on_bsz, top_k)[1]
-
-            # stack autocorrelations together and apply softmax
-            top_k_autocorrelations = [autocorrelations_mean_on_head_channel[:, top_k_delays_index[i]] for i in range(top_k)]
-            top_k_autocorrelations = torch.stack(top_k_autocorrelations, dim=-1)
-            top_k_autocorrelations = torch.softmax(top_k_autocorrelations, dim=-1)  # bsz x top_k
-
-            # compute aggregation: value_states.roll(delay) * top_k_autocorrelations(delay)
-            delays_agg = torch.zeros_like(value_states).float()  # bsz x time_length x channel
-            for i in range(top_k):
-                # compute at_delay
-                value_states_roll_delay = value_states.roll(shifts=-int(top_k_delays_index[i]), dims=1)
-                top_k_autocorrelations_at_delay = top_k_autocorrelations[:, i].unsqueeze(1).unsqueeze(1).unsqueeze(1).repeat(1, self.num_heads, tgt_len, channel)
-                top_k_autocorrelations_at_delay = top_k_autocorrelations_at_delay.view(bsz * self.num_heads, tgt_len, channel)
-                # aggregate
-                delays_agg += value_states_roll_delay * top_k_autocorrelations_at_delay
-
-            attn_output = delays_agg.contiguous()
+            top_k_autocorrelations = torch.stack(
+                [autocorrelations_mean_on_head_channel[:, top_k_delays_index[i]] for i in range(top_k)], dim=-1)
         else:
-            time_delay_agg_inference()
+            top_k_autocorrelations, top_k_delays_index = torch.topk(autocorrelations_mean_on_head_channel, top_k, dim=1)
+
+        top_k_autocorrelations = torch.softmax(top_k_autocorrelations, dim=-1)  # bsz x top_k
+
+        # compute aggregation: value_states.roll(delay) * top_k_autocorrelations(delay)
+        delays_agg = torch.zeros_like(value_states).float()  # bsz x time_length x channel
+
+        if not self.training:
+            tmp_values = value_states.repeat(1, 2, 1)
+            init_index = torch.arange(time_length).unsqueeze(0).unsqueeze(-1) \
+                .repeat(bsz*self.num_heads, 1, channel).to(value_states.device)
+            init_index = init_index.view(bsz, self.num_heads, tgt_len, channel)
+
+        for i in range(top_k):
+            # compute value_states roll delay
+            if not self.training:
+                tmp_delay = init_index + top_k_delays_index[:, i].unsqueeze(1).unsqueeze(1).unsqueeze(1).repeat(1, self.num_heads, tgt_len, channel)
+                value_states_roll_delay = torch.gather(tmp_values, dim=1, index=tmp_delay)
+            else:
+                value_states_roll_delay = value_states.roll(shifts=-int(top_k_delays_index[i]), dims=1)
+
+            top_k_autocorrelations_at_delay = top_k_autocorrelations[:, i].unsqueeze(1).unsqueeze(1).unsqueeze(1).repeat(1, self.num_heads, tgt_len, channel)
+            top_k_autocorrelations_at_delay = top_k_autocorrelations_at_delay.view(bsz * self.num_heads, tgt_len, channel)
+
+            # aggregate
+            delays_agg += value_states_roll_delay * top_k_autocorrelations_at_delay
+
+        attn_output = delays_agg.contiguous()
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
