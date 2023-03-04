@@ -71,7 +71,6 @@ class LLaMaLayerNorm(nn.Module):
         return self.weight * hidden_states
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXPreTrainedModel with GPTNeoX->LLaMa,gpt_neox->llama
 class LLaMaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -93,7 +92,7 @@ class LLaMaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, LLaMaLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -102,7 +101,6 @@ class LLaMaPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXAttention with GPTNeoX->LLaMa
 class LLaMaAttention(nn.Module):
     def __init__(self, config: LLaMaConfig):
         super().__init__()
@@ -275,7 +273,6 @@ def apply_rotary_pos_emb(embedding, complex_freq, offset: int = 0):
     return embed_rot.type_as(embedding)
 
 
-# Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXFF with GPTNeoX->LLaMa
 class LLaMaFF(nn.Module):
     def __init__(self, config):
         super().__init__()
