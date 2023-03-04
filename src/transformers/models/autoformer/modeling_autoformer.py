@@ -886,16 +886,16 @@ class AutoformerAttention(nn.Module):
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
                     f" {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, channel)
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, channel)
 
         if output_attentions:
             # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, channel)
+            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, channel)
         else:
             attn_weights_reshaped = None
 
@@ -903,14 +903,15 @@ class AutoformerAttention(nn.Module):
 
         # attn_output = torch.bmm(attn_probs, value_states)
 
+        self.training = True
         if self.training:
             # time_delay_agg_training()
             time_length = value_states.size(1)
-            autocorrelations = attn_weights.view(bsz, self.num_heads, channel, src_len)
+            autocorrelations = attn_weights.view(bsz, self.num_heads, tgt_len, channel)
 
             # find top k autocorrelations
-            top_k = int(self.factor * math.log(length))
-            mean_on_head_channel = torch.mean(torch.mean(autocorrelations, dim=1), dim=1)  # bsz x src_len
+            top_k = int(self.factor * math.log(time_length))
+            mean_on_head_channel = torch.mean(torch.mean(autocorrelations, dim=1), dim=2)  # bsz x tgt_len
             mean_on_bsz = torch.mean(mean_on_head_channel, dim=0)
             top_k_autocorrelations = torch.topk(mean_on_bsz, top_k)[1]
 
