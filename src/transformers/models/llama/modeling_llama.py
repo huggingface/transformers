@@ -247,11 +247,18 @@ class LLaMaAttention(nn.Module):
 class RotaryEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings, base=10000):
         super().__init__()
-        assert dim % 2 == 0
-        self.inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float, device=None)[:dim//2] / dim))
+        self.dim = dim
+        self.base = base
+        self.build_new_freq(length=max_position_embeddings, device=None)
+
+    def build_new_freq(self, length, device):
+        assert self.dim % 2 == 0
+        self.device = device
+        assert self.max_seq_len_cached <= length
+        self.max_seq_len_cached = length
+        self.inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float, device=None)[:self.dim // 2] / self.dim))
 
         # Build here to make `torch.jit.trace` work.
-        self.max_seq_len_cached = max_position_embeddings
         t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # We don't register as a buffer as this needs to be kept in fp32 at all time.
@@ -259,15 +266,11 @@ class RotaryEmbedding(torch.nn.Module):
         self.fp32_sin_cached = freqs.sin()[None, None, :, :]
 
     def forward(self, device, seq_len=None):
-        self.inv_freq = self.inv_freq.to(device)
-
-        # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
-        if seq_len > self.max_seq_len_cached:
-            self.max_seq_len_cached = seq_len
-            t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            self.fp32_cos_cached = freqs.cos()[None, None, :, :]
-            self.fp32_sin_cached = freqs.sin()[None, None, :, :]
+        if seq_len > self.max_seq_len_cached or self.device != device:
+            self.build_new_freq(
+                length = max(self.max_seq_len_cached, seq_len),
+                device=device
+            )
 
         return self.fp32_cos_cached.to(device)[:seq_len, ...], self.fp32_sin_cached.to(device)[:seq_len, ...]
 
