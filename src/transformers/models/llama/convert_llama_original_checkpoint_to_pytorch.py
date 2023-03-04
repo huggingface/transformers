@@ -99,14 +99,19 @@ def convert_model(model_path: Path, config: LLaMaConfig) -> LLaMaForCausalLM:
             transformers_name = map_original_names_to_transformers_names(original_name)
             transformers_param = model.get_parameter(transformers_name)
             checkpoint_param_set.add(transformers_name)
-            assert original_param.dtype == transformers_param.dtype, f"Expected dtypes to match. Got {original_param.dtype} and {transformers_param.dtype}"
+            assert (
+                original_param.dtype == transformers_param.dtype
+            ), f"Expected dtypes to match. Got {original_param.dtype} and {transformers_param.dtype}"
 
             if original_name.endswith("norm.weight"):
                 transformers_param.copy_(original_param)
                 continue
 
             # weights are sharded across TP
-            if any(original_name.endswith(suffix) for suffix in [".feed_forward.w2.weight", ".attention.wo.weight",  "tok_embeddings.weight"]):
+            if any(
+                original_name.endswith(suffix)
+                for suffix in [".feed_forward.w2.weight", ".attention.wo.weight", "tok_embeddings.weight"]
+            ):
                 # Row Linear weight
                 input_dim = transformers_param.shape[1]
                 assert input_dim % tp_size == 0
@@ -140,7 +145,9 @@ def convert_model(model_path: Path, config: LLaMaConfig) -> LLaMaForCausalLM:
 
             transformer_shard.copy_(original_param)
 
-    assert hf_param_set == checkpoint_param_set, f"Updated params didn't match. Ref: {hf_param_set}, got: {checkpoint_param_set}"
+    assert (
+        hf_param_set == checkpoint_param_set
+    ), f"Updated params didn't match. Ref: {hf_param_set}, got: {checkpoint_param_set}"
 
     return model
 

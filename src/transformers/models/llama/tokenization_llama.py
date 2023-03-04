@@ -15,7 +15,7 @@
 """Tokenization classes for LLaMa."""
 import os
 from shutil import copyfile
-from typing import List, Optional, Union, Tuple
+from typing import List, Optional, Tuple, Union
 
 import sentencepiece as spm
 
@@ -180,4 +180,3 @@ class LLaMaTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
-
