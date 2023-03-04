@@ -86,6 +86,8 @@ def convert_model(model_path: Path, config: LLaMaConfig) -> LLaMaForCausalLM:
 
     paths = sorted(model_path.glob("*.pth"))
     tp_size = len(paths)
+    hf_param_set = set(model.state_dict().keys())
+    checkpoint_param_set = set()
     for tp_rank, path in enumerate(paths):
         weights = torch.load(path)
 
@@ -96,6 +98,7 @@ def convert_model(model_path: Path, config: LLaMaConfig) -> LLaMaForCausalLM:
 
             transformers_name = map_original_names_to_transformers_names(original_name)
             transformers_param = model.get_parameter(transformers_name)
+            checkpoint_param_set.add(transformers_name)
             assert original_param.dtype == transformers_param.dtype, f"Expected dtypes to match. Got {original_param.dtype} and {transformers_param.dtype}"
 
             if original_name.endswith("norm.weight"):
@@ -136,6 +139,8 @@ def convert_model(model_path: Path, config: LLaMaConfig) -> LLaMaForCausalLM:
                 transformer_shard = transformers_param[start:end]
 
             transformer_shard.copy_(original_param)
+
+    assert hf_param_set == checkpoint_param_set, f"Updated params didn't match. Ref: {hf_param_set}, got: {checkpoint_param_set}"
 
     return model
 

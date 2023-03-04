@@ -206,8 +206,6 @@ class LLaMaAttention(nn.Module):
         batch_size, num_attention_heads, query_length, attn_head_size = query.shape
         key_length = key.shape[-2]
 
-        causal_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length]
-
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
         attn_scores = torch.empty(
@@ -225,6 +223,7 @@ class LLaMaAttention(nn.Module):
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
         # Build attention mask
+        causal_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length]
         if attention_mask is not None:
             attention_mask = causal_mask * attention_mask
         else:
@@ -272,17 +271,19 @@ class RotaryEmbedding(torch.nn.Module):
 
         return self.fp32_cos_cached.to(device)[:seq_len, ...], self.fp32_sin_cached.to(device)[:seq_len, ...]
 
-
+@torch.jit.script
 def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
     cos = cos[..., offset : q.shape[-2] + offset, :]
     sin = sin[..., offset : q.shape[-2] + offset, :]
     # q[...,::2] is considered the real part, q[...,1::2] is the imaginary part
+    assert cos.dtype == torch.float
+    assert sin.dtype == torch.float
     q_float = q.float()
     k_float = k.float()
-    q_real = q_float[...,::2].float()
-    q_imag = q_float[...,1::2].float()
-    k_real = k_float[...,::2].float()
-    k_imag = k_float[...,1::2].float()
+    q_real = q_float[...,::2]
+    q_imag = q_float[...,1::2]
+    k_real = k_float[...,::2]
+    k_imag = k_float[...,1::2]
     q_embed = torch.stack([q_real * cos - (q_imag * sin), q_real * sin + q_imag * cos], dim=-1).view(q.shape)
     k_embed = torch.stack([k_real * cos - (k_imag * sin), k_real * sin + k_imag * cos], dim=-1).view(k.shape)
     return q_embed.type_as(q), k_embed.type_as(k)
