@@ -1323,7 +1323,24 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
                         embedding_offset=embedding_offset,
                         n_vocab=composer_n_vocab,
                         n_dim=n_dim)
-        self.transformer = Pop2PianoForConditionalGeneration(config)
+        # self.transformer = Pop2PianoForConditionalGeneration(config)
+
+
+        from transformers import T5ForConditionalGeneration, T5Config
+        t5config = T5Config.from_pretrained("t5-small")
+        custom_config_t5 = {
+                "feed_forward_proj": "gated-gelu",
+                "tie_word_embeddings": False,
+                "tie_encoder_decoder": False,
+                "vocab_size": 2400,
+                "n_positions": 1024,
+                "is_gated_act": True,
+                "relative_attention_num_buckets": 32,
+        }
+        for k, v in custom_config_t5.items():
+            t5config.__setattr__(k, v)
+        self.transformer = T5ForConditionalGeneration(t5config)
+
 
         self.post_init()
 
@@ -1346,11 +1363,42 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
         """
         self.transformer.encoder._freeze_parameters()
 
-    def forward(self, input_ids, batch, ext_beatstep, max_batch_size:int = None, n_bars: int = 2):
+    def forward(self,
+                input_ids,
+                batch,
+                ext_beatstep,
+                composer=None,
+                model="generated",
+                max_batch_size:int = None,
+                n_bars: int = 2,
+                save_midi=False,
+                save_mix=False,
+                midi_path=None,
+                mix_path=None,
+                mix_sample_rate = None,
+                save_path = None,
+                ):
+
+        # select composer randomly if not already given
+        composer_to_feature_token = self.config.composer_to_feature_token
+        if composer is None:
+            composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
+        elif composer not in composer_to_feature_token.keys():
+            raise ValueError(f"Composer not found in list, Please choose from {list(composer_to_feature_token.keys())}")
+        composer_value = composer_to_feature_token[composer]
+        mix_sample_rate = (
+            self.config.dataset.get("sample_rate", None) if mix_sample_rate is None else mix_sample_rate
+        )
+
+        if save_path is not None:
+            extension = os.path.splitext(save_path)[1]
+            mix_path = save_path.replace(extension, f".{model}.{composer}.wav")
+            midi_path = save_path.replace(extension, f".{model}.{composer}.mid")
+
         n_bars = self.config.dataset.get("n_bars", None) if n_bars is None else n_bars
         max_batch_size = 64 // n_bars if max_batch_size is None else max_batch_size
-        max_length = self.config.dataset.get("target_length", None) * \
-                     max(1, (n_bars // self.config.dataset.get("n_bars", None))),
+        max_length = self.config.dataset.get("target_length") * max(1, (n_bars // self.config.dataset.get("n_bars")))
+        PAD = self.config.pad_token_id
 
         inputs_embeds = self.spectrogram(batch).transpose(-1, -2)
         if self.config.dataset.get("mel_is_conditioned", None):
@@ -1376,11 +1424,14 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
                 input_ids=_input_ids,
                 inputs_embeds=_inputs_embeds,
                 max_length=max_length,
+                # min_length=10,
+                do_sample=False,
             )
             _relative_tokens = _relative_tokens.cpu().numpy()
             relative_tokens.append(_relative_tokens)
 
         max_length = max([rt.shape[-1] for rt in relative_tokens])
+
         for i in range(len(relative_tokens)):
             relative_tokens[i] = np.pad(
                 relative_tokens[i],

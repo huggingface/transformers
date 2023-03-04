@@ -66,8 +66,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                  config: Pop2PianoConfig,
         ):
         self.config = config
-        # self.essentia_samplerate = ESSENTIA_SAMPLERATE
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def extract_rhythm(self, raw_audio):
         """
@@ -109,7 +107,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         return ext_beats
 
     def preprocess_mel(
-            self, audio, beatstep, n_bars, padding_value, composer_value=None
+            self, audio, beatstep, n_bars, padding_value,
     ):
         n_steps = n_bars * 4
         n_target_step = len(beatstep)
@@ -135,6 +133,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         batch = split_audio(audio)
         batch = pad_sequence(batch, batch_first=True, padding_value=padding_value)
 
+        ext_beatstep = torch.from_numpy(ext_beatstep)
+
         return batch, ext_beatstep
 
     def single_preprocess(
@@ -143,7 +143,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             feature_tokens=None,
             audio=None,
             n_bars=None,
-            composer_value=None,
     ):
         """
         generate a long audio sequence
@@ -176,33 +175,22 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                                                         beatstep,
                                                         n_bars=n_bars,
                                                         padding_value=self.config.pad_token_id,
-                                                        composer_value=composer_value,
                                                         )
         else:
             raise NotImplementedError("use_mel must be True")
 
         return input_ids, batch, ext_beatstep
 
-
     def __call__(self,
                  audio_path: str = None,
                  raw_audio:Union[np.ndarray, torch.tensor, list] = None,
                  audio_sr:int =None,
-                 composer=None,
                  beatsteps=None,
-                 model="generated",
                  steps_per_beat=2,
                  stereo_amp=0.5,
                  n_bars=2,
-                 # ignore_duplicate=True,
-                 # show_plot=False,
-                 save_midi=False,
-                 save_mix=False,
-                 midi_path=None,
-                 mix_path=None,
                  click_amp=0.2,
                  add_click=False,
-                 mix_sample_rate=None,
                  ):
 
         # If only raw_audio is present then audio_sr also must be present
@@ -216,59 +204,37 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         elif raw_audio is not None and audio_path is not  None:
             warnings.warn("Found both `raw_audio` and `audio_path` to be present, so using `audio_path`")
         elif raw_audio is None and audio_path is not None:
-            extension = os.path.splitext(audio_path)[1]
-            mix_path = (
-                audio_path.replace(extension, f".{model}.{composer}.wav")
-                if mix_path is None
-                else mix_path
-            )
-            midi_path = (
-                audio_path.replace(extension, f".{model}.{composer}.mid")
-                if midi_path is None
-                else midi_path
-            )
             raw_audio, sr = librosa.load(audio_path, sr=ESSENTIA_SAMPLERATE)
         else:
             sr = audio_sr
-
-        # select composer randomly if not already given
-        composer_to_feature_token = self.config.composer_to_feature_token
-        if composer is None:
-            composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
-        composer_value = composer_to_feature_token[composer]
-        mix_sample_rate = (
-            self.config.dataset.get("sample_rate", None) if mix_sample_rate is None else mix_sample_rate
-        )
 
         if beatsteps is None:
             bpm, beat_times, confidence, estimates, essentia_beat_intervals = self.extract_rhythm(raw_audio=raw_audio)
             beat_times = np.array(beat_times)
             beatsteps = self.interpolate_beat_times(beat_times, steps_per_beat, extend=True)
 
-        if self.config.dataset.get("use_mel", None):
-            # Change raw_audio_sr to config.dataset.sample_rate
-            raw_audio = librosa.core.resample(
-                raw_audio, orig_sr=sr, target_sr=self.config.dataset.get("sample_rate", None)
-            )
-            sr = self.config.dataset.get("sample_rate", None)
-            start_sample = int(beatsteps[0] * sr)
-            end_sample = int(beatsteps[-1] * sr)
-            _audio = torch.from_numpy(raw_audio)[start_sample:end_sample].to(self.device)
-            fzs = None
+        if self.config.dataset.get("use_mel", None) is not None:
+            if self.config.dataset.get("sample_rate", None) != ESSENTIA_SAMPLERATE and self.config.dataset.get("sample_rate", None) is not None:
+                # Change raw_audio_sr to config.dataset.sample_rate
+                raw_audio = librosa.core.resample(
+                    raw_audio, orig_sr=sr, target_sr=self.config.dataset.get("sample_rate"), res_type='kaiser_best'
+                )
+                sr = self.config.dataset.get("sample_rate")
+                start_sample = int(beatsteps[0] * sr)
+                end_sample = int(beatsteps[-1] * sr)
+                _audio = torch.from_numpy(raw_audio)[start_sample:end_sample]
+                fzs = None
         else:
             raise NotImplementedError("use_mel must be True")
-
 
         input_ids, batch, ext_beatstep = self.single_preprocess(
             feature_tokens=fzs,
             audio=_audio,
             beatstep=beatsteps - beatsteps[0],
             n_bars=n_bars,
-            composer_value=composer_value,
         )
 
-        return input_ids, batch, ext_beatstep
-
-
-
-
+        return {"input_ids" : torch.from_numpy(input_ids) if input_ids is not None else None,
+                "batch" : batch,
+                "ext_beatstep" : ext_beatstep,
+                }
