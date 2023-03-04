@@ -133,27 +133,20 @@ class LLaMaAttention(nn.Module):
     ):
         has_layer_past = layer_past is not None
 
-        # # Compute QKV
-        # # Attention heads [batch, seq_len, hidden_size]
-        # #   --> [batch, seq_len, (np * 3 * head_size)]
-        # qkv = self.qkv(hidden_states)
-        #
-        # # [batch, seq_len, (num_heads * 3 * head_size)]
-        # #   --> [batch, seq_len, num_heads, 3 * head_size]
-        # new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
-        # qkv = qkv.view(*new_qkv_shape)
-        #
-        # # [batch, seq_len, num_attention_heads, 3, head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
-        # query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
-        # key = qkv[..., self.head_size : 2 * self.head_size].permute(0, 2, 1, 3)
-        # value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
-        query, key, value = [
-            F.linear(
-                hidden_states,
-                weight=elt.reshape(self.num_attention_heads * self.head_size, self.hidden_size)
-            ).view(*hidden_states.shape[:-1], self.num_attention_heads, self.head_size).permute(0, 2, 1, 3)
-            for elt in torch.split(self.qkv.weight.view(self.num_attention_heads, 3, self.head_size, self.hidden_size), split_size_or_sections=1, dim=1)
-        ]
+        # Compute QKV
+        # Attention heads [batch, seq_len, hidden_size]
+        #   --> [batch, seq_len, (np * 3 * head_size)]
+        qkv = self.qkv(hidden_states)
+
+        # [batch, seq_len, (num_heads * 3 * head_size)]
+        #   --> [batch, seq_len, num_heads, 3 * head_size]
+        new_qkv_shape = qkv.size()[:-1] + (self.num_attention_heads, 3 * self.head_size)
+        qkv = qkv.view(*new_qkv_shape)
+
+        # [batch, seq_len, num_attention_heads, 3, head_size] --> 3 [batch, num_attention_heads, seq_len, head_size]
+        query = qkv[..., : self.head_size].permute(0, 2, 1, 3)
+        key = qkv[..., self.head_size : 2 * self.head_size].permute(0, 2, 1, 3)
+        value = qkv[..., 2 * self.head_size :].permute(0, 2, 1, 3)
 
         # Compute token offset for rotary embeddings (when decoding)
         offset = 0
