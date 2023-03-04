@@ -249,6 +249,7 @@ class RotaryEmbedding(torch.nn.Module):
         super().__init__()
         self.dim = dim
         self.base = base
+        self.max_seq_len_cached = max_position_embeddings
         self.build_new_freq(length=max_position_embeddings, device=None)
 
     def build_new_freq(self, length, device):
