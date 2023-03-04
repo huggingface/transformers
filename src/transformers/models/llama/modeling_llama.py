@@ -124,8 +124,7 @@ class LLaMaAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        frequency_cos,
-        frequency_sin,
+        complex_freq,
         head_mask=None,
         layer_past=None,
         use_cache=False,
@@ -152,7 +151,8 @@ class LLaMaAttention(nn.Module):
         offset = 0
         if has_layer_past:
             offset = layer_past[0].shape[-2]
-        query, key = apply_rotary_pos_emb(q=query, k=key, cos=frequency_cos, sin=frequency_sin, offset=offset)
+        query = apply_rotary_pos_emb(embedding=query, complex_freq=complex_freq, offset=offset)
+        key = apply_rotary_pos_emb(embedding=key, complex_freq=complex_freq, offset=offset)
 
         # Cache QKV values
         if has_layer_past:
@@ -208,18 +208,7 @@ class LLaMaAttention(nn.Module):
 
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
-        # attn_scores = torch.empty(
-        #     1,
-        #     dtype=query.dtype,
-        #     device=key.device,
-        # ).expand(batch_size * num_attention_heads, query_length, key_length)
-        # attn_scores = torch.baddbmm(
-        #     attn_scores,
-        #     query,
-        #     key.transpose(1, 2),
-        #     beta=0.0,
-        #     alpha=1.0 / math.sqrt(self.head_size),
-        # )
+
         attn_scores = torch.matmul(query, key.transpose(1,2)) / math.sqrt(self.head_size)
         attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
 
@@ -264,8 +253,7 @@ class RotaryEmbedding(torch.nn.Module):
         t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # We don't register as a buffer as this needs to be kept in fp32 at all time.
-        self.fp32_cos_cached = freqs.cos()[None, None, :, :]
-        self.fp32_sin_cached = freqs.sin()[None, None, :, :]
+        self.complex_freq = torch.polar(torch.ones((1,), device=device, dtype=torch.float), freqs)
 
     def forward(self, device, seq_len=None):
         if seq_len > self.max_seq_len_cached or self.device != device:
@@ -274,24 +262,17 @@ class RotaryEmbedding(torch.nn.Module):
                 device=device
             )
 
-        return self.fp32_cos_cached[:seq_len, ...], self.fp32_sin_cached[:seq_len, ...]
+        return self.complex_freq[:seq_len, ...]
 
-# @torch.jit.script
-def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
-    cos = cos[..., offset : q.shape[-2] + offset, :]
-    sin = sin[..., offset : q.shape[-2] + offset, :]
+def apply_rotary_pos_emb(embedding, complex_freq, offset: int = 0):
+    complex_freq = complex_freq[..., offset : embedding.shape[-2] + offset, :]
     # q[...,::2] is considered the real part, q[...,1::2] is the imaginary part
-    assert cos.dtype == torch.float
-    assert sin.dtype == torch.float
-    q_float = q.float()
-    k_float = k.float()
-    q_real = q_float[...,::2]
-    q_imag = q_float[...,1::2]
-    k_real = k_float[...,::2]
-    k_imag = k_float[...,1::2]
-    q_embed = torch.stack([q_real * cos - (q_imag * sin), q_real * sin + q_imag * cos], dim=-1).view(q.shape)
-    k_embed = torch.stack([k_real * cos - (k_imag * sin), k_real * sin + k_imag * cos], dim=-1).view(k.shape)
-    return q_embed.type_as(q), k_embed.type_as(k)
+    assert complex_freq.dtype == torch.complex64
+    assert embedding.shape[-1] % 2 == 0
+    complex_embed = torch.view_as_complex(embedding.float().view(*embedding.shape[:-1], embedding.shape[-1] // 2, 2))
+    complex_embed_rot = complex_embed * complex_freq
+    embed_rot = torch.view_as_real(complex_embed_rot).view(embedding.shape)
+    return embed_rot.type_as(embedding)
 
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXFF with GPTNeoX->LLaMa
@@ -318,8 +299,7 @@ class LLaMaLayer(nn.Module):
     def forward(
         self,
         hidden_states,
-        frequency_cos,
-        frequency_sin,
+        complex_freq,
         attention_mask=None,
         head_mask=None,
         use_cache=False,
@@ -328,8 +308,7 @@ class LLaMaLayer(nn.Module):
     ):
         attention_layer_outputs = self.attention(
             hidden_states=self.attention_norm(hidden_states),
-            frequency_cos=frequency_cos,
-            frequency_sin=frequency_sin,
+            complex_freq=complex_freq,
             attention_mask=attention_mask,
             layer_past=layer_past,
             head_mask=head_mask,
@@ -501,7 +480,7 @@ class LLaMaModel(LLaMaPreTrainedModel):
         all_seq_length = seq_length
         if past_key_values[0] is not None:
             all_seq_length += past_key_values[0][0].shape[-2]
-        cos, sin = self.rotary_emb(device=inputs_embeds.device, seq_len=all_seq_length)
+        complex_freq = self.rotary_emb(device=inputs_embeds.device, seq_len=all_seq_length)
 
         hidden_states = inputs_embeds
 
@@ -531,8 +510,7 @@ class LLaMaModel(LLaMaPreTrainedModel):
                 outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer),
                     hidden_states,
-                    cos,
-                    sin,
+                    complex_freq,
                     attention_mask,
                     head_mask[i],
                 )
@@ -540,8 +518,7 @@ class LLaMaModel(LLaMaPreTrainedModel):
                 outputs = layer(
                     hidden_states,
                     attention_mask=attention_mask,
-                    frequency_cos=cos,
-                    frequency_sin=sin,
+                    complex_freq=complex_freq,
                     head_mask=head_mask[i],
                     layer_past=layer_past,
                     use_cache=use_cache,
