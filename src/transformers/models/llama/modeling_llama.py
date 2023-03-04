@@ -273,7 +273,7 @@ class RotaryEmbedding(torch.nn.Module):
                 device=device
             )
 
-        return self.fp32_cos_cached.to(device)[:seq_len, ...], self.fp32_sin_cached.to(device)[:seq_len, ...]
+        return self.fp32_cos_cached[:seq_len, ...], self.fp32_sin_cached[:seq_len, ...]
 
 @torch.jit.script
 def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
