@@ -254,10 +254,10 @@ class RotaryEmbedding(torch.nn.Module):
 
     def build_new_freq(self, length, device):
         assert self.dim % 2 == 0
-        self.device = device
         assert self.max_seq_len_cached <= length
         self.max_seq_len_cached = length
-        self.inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float, device=None)[:self.dim // 2] / self.dim))
+        self.inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float, device=device)[:self.dim // 2] / self.dim))
+        self.device = self.inv_freq.device
 
         # Build here to make `torch.jit.trace` work.
         t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
