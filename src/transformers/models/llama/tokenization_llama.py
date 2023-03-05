@@ -13,15 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for LLaMA."""
-from typing import List, Optional, Tuple, Dict, Any
 import os
 import re
-import warnings
 from shutil import copyfile
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
