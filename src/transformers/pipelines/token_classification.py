@@ -343,27 +343,25 @@ class TokenClassificationPipeline(ChunkPipeline):
 
         if num_chunks > 1:
             aggregated_entities = self.aggregate_entities(aggregated_entities)
-            aggregated_entities = self.aggregate_entities(aggregated_entities, forward=True)
         return aggregated_entities
 
-    def aggregate_entities(self, entities, forward=False):
+    def aggregate_entities(self, entities):
         if len(entities) == 0:
             return entities
-        filter_key = "start" if forward else "end"
-        entities = sorted(entities, key=lambda x: x[filter_key])
+        entities = sorted(entities, key=lambda x: x["start"])
         aggregated_entities = []
         previous_entity = entities[0]
         for entity in entities:
-            if entity[filter_key] != previous_entity[filter_key]:
-                aggregated_entities.append(previous_entity)
-                previous_entity = entity
-            else:
+            if previous_entity["start"] <= entity["start"] < previous_entity["end"]:
                 current_length = entity["end"] - entity["start"]
                 previous_length = previous_entity["end"] - previous_entity["start"]
                 if current_length > previous_length:
                     previous_entity = entity
-                elif entity["score"] > previous_entity["score"]:
+                elif current_length == previous_length and entity["score"] > previous_entity["score"]:
                     previous_entity = entity
+            else:
+                aggregated_entities.append(previous_entity)
+                previous_entity = entity
         aggregated_entities.append(entity)
         return aggregated_entities
 
