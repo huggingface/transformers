@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_llama": ["LLaMAConfig"],
+    "configuration_llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LLaMAConfig"],
     "tokenization_llama": ["LLaMATokenizer"],
 }
 
@@ -35,7 +35,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_llama import LLaMAConfig
+    from .configuration_llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LLaMAConfig
     from .tokenization_llama import LLaMATokenizer
 
     try:
