@@ -751,8 +751,12 @@ class AutoformerLayernorm(nn.Module):
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Autoformer
 class AutoformerAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
+    """
+    AutoCorrelation Mechanism with the following two phases:
+        (1) period-based dependencies discovery
+        (2) time delay aggregation
+    This block replace the canonical self-attention mechanism.
+    """
     def __init__(
         self,
         embed_dim: int,
@@ -925,26 +929,24 @@ class AutoformerAttention(nn.Module):
         top_k_autocorrelations = torch.softmax(top_k_autocorrelations, dim=-1)  # bsz x top_k
 
         # compute aggregation: value_states.roll(delay) * top_k_autocorrelations(delay)
-        delays_agg = torch.zeros_like(value_states).float()  # bsz x time_length x channel
-
         if not self.training:
+            # used for compute values_states.roll(delay) in inference
             tmp_values = value_states.repeat(1, 2, 1)
             init_index = torch.arange(time_length).unsqueeze(0).unsqueeze(-1) \
                 .repeat(bsz*self.num_heads, 1, channel).to(value_states.device)
-            init_index = init_index.view(bsz, self.num_heads, tgt_len, channel)
 
+        delays_agg = torch.zeros_like(value_states).float()  # bsz x time_length x channel
         for i in range(top_k):
             # compute value_states roll delay
             if not self.training:
-                tmp_delay = init_index + top_k_delays_index[:, i].unsqueeze(1).unsqueeze(1).unsqueeze(1).repeat(1, self.num_heads, tgt_len, channel)
+                tmp_delay = init_index + top_k_delays_index[:, i].unsqueeze(1).unsqueeze(1).repeat(self.num_heads, tgt_len, channel)
                 value_states_roll_delay = torch.gather(tmp_values, dim=1, index=tmp_delay)
             else:
                 value_states_roll_delay = value_states.roll(shifts=-int(top_k_delays_index[i]), dims=1)
 
-            top_k_autocorrelations_at_delay = top_k_autocorrelations[:, i].unsqueeze(1).unsqueeze(1).unsqueeze(1).repeat(1, self.num_heads, tgt_len, channel)
-            top_k_autocorrelations_at_delay = top_k_autocorrelations_at_delay.view(bsz * self.num_heads, tgt_len, channel)
-
-            # aggregate
+            # aggregation
+            top_k_autocorrelations_at_delay = top_k_autocorrelations[:, i].unsqueeze(1).unsqueeze(1).repeat(
+                self.num_heads, tgt_len, channel)
             delays_agg += value_states_roll_delay * top_k_autocorrelations_at_delay
 
         attn_output = delays_agg.contiguous()
