@@ -229,7 +229,7 @@ def write_tokenizer(tokenizer_path, input_tokenizer_path):
             "tokenizer_class": "LLaMATokenizer",
             "unk_token": "",
         },
-        os.path.join(tokenizer_path, "special_tokens_map.json"),
+        os.path.join(tokenizer_path, "tokenizer_config.json"),
     )
     shutil.copyfile(input_tokenizer_path, os.path.join(tokenizer_path, "tokenizer.model"))
 

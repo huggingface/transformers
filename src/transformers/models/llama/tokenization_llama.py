@@ -50,26 +50,11 @@ class LLaMATokenizer(PreTrainedTokenizer):
         unk_token="",
         bos_token="",
         eos_token="",
-        extra_ids=100,
-        additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        add_bos_token=True,
-        add_eos_token=True,
+        add_bos_token=False,
+        add_eos_token=False,
         **kwargs,
     ):
-        # Add extra_ids to the special token list
-        if extra_ids > 0 and additional_special_tokens is None:
-            additional_special_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
-        elif extra_ids > 0 and additional_special_tokens is not None:
-            # Check that we have the right number of extra_id special tokens
-            extra_tokens = len(set(filter(lambda x: bool("extra_id" in str(x)), additional_special_tokens)))
-            if extra_tokens != extra_ids:
-                raise ValueError(
-                    f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
-                    " provided to T5Tokenizer. In this case the additional_special_tokens must include the extra_ids"
-                    " tokens"
-                )
-
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
         self.vocab_file = vocab_file
@@ -83,7 +68,7 @@ class LLaMATokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         """Returns vocab size"""
-        return self.sp_model.get_piece_size() + self._extra_ids
+        return self.sp_model.get_piece_size()
 
     @property
     def bos_token_id(self) -> Optional[int]:
@@ -105,18 +90,11 @@ class LLaMATokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        if token.startswith("<extra_id_"):
-            match = re.match(r"<extra_id_(\d+)>", token)
-            num = int(match.group(1))
-            return self.vocab_size - num - 1
         return self.sp_model.piece_to_id(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index < self.sp_model.get_piece_size():
-            token = self.sp_model.IdToPiece(index)
-        else:
-            token = f"<extra_id_{self.vocab_size - 1 - index}>"
+        token = self.sp_model.IdToPiece(index)
         return token
 
     def convert_tokens_to_string(self, tokens):
@@ -176,7 +154,7 @@ class LLaMATokenizer(PreTrainedTokenizer):
         if token_ids_1 is not None:
             output = output + token_ids_1
 
-        if self.eos_token_id:
+        if self.add_eos_token:
             output = output + [self.eos_token_id]
 
         return output
