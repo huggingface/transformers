@@ -58,7 +58,8 @@ MRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MRA models at https://huggingface.co/models?filter=mra
 ]
 
-
+import sys
+sys.path.append('./dist/cuda_kernel-0.0.0-py3.9-linux-x86_64.egg')
 import kernel as cuda_kernel
 
 
