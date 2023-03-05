@@ -63,9 +63,24 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     model_input_names = ["input_features"]
 
     def __init__(self,
-                 config: Pop2PianoConfig,
+                 start_token_id:int = 0,
+                 target_length:int = 256,
+                 input_length:int = 1024,
+                 n_bars:int = 2,
+                 sample_rate:int = 22050,
+                 use_mel:int = True,
+                 mel_is_conditioned:int = True,
+                 pad_token_id:int = 0,
+                 **kwargs
         ):
-        self.config = config
+        self.start_token_id = start_token_id
+        self.target_length = target_length
+        self.input_length = input_length
+        self.n_bars = n_bars
+        self.sample_rate = sample_rate
+        self.use_mel = use_mel
+        self.mel_is_conditioned = mel_is_conditioned
+        self.pad_token_id = pad_token_id
 
     def extract_rhythm(self, raw_audio):
         """
@@ -111,7 +126,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     ):
         n_steps = n_bars * 4
         n_target_step = len(beatstep)
-        sample_rate = self.config.dataset.get("sample_rate", None)
         ext_beatstep = self.extrapolate_beat_times(beatstep, (n_bars + 1) * 4 + 1)
 
         def split_audio(audio):
@@ -124,8 +138,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 start_idx = i
                 end_idx = min(i + n_steps, n_target_step)
 
-                start_sample = int(ext_beatstep[start_idx] * sample_rate)
-                end_sample = int(ext_beatstep[end_idx] * sample_rate)
+                start_sample = int(ext_beatstep[start_idx] * self.sample_rate)
+                end_sample = int(ext_beatstep[end_idx] * self.sample_rate)
                 feature = audio[start_sample:end_sample]
                 batch.append(feature)
             return batch
@@ -162,19 +176,19 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         if audio is not None:
             if len(audio.shape) != 1:
                 raise ValueError(f"Expected `audio` shape to be (n, ) but found {feature_tokens.shape}")
-        n_bars = self.config.dataset.get("n_bars", None) if n_bars is None else n_bars
+        n_bars = self.n_bars if n_bars is None else n_bars
 
         if beatstep[0] > 0.01:
             warnings.warn(f"Inference Warning : beatstep[0] is not 0 ({beatstep[0]}). all beatstep will be shifted.")
             beatstep = beatstep - beatstep[0]
 
-        if self.config.dataset.get("use_mel", None):
+        if self.use_mel:
             input_ids = None
             batch, ext_beatstep = self.preprocess_mel(
                                                         audio,
                                                         beatstep,
                                                         n_bars=n_bars,
-                                                        padding_value=self.config.pad_token_id,
+                                                        padding_value=self.pad_token_id,
                                                         )
         else:
             raise NotImplementedError("use_mel must be True")
@@ -213,13 +227,13 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             beat_times = np.array(beat_times)
             beatsteps = self.interpolate_beat_times(beat_times, steps_per_beat, extend=True)
 
-        if self.config.dataset.get("use_mel", None) is not None:
-            if self.config.dataset.get("sample_rate", None) != ESSENTIA_SAMPLERATE and self.config.dataset.get("sample_rate", None) is not None:
+        if self.use_mel is not None:
+            if self.sample_rate != ESSENTIA_SAMPLERATE and self.sample_rate is not None:
                 # Change raw_audio_sr to config.dataset.sample_rate
                 raw_audio = librosa.core.resample(
-                    raw_audio, orig_sr=sr, target_sr=self.config.dataset.get("sample_rate"), res_type='kaiser_best'
+                    raw_audio, orig_sr=sr, target_sr=self.sample_rate, res_type='kaiser_best'
                 )
-                sr = self.config.dataset.get("sample_rate")
+                sr = self.sample_rate
                 start_sample = int(beatsteps[0] * sr)
                 end_sample = int(beatsteps[-1] * sr)
                 _audio = torch.from_numpy(raw_audio)[start_sample:end_sample]
