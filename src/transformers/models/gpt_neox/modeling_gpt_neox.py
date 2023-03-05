@@ -20,6 +20,22 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+import torch.nn.functional as F
+
+FUSE_LN = False
+FUSE_MLP = False
+FLASH_ATTN = False
+FLASH_CROSS_ATTN = False
+
+if FLASH_ATTN:
+    from flash_attn.flash_attention import FlashAttention
+if FLASH_CROSS_ATTN:
+    from flash_attn.modules.mha import FlashCrossAttention
+if FUSE_MLP:
+    from flash_attn.ops.fused_dense import fused_dense_gelu_dense_func
+if FUSE_LN:
+    from flash_attn.ops.layer_norm import dropout_add_layer_norm
+from einops import rearrange
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -104,7 +120,7 @@ class GPTNeoXAttention(nn.Module):
         )
         self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
         self.rotary_emb = RotaryEmbedding(
-            self.rotary_ndims, config.max_position_embeddings, base=config.rotary_emb_base
+            self.rotary_ndims, config.max_position_embeddings, base=config.rotary_emb_base, device = 'cuda:0'
         )
         self.register_buffer(
             "norm_factor",
@@ -113,6 +129,10 @@ class GPTNeoXAttention(nn.Module):
         )
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if FLASH_ATTN:
+            self.flash_attn = FlashAttention()
+        if FLASH_CROSS_ATTN:
+            self.flash_cross_attn = FlashCrossAttention()
 
         self.attention_dropout = nn.Dropout(config.attention_dropout)
 
@@ -162,9 +182,38 @@ class GPTNeoXAttention(nn.Module):
         if has_layer_past:
             past_key = layer_past[0]
             past_value = layer_past[1]
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
-        present = (key, value) if use_cache else None
+            index = layer_past[2]
+            if True:
+                key = torch.cat((past_key, key), dim=-2)
+                value = torch.cat((past_value, value), dim=-2)
+                present = (key, value, key.shape[-2]) if use_cache else None
+            else:
+                key_len = key.shape[-2]
+                if past_key.shape[-2] <= key_len + index:
+                    new_key = F.pad(past_key, (0, 0, 0, 2 * index))
+                    new_value = F.pad(past_value, (0, 0, 0, 2 * index))
+                else:
+                    new_key = past_key
+                    new_value = past_value
+                new_key[:, :, index : index + key_len, :] = key
+                new_value[:, :, index : index + key_len, :] = value
+                index = index + key_len
+                # key = new_key[:, :, :index, :]
+                # value = new_value[:, :, :index, :]
+                key = new_key
+                value = new_value
+                present = (new_key, new_value, index) if use_cache else None
+            
+        else:
+            if True:
+                present = (key, value, key.shape[-2]) if use_cache else None
+            else:
+                if use_cache:
+                    index = key.shape[-2]
+                    new_key = F.pad(key, (0, 0, 0, 2 * index))
+                    new_value = F.pad(value, (0, 0, 0, 2 * index))
+                    present = (new_key, new_value, index)
+                present = None
 
         # Compute attention
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
@@ -209,49 +258,77 @@ class GPTNeoXAttention(nn.Module):
         # compute causal mask from causal mask buffer
         batch_size, num_attention_heads, query_length, attn_head_size = query.size()
         key_length = key.size(-2)
+        if query_length == key_length and FLASH_ATTN:
+            # B H S D -> B S 3 H D
+            qkv = torch.stack([query, key, value], dim=2) # B H 3 S D
+            qkv = torch.swapaxes(qkv, 1, 3) # B S 3 H D
+            attn_output, _ = self.flash_attn(qkv, causal=True) # B S H D
+            attn_output = torch.swapaxes(attn_output, 1, 2)
 
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+            return attn_output, _
+        elif query_length != key_length and FLASH_CROSS_ATTN:
+            q = torch.swapaxes(query, 1, 2) # B S H D
+            kv = torch.stack([key, value], dim=2) # B H 3 S D
+            kv = torch.swapaxes(kv, 1, 3) # B S 3 H D
+            attn_output = self.flash_cross_attn(q, kv, causal=True) # B S H D
+            attn_output = torch.swapaxes(attn_output, 1, 2)
+            # THIS IS BROKEN
+            # q_seqlen = query.shape[-2]
+            # kv_seqlen = key.shape[-2]
+            # # B H S D -> (B S) 2 H D
+            # # kv = torch.stack([key, value], dim=2)
+            # # kv = rearrange(kv, 'b h t s d -> (b s) t h d')
+            # q = rearrange(query, 'b h s d -> (b s) h d') # B S H D
+            # k = rearrange(key, 'b h s d -> (b s) h d')
+            # v = rearrange(value, 'b h s d -> (b s) h d')
 
-        query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
-        key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
-        attn_scores = torch.zeros(
-            batch_size * num_attention_heads,
-            query_length,
-            key_length,
-            dtype=query.dtype,
-            device=key.device,
-        )
-        attn_scores = torch.baddbmm(
-            attn_scores,
-            query,
-            key.transpose(1, 2),
-            beta=1.0,
-            alpha=(torch.tensor(1.0, dtype=self.norm_factor.dtype, device=self.norm_factor.device) / self.norm_factor),
-        )
-        attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
+            # # cu_seqlens_q = torch.arange(0, (batch_size + 1) * q_seqlen, step=q_seqlen, dtype=torch.int32, device=q.device)
+            # # cu_seqlens_kv = torch.arange(0, (batch_size + 1) * kv_seqlen, step=kv_seqlen, dtype=torch.int32, device=q.device)
 
-        mask_value = torch.finfo(attn_scores.dtype).min
-        # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-        # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-        mask_value = torch.tensor(mask_value, dtype=attn_scores.dtype).to(attn_scores.device)
-        attn_scores = torch.where(causal_mask, attn_scores, mask_value)
+            # attn_output = flash_attn_unpadded_func(q, k, v, cu_seqlens_q, cu_seqlens_k, q_seqlen, kv_seqlen, 0.0, softmax_scale=1.0, causal=True)
 
-        if attention_mask is not None:
-            # Apply the attention mask
-            attn_scores = attn_scores + attention_mask
+            # attn_output = rearrange(attn_output, '(b s) h d -> b h s d', b = batch_size)
 
-        attn_weights = nn.functional.softmax(attn_scores, dim=-1)
-        attn_weights = attn_weights.to(value.dtype)
+            return attn_output, None
+        else:
+            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
 
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
+            query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
+            key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
+            attn_scores = torch.zeros(
+                batch_size * num_attention_heads,
+                query_length,
+                key_length,
+                dtype=query.dtype,
+                device=key.device,
+            )
+            attn_scores = torch.baddbmm(
+                attn_scores,
+                query,
+                key.transpose(1, 2),
+                beta=1.0,
+                alpha=(torch.tensor(1.0, dtype=self.norm_factor.dtype, device=self.norm_factor.device) / self.norm_factor),
+            )
+            attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
+            mask_value = torch.finfo(attn_scores.dtype).min
+            # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
+            # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
+            # mask_value = torch.tensor(mask_value, dtype=attn_scores.dtype, device=attn_scores.device) #.to(attn_scores.device)
+            attn_scores = torch.where(causal_mask, attn_scores, mask_value)
 
-        attn_weights = self.attention_dropout(attn_weights)
+            if attention_mask is not None:
+                # Apply the attention mask
+                attn_scores = attn_scores + attention_mask
 
-        attn_output = torch.matmul(attn_weights, value)
-        return attn_output, attn_weights
+            attn_weights = nn.functional.softmax(attn_scores, dim=-1)
+            attn_weights = attn_weights #.to(value.dtype)
 
+            # Mask heads if we want to
+            if head_mask is not None:
+                attn_weights = attn_weights * head_mask
+
+            attn_output = torch.matmul(attn_weights, value)
+            return attn_output, attn_weights
 
 def attention_mask_func(attention_scores, ltor_mask):
     attention_scores.masked_fill_(~ltor_mask, torch.finfo(attention_scores.dtype).min)
@@ -270,8 +347,8 @@ class RotaryEmbedding(torch.nn.Module):
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.cos_cached = emb.cos()[None, None, :, :]
-        self.sin_cached = emb.sin()[None, None, :, :]
+        self.cos_cached = emb.cos()[None, None, :, :].half()
+        self.sin_cached = emb.sin()[None, None, :, :].half()
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
@@ -282,15 +359,14 @@ class RotaryEmbedding(torch.nn.Module):
             freqs = torch.einsum("i,j->ij", t, self.inv_freq)
             # Different from paper, but it uses a different permutation in order to obtain the same calculation
             emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-            self.cos_cached = emb.cos()[None, None, :, :]
-            self.sin_cached = emb.sin()[None, None, :, :]
-        return self.cos_cached[:seq_len, ...].to(x.device), self.sin_cached[:seq_len, ...].to(x.device)
+            self.cos_cached = emb.cos()[None, None, :, :].half()
+            self.sin_cached = emb.sin()[None, None, :, :].half()
+        # return self.cos_cached[:seq_len, ...].to(x.device), self.sin_cached[:seq_len, ...].to(x.device)
+        return self.cos_cached[:seq_len, ...], self.sin_cached[:seq_len, ...]
 
 
 def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
+    x1, x2 = x.chunk(2, dim=-1)
     return torch.cat((-x2, x1), dim=-1)
 
 
@@ -312,10 +388,19 @@ class GPTNeoXMLP(nn.Module):
         self.act = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states):
-        hidden_states = self.dense_h_to_4h(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.dense_4h_to_h(hidden_states)
-        return hidden_states
+        if not FUSE_MLP:
+            hidden_states = self.dense_h_to_4h(hidden_states)
+            hidden_states = self.act(hidden_states)
+            hidden_states = self.dense_4h_to_h(hidden_states)
+            return hidden_states
+        else:
+            return fused_dense_gelu_dense_func(
+                hidden_states,
+                self.dense_h_to_4h.weight, self.dense_4h_to_h.weight,
+                self.dense_h_to_4h.bias, self.dense_4h_to_h.bias,
+                save_pre_act=False,
+                return_residual=False
+            )
 
 
 class GPTNeoXLayer(nn.Module):
@@ -530,7 +615,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             # positions we want to attend and the dtype's smallest value for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            attention_mask = attention_mask.half() # .to(dtype=self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # Prepare head mask if needed
@@ -727,6 +812,10 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
         input_shape = input_ids.shape
+
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = input_ids.new_ones(input_shape).half()
 
         # cut decoder_input_ids if past is used
         if past_key_values and past_key_values[0] is not None:
