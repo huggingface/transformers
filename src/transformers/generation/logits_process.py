@@ -137,14 +137,18 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
             The id of the *end-of-sequence* token.
     """
 
-    def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: int):
+    def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: Union[int, List[int]]):
         for arg_name, arg_value in [
             ("prompt_length_to_skip", prompt_length_to_skip),
             ("min_new_tokens", min_new_tokens),
-            ("eos_token_id", eos_token_id),
         ]:
             if not isinstance(arg_value, int) or arg_value < 0:
                 raise ValueError(f"`{arg_name}` has to be a positive integer, but is {arg_value}")
+
+        if isinstance(eos_token_id, int):
+            eos_token_id = [eos_token_id]
+        if not all([isinstance(i, int) for i in eos_token_id]) or any([i < 0 for i in eos_token_id]):
+            raise ValueError(f"`eos_token_id` has to be a list of positive integers, but is {eos_token_id}")
 
         self.prompt_length_to_skip = prompt_length_to_skip
         self.min_new_tokens = min_new_tokens
@@ -153,7 +157,8 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         new_tokens_length = input_ids.shape[-1] - self.prompt_length_to_skip
         if new_tokens_length < self.min_new_tokens:
-            scores[:, self.eos_token_id] = -float("inf")
+            for i in self.eos_token_id:
+                scores[:, i] = -float("inf")
 
         return scores
 
