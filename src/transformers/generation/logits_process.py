@@ -133,8 +133,8 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
             The input tokens length.
         min_new_tokens (`int`):
             The minimum *new* tokens length below which the score of `eos_token_id` is set to `-float("Inf")`.
-        eos_token_id (`int`):
-            The id of the *end-of-sequence* token.
+        eos_token_id (`Union[int, List[int]]`):
+            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
 
     def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: Union[int, List[int]]):
