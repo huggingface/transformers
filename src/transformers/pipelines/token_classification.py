@@ -205,7 +205,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                     preprocess_params["tokenizer_params"] = tokenizer_params
                 else:
                     warnings.warn(
-                        "`stride` was provided to process all text but you're using Slow tokenizers."
+                        "`stride` was provided to process all the text but you're using Slow tokenizers."
                         " The pipeline will be applied on the truncated text."
                     )
         return preprocess_params, {}, postprocess_params
