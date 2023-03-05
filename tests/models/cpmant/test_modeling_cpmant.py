@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers.testing_utils import is_torch_available, require_torch, slow
+from transformers.testing_utils import is_torch_available, require_torch
 
 from ...generation.test_utils import torch_device
 from ...test_configuration_common import ConfigTester
@@ -134,7 +134,7 @@ class CpmAntModelTester:
 
 @require_torch
 class CpmAntModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = ((CpmAntModel, CpmAntForCausalLM) if is_torch_available() else ())
+    all_model_classes = (CpmAntModel, CpmAntForCausalLM) if is_torch_available() else ()
 
     test_pruning = False
     test_missing_keys = False
