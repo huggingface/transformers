@@ -109,35 +109,40 @@ def write_model(model_path, input_base_path, model_size):
                 ],
                 f"model.decoder.layers.{layer_i}.ffn_norm.weight": loaded[0][f"layers.{layer_i}.ffn_norm.weight"],
             }
-            state_dict[f"model.decoder.layers.{layer_i}.self_attn.q_proj.weight"] = torch.cat([
-                loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
-                for i in range(num_shards)
-            ], dim=0).reshape(dim, dim)
-            state_dict[f"model.decoder.layers.{layer_i}.self_attn.k_proj.weight"] = torch.cat([
-                loaded[i][f"layers.{layer_i}.attention.wk.weight"].view(n_heads_per_shard, dims_per_head, dim)
-                for i in range(num_shards)
-            ], dim=0).reshape(dim, dim)
-            state_dict[f"model.decoder.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat([
-                loaded[i][f"layers.{layer_i}.attention.wv.weight"].view(n_heads_per_shard, dims_per_head, dim)
-                for i in range(num_shards)
-            ], dim=0).reshape(dim, dim)
+            state_dict[f"model.decoder.layers.{layer_i}.self_attn.q_proj.weight"] = torch.cat(
+                [
+                    loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
+                    for i in range(num_shards)
+                ],
+                dim=0,
+            ).reshape(dim, dim)
+            state_dict[f"model.decoder.layers.{layer_i}.self_attn.k_proj.weight"] = torch.cat(
+                [
+                    loaded[i][f"layers.{layer_i}.attention.wk.weight"].view(n_heads_per_shard, dims_per_head, dim)
+                    for i in range(num_shards)
+                ],
+                dim=0,
+            ).reshape(dim, dim)
+            state_dict[f"model.decoder.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
+                [
+                    loaded[i][f"layers.{layer_i}.attention.wv.weight"].view(n_heads_per_shard, dims_per_head, dim)
+                    for i in range(num_shards)
+                ],
+                dim=0,
+            ).reshape(dim, dim)
 
-            state_dict[f"model.decoder.layers.{layer_i}.self_attn.o_proj.weight"] = torch.cat([
-                loaded[i][f"layers.{layer_i}.attention.wo.weight"]
-                for i in range(num_shards)
-            ], dim=1)
-            state_dict[f"model.decoder.layers.{layer_i}.feed_forward.w1.weight"] = torch.cat([
-                loaded[i][f"layers.{layer_i}.feed_forward.w1.weight"]
-                for i in range(num_shards)
-            ], dim=0)
-            state_dict[f"model.decoder.layers.{layer_i}.feed_forward.w2.weight"] = torch.cat([
-                loaded[i][f"layers.{layer_i}.feed_forward.w2.weight"]
-                for i in range(num_shards)
-            ], dim=1)
-            state_dict[f"model.decoder.layers.{layer_i}.feed_forward.w3.weight"] = torch.cat([
-                loaded[i][f"layers.{layer_i}.feed_forward.w3.weight"]
-                for i in range(num_shards)
-            ], dim=0)
+            state_dict[f"model.decoder.layers.{layer_i}.self_attn.o_proj.weight"] = torch.cat(
+                [loaded[i][f"layers.{layer_i}.attention.wo.weight"] for i in range(num_shards)], dim=1
+            )
+            state_dict[f"model.decoder.layers.{layer_i}.feed_forward.w1.weight"] = torch.cat(
+                [loaded[i][f"layers.{layer_i}.feed_forward.w1.weight"] for i in range(num_shards)], dim=0
+            )
+            state_dict[f"model.decoder.layers.{layer_i}.feed_forward.w2.weight"] = torch.cat(
+                [loaded[i][f"layers.{layer_i}.feed_forward.w2.weight"] for i in range(num_shards)], dim=1
+            )
+            state_dict[f"model.decoder.layers.{layer_i}.feed_forward.w3.weight"] = torch.cat(
+                [loaded[i][f"layers.{layer_i}.feed_forward.w3.weight"] for i in range(num_shards)], dim=0
+            )
 
         for k, v in state_dict.items():
             index_dict["weight_map"][k] = filename
@@ -158,14 +163,10 @@ def write_model(model_path, input_base_path, model_size):
     else:
         state_dict = {
             "model.decoder.norm.weight": loaded[0]["norm.weight"],
-            "model.decoder.embed_tokens.weight": torch.cat([
-                loaded[i]["tok_embeddings.weight"]
-                for i in range(num_shards)
-            ], dim=1),
-            "lm_head.weight": torch.cat([
-                loaded[i]["output.weight"]
-                for i in range(num_shards)
-            ], dim=0),
+            "model.decoder.embed_tokens.weight": torch.cat(
+                [loaded[i]["tok_embeddings.weight"] for i in range(num_shards)], dim=1
+            ),
+            "lm_head.weight": torch.cat([loaded[i]["output.weight"] for i in range(num_shards)], dim=0),
         }
 
     for k, v in state_dict.items():
@@ -237,7 +238,7 @@ def main():
     )
     parser.add_argument(
         "--model_size",
-        choices=['7B', '13B', '30B', '65B'],
+        choices=["7B", "13B", "30B", "65B"],
     )
     parser.add_argument(
         "--output_dir",
