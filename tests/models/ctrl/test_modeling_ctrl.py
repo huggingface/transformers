@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -192,9 +193,19 @@ class CTRLModelTester:
 
 
 @require_torch
-class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CTRLModel, CTRLLMHeadModel, CTRLForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (CTRLLMHeadModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": CTRLModel,
+            "text-classification": CTRLForSequenceClassification,
+            "text-generation": CTRLLMHeadModel,
+            "zero-shot": CTRLForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = True
     test_resize_embeddings = False
     test_head_masking = False

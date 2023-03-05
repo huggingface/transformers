@@ -27,6 +27,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -214,8 +215,9 @@ class OneFormerModelTester:
 
 
 @require_torch
-class OneFormerModelTest(ModelTesterMixin, unittest.TestCase):
+class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OneFormerModel, OneFormerForUniversalSegmentation) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": OneFormerModel} if is_torch_available() else {}
 
     is_encoder_decoder = False
     test_pruning = False

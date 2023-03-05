@@ -404,12 +404,12 @@ def _compute_global_attention_mask(input_ids, sep_token_id, before_sep_token=Tru
     # bool attention mask with True in locations of global attention
     attention_mask = torch.arange(input_ids.shape[1], device=input_ids.device)
     if before_sep_token is True:
-        attention_mask = (attention_mask.expand_as(input_ids) < question_end_index).to(torch.uint8)
+        attention_mask = (attention_mask.expand_as(input_ids) < question_end_index).to(torch.bool)
     else:
         # last token is separation token and should not be counted and in the middle are two separation tokens
-        attention_mask = (attention_mask.expand_as(input_ids) > (question_end_index + 1)).to(torch.uint8) * (
+        attention_mask = (attention_mask.expand_as(input_ids) > (question_end_index + 1)).to(torch.bool) * (
             attention_mask.expand_as(input_ids) < input_ids.shape[-1]
-        ).to(torch.uint8)
+        ).to(torch.bool)
 
     return attention_mask
 
