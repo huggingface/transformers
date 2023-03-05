@@ -290,13 +290,11 @@ class TokenClassificationPipeline(ChunkPipeline):
         self,
         all_outputs,
         aggregation_strategy=AggregationStrategy.NONE,
-        ignore_labels=None,
-        **postprocess_params,
+        ignore_labels=None
     ):
         if ignore_labels is None:
             ignore_labels = ["O"]
         num_chunks = len(all_outputs)
-        postprocess_params.pop("stride", 0)
         sentence = all_outputs[0]["sentence"]
         keys = ["input_ids", "logits", "special_tokens_mask"]
         # Check whether offset_mapping comes from tokenizer or manual input
