@@ -9,14 +9,18 @@ import torch
 """
 Sample usage:
 
+    ```
     python src/transformers/models/llama/convert_llama_weights_to_hf.py \
         --input_dir /path/to/downloaded/llama/weights --model_size 7B --output_dir /output/path
+    ```
 
 Thereafter, models can be loaded via:
 
-    tokenizer = transformers.LLaMATokenizer.from_pretrained("/output/path/tokenizer/")
-    model = transformers.LLaMAForCausalLM.from_pretrained("/output/path/llama-7b/")
+    ```
+    tokenizer = transformers.LLaMATokenizer.from_pretrained("/output/path/tokenizer/") 
 
+    model = transformers.LLaMAForCausalLM.from_pretrained("/output/path/llama-7b/")
+    ```
 """
 
 INTERMEDIATE_SIZE_MAP = {
