@@ -17,7 +17,7 @@ Sample usage:
 Thereafter, models can be loaded via:
 
     ```
-    tokenizer = transformers.LLaMATokenizer.from_pretrained("/output/path/tokenizer/") 
+    tokenizer = transformers.LLaMATokenizer.from_pretrained("/output/path/tokenizer/")
 
     model = transformers.LLaMAForCausalLM.from_pretrained("/output/path/llama-7b/")
     ```
