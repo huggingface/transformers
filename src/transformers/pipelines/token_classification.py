@@ -362,7 +362,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             else:
                 aggregated_entities.append(previous_entity)
                 previous_entity = entity
-        aggregated_entities.append(entity)
+        aggregated_entities.append(previous_entity)
         return aggregated_entities
 
     def gather_pre_entities(
