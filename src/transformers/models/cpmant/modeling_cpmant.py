@@ -29,14 +29,13 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_cpmant import CPMAntConfig
+from .configuration_cpmant import CpmAntConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "cpm-ant-10b"
-_CONFIG_FOR_DOC = "CPMAntConfig"
-_TOKENIZER_FOR_DOC = "CPMAntTokenizer"
+_CHECKPOINT_FOR_DOC = "openbmb/cpm-ant-10b"
+_CONFIG_FOR_DOC = "CpmAntConfig"
 
 CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openbmb/cpm-ant-10b",
@@ -44,94 +43,20 @@ CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with Bert->CPMAnt
-def load_tf_weights_in_cpmant(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            if pointer.shape != array.shape:
-                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
-
-
-class CPMAntLayerNorm(nn.Module):
+class CpmAntLayerNorm(nn.Module):
     """
     We use Root Mean Square (RMS) Layer Normalization, please see https://arxiv.org/abs/1910.07467 for details."
     """
 
     def __init__(
         self,
-        config: CPMAntConfig,
+        config: CpmAntConfig,
     ):
         super().__init__()
 
         self.eps = config.eps
         self.dim_norm = config.hidden_size
-        self.weight = torch.nn.parameter.Parameter(torch.empty(config.hidden_size))
+        self.weight = nn.Parameter(torch.empty(config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor):
         """
@@ -146,8 +71,8 @@ class CPMAntLayerNorm(nn.Module):
         return hidden_states
 
 
-class CPMAntAttention(nn.Module):
-    def __init__(self, config: CPMAntConfig):
+class CpmAntAttention(nn.Module):
+    def __init__(self, config: CpmAntConfig):
         super().__init__()
         self.dim_model = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -250,11 +175,11 @@ class CPMAntAttention(nn.Module):
         return score, attn_weights, past_key_values
 
 
-class CPMAntSelfAttentionBlock(nn.Module):
-    def __init__(self, config: CPMAntConfig):
+class CpmAntSelfAttentionBlock(nn.Module):
+    def __init__(self, config: CpmAntConfig):
         super().__init__()
-        self.layernorm_before_attention = CPMAntLayerNorm(config)
-        self.self_attention = CPMAntAttention(config)
+        self.layernorm_before_attention = CpmAntLayerNorm(config)
+        self.self_attention = CpmAntAttention(config)
         if config.dropout_p:
             self.dropout = torch.nn.Dropout(config.dropout_p)
         else:
@@ -299,8 +224,8 @@ class CPMAntSelfAttentionBlock(nn.Module):
         return hidden_states, attn_weights, current_key_value
 
 
-class DenseGatedACT(nn.Module):
-    def __init__(self, config: CPMAntConfig):
+class CpmAntDenseGatedACT(nn.Module):
+    def __init__(self, config: CpmAntConfig):
         super().__init__()
         self.w_0 = nn.Linear(config.hidden_size, config.dim_ff, bias=False)
         self.w_1 = nn.Linear(config.hidden_size, config.dim_ff, bias=False)
@@ -319,10 +244,10 @@ class DenseGatedACT(nn.Module):
         return hidden_states
 
 
-class CPMAntFeedForward(nn.Module):
-    def __init__(self, config: CPMAntConfig):
+class CpmAntFeedForward(nn.Module):
+    def __init__(self, config: CpmAntConfig):
         super().__init__()
-        self.w_in = DenseGatedACT(config)
+        self.w_in = CpmAntDenseGatedACT(config)
         if config.dropout_p is not None:
             self.dropout = torch.nn.Dropout(config.dropout_p)
         else:
@@ -345,11 +270,11 @@ class CPMAntFeedForward(nn.Module):
         return hidden_states
 
 
-class CPMAntFFNBlock(nn.Module):
-    def __init__(self, config: CPMAntConfig):
+class CpmAntFFNBlock(nn.Module):
+    def __init__(self, config: CpmAntConfig):
         super().__init__()
-        self.layernorm_before_ffn = CPMAntLayerNorm(config)
-        self.ffn = CPMAntFeedForward(config)
+        self.layernorm_before_ffn = CpmAntLayerNorm(config)
+        self.ffn = CpmAntFeedForward(config)
         if config.dropout_p:
             self.dropout = torch.nn.Dropout(config.dropout_p)
         else:
@@ -372,11 +297,11 @@ class CPMAntFFNBlock(nn.Module):
         return hidden_states
 
 
-class CPMAntTransformerBlock(nn.Module):
-    def __init__(self, config: CPMAntConfig):
+class CpmAntTransformerBlock(nn.Module):
+    def __init__(self, config: CpmAntConfig):
         super().__init__()
-        self.self_att = CPMAntSelfAttentionBlock(config)
-        self.ffn = CPMAntFFNBlock(config)
+        self.self_att = CpmAntSelfAttentionBlock(config)
+        self.ffn = CpmAntFFNBlock(config)
 
     def forward(
         self,
@@ -419,13 +344,13 @@ class CPMAntTransformerBlock(nn.Module):
         return hidden_states, attn_weights, current_key_value
 
 
-class CPMAntEncoder(nn.Module):
-    def __init__(self, config: CPMAntConfig):
+class CpmAntEncoder(nn.Module):
+    def __init__(self, config: CpmAntConfig):
         super().__init__()
         self.num_layers = config.num_hidden_layers
-        self.layers = nn.ModuleList([CPMAntTransformerBlock(config) for ith in range(self.num_layers)])
+        self.layers = nn.ModuleList([CpmAntTransformerBlock(config) for ith in range(self.num_layers)])
 
-        self.output_layernorm = CPMAntLayerNorm(config)
+        self.output_layernorm = CpmAntLayerNorm(config)
 
     def forward(
         self,
@@ -485,7 +410,7 @@ class CPMAntEncoder(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->CPMAnt
-class CPMAntIntermediate(nn.Module):
+class CpmAntIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -500,10 +425,10 @@ class CPMAntIntermediate(nn.Module):
         return hidden_states
 
 
-class CPMAntSegmentPositionEmbedding(nn.Module):
+class CpmAntSegmentPositionEmbedding(nn.Module):
     def __init__(
         self,
-        config: CPMAntConfig,
+        config: CpmAntConfig,
     ):
         super().__init__()
 
@@ -512,7 +437,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
         self.max_distance = config.position_bias_max_distance
         self.num_segments = config.segment_types
 
-        self.relative_attention_bias = torch.nn.parameter.Parameter(
+        self.relative_attention_bias = nn.Parameter(
             torch.empty(
                 config.segment_types * config.segment_types + config.position_bias_num_buckets,
                 config.num_attention_heads,
@@ -596,7 +521,7 @@ class CPMAntSegmentPositionEmbedding(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->CPMAnt
-class CPMAntOutput(nn.Module):
+class CpmAntOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -610,14 +535,13 @@ class CPMAntOutput(nn.Module):
         return hidden_states
 
 
-class CPMAntPreTrainedModel(PreTrainedModel):
+class CpmAntPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = CPMAntConfig
-    load_tf_weights = load_tf_weights_in_cpmant
+    config_class = CpmAntConfig
     base_model_prefix = "cpmant"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -635,13 +559,13 @@ class CPMAntPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, CPMAntLayerNorm):
+        elif isinstance(module, CpmAntLayerNorm):
             module.weight.data.fill_(1.0)
-        elif isinstance(module, CPMAntSegmentPositionEmbedding):
+        elif isinstance(module, CpmAntSegmentPositionEmbedding):
             module.relative_attention_bias.data.normal_(mean=0.0, std=self.config.init_std)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, CPMAntEncoder):
+        if isinstance(module, CpmAntEncoder):
             module.gradient_checkpointing = value
 
 
@@ -651,7 +575,7 @@ CPMANT_START_DOCSTRING = r"""
     behavior.
 
     Parameters
-        config ([`~CPMAntConfig`]): Model configuration class with all the parameters of the
+        config ([`~CpmAntConfig`]): Model configuration class with all the parameters of the
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -684,15 +608,15 @@ CPMANT_INPUTS_DOCSTRING = r"""
     "The bare CPMAnt Model outputting raw hidden-states without any specific head on top.",
     CPMANT_START_DOCSTRING,
 )
-class CPMAntModel(CPMAntPreTrainedModel):
-    def __init__(self, config: CPMAntConfig):
+class CpmAntModel(CpmAntPreTrainedModel):
+    def __init__(self, config: CpmAntConfig):
         super().__init__(config)
-        self.encoder = CPMAntEncoder(config)
+        self.encoder = CpmAntEncoder(config)
         self.segment_embedding = nn.Embedding(config.segment_types, config.hidden_size)
         self.input_embedding = nn.Embedding(
             config.vocab_size + config.prompt_types * config.prompt_length, config.hidden_size
         )
-        self.position_bias = CPMAntSegmentPositionEmbedding(config)
+        self.position_bias = CpmAntSegmentPositionEmbedding(config)
         self.prompt_length = config.prompt_length
         self.vocab_size = config.vocab_size
 
@@ -724,7 +648,6 @@ class CPMAntModel(CPMAntPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -832,12 +755,12 @@ class CPMAntModel(CPMAntPreTrainedModel):
     """,
     CPMANT_START_DOCSTRING,
 )
-class CPMAntForCausalLM(CPMAntPreTrainedModel):
+class CpmAntForCausalLM(CpmAntPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
-    def __init__(self, config: CPMAntConfig):
+    def __init__(self, config: CpmAntConfig):
         super().__init__(config)
-        self.cpmant = CPMAntModel(config)
+        self.cpmant = CpmAntModel(config)
 
         # lm_head.weight is tied to cpmant.input_embedding.weight
         self.lm_head = nn.Linear(
@@ -847,7 +770,6 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CPMANT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -893,12 +815,12 @@ class CPMAntForCausalLM(CPMAntPreTrainedModel):
 
         Example:
 
-        Text Generation with CPMAntForCausalLM.
+        Text Generation with CpmAntForCausalLM.
         ```python
-        >>> from transformers import CPMAntTokenizer, CPMAntForCausalLM
+        >>> from transformers import CPMAntTokenizer, CpmAntForCausalLM
 
         >>> texts = "今天天气不错，"
-        >>> model = CPMAntForCausalLM.from_pretrained("openbmb/cpm-ant-10b")
+        >>> model = CpmAntForCausalLM.from_pretrained("openbmb/cpm-ant-10b")
         >>> tokenizer = CPMAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
         >>> input_ids = tokenizer(texts, return_tensors="pt")
         >>> outputs = model.generate(**input_ids)

@@ -93,13 +93,6 @@ class CpmTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
-class CPMAntTokenizerFast(metaclass=DummyObject):
-    _backends = ["tokenizers"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tokenizers"])
-
-
 class DebertaTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 

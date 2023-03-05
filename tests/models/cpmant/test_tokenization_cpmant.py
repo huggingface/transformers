@@ -21,28 +21,13 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 if is_torch_available():
-    from transformers.models.cpmant import CPMAntTokenizer, CPMAntTokenizerFast
+    from transformers.models.cpmant import CpmAntTokenizer
 
 
-@unittest.skip("CPMAntTokenizer/-Fast process vocab in list format, so we skip the common test.")
+@unittest.skip("CPMAntTokenizer process vocab in list format, so we skip the common test.")
 class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_pre_tokenization(self):
-        tokenizer = CPMAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
-        texts = "今天天气真好！"
-        jieba_tokens = ["今天", "天气", "真", "好", "！"]
-        tokens = tokenizer.tokenize(texts)
-        self.assertListEqual(tokens, jieba_tokens)
-        normalized_text = "今天天气真好！"
-        input_tokens = [tokenizer.bos_token] + tokens
-
-        input_jieba_tokens = [6, 9802, 14962, 2082, 831, 244]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_jieba_tokens)
-
-        reconstructed_text = tokenizer.decode(input_jieba_tokens)
-        self.assertEqual(reconstructed_text, normalized_text)
-
-    def test_pre_fast_tokenization(self):
-        tokenizer = CPMAntTokenizerFast.from_pretrained("openbmb/cpm-ant-10b")
+        tokenizer = CpmAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
         texts = "今天天气真好！"
         jieba_tokens = ["今天", "天气", "真", "好", "！"]
         tokens = tokenizer.tokenize(texts)

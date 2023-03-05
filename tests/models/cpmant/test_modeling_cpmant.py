@@ -27,15 +27,15 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        CPMAntConfig,
-        CPMAntForCausalLM,
-        CPMAntModel,
-        CPMAntTokenizer,
+        CpmAntConfig,
+        CpmAntForCausalLM,
+        CpmAntModel,
+        CpmAntTokenizer,
     )
 
 
 @require_torch
-class CPMAntModelTester:
+class CpmAntModelTester:
     def __init__(
         self,
         parent,
@@ -90,7 +90,7 @@ class CPMAntModelTester:
         return (config, input_ids)
 
     def get_config(self):
-        return CPMAntConfig(
+        return CpmAntConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -107,19 +107,18 @@ class CPMAntModelTester:
         )
 
     def create_and_check_cpmant_model(self, config, input_ids, *args):
-        model = CPMAntModel(config=config)
+        model = CpmAntModel(config=config)
         model.to(torch_device)
         model.eval()
 
         hidden_states = model(**input_ids).last_hidden_state
 
-        self.parent.assertEqual(hidden_states.shape, (self.batch_size, self.seq_length, config.dim_model))
+        self.parent.assertEqual(hidden_states.shape, (self.batch_size, self.seq_length, config.hidden_size))
 
     def create_and_check_lm_head_model(self, config, input_ids, *args):
-        model = CPMAntForCausalLM(config)
+        model = CpmAntForCausalLM(config)
         model.to(torch_device)
-        for k, v in input_ids.items():
-            input_ids[k] = v.to(torch_device)
+        input_ids["input_ids"] = input_ids["input_ids"].to(torch_device)
         model.eval()
 
         model_output = model(**input_ids)
@@ -134,15 +133,8 @@ class CPMAntModelTester:
 
 
 @require_torch
-class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            CPMAntModel,
-            CPMAntForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
+class CpmAntModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = ((CpmAntModel, CpmAntForCausalLM) if is_torch_available() else ())
 
     test_pruning = False
     test_missing_keys = False
@@ -151,8 +143,8 @@ class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
 
     def setUp(self):
-        self.model_tester = CPMAntModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CPMAntConfig)
+        self.model_tester = CpmAntModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=CpmAntConfig)
 
     def test_config(self):
         self.config_tester.create_and_test_config_common_properties()
@@ -171,57 +163,23 @@ class CPMAntModelTest(ModelTesterMixin, unittest.TestCase):
                  So is attentions. We strongly recommand you use loss to tune model."
         )(self.test_retain_grad_hidden_states_attentions)
 
-    @slow
-    @unittest.skip("skip this test as the model is very large for our daily runner")
     def test_cpmant_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_cpmant_model(config, inputs)
 
-    @slow
-    @unittest.skip("skip this test as the model is very large for our daily runner")
     def test_cpmant_lm_head_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(config, inputs)
 
-    @slow
-    @unittest.skip("skip this test as the model is very large for our daily runner")
-    def test_simple_generation(self):
-        model_path = "openbmb/cpm-ant-10b"
-        model = CPMAntForCausalLM.from_pretrained(model_path)
-        tokenizer = CPMAntTokenizer.from_pretrained(model_path)
-        texts = "今天天气不错，"
-        expected_output = "今天天气不错，阳光明媚，我和妈妈一起去超市买东西。\n在超市里，我看到了一个很好玩的玩具，它的名字叫“机器人”。它有一个圆圆的脑袋，两只圆圆的眼睛，还有一个圆圆的"
-        model_inputs = tokenizer(texts, return_tensors="pt")
-        token_ids = model.generate(**model_inputs)
-        output_texts = tokenizer.decode(token_ids)
-        self.assertEqual(expected_output, output_texts)
-
-    @slow
-    @unittest.skip("skip this test as the model is very large for our daily runner")
-    def test_batch_generation(self):
-        model_path = "openbmb/cpm-ant-10b"
-        model = CPMAntForCausalLM.from_pretrained(model_path)
-        tokenizer = CPMAntTokenizer.from_pretrained(model_path)
-        texts = ["今天天气不错，", "新年快乐，万事如意！"]
-        expected_output = [
-            "今天天气不错，阳光明媚，我和妈妈一起去超市买东西。\n在超市里，我看到了一个很好玩的玩具，它的名字叫“机器人”。它有一个圆圆的脑袋，两只圆圆的眼睛，还有一个圆圆的",
-            "新年快乐，万事如意！在这辞旧迎新的美好时刻，我谨代表《农村新技术》杂志社全体同仁，向一直以来关心、支持《农村新技术》杂志发展的各级领导、各界朋友和广大读者致以最诚挚的",
-        ]
-        model_inputs = tokenizer(texts, return_tensors="pt", padding=True)
-        token_ids = model.generate(**model_inputs)
-        output_texts = tokenizer.batch_decode(token_ids)
-        self.assertEqual(expected_output, output_texts)
-
 
 @require_torch
-class CPMAntModelIntegrationTest(unittest.TestCase):
-    @slow
+class CpmAntModelIntegrationTest(unittest.TestCase):
     @unittest.skip("skip this test as the model is very large for our daily runner")
     def test_inference_masked_lm(self):
         texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
-        model = CPMAntModel.from_pretrained(model_path)
-        tokenizer = CPMAntTokenizer.from_pretrained(model_path)
+        model = CpmAntModel.from_pretrained(model_path)
+        tokenizer = CpmAntTokenizer.from_pretrained(model_path)
         inputs = tokenizer(texts, return_tensors="pt")
         hidden_states = model(**inputs).last_hidden_state
 
@@ -232,14 +190,13 @@ class CPMAntModelIntegrationTest(unittest.TestCase):
 
 
 @require_torch
-class CPMAntForCausalLMlIntegrationTest(unittest.TestCase):
-    @slow
+class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
     @unittest.skip("skip this test as the model is very large for our daily runner")
     def test_inference_casual(self):
         texts = "今天天气真好！"
         model_path = "openbmb/cpm-ant-10b"
-        model = CPMAntForCausalLM.from_pretrained(model_path)
-        tokenizer = CPMAntTokenizer.from_pretrained(model_path)
+        model = CpmAntForCausalLM.from_pretrained(model_path)
+        tokenizer = CpmAntTokenizer.from_pretrained(model_path)
         inputs = tokenizer(texts, return_tensors="pt")
         hidden_states = model(**inputs).logits
 
@@ -247,3 +204,30 @@ class CPMAntForCausalLMlIntegrationTest(unittest.TestCase):
             [[[-6.4267, -6.4083, -6.3958], [-5.8802, -5.9447, -5.7811], [-5.3896, -5.4820, -5.4295]]],
         )
         self.assertTrue(torch.allclose(hidden_states[:, :3, :3], expected_slice, atol=1e-2))
+
+    @unittest.skip("skip this test as the model is very large for our daily runner")
+    def test_simple_generation(self):
+        model_path = "openbmb/cpm-ant-10b"
+        model = CpmAntForCausalLM.from_pretrained(model_path)
+        tokenizer = CpmAntTokenizer.from_pretrained(model_path)
+        texts = "今天天气不错，"
+        expected_output = "今天天气不错，阳光明媚，我和妈妈一起去超市买东西。\n在超市里，我看到了一个很好玩的玩具，它的名字叫“机器人”。它有一个圆圆的脑袋，两只圆圆的眼睛，还有一个圆圆的"
+        model_inputs = tokenizer(texts, return_tensors="pt")
+        token_ids = model.generate(**model_inputs)
+        output_texts = tokenizer.decode(token_ids)
+        self.assertEqual(expected_output, output_texts)
+
+    @unittest.skip("skip this test as the model is very large for our daily runner")
+    def test_batch_generation(self):
+        model_path = "openbmb/cpm-ant-10b"
+        model = CpmAntForCausalLM.from_pretrained(model_path)
+        tokenizer = CpmAntTokenizer.from_pretrained(model_path)
+        texts = ["今天天气不错，", "新年快乐，万事如意！"]
+        expected_output = [
+            "今天天气不错，阳光明媚，我和妈妈一起去超市买东西。\n在超市里，我看到了一个很好玩的玩具，它的名字叫“机器人”。它有一个圆圆的脑袋，两只圆圆的眼睛，还有一个圆圆的",
+            "新年快乐，万事如意！在这辞旧迎新的美好时刻，我谨代表《农村新技术》杂志社全体同仁，向一直以来关心、支持《农村新技术》杂志发展的各级领导、各界朋友和广大读者致以最诚挚的",
+        ]
+        model_inputs = tokenizer(texts, return_tensors="pt", padding=True)
+        token_ids = model.generate(**model_inputs)
+        output_texts = tokenizer.batch_decode(token_ids)
+        self.assertEqual(expected_output, output_texts)

@@ -26,9 +26,9 @@ CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class CPMAntConfig(PretrainedConfig):
+class CpmAntConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~CPMAntModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`CpmAntModel`]. It is used to instantiate an
     CPMAnt model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the CPMAnt
     [cpm-ant-10b](https://huggingface.co/openbmb/cpm-ant-10b) architecture.
@@ -39,7 +39,7 @@ class CPMAntConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30720):
             Vocabulary size of the CPMAnt model. Defines the number of different tokens that can be represented by the
-            `input` passed when calling [`~CPMAntModel`].
+            `input` passed when calling [`CpmAntModel`].
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the encoder layers.
         num_attention_heads (`int`, *optional*, defaults to 32):
@@ -75,13 +75,13 @@ class CPMAntConfig(PretrainedConfig):
         Example:
 
     ```python
-    >>> from transformers import CPMAntModel, CPMAntConfig
+    >>> from transformers import CpmAntModel, CpmAntConfig
 
     >>> # Initializing a CPMAnt cpm-ant-10b style configuration
-    >>> configuration = CPMAntConfig()
+    >>> configuration = CpmAntConfig()
 
     >>> # Initializing a model from the cpm-ant-10b style configuration
-    >>> model = CPMAntModel(configuration)
+    >>> model = CpmAntModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

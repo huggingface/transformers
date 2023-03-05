@@ -18,7 +18,7 @@ import os
 from typing import List, Optional, Tuple
 
 from transformers import is_torch_available
-from transformers.utils import is_jieba_available
+from transformers.utils import is_jieba_available, requires_backends
 
 
 if is_torch_available():
@@ -91,7 +91,7 @@ class WordpieceTokenizer(object):
         return sub_tokens
 
 
-class CPMAntTokenizer(PreTrainedTokenizer):
+class CpmAntTokenizer(PreTrainedTokenizer):
     """
     Construct a CPMAnt tokenizer. Based on byte-level Byte-Pair-Encoding.
 
@@ -134,6 +134,7 @@ class CPMAntTokenizer(PreTrainedTokenizer):
         space_token="</_>",
         **kwargs,
     ):
+        requires_backends(self, ["jieba"])
         super().__init__(
             bod_token=bod_token,
             eod_token=eod_token,
@@ -263,7 +264,7 @@ class CPMAntTokenizer(PreTrainedTokenizer):
 
         Args:
             token_ids_0 (`List[int]`): The first tokenized sequence that special tokens will be added.
-            token_ids_1 (`List[int]`): Dummy param in CPMAntTokenizer.
+            token_ids_1 (`List[int]`): Dummy param in CpmAntTokenizer.
 
         Returns:
             `List[int]`: The model input with special tokens.

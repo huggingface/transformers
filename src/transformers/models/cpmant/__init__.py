@@ -22,17 +22,9 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_cpmant": ["CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CPMAntConfig"],
-    "tokenization_cpmant": ["CPMAntTokenizer"],
+    "configuration_cpmant": ["CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CpmAntConfig"],
+    "tokenization_cpmant": ["CpmAntTokenizer"],
 }
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_cpmant_fast"] = ["CPMAntTokenizerFast"]
 
 try:
     if not is_torch_available():
@@ -42,24 +34,15 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_cpmant"] = [
         "CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "CPMAntForCausalLM",
-        "CPMAntModel",
-        "CPMAntPreTrainedModel",
-        "load_tf_weights_in_cpmant",
+        "CpmAntForCausalLM",
+        "CpmAntModel",
+        "CpmAntPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_cpmant import CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP, CPMAntConfig
-    from .tokenization_cpmant import CPMAntTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_cpmant_fast import CPMAntTokenizerFast
+    from .configuration_cpmant import CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP, CpmAntConfig
+    from .tokenization_cpmant import CpmAntTokenizer
 
     try:
         if not is_torch_available():
@@ -69,10 +52,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_cpmant import (
             CPMANT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            CPMAntForCausalLM,
-            CPMAntModel,
-            CPMAntPreTrainedModel,
-            load_tf_weights_in_cpmant,
+            CpmAntForCausalLM,
+            CpmAntModel,
+            CpmAntPreTrainedModel,
         )
 
 
