@@ -853,17 +853,17 @@ class AutoformerAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         # (1) period-based dependencies discovery
-
         # Resize (truncation or zero filling)
-        # B, L, H, E = queries.shape
-        # _, S, _, D = values.shape
-        # if L > S:
-        #     zeros = torch.zeros_like(queries[:, :(L - S), :]).float()
-        #     values = torch.cat([values, zeros], dim=1)
-        #     keys = torch.cat([keys, zeros], dim=1)
-        # else:
-        #     values = values[:, :L, :, :]
-        #     keys = keys[:, :L, :, :]
+        queries_time_length = query_states.size(1)
+        values_time_length = value_states.size(1)
+        if queries_time_length > values_time_length:
+            query_states = query_states[:, :(queries_time_length - values_time_length), :]
+            zeros = torch.zeros_like(query_states).float()
+            value_states = torch.cat([value_states, zeros], dim=1)
+            key_states = torch.cat([key_states, zeros], dim=1)
+        else:
+            value_states = value_states[:, :queries_time_length, :]
+            key_states = key_states[:, :queries_time_length, :]
 
         query_states_fft = torch.fft.rfft(query_states, dim=1)
         key_states_fft = torch.fft.rfft(key_states, dim=1)
