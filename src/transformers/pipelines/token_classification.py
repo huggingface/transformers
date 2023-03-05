@@ -98,34 +98,26 @@ class TokenClassificationPipeline(ChunkPipeline):
     """
     Named Entity Recognition pipeline using any `ModelForTokenClassification`. See the [named entity recognition
     examples](../task_summary#named-entity-recognition) for more information.
-
     Example:
-
     ```python
     >>> from transformers import pipeline
-
     >>> token_classifier = pipeline(model="Jean-Baptiste/camembert-ner", aggregation_strategy="simple")
     >>> sentence = "Je m'appelle jean-baptiste et je vis à montréal"
     >>> tokens = token_classifier(sentence)
     >>> tokens
     [{'entity_group': 'PER', 'score': 0.9931, 'word': 'jean-baptiste', 'start': 12, 'end': 26}, {'entity_group': 'LOC', 'score': 0.998, 'word': 'montréal', 'start': 38, 'end': 47}]
-
     >>> token = tokens[0]
     >>> # Start and end provide an easy way to highlight words in the original text.
     >>> sentence[token["start"] : token["end"]]
     ' jean-baptiste'
-
     >>> # Some models use the same idea to do part of speech.
     >>> syntaxer = pipeline(model="vblagoje/bert-english-uncased-finetuned-pos", aggregation_strategy="simple")
     >>> syntaxer("My name is Sarah and I live in London")
     [{'entity_group': 'PRON', 'score': 0.999, 'word': 'my', 'start': 0, 'end': 2}, {'entity_group': 'NOUN', 'score': 0.997, 'word': 'name', 'start': 3, 'end': 7}, {'entity_group': 'AUX', 'score': 0.994, 'word': 'is', 'start': 8, 'end': 10}, {'entity_group': 'PROPN', 'score': 0.999, 'word': 'sarah', 'start': 11, 'end': 16}, {'entity_group': 'CCONJ', 'score': 0.999, 'word': 'and', 'start': 17, 'end': 20}, {'entity_group': 'PRON', 'score': 0.999, 'word': 'i', 'start': 21, 'end': 22}, {'entity_group': 'VERB', 'score': 0.998, 'word': 'live', 'start': 23, 'end': 27}, {'entity_group': 'ADP', 'score': 0.999, 'word': 'in', 'start': 28, 'end': 30}, {'entity_group': 'PROPN', 'score': 0.999, 'word': 'london', 'start': 31, 'end': 37}]
     ```
-
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
-
     This token recognition pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"ner"` (for predicting the classes of tokens in a sequence: person, organisation, location or miscellaneous).
-
     The models that this pipeline can use are models that have been fine-tuned on a token classification task. See the
     up-to-date list of available models on
     [huggingface.co/models](https://huggingface.co/models?filter=token-classification).
@@ -197,34 +189,38 @@ class TokenClassificationPipeline(ChunkPipeline):
         if ignore_labels is not None:
             postprocess_params["ignore_labels"] = ignore_labels
         if stride is not None:
-            if self.tokenizer.is_fast:
-                tokenizer_params = {
-                    "return_overflowing_tokens": True,
-                    "max_length": self.tokenizer.model_max_length,
-                    "padding": True,
-                    "stride": stride,
-                }
-                preprocess_params["tokenizer_params"] = tokenizer_params
-            else:
+            if aggregation_strategy == AggregationStrategy.NONE:
                 warnings.warn(
-                    "`stride` was provided to process all text but you're using Slow tokenizers."
+                    "`stride` was provided to process all the text but `aggregation_strategy="
+                    f'"{aggregation_strategy}"`, please select another one instead.'
                     " The pipeline will be applied on the truncated text."
                 )
+            else:
+                if self.tokenizer.is_fast:
+                    tokenizer_params = {
+                        "return_overflowing_tokens": True,
+                        "max_length": self.tokenizer.model_max_length,
+                        "padding": True,
+                        "stride": stride,
+                    }
+                    preprocess_params["tokenizer_params"] = tokenizer_params
+                else:
+                    warnings.warn(
+                        "`stride` was provided to process all text but you're using Slow tokenizers."
+                        " The pipeline will be applied on the truncated text."
+                    )
         return preprocess_params, {}, postprocess_params
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
         """
         Classify each token of the text(s) given as inputs.
-
         Args:
             inputs (`str` or `List[str]`):
                 One or several texts (or one list of texts) for token classification.
-
         Return:
             A list or a list of list of `dict`: Each result comes as a list of dictionaries (one for each token in the
             corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy) with
             the following keys:
-
             - **word** (`str`) -- The token/word classified. This is obtained by decoding the selected tokens. If you
               want to have the exact string in the original sentence, use `start` and `end`.
             - **score** (`float`) -- The corresponding probability for `entity`.
@@ -496,7 +492,6 @@ class TokenClassificationPipeline(ChunkPipeline):
     def aggregate_words(self, entities: List[dict], aggregation_strategy: AggregationStrategy) -> List[dict]:
         """
         Override tokens from a given word that disagree to force agreement on word boundaries.
-
         Example: micro|soft| com|pany| B-ENT I-NAME I-ENT I-ENT will be rewritten with first strategy as microsoft|
         company| B-ENT I-ENT
         """
@@ -523,7 +518,6 @@ class TokenClassificationPipeline(ChunkPipeline):
     def group_sub_entities(self, entities: List[dict]) -> dict:
         """
         Group together the adjacent tokens with the same entity predicted.
-
         Args:
             entities (`dict`): The entities predicted by the pipeline.
         """
@@ -558,7 +552,6 @@ class TokenClassificationPipeline(ChunkPipeline):
     def group_entities(self, entities: List[dict]) -> List[dict]:
         """
         Find and group together the adjacent tokens with the same entity predicted.
-
         Args:
             entities (`dict`): The entities predicted by the pipeline.
         """
