@@ -43,7 +43,6 @@ def write_json(text, path):
 
 
 def write_model(model_path, input_base_path, model_size):
-    # WIP: Currently only support 7B
     assert model_size in INTERMEDIATE_SIZE_MAP
     os.makedirs(model_path, exist_ok=True)
 
