@@ -198,7 +198,6 @@ def write_model(model_path, input_base_path, model_size):
         "rms_norm_eps": params["norm_eps"],
         "torch_dtype": "float16",
         "transformers_version": "4.27.0.dev0",
-        "type_vocab_size": 2,
         "use_cache": True,
         "vocab_size": 32000,
     }
