@@ -25,6 +25,10 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor,
 
 
 if is_torch_available():
+    import sys
+
+    sys.path.append('../../../src/transformers/models/mra/dist/cuda_kernel-0.0.0-py3.9-linux-x86_64.egg')
+
     import torch
 
     from transformers import (
