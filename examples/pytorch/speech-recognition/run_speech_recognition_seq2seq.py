@@ -229,13 +229,13 @@ class DataCollatorSpeechSeq2SeqWithPadding:
             The processor used for processing the data.
         decoder_start_token_id (`int`)
             The begin-of-sentence of the decoder.
-        return_attention_mask (`bool`)
+        forward_attention_mask (`bool`)
             Whether to return attention_mask.
     """
 
     processor: Any
     decoder_start_token_id: int
-    return_attention_mask: bool
+    forward_attention_mask: bool
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
@@ -431,7 +431,7 @@ def main():
     model_input_name = feature_extractor.model_input_names[0]
     do_lower_case = data_args.do_lower_case
     # if SpecAugment is used for whisper models, return attention_mask to guide the mask along time axis
-    return_attention_mask = (
+    forward_attention_mask = (
         getattr(config, "model_type", None) == "whisper"
         and getattr(config, "apply_spec_augment", False)
         and getattr(config, "mask_time_prob", 0) > 0
@@ -447,12 +447,12 @@ def main():
         # process audio
         sample = batch[audio_column_name]
         inputs = feature_extractor(
-            sample["array"], sampling_rate=sample["sampling_rate"], return_attention_mask=return_attention_mask
+            sample["array"], sampling_rate=sample["sampling_rate"], return_attention_mask=forward_attention_mask
         )
         # process audio length
         batch[model_input_name] = inputs.get(model_input_name)[0]
         batch["input_length"] = len(sample["array"])
-        if return_attention_mask:
+        if forward_attention_mask:
             batch["attention_mask"] = inputs.get("attention_mask")[0]
 
         # process targets
@@ -518,7 +518,7 @@ def main():
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(
         processor=processor,
         decoder_start_token_id=model.config.decoder_start_token_id,
-        return_attention_mask=return_attention_mask,
+        forward_attention_mask=forward_attention_mask,
     )
 
     # 11. Initialize Trainer
