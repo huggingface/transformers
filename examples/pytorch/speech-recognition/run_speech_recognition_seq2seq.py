@@ -246,7 +246,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 
         batch = self.processor.feature_extractor.pad(input_features, return_tensors="pt")
 
-        if self.return_attention_mask:
+        if self.forward_attention_mask:
             batch["attention_mask"] = torch.LongTensor([feature["attention_mask"] for feature in features])
 
         labels_batch = self.processor.tokenizer.pad(label_features, return_tensors="pt")
