@@ -1415,7 +1415,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         stopping_criteria=None,
         prefix_allowed_tokens_fn=None,
         synced_gpus=False,
-        return_timestamps=False,
+        return_timestamps=None,
         task=None,
         language=None,
         is_multilingual=None,
@@ -1513,7 +1513,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 )
 
             generation_config.return_timestamps = return_timestamps
-
+        else:
+            generation_config.return_timestamps = False
         if is_multilingual is not None:
             generation_config.is_multilingual = is_multilingual
 
@@ -1545,7 +1546,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))
 
         # Legacy code for backward compatibility
-        if forced_decoder_ids != self.config.forced_decoder_ids:
+        if hasattr(self.config, "forced_decoder_ids") and  forced_decoder_ids != self.generation.forced_decoder_ids:
             warnings.warn(
                 "You have modified the pretrained model configuration to control generation. This is a"
                 " deprecated strategy to control generation and will be removed soon, in a future version."
