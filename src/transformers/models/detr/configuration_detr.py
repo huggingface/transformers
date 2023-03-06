@@ -243,12 +243,9 @@ class DetrConfig(PretrainedConfig):
             backbone_config ([`PretrainedConfig`]):
                 The backbone configuration.
         Returns:
-            [`Mask2FormerConfig`]: An instance of a configuration object
+            [`DetrConfig`]: An instance of a configuration object
         """
-        return cls(
-            backbone_config=backbone_config,
-            **kwargs,
-        )
+        return cls(backbone_config=backbone_config, **kwargs)
 
     def to_dict(self) -> Dict[str, any]:
         """
