@@ -18,8 +18,8 @@ from typing import List, Optional, Union
 
 import numpy as np
 import torch
-import torchaudio
 
+from ...audio_utils import get_mel_filter_banks
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
@@ -112,16 +112,15 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         window = getattr(torch, self.win_function)(window_length=self.sample_size, periodic=True)
         self.window = window.numpy()
 
-        fbanks = torchaudio.functional.melscale_fbanks(
-            n_freqs=self.n_freqs,
-            f_min=self.fmin,
-            f_max=self.fmax,
-            n_mels=self.num_mel_bins,
+        self.mel_filter_banks = get_mel_filter_banks(
+            nb_frequency_bins=self.n_freqs,
+            nb_mel_filters=self.num_mel_bins,
+            frequency_min=self.fmin,
+            frequency_max=self.fmax,
             sample_rate=self.sampling_rate,
             norm="slaney",
             mel_scale="slaney",
         )
-        self.fbanks = fbanks.numpy()
 
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
@@ -219,7 +218,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
         dft_out = self._dft(frames.flatten(), self.n_freqs, n_frames, self.sample_size, self.n_fft)
 
-        return np.log10(np.maximum(self.mel_floor, np.dot(dft_out, self.fbanks)))
+        return np.log10(np.maximum(self.mel_floor, np.dot(dft_out, self.mel_filter_banks)))
 
     def __call__(
         self,
