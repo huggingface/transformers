@@ -553,16 +553,15 @@ class AutoformerSeriesDecompositionLayer(nn.Module):
         self.avg = nn.AvgPool1d(kernel_size=kernel_size, stride=1, padding=0)
 
     def forward(self, x):
+        """Input shape: Batch x Time x EMBED_DIM"""
         # padding on the both ends of time series
-        front = x[:, 0:1, :].repeat(1, (self.kernel_size - 1) // 2, 1)
-        end = x[:, -1:, :].repeat(1, (self.kernel_size - 1) // 2, 1)
-        x = torch.cat([front, x, end], dim=1)
+        num_of_pads = (self.kernel_size - 1) // 2
+        front = x[:, 0:1, :].repeat(1, num_of_pads, 1)
+        end = x[:, -1:, :].repeat(1, num_of_pads, 1)
+        x_padded = torch.cat([front, x, end], dim=1)
 
-        # pooling
-        x = self.avg(x.permute(0, 2, 1))
-        x_trend = x.permute(0, 2, 1)
-
-        # calculate x_seasonal
+        # calculate the trend and seasonal part of the series
+        x_trend = self.avg(x_padded.permute(0, 2, 1)).permute(0, 2, 1)
         x_seasonal = x - x_trend
         return x_seasonal, x_trend
 
@@ -822,6 +821,8 @@ class AutoformerEncoderLayer(nn.Module):
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = AutoformerLayernorm(self.embed_dim)
+        self.decomp1 = AutoformerSeriesDecompositionLayer(config.moving_avg)
+        self.decomp2 = AutoformerSeriesDecompositionLayer(config.moving_avg)
 
     def forward(
         self,
@@ -850,14 +851,18 @@ class AutoformerEncoderLayer(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+        # Todo: ask kashif whether apply self_attn_layer_norm here or not.
+        #  In the original paper they don't apply it after AutoCorrelation, but
+        #  we can consider applying it as improvment :).
         hidden_states = self.self_attn_layer_norm(hidden_states)
-
+        hidden_states, _ = self.decomp1(hidden_states)
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+        hidden_states, _ = self.decomp2(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
         if hidden_states.dtype == torch.float16 and (
