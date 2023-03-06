@@ -109,6 +109,20 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = 2 ** int(np.ceil(np.log2(self.sample_size)))
         self.n_freqs = (self.n_fft // 2) + 1
 
+        window = getattr(torch, self.win_function)(window_length=self.sample_size, periodic=True)
+        self.window = window.numpy()
+
+        fbanks = torchaudio.functional.melscale_fbanks(
+            n_freqs=self.n_freqs,
+            f_min=self.fmin,
+            f_max=self.fmax,
+            n_mels=self.num_mel_bins,
+            sample_rate=self.sampling_rate,
+            norm="slaney",
+            mel_scale="slaney",
+        )
+        self.fbanks = fbanks.numpy()
+
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
     def zero_mean_unit_var_norm(
@@ -201,25 +215,11 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
             one_waveform, n_frames, self.frame_signal_scale, self.sample_size, self.sample_stride
         )
 
-        window = getattr(torch, self.win_function)(window_length=self.sample_size, periodic=True)
-        window = window.numpy()
-
-        frames = self._windowing(frames, self.sample_size, window)
+        frames = self._windowing(frames, self.sample_size, self.window)
 
         dft_out = self._dft(frames.flatten(), self.n_freqs, n_frames, self.sample_size, self.n_fft)
 
-        fbanks = torchaudio.functional.melscale_fbanks(
-            n_freqs=self.n_freqs,
-            f_min=self.fmin,
-            f_max=self.fmax,
-            n_mels=self.num_mel_bins,
-            sample_rate=self.sampling_rate,
-            norm="slaney",
-            mel_scale="slaney",
-        )
-        fbanks = fbanks.numpy()
-
-        return np.log10(np.maximum(self.mel_floor, np.dot(dft_out, fbanks)))
+        return np.log10(np.maximum(self.mel_floor, np.dot(dft_out, self.fbanks)))
 
     def __call__(
         self,
