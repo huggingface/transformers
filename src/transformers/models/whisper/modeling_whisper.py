@@ -1546,7 +1546,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))
 
         # Legacy code for backward compatibility
-        if hasattr(self.config, "forced_decoder_ids") and  forced_decoder_ids != self.generation.forced_decoder_ids:
+        if hasattr(self.config, "forced_decoder_ids") and forced_decoder_ids != self.generation.forced_decoder_ids:
             warnings.warn(
                 "You have modified the pretrained model configuration to control generation. This is a"
                 " deprecated strategy to control generation and will be removed soon, in a future version."
