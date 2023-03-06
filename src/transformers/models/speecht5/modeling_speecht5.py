@@ -82,6 +82,10 @@ def shift_spectrograms_right(input_values: torch.Tensor, reduction_factor: int =
 
     shifted_input_values = input_values.new_zeros(input_values.shape)
     shifted_input_values[:, 1:] = input_values[:, :-1].clone()
+
+    # replace possible -100 values in labels by zeros
+    shifted_input_values.masked_fill_(shifted_input_values == -100.0, 0.0)
+
     return shifted_input_values
 
 
@@ -2592,10 +2596,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            # replace -100 in the spectrogram otherwise model gives nan
-            padding_mask = labels != -100.0
-            labels[~padding_mask] = 0.0
-
             if decoder_input_values is None:
                 decoder_input_values = shift_spectrograms_right(labels, self.config.reduction_factor)
 
@@ -2621,7 +2621,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         loss = None
         if labels is not None:
             loss = self._compute_loss(
-                padding_mask,
                 outputs_before_postnet,
                 outputs_after_postnet,
                 logits,
@@ -2646,12 +2645,13 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
     def _compute_loss(
         self,
-        padding_mask: torch.Tensor,
         outputs_before_postnet: torch.FloatTensor,
         outputs_after_postnet: torch.FloatTensor,
         logits: torch.FloatTensor,
         labels: torch.FloatTensor,
     ):
+        padding_mask = labels != -100.0
+
         # mask out the padded portions
         labels = labels.masked_select(padding_mask)
         outputs_before_postnet = outputs_before_postnet.masked_select(padding_mask)
