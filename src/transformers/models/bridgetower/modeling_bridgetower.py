@@ -23,7 +23,6 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from torch.nn.functional import normalize
 
 from ...activations import ACT2FN, QuickGELUActivation
 from ...modeling_outputs import (
@@ -56,10 +55,6 @@ BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "BridgeTower/bridgetower-base-itm-mlm"
     # See all bridgetower models at https://huggingface.co/BridgeTower
 ]
-
-
-def contrastive_loss(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, labels)
 
 
 BRIDGETOWER_START_DOCSTRING = r"""
@@ -148,8 +143,8 @@ class BridgeTowerModelOutput(ModelOutput):
             token), respectively, after further processing through layers used for auxiliary pretraining tasks.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
+            the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -168,22 +163,26 @@ class BridgeTowerModelOutput(ModelOutput):
 @dataclass
 class BridgeTowerITCOutput(ModelOutput):
     """
+    Output type of ['BridgeTowerForITC']
+
     Args:
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
+            the model at the output of each layer plus the optional initial embedding outputs.
         text_embeds (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
             The text embeddings obtained by applying the projection layer to the pooler_output.
-        image_embeds
-        cross_embeds
+        image_embeds (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
+        cross_embeds  (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
+            The text-image cross-modal embeddings obtained by applying the projection layer to the pooler_output.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            ITC loss.
+            Image-text contrastive loss
     """
 
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1746,7 +1745,7 @@ class BridgeTowerITCHead(nn.Module):
 
 @add_start_docstrings(
     """
-    BridgeTower Model with a image-text contrastive head on top as done during pretraining.
+    BridgeTower Model with a image-text contrastive head on top computing image-text contrastive loss.
     """,
     BRIDGETOWER_START_DOCSTRING,
 )
@@ -1764,6 +1763,8 @@ class BridgeTowerForITC(BridgeTowerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BridgeTowerITCOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1775,10 +1776,10 @@ class BridgeTowerForITC(BridgeTowerPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         image_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = True,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[SequenceClassifierOutput, Tuple[torch.FloatTensor]]:
+    ) -> Union[BridgeTowerITCOutput, Tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Labels for computing the image-text matching loss. 0 means the pairs don't match and 1 means they match.
@@ -1800,7 +1801,6 @@ class BridgeTowerForITC(BridgeTowerPreTrainedModel):
         >>> model = BridgeTowerForITC.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
         >>> outputs = model(**inputs, output_hidden_states=True)
         ```"""
-        assert output_hidden_states, 'output_hidden_states should be set to True for BridgeTowerForITC'
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bridgetower(
@@ -1828,15 +1828,12 @@ class BridgeTowerForITC(BridgeTowerPreTrainedModel):
             torch.full((1,), 1, dtype=torch.long, device=self.bridgetower.token_type_embeddings.weight.device)
         ).expand_as(image_embeds_with_ln)
 
-        image_embeds = (
-            self.bridgetower.cross_modal_image_transform(image_embeds_with_ln)
-            + image_token_type_embeddings
-        )
+        image_embeds = self.bridgetower.cross_modal_image_transform(image_embeds_with_ln) + image_token_type_embeddings
 
         # normalized features
-        text_embeds = normalize(self.itc_text_head(text_embeds[:,0,:]), dim=-1, p=2)
-        image_embeds = normalize(self.itc_image_head(image_embeds[:,0,:]), dim=-1, p=2)
-        cross_embeds = normalize(self.itc_cross_modal_head(pooler_output), dim=-1, p=2)
+        text_embeds = nn.funtional.normalize(self.itc_text_head(text_embeds[:, 0, :]), dim=-1, p=2)
+        image_embeds = nn.functional.normalize(self.itc_image_head(image_embeds[:, 0, :]), dim=-1, p=2)
+        cross_embeds = nn.funtional.normalize(self.itc_cross_modal_head(pooler_output), dim=-1, p=2)
 
         logits = torch.stack([text_embeds, image_embeds, cross_embeds], dim=-2)
 
@@ -1848,8 +1845,9 @@ class BridgeTowerForITC(BridgeTowerPreTrainedModel):
 
         if labels is not None:
             labels = torch.arange(len(labels), device=labels.device)
-            text_to_image_loss = contrastive_loss(logits_text_to_image, labels)
-            text_to_cross_loss = contrastive_loss(logits_text_to_cross, labels)
+            loss_fct = CrossEntropyLoss()
+            text_to_image_loss = loss_fct(logits_text_to_image, labels)
+            text_to_cross_loss = loss_fct(logits_text_to_cross, labels)
             itc_loss = (text_to_image_loss + text_to_cross_loss) / 2.0
 
         if not return_dict:
@@ -1863,5 +1861,5 @@ class BridgeTowerForITC(BridgeTowerPreTrainedModel):
             image_embeds=image_embeds,
             cross_embeds=cross_embeds,
             logits=logits,
-            loss=itc_loss
+            loss=itc_loss,
         )
