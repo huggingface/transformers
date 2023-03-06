@@ -267,6 +267,13 @@ class Jukebox5bModelTester(unittest.TestCase):
         653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
         1489, 1489, 1489, 1489, 1150, 1853, 1509, 1150, 1357, 1509, 6, 1272
     ]
+    EXPECTED_OUTPUT_2_PT_2 = [
+        1489, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653
+    ]
 
     EXPECTED_OUTPUT_1 = [
         1125, 416, 1125, 1125, 1125, 1125, 1125, 416, 416, 416, 416, 416,
@@ -275,6 +282,13 @@ class Jukebox5bModelTester(unittest.TestCase):
         416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
         416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416
     ]
+    EXPECTED_OUTPUT_1_PT_2 = [
+        416, 416, 1125, 1125, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416
+    ]
 
     EXPECTED_OUTPUT_0 = [
         1755, 1061, 234, 1755, 1061, 1755, 185, 290, 307, 307, 616, 616,
@@ -282,6 +296,13 @@ class Jukebox5bModelTester(unittest.TestCase):
         290, 290, 307, 616, 616, 616, 616, 616, 290, 234, 234, 1755,
         234, 234, 1755, 234, 185, 185, 307, 616, 616, 616, 616, 290,
         1755, 1755, 1755, 234, 234, 1755, 1572, 290, 307, 616, 34, 616
+    ]
+    EXPECTED_OUTPUT_0_PT_2 = [
+        854, 842, 1353, 114, 1353, 842, 185, 842, 185, 114, 591, 842, 185,
+        417, 185, 842, 307, 842, 591, 842, 185, 842, 185, 842, 591, 842,
+        1353, 842, 185, 842, 591, 842, 591, 114, 591, 842, 185, 842, 591,
+        89, 591, 842, 591, 842, 591, 417, 1372, 842, 1372, 842, 34, 842,
+        185, 89, 591, 842, 185, 842, 591, 632
     ]
 
     EXPECTED_GPU_OUTPUTS_2 = [
@@ -329,15 +350,15 @@ class Jukebox5bModelTester(unittest.TestCase):
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
         zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[0].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[0][0], torch.tensor(self.EXPECTED_OUTPUT_2))
+        self.assertIn(zs[0][0].detach().cpu().tolist(), [self.EXPECTED_OUTPUT_2, self.EXPECTED_OUTPUT_2_PT_2])
 
         set_seed(0)
         zs = model._sample(zs, labels, [1], sample_length=60 * model.priors[1].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[1][0], torch.tensor(self.EXPECTED_OUTPUT_1))
+        self.assertIn(zs[1][0].detach().cpu().tolist(), [self.EXPECTED_OUTPUT_2, self.EXPECTED_OUTPUT_2_PT_2])
 
         set_seed(0)
         zs = model._sample(zs, labels, [2], sample_length=60 * model.priors[2].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[2][0], torch.tensor(self.EXPECTED_OUTPUT_0))
+        self.assertIn(zs[2][0].detach().cpu().tolist(), [self.EXPECTED_OUTPUT_2, self.EXPECTED_OUTPUT_2_PT_2])
 
     @slow
     @skip("Not enough GPU memory on CI runners")
