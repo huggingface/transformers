@@ -21,6 +21,7 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -549,7 +550,7 @@ class TFRobertaPreLayerNormModelTester:
 
 @require_tf
 # Copied from tests.models.roberta.test_modelling_tf_roberta.TFRobertaPreLayerNormModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
-class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFRobertaPreLayerNormModel,
@@ -561,6 +562,19 @@ class TFRobertaPreLayerNormModelTest(TFModelTesterMixin, unittest.TestCase):
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFRobertaPreLayerNormModel,
+            "fill-mask": TFRobertaPreLayerNormForMaskedLM,
+            "question-answering": TFRobertaPreLayerNormForQuestionAnswering,
+            "text-classification": TFRobertaPreLayerNormForSequenceClassification,
+            "text-generation": TFRobertaPreLayerNormForCausalLM,
+            "token-classification": TFRobertaPreLayerNormForTokenClassification,
+            "zero-shot": TFRobertaPreLayerNormForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
     test_head_masking = False
     test_onnx = False

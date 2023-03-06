@@ -1098,11 +1098,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         logger = logging.get_logger()
         log_info_string = "Running training"
 
-        # test with the default log_level - should be warning and thus not log on the main process
+        # test with the default log_level - should be the same as before and thus we test depending on is_info
+        is_info = logging.get_verbosity() <= 20
         with CaptureLogger(logger) as cl:
             trainer = get_regression_trainer()
             trainer.train()
-        self.assertNotIn(log_info_string, cl.out)
+        if is_info:
+            self.assertIn(log_info_string, cl.out)
+        else:
+            self.assertNotIn(log_info_string, cl.out)
 
         # test with low log_level - lower than info
         with CaptureLogger(logger) as cl:

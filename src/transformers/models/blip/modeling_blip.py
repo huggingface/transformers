@@ -985,12 +985,13 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "A picture of"
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         ```"""
-        batch_size = pixel_values.shape[0]
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         vision_outputs = self.vision_model(
@@ -1001,12 +1002,6 @@ class BlipForConditionalGeneration(BlipPreTrainedModel):
         )
 
         image_embeds = vision_outputs[0]
-
-        if input_ids is None:
-            input_ids = torch.LongTensor([[self.decoder_input_ids] * batch_size]).to(image_embeds.device)
-
-        if labels is None:
-            labels = input_ids.masked_fill(input_ids == self.decoder_pad_token_id, -100)
 
         outputs = self.text_decoder(
             input_ids=input_ids,

@@ -16,9 +16,16 @@ import unittest
 
 from transformers import is_vision_available
 from transformers.pipelines import pipeline
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_tf,
+    require_torch,
+    require_vision,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -31,8 +38,9 @@ else:
             pass
 
 
+@is_pipeline_test
 @require_vision
-class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
     # Deactivating auto tests since we don't have a good MODEL_FOR_XX mapping,
     # and only CLIP would be there for now.
     # model_mapping = {CLIPConfig: CLIPModel}
