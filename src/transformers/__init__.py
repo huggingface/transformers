@@ -2718,6 +2718,17 @@ else:
     ]
     _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward", "prune_layer"]
     _import_structure["sagemaker"] = []
+    _import_structure["time_series_utils"] = [
+        "FeatureEmbedder",
+        "MeanScaler",
+        "NegativeBinomialOutput",
+        "NegativeLogLikelihood",
+        "NOPScaler",
+        "NormalOutput",
+        "StdScaler",
+        "StudentTOutput",
+        "weighted_average",
+    ]
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
     _import_structure["trainer_seq2seq"] = ["Seq2SeqTrainer"]
