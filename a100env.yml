@@ -1,0 +1,16 @@
+name: transformers-dev
+channels:
+    - pytorch
+    - conda-forge
+dependencies:
+    - python=3.8
+    - cudatoolkit=11.0
+    - pytorch=1.7.1
+    - torchvision=0.8.2
+    - torchaudio=0.7.2
+    - pip
+    - pip:
+        - tensorflow==2.9.0
+        - -e ".[dev]"
+variables:
+    LD_LIBRARY_PATH: /data/work/anaconda3/lib
