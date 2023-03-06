@@ -115,32 +115,8 @@ class ModelArguments:
     )
     apply_spec_augment: bool = field(
         default=False,
-        metadata={"help": "Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder."},
-    )
-    mask_time_prob: float = field(
-        default=0.05,
         metadata={
-            "help": "Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking procecure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector span to be masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment == True`."
-        },
-    )
-    mask_time_length: int = field(default=10, metadata={"help": "Length of vector span along the time axis."})
-    mask_time_min_masks: int = field(
-        default=2,
-        metadata={
-            "help": "The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step, irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length < mask_time_min_masks''"
-        },
-    )
-    mask_feature_prob: float = field(
-        default=0.0,
-        metadata={
-            "help": "Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`."
-        },
-    )
-    mask_feature_length: int = field(default=10, metadata={"help": "Length of vector span along the feature axis."})
-    mask_feature_min_masks: int = field(
-        default=0,
-        metadata={
-            "help": "The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time step, irrespectively of `mask_feature_prob`. Only relevant if `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`."
+            "help": "Whether to apply *SpecAugment* data augmentation to the input features. This is currently only relevant for whisper models."
         },
     )
 
@@ -399,18 +375,22 @@ def main():
 
     config.update({"forced_decoder_ids": model_args.forced_decoder_ids, "suppress_tokens": model_args.suppress_tokens})
 
-    if config.model_type == "whisper":
-        config.update(
-            {
-                "apply_spec_augment": model_args.apply_spec_augment,
-                "mask_time_prob": model_args.mask_time_prob,
-                "mask_time_length": model_args.mask_time_length,
-                "mask_time_min_masks": model_args.mask_time_min_masks,
-                "mask_feature_prob": model_args.mask_feature_prob,
-                "mask_feature_length": model_args.mask_feature_length,
-                "mask_feature_min_masks": model_args.mask_feature_min_masks,
-            }
-        )
+    # SpecAugment for whisper models
+    if getattr(config, "model_type", None) == "whisper":
+        config.update({"apply_spec_augment": model_args.apply_spec_augment})
+        # In order to keep the example easy to understand and to customize, we don't provide all the arguments of SpecAugment in ModelArguments
+        # You can customize the default values here as you want
+        if config.apply_spec_augment:
+            config.update(
+                {
+                    "mask_time_prob": 0.05,
+                    "mask_time_length": 10,
+                    "mask_time_min_masks": 2,
+                    "mask_feature_prob": 0.0,
+                    "mask_feature_length": 10,
+                    "mask_feature_min_masks": 0,
+                }
+            )
 
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.feature_extractor_name if model_args.feature_extractor_name else model_args.model_name_or_path,
@@ -463,9 +443,11 @@ def main():
     text_column_name = data_args.text_column_name
     model_input_name = feature_extractor.model_input_names[0]
     do_lower_case = data_args.do_lower_case
-    # if SpecAugment is used, return attention_mask to guide the mask along time axis
+    # if SpecAugment is used for whisper models, return attention_mask to guide the mask along time axis
     return_attention_mask = (
-        config.model_type == "whisper" and model_args.apply_spec_augment and model_args.mask_time_prob > 0
+        getattr(config, "model_type", None) == "whisper"
+        and getattr(config, "apply_spec_augment", False)
+        and getattr(config, "mask_time_prob", 0) > 0
     )
 
     if data_args.max_train_samples is not None:
