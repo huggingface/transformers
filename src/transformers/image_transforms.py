@@ -131,8 +131,8 @@ def to_pil_image(
             The image to convert to the `PIL.Image` format.
         do_rescale (`bool`, *optional*):
             Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will default
-            to `True` if the image type is a floating type and casting to `int` would result in a loss of precision, and
-            `False` otherwise.
+            to `True` if the image type is a floating type and casting to `int` would result in a loss of precision,
+            and `False` otherwise.
 
     Returns:
         `PIL.Image.Image`: The converted image.
