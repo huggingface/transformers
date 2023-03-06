@@ -310,10 +310,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         shifted_exp = np.exp(logits - maxes)
         scores = shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
 
-        outputs["scores"] = scores
-
         input_ids = outputs.pop("input_ids")
-        scores = outputs.pop("scores")
         special_tokens_mask = outputs.pop("special_tokens_mask")
         offset_mapping = outputs.pop("offset_mapping", None)
 
