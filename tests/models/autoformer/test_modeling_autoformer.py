@@ -298,13 +298,15 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                inputs = self._prepare_for_class(inputs_dict, model_class)
+                outputs = model(**inputs)
             attentions = outputs.encoder_attentions
+            channel = inputs["past_time_features"].size(-1)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+                [self.model_tester.num_attention_heads, encoder_seq_length, channel],
             )
             out_len = len(outputs)
 
@@ -330,7 +332,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_seq_length],
+                [self.model_tester.num_attention_heads, decoder_seq_length, channel],
             )
 
             # cross attentions
@@ -342,7 +344,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
                 [
                     self.model_tester.num_attention_heads,
                     decoder_seq_length,
-                    encoder_seq_length,
+                    channel,
                 ],
             )
 
@@ -362,7 +364,7 @@ class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
         self.assertListEqual(
             list(self_attentions[0].shape[-3:]),
-            [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+            [self.model_tester.num_attention_heads, encoder_seq_length, channel],
         )
 
     @is_flaky()
