@@ -85,6 +85,7 @@ if is_tf_available():
         TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
+        PreTrainedModel,
         PushToHubCallback,
         RagRetriever,
         TFAutoModel,
@@ -92,10 +93,9 @@ if is_tf_available():
         TFBertForMaskedLM,
         TFBertForSequenceClassification,
         TFBertModel,
+        TFPreTrainedModel,
         TFRagModel,
         TFSharedEmbeddings,
-        TFPreTrainedModel,
-        PreTrainedModel,
     )
     from transformers.generation import (
         TFBeamSampleDecoderOnlyOutput,
@@ -2467,7 +2467,6 @@ class TFModelPushToHubTester(unittest.TestCase):
                 models_equal = False
                 break
         self.assertTrue(models_equal)
-
 
     def test_push_to_hub_callback(self):
         config = BertConfig(
