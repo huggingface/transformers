@@ -759,7 +759,7 @@ class InformerDecoderLayer(nn.Module):
         if config.attention_type == "prob":
             self.self_attn = InformerProbSparseAttention(
                 embed_dim=self.embed_dim,
-                num_heads=config.encoder_attention_heads,
+                num_heads=config.decoder_attention_heads,
                 dropout=config.attention_dropout,
                 sampling_factor=config.sampling_factor,
                 is_decoder=True,
