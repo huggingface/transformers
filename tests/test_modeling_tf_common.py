@@ -2492,7 +2492,9 @@ class TFModelPushToHubTester(unittest.TestCase):
         self.assertTrue(models_equal)
 
         tf_push_to_hub_params = dict(inspect.signature(TFPreTrainedModel.push_to_hub).parameters)
+        tf_push_to_hub_params.pop("base_model_card_args")
         pt_push_to_hub_params = dict(inspect.signature(PreTrainedModel.push_to_hub).parameters)
+        pt_push_to_hub_params.pop("deprecated_kwargs")
         self.assertDictEaual(tf_push_to_hub_params, pt_push_to_hub_params)
 
     def test_push_to_hub_in_organization(self):
