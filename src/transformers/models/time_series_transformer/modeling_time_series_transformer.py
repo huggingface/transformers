@@ -16,7 +16,6 @@
 """ PyTorch Time Series Transformer model."""
 
 import random
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -27,10 +26,9 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
-    ModelOutput,
+    SampleTSPredictionOutput,
     Seq2SeqTSModelOutput,
     Seq2SeqTSPredictionOutput,
-    SampleTSPredictionOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NegativeLogLikelihood, NormalOutput, StudentTOutput
@@ -1741,9 +1739,9 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
                 Whether or not to return the hidden states of all layers.
 
         Return:
-            [`SampleTSPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
-            number of samples, prediction_length)` or `(batch_size, number of samples, prediction_length, input_size)`
-            for multivariate predictions.
+            [`SampleTSPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of
+            samples, prediction_length)` or `(batch_size, number of samples, prediction_length, input_size)` for
+            multivariate predictions.
         """
         outputs = self(
             static_categorical_features=static_categorical_features,

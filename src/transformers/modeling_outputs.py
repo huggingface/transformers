@@ -1469,8 +1469,8 @@ class Seq2SeqSpectrogramOutput(ModelOutput):
 @dataclass
 class Seq2SeqTSModelOutput(ModelOutput):
     """
-    Base class for time series model's encoder outputs that also contains pre-computed hidden states that can speed up sequential
-    decoding.
+    Base class for time series model's encoder outputs that also contains pre-computed hidden states that can speed up
+    sequential decoding.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -1515,10 +1515,10 @@ class Seq2SeqTSModelOutput(ModelOutput):
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        loc (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+        loc (`torch.FloatTensor` of shape `(batch_size,)` or `(batch_size, input_size)`, *optional*):
             Shift values of each time series' context window which is used to give the model inputs of the same
             magnitude and then used to shift back to the original magnitude.
-        scale (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+        scale (`torch.FloatTensor` of shape `(batch_size,)` or `(batch_size, input_size)`, *optional*):
             Scaling values of each time series' context window which is used to give the model inputs of the same
             magnitude and then used to rescale back to the original magnitude.
         static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
@@ -1541,8 +1541,8 @@ class Seq2SeqTSModelOutput(ModelOutput):
 @dataclass
 class Seq2SeqTSPredictionOutput(ModelOutput):
     """
-    Base class for time series model's decoder outputs that also contain the loss as well as the parameters of the chosen
-    distribution.
+    Base class for time series model's decoder outputs that also contain the loss as well as the parameters of the
+    chosen distribution.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when a `future_values` is provided):
@@ -1586,10 +1586,10 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        loc (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+        loc (`torch.FloatTensor` of shape `(batch_size,)` or `(batch_size, input_size)`, *optional*):
             Shift values of each time series' context window which is used to give the model inputs of the same
             magnitude and then used to shift back to the original magnitude.
-        scale (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+        scale (`torch.FloatTensor` of shape `(batch_size,)` or `(batch_size, input_size)`, *optional*):
             Scaling values of each time series' context window which is used to give the model inputs of the same
             magnitude and then used to rescale back to the original magnitude.
         static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
@@ -1613,7 +1613,8 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
 @dataclass
 class SampleTSPredictionOutput(ModelOutput):
     """
-    Base class for time series model's predictions outputs that contains the sampled values from the chosen distribution.
+    Base class for time series model's predictions outputs that contains the sampled values from the chosen
+    distribution.
 
     Args:
         sequences (`torch.FloatTensor` of shape `(batch_size, num_samples, prediction_length)` or `(batch_size, num_samples, prediction_length, input_size)`):

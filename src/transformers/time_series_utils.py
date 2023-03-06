@@ -16,7 +16,7 @@
 """
 Time series distributional output classes and utilities.
 """
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import torch
 from torch import nn

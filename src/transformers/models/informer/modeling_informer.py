@@ -15,7 +15,6 @@
 """ PyTorch Informer model."""
 
 import random
-from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -26,10 +25,9 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
-    ModelOutput,
+    SampleTSPredictionOutput,
     Seq2SeqTSModelOutput,
     Seq2SeqTSPredictionOutput,
-    SampleTSPredictionOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NegativeLogLikelihood, NormalOutput, StudentTOutput
