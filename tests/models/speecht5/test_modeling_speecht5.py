@@ -39,6 +39,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -160,8 +161,13 @@ class SpeechT5ModelTester:
 
 
 @require_torch
-class SpeechT5ModelTest(ModelTesterMixin, unittest.TestCase):
+class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5Model,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"automatic-speech-recognition": SpeechT5ForSpeechToText, "feature-extraction": SpeechT5Model}
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
@@ -1545,3 +1551,31 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
     # skip because it fails on automapping of SpeechT5HifiGanConfig
     def test_save_load_fast_init_to_base(self):
         pass
+
+    def test_batched_inputs_outputs(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            batched_inputs = inputs["spectrogram"].unsqueeze(0).repeat(2, 1, 1)
+            with torch.no_grad():
+                batched_outputs = model(batched_inputs.to(torch_device))
+
+            self.assertEqual(
+                batched_inputs.shape[0], batched_outputs.shape[0], msg="Got different batch dims for input and output"
+            )
+
+    def test_unbatched_inputs_outputs(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(inputs["spectrogram"].to(torch_device))
+            self.assertTrue(outputs.dim() == 1, msg="Got un-batched inputs but batched output")

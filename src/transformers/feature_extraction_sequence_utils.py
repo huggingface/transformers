@@ -188,7 +188,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         truncated_inputs = []
         for i in range(batch_size):
-            inputs = dict((k, v[i]) for k, v in processed_features.items())
+            inputs = {k: v[i] for k, v in processed_features.items()}
             # truncation
             inputs_slice = self._truncate(
                 inputs,

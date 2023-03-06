@@ -395,7 +395,7 @@ class XmodOutput(nn.Module):
         else:
             self.adapter_layer_norm = None
         self.adapter_reuse_layer_norm = config.adapter_reuse_layer_norm
-        self.adapter_modules = nn.ModuleDict(dict())
+        self.adapter_modules = nn.ModuleDict({})
         for language in config.languages:
             self.adapter_modules[str(language)] = XmodAdapter(config)
 
@@ -566,7 +566,7 @@ class XmodEncoder(nn.Module):
 
             if self.gradient_checkpointing and self.training:
                 if use_cache:
-                    logger.warning(
+                    logger.warning_once(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False

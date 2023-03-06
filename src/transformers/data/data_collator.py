@@ -274,12 +274,11 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
-              is provided).
+            - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
+              sequence is provided).
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
               acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-              lengths).
+            - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different lengths).
         max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
         pad_to_multiple_of (`int`, *optional*):
@@ -531,12 +530,11 @@ class DataCollatorForSeq2Seq:
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
-              is provided).
+            - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
+              sequence is provided).
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
               acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-              lengths).
+            - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different lengths).
         max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
         pad_to_multiple_of (`int`, *optional*):
@@ -679,7 +677,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         inputs = tf.where(indices_replaced, mask_token_id, inputs)
 
         # 10% of the time, we replace masked input tokens with random word
-        indices_random = self.tf_bernoulli(input_shape, 0.1) & masked_indices & ~indices_replaced
+        indices_random = self.tf_bernoulli(input_shape, 0.5) & masked_indices & ~indices_replaced
         random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=tf.int64)
         inputs = tf.where(indices_random, random_words, inputs)
 
@@ -1062,7 +1060,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         inputs = tf.where(indices_replaced, self.tokenizer.mask_token_id, inputs)
 
         # 10% of the time, we replace masked input tokens with random word
-        indices_random = self.tf_bernoulli(input_shape, 0.1) & masked_indices & ~indices_replaced
+        indices_random = self.tf_bernoulli(input_shape, 0.5) & masked_indices & ~indices_replaced
         random_words = tf.random.uniform(input_shape, maxval=len(self.tokenizer), dtype=tf.int64)
         inputs = tf.where(indices_random, random_words, inputs)
 

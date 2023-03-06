@@ -34,9 +34,17 @@ from transformers import (
     is_vision_available,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_timm, require_torch, require_vision, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    nested_simplify,
+    require_tf,
+    require_timm,
+    require_torch,
+    require_vision,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -67,10 +75,11 @@ def mask_to_test_readable_only_shape(mask: Image) -> Dict:
     return {"shape": shape}
 
 
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch
-class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ImageSegmentationPipelineTests(unittest.TestCase):
     model_mapping = {
         k: v
         for k, v in (

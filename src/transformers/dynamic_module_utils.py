@@ -116,6 +116,9 @@ def check_imports(filename):
     with open(filename, "r", encoding="utf-8") as f:
         content = f.read()
 
+    # filter out try/except block so in custom code we can have try/except imports
+    content = re.sub(r"\s*try\s*:\s*.*?\s*except\s*:", "", content, flags=re.MULTILINE)
+
     # Imports of the form `import xxx`
     imports = re.findall(r"^\s*import\s+(\S+)\s*$", content, flags=re.MULTILINE)
     # Imports of the form `from xxx import yyy`
@@ -154,7 +157,17 @@ def get_class_in_module(class_name, module_path):
         shutil.copy(f"{module_dir}/{module_file_name}", tmp_dir)
         # On Windows, we need this character `r` before the path argument of `os.remove`
         cmd = f'import os; os.remove(r"{module_dir}{os.path.sep}{module_file_name}")'
-        subprocess.run(["python", "-c", cmd])
+        # We don't know which python binary file exists in an environment. For example, if `python3` exists but not
+        # `python`, the call `subprocess.run(["python", ...])` gives `FileNotFoundError` (about python binary). Notice
+        # that, if the file to be removed is not found, we also have `FileNotFoundError`, but it is not raised to the
+        # caller's process.
+        try:
+            subprocess.run(["python", "-c", cmd])
+        except FileNotFoundError:
+            try:
+                subprocess.run(["python3", "-c", cmd])
+            except FileNotFoundError:
+                pass
 
         # copy back the file that we want to import
         shutil.copyfile(f"{tmp_dir}/{module_file_name}", f"{module_dir}/{module_file_name}")

@@ -31,6 +31,7 @@ from transformers.utils.import_utils import is_datasets_available
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_datasets_available():
@@ -271,13 +272,21 @@ class WhisperModelTester:
 
 
 @require_torch
-class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (WhisperForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"automatic-speech-recognition": WhisperForConditionalGeneration, "feature-extraction": WhisperModel}
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
     fx_compatible = False
     test_pruning = False
     test_missing_keys = False
+    # Needs higher percentages after model tester's vocab_size is changed to 200 (PR #21222)
+    # `0.5` is for `test_disk_offload` (which also works for `test_model_parallelism`)
+    model_split_percents = [0.5, 0.8, 0.9]
 
     input_name = "input_features"
 
@@ -383,6 +392,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
             expected_arg_names = [
                 "input_features",
+                "attention_mask",
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
@@ -720,7 +730,17 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 input_features = inputs["input_features"]
                 decoder_input_ids = inputs["decoder_input_ids"]
                 decoder_attention_mask = inputs["decoder_attention_mask"]
-                traced_model = torch.jit.trace(model, (input_features, decoder_input_ids, decoder_attention_mask))
+                # prepare `attention_mask` with shape (batch_size, sequence_length)
+                attention_mask = torch.ones(
+                    input_features.shape[0],
+                    input_features.shape[-1],
+                    device=input_features.device,
+                    dtype=input_features.dtype,
+                )
+                traced_model = torch.jit.trace(
+                    model, (input_features, attention_mask, decoder_input_ids, decoder_attention_mask)
+                )
+
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
@@ -908,6 +928,34 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
                 self.assertEqual(fx_keys, pt_keys)
                 self.check_pt_flax_outputs(fx_outputs, pt_outputs_loaded, model_class)
+
+    def test_mask_feature_prob(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.mask_feature_prob = 0.2
+        config.mask_feature_length = 2
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+
+            # forward pass
+            encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
+            self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
+
+    def test_mask_time_prob(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.mask_time_prob = 0.2
+        config.mask_time_length = 2
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+
+            # forward pass
+            encoder_last_hidden_state = model(**input_dict).encoder_last_hidden_state
+            self.assertTrue(encoder_last_hidden_state.shape, (13, 30, 16))
 
 
 @require_torch
@@ -1158,7 +1206,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features
-        generated_ids = model.generate(input_features, max_length=20)
+        generated_ids = model.generate(input_features, max_length=20, task="translate")
 
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
@@ -1289,3 +1337,38 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    @slow
+    def test_tiny_specaugment_librispeech(self):
+        torch_device = "cpu"
+        set_seed(0)
+        # Apply SpecAugment
+        model = WhisperModel.from_pretrained("openai/whisper-tiny", apply_spec_augment=True)
+        # Set model to training mode to enable SpecAugment
+        model.train()
+        model.to(torch_device)
+        input_speech = self._load_datasamples(1)
+        feature_extractor = WhisperFeatureExtractor()
+        input_features = feature_extractor(input_speech, return_tensors="pt").input_features
+
+        with torch.no_grad():
+            logits = model(
+                input_features,
+                decoder_input_ids=torch.tensor([[50258, 50259, 50359]]),
+                output_hidden_states=False,
+                output_attentions=False,
+                return_dict=False,
+                use_cache=False,
+            )
+
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                0.9362, -4.7105, 5.0879, 3.9642, 1.0013, -6.0096, 4.7285, -3.1847,
+                -0.8648, 1.9631, 6.2653, 3.6936, 0.3575, -4.5818, 3.0564, 7.8712,
+                2.9951, 0.6848, 9.9497, -2.6638, 1.1571, -6.8546, -1.4333, -7.7584,
+                1.1200, 3.9030, 4.4655, -4.4919, -1.1703, 9.6241
+            ]
+        )
+        # fmt: on
+        self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))

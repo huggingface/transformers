@@ -82,6 +82,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("t5", "TFT5Model"),
         ("tapas", "TFTapasModel"),
         ("transfo-xl", "TFTransfoXLModel"),
+        ("vision-text-dual-encoder", "TFVisionTextDualEncoderModel"),
         ("vit", "TFViTModel"),
         ("vit_mae", "TFViTMAEModel"),
         ("wav2vec2", "TFWav2Vec2Model"),

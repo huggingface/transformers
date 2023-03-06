@@ -22,6 +22,7 @@ from transformers.utils import is_detectron2_available, is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -253,7 +254,7 @@ class LayoutLMv2ModelTester:
 
 @require_torch
 @require_detectron2
-class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
+class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = True
     test_mismatched_shapes = False
@@ -267,6 +268,18 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "document-question-answering": LayoutLMv2ForQuestionAnswering,
+            "feature-extraction": LayoutLMv2Model,
+            "question-answering": LayoutLMv2ForQuestionAnswering,
+            "text-classification": LayoutLMv2ForSequenceClassification,
+            "token-classification": LayoutLMv2ForTokenClassification,
+            "zero-shot": LayoutLMv2ForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):

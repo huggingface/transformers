@@ -37,6 +37,7 @@ logger = logging.get_logger(__name__)
 
 IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
+        ("align", "EfficientNetImageProcessor"),
         ("beit", "BeitImageProcessor"),
         ("bit", "BitImageProcessor"),
         ("blip", "BlipImageProcessor"),

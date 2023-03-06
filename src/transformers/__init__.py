@@ -123,6 +123,13 @@ _import_structure = {
     "models": [],
     # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
+    "models.align": [
+        "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "AlignConfig",
+        "AlignProcessor",
+        "AlignTextConfig",
+        "AlignVisionConfig",
+    ],
     "models.altclip": [
         "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "AltCLIPConfig",
@@ -561,6 +568,7 @@ _import_structure = {
         "TranslationPipeline",
         "VideoClassificationPipeline",
         "VisualQuestionAnsweringPipeline",
+        "ZeroShotAudioClassificationPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
         "ZeroShotObjectDetectionPipeline",
@@ -983,6 +991,15 @@ else:
             "load_tf_weights_in_albert",
         ]
     )
+    _import_structure["models.align"].extend(
+        [
+            "ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AlignModel",
+            "AlignPreTrainedModel",
+            "AlignTextModel",
+            "AlignVisionModel",
+        ]
+    )
     _import_structure["models.altclip"].extend(
         [
             "ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1191,6 +1208,7 @@ else:
         [
             "BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Blip2ForConditionalGeneration",
+            "Blip2Model",
             "Blip2PreTrainedModel",
             "Blip2QFormerModel",
             "Blip2VisionModel",
@@ -3290,6 +3308,7 @@ else:
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["TFVisionEncoderDecoderModel"])
+    _import_structure["models.vision_text_dual_encoder"].extend(["TFVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(
         [
             "TFViTForImageClassification",
@@ -3724,6 +3743,13 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.align import (
+        ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        AlignConfig,
+        AlignProcessor,
+        AlignTextConfig,
+        AlignVisionConfig,
+    )
     from .models.altclip import (
         ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AltCLIPConfig,
@@ -4126,6 +4152,7 @@ if TYPE_CHECKING:
         TranslationPipeline,
         VideoClassificationPipeline,
         VisualQuestionAnsweringPipeline,
+        ZeroShotAudioClassificationPipeline,
         ZeroShotClassificationPipeline,
         ZeroShotImageClassificationPipeline,
         ZeroShotObjectDetectionPipeline,
@@ -4488,6 +4515,13 @@ if TYPE_CHECKING:
             AlbertPreTrainedModel,
             load_tf_weights_in_albert,
         )
+        from .models.align import (
+            ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AlignModel,
+            AlignPreTrainedModel,
+            AlignTextModel,
+            AlignVisionModel,
+        )
         from .models.altclip import (
             ALTCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             AltCLIPModel,
@@ -4667,6 +4701,7 @@ if TYPE_CHECKING:
         from .models.blip_2 import (
             BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Blip2ForConditionalGeneration,
+            Blip2Model,
             Blip2PreTrainedModel,
             Blip2QFormerModel,
             Blip2VisionModel,
@@ -6361,6 +6396,7 @@ if TYPE_CHECKING:
             TFTransfoXLPreTrainedModel,
         )
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
+        from .models.vision_text_dual_encoder import TFVisionTextDualEncoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
         from .models.vit_mae import TFViTMAEForPreTraining, TFViTMAEModel, TFViTMAEPreTrainedModel
         from .models.wav2vec2 import (

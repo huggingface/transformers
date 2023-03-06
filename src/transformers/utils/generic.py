@@ -366,13 +366,14 @@ def can_return_loss(model_class):
     Args:
         model_class (`type`): The class of the model.
     """
-    model_name = model_class.__name__
-    if model_name.startswith("TF"):
-        signature = inspect.signature(model_class.call)
-    elif model_name.startswith("Flax"):
-        signature = inspect.signature(model_class.__call__)
+    base_classes = str(inspect.getmro(model_class))
+
+    if "keras.engine.training.Model" in base_classes:
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif "torch.nn.modules.module.Module" in base_classes:
+        signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
-        signature = inspect.signature(model_class.forward)
+        signature = inspect.signature(model_class.__call__)  # Flax models
 
     for p in signature.parameters:
         if p == "return_loss" and signature.parameters[p].default is True:
@@ -389,12 +390,15 @@ def find_labels(model_class):
         model_class (`type`): The class of the model.
     """
     model_name = model_class.__name__
-    if model_name.startswith("TF"):
-        signature = inspect.signature(model_class.call)
-    elif model_name.startswith("Flax"):
-        signature = inspect.signature(model_class.__call__)
+    base_classes = str(inspect.getmro(model_class))
+
+    if "keras.engine.training.Model" in base_classes:
+        signature = inspect.signature(model_class.call)  # TensorFlow models
+    elif "torch.nn.modules.module.Module" in base_classes:
+        signature = inspect.signature(model_class.forward)  # PyTorch models
     else:
-        signature = inspect.signature(model_class.forward)
+        signature = inspect.signature(model_class.__call__)  # Flax models
+
     if "QuestionAnswering" in model_name:
         return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
     else:

@@ -26,6 +26,7 @@ from transformers.testing_utils import require_torchvision, require_vision, slow
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -169,8 +170,13 @@ class DetaModelTester:
 
 
 @require_torchvision
-class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DetaModel, DetaForObjectDetection) if is_torchvision_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": DetaModel, "object-detection": DetaForObjectDetection}
+        if is_torchvision_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False

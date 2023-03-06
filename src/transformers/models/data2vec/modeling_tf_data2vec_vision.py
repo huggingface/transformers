@@ -22,8 +22,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-from transformers.tf_utils import shape_list, stable_softmax
-
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
@@ -39,6 +37,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -596,7 +595,7 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
             self.relative_position_bias = None
 
         # stochastic depth decay rule
-        dpr = [x for x in tf.linspace(0.0, config.drop_path_rate, config.num_hidden_layers)]
+        dpr = list(tf.linspace(0.0, config.drop_path_rate, config.num_hidden_layers))
         self.layer = [
             TFData2VecVisionLayer(
                 config,
