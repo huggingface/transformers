@@ -71,7 +71,7 @@ if is_torch_available():
         _compute_mask_indices,
         _sample_negative_indices,
     )
-    from transformers.pytorch_utils import is_torch_less_than_1_9
+    from transformers.pytorch_utils import is_torch_less_than_1_9, torch_int_div
 else:
     is_torch_less_than_1_9 = True
 
@@ -1217,10 +1217,8 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         sequence_length = 10
         hidden_size = 4
         num_negatives = 3
-
-        features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
-            sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        sequence = torch_int_div(torch.arange(sequence_length * hidden_size, device=torch_device), hidden_size)
+        features = sequence.view(sequence_length, hidden_size)  # each value in vector consits of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # sample negative indices
@@ -1247,9 +1245,8 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
         mask = torch.ones((batch_size, sequence_length), dtype=torch.long, device=torch_device)
         mask[-1, sequence_length // 2 :] = 0
 
-        features = (torch.arange(sequence_length * hidden_size, device=torch_device) // hidden_size).view(
-            sequence_length, hidden_size
-        )  # each value in vector consits of same value
+        sequence = torch_int_div(torch.arange(sequence_length * hidden_size, device=torch_device), hidden_size)
+        features = sequence.view(sequence_length, hidden_size)  # each value in vector consits of same value
         features = features[None, :].expand(batch_size, sequence_length, hidden_size).contiguous()
 
         # replace masked feature vectors with -100 to test that those are not sampled
