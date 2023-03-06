@@ -127,14 +127,14 @@ extract the `text` subfield from its nested structure with the [`flatten`](https
 Each subfield is now a separate column as indicated by the `answers` prefix, and the `text` field is a list now. Instead
 of tokenizing each sentence separately, convert the list to a string so you can jointly tokenize them.
 
-Here is how you can create a preprocessing function to convert the list to a string, and truncate sequences to be no longer than DistilGPT2's maximum input length:
+Here is a first preprocessing function to join the list of strings for each example and tokenize the result:
 
 ```py
 >>> def preprocess_function(examples):
-...     return tokenizer([" ".join(x) for x in examples["answers.text"]], truncation=True)
+...     return tokenizer([" ".join(x) for x in examples["answers.text"]])
 ```
 
-To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.with_transform`] method. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once, and increasing the number of processes with `num_proc`. Remove any columns you don't need:
+To apply this preprocessing function over the entire dataset, use the 🤗 Datasets [`~datasets.Dataset.map`] method. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once, and increasing the number of processes with `num_proc`. Remove any columns you don't need:
 
 ```py
 >>> tokenized_eli5 = eli5.map(
@@ -145,19 +145,25 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 ... )
 ```
 
-Now you'll need a second preprocessing function to capture text truncated from the lengthier examples to avoid losing any information. This preprocessing function should:
+This dataset contains the token sequences, but some of these are longer than the maximum input length for the model.
 
-- Concatenate all the text.
-- Split the concatenated text into smaller chunks defined by `block_size`.
+You can now use a second preprocessing function to
+- concatenate all the sequences
+- split the concatenated sequences into shorter chunks defined by `block_size`, which should be both shorter than the maximum input length and short enough for your GPU RAM. 
 
 ```py
 >>> block_size = 128
 
 
 >>> def group_texts(examples):
+...     # Concatenate all texts.
 ...     concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
 ...     total_length = len(concatenated_examples[list(examples.keys())[0]])
-...     total_length = (total_length // block_size) * block_size
+...     # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
+...     # customize this part to your needs.
+...     if total_length >= block_size:
+...         total_length = (total_length // block_size) * block_size
+...     # Split by chunks of block_size.
 ...     result = {
 ...         k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
 ...         for k, t in concatenated_examples.items()
