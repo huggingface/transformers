@@ -254,6 +254,7 @@ _import_structure = {
     "models.dialogpt": [],
     "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
+    "models.vgcn_bert": ["VGCNBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VGCNBertConfig"],
     "models.dit": [],
     "models.donut": ["DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "DonutProcessor", "DonutSwinConfig"],
     "models.dpr": [
@@ -1425,6 +1426,18 @@ else:
             "DistilBertForTokenClassification",
             "DistilBertModel",
             "DistilBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vgcn_bert"].extend(
+        [
+            "VGCNBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VGCNBertForMaskedLM",
+            "VGCNBertForMultipleChoice",
+            "VGCNBertForQuestionAnswering",
+            "VGCNBertForSequenceClassification",
+            "VGCNBertForTokenClassification",
+            "VGCNBertModel",
+            "VGCNBertPreTrainedModel",
         ]
     )
     _import_structure["models.donut"].extend(
@@ -3833,6 +3846,7 @@ if TYPE_CHECKING:
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
+    from .models.vgcn_bert import VGCNBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VGCNBertConfig
     from .models.donut import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutProcessor, DonutSwinConfig
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4842,6 +4856,16 @@ if TYPE_CHECKING:
             DistilBertForTokenClassification,
             DistilBertModel,
             DistilBertPreTrainedModel,
+        )
+        from .models.vgcn_bert import (
+            VGCNBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VGCNBertForMaskedLM,
+            VGCNBertForMultipleChoice,
+            VGCNBertForQuestionAnswering,
+            VGCNBertForSequenceClassification,
+            VGCNBertForTokenClassification,
+            VGCNBertModel,
+            VGCNBertPreTrainedModel,
         )
         from .models.donut import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, DonutSwinModel, DonutSwinPreTrainedModel
         from .models.dpr import (

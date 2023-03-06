@@ -61,6 +61,7 @@ from . import (
     dialogpt,
     dinat,
     distilbert,
+    vgcn_bert,
     dit,
     donut,
     dpr,
