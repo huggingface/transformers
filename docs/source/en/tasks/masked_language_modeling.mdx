@@ -142,11 +142,10 @@ To apply this preprocessing function over the entire dataset, use the 🤗 Datas
 ```
 
 This dataset contains the token sequences, but some of these are longer than the maximum input length for the model.
-You'll need a second preprocessing function to avoid losing any information.
-This preprocessing function should:
 
-- Concatenate all the sequences.
-- Split the concatenated sequences into shorter chunks defined by `block_size`, which should be both shorter than the maximum input length and short enough for your GPU RAM. 
+You can now use a second preprocessing function to
+- concatenate all the sequences
+- split the concatenated sequences into shorter chunks defined by `block_size`, which should be both shorter than the maximum input length and short enough for your GPU RAM. 
 
 ```py
 >>> block_size = 128
@@ -160,7 +159,7 @@ This preprocessing function should:
 ...     # customize this part to your needs.
 ...     if total_length >= block_size:
 ...         total_length = (total_length // block_size) * block_size
-...     # Split by chunks of max_len.
+...     # Split by chunks of block_size.
 ...     result = {
 ...         k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
 ...         for k, t in concatenated_examples.items()
