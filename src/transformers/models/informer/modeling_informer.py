@@ -23,19 +23,16 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, ModelOutput
-from ...modeling_utils import PreTrainedModel
-from ...time_series_utils import (
-    FeatureEmbedder,
-    MeanScaler,
-    NegativeBinomialOutput,
-    NegativeLogLikelihood,
-    NOPScaler,
-    NormalOutput,
-    StdScaler,
-    StudentTOutput,
-    weighted_average,
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    ModelOutput,
+    Seq2SeqTSModelOutput,
+    Seq2SeqTSPredictionOutput,
+    SampleTSPredictionOutput,
 )
+from ...modeling_utils import PreTrainedModel
+from ...time_series_utils import NegativeBinomialOutput, NegativeLogLikelihood, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_informer import InformerConfig
 
@@ -49,6 +46,181 @@ INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "huggingface/informer-tourism-monthly",
     # See all Informer models at https://huggingface.co/models?filter=informer
 ]
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesFeatureEmbedder with TimeSeries->Informer
+class InformerFeatureEmbedder(nn.Module):
+    """
+    Embed a sequence of categorical features.
+
+    Args:
+        cardinalities (`list[int]`):
+            List of cardinalities of the categorical features.
+        embedding_dims (`list[int]`):
+            List of embedding dimensions of the categorical features.
+    """
+
+    def __init__(self, cardinalities: List[int], embedding_dims: List[int]) -> None:
+        super().__init__()
+
+        self.num_features = len(cardinalities)
+        self.embedders = nn.ModuleList([nn.Embedding(c, d) for c, d in zip(cardinalities, embedding_dims)])
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        if self.num_features > 1:
+            # we slice the last dimension, giving an array of length
+            # self.num_features with shape (N,T) or (N)
+            cat_feature_slices = torch.chunk(features, self.num_features, dim=-1)
+        else:
+            cat_feature_slices = [features]
+
+        return torch.cat(
+            [
+                embed(cat_feature_slice.squeeze(-1))
+                for embed, cat_feature_slice in zip(self.embedders, cat_feature_slices)
+            ],
+            dim=-1,
+        )
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeries->Informer
+class InformerStdScaler(nn.Module):
+    """
+    Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
+    by subtracting from the mean and dividing by the standard deviation.
+
+    Args:
+        dim (`int`):
+            Dimension along which to calculate the mean and standard deviation.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        minimum_scale (`float`, *optional*, defaults to 1e-5):
+            Default scale that is used for elements that are constantly zero along dimension `dim`.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-5):
+        super().__init__()
+        if not dim > 0:
+            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
+        self.dim = dim
+        self.keepdim = keepdim
+        self.minimum_scale = minimum_scale
+
+    @torch.no_grad()
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        denominator = weights.sum(self.dim, keepdim=self.keepdim)
+        denominator = denominator.clamp_min(1.0)
+        loc = (data * weights).sum(self.dim, keepdim=self.keepdim) / denominator
+
+        variance = (((data - loc) * weights) ** 2).sum(self.dim, keepdim=self.keepdim) / denominator
+        scale = torch.sqrt(variance + self.minimum_scale)
+        return (data - loc) / scale, loc, scale
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeries->Informer
+class InformerMeanScaler(nn.Module):
+    """
+    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
+    accordingly.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        default_scale (`float`, *optional*, defaults to `None`):
+            Default scale that is used for elements that are constantly zero. If `None`, we use the scale of the batch.
+        minimum_scale (`float`, *optional*, defaults to 1e-10):
+            Default minimum possible scale that is used for any item.
+    """
+
+    def __init__(
+        self, dim: int = -1, keepdim: bool = True, default_scale: Optional[float] = None, minimum_scale: float = 1e-10
+    ):
+        super().__init__()
+        self.dim = dim
+        self.keepdim = keepdim
+        self.minimum_scale = minimum_scale
+        self.default_scale = default_scale
+
+    @torch.no_grad()
+    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # shape: (N, [C], T=1)
+        ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
+        num_observed = observed_indicator.sum(self.dim, keepdim=True)
+
+        scale = ts_sum / torch.clamp(num_observed, min=1)
+
+        # If `default_scale` is provided, we use it, otherwise we use the scale
+        # of the batch.
+        if self.default_scale is None:
+            batch_sum = ts_sum.sum(dim=0)
+            batch_observations = torch.clamp(num_observed.sum(0), min=1)
+            default_scale = torch.squeeze(batch_sum / batch_observations)
+        else:
+            default_scale = self.default_scale * torch.ones_like(scale)
+
+        # apply default scale where there are no observations
+        scale = torch.where(num_observed > 0, scale, default_scale)
+
+        # ensure the scale is at least `self.minimum_scale`
+        scale = torch.clamp(scale, min=self.minimum_scale)
+        scaled_data = data / scale
+
+        if not self.keepdim:
+            scale = scale.squeeze(dim=self.dim)
+
+        return scaled_data, torch.zeros_like(scale), scale
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeries->Informer
+class InformerNOPScaler(nn.Module):
+    """
+    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False):
+        super().__init__()
+        self.dim = dim
+        self.keepdim = keepdim
+
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
+        return data, loc, scale
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.weighted_average
+def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+    """
+    Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
+    meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
+
+    Args:
+        input_tensor (`torch.FloatTensor`):
+            Input tensor, of which the average must be computed.
+        weights (`torch.FloatTensor`, *optional*):
+            Weights tensor, of the same shape as `input_tensor`.
+        dim (`int`, *optional*):
+            The dim along which to average `input_tensor`.
+
+    Returns:
+        `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
+    """
+    if weights is not None:
+        weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
+        sum_weights = torch.clamp(weights.sum(dim=dim) if dim else weights.sum(), min=1.0)
+        return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
+    else:
+        return input_tensor.mean(dim=dim)
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -125,158 +297,6 @@ class InformerValueEmbedding(nn.Module):
 
     def forward(self, x):
         return self.value_projection(x)
-
-
-@dataclass
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.Seq2SeqTimeSeriesModelOutput
-class Seq2SeqTimeSeriesModelOutput(ModelOutput):
-    """
-    Base class for model encoder's outputs that also contains pre-computed hidden states that can speed up sequential
-    decoding.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the decoder of the model.
-
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the optional initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the optional initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        loc (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
-            Shift values of each time series' context window which is used to give the model inputs of the same
-            magnitude and then used to shift back to the original magnitude.
-        scale (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
-            Scaling values of each time series' context window which is used to give the model inputs of the same
-            magnitude and then used to rescale back to the original magnitude.
-        static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
-            Static features of each time series' in a batch which are copied to the covariates at inference time.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    loc: Optional[torch.FloatTensor] = None
-    scale: Optional[torch.FloatTensor] = None
-    static_features: Optional[torch.FloatTensor] = None
-
-
-@dataclass
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.Seq2SeqTimeSeriesPredictionOutput
-class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
-    """
-    Base class for model's predictions outputs that also contain the loss as well parameters of the chosen
-    distribution.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when a `future_values` is provided):
-            Distributional loss.
-        params (`torch.FloatTensor` of shape `(batch_size, num_samples, num_params)`):
-            Parameters of the chosen distribution.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
-        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
-        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder of the model.
-        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
-        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
-        loc (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
-            Shift values of each time series' context window which is used to give the model inputs of the same
-            magnitude and then used to shift back to the original magnitude.
-        scale (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
-            Scaling values of each time series' context window which is used to give the model inputs of the same
-            magnitude and then used to rescale back to the original magnitude.
-        static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
-            Static features of each time series' in a batch which are copied to the covariates at inference time.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    params: Optional[Tuple[torch.FloatTensor]] = None
-    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    loc: Optional[torch.FloatTensor] = None
-    scale: Optional[torch.FloatTensor] = None
-    static_features: Optional[torch.FloatTensor] = None
-
-
-@dataclass
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.SampleTimeSeriesPredictionOutput
-class SampleTimeSeriesPredictionOutput(ModelOutput):
-    sequences: torch.FloatTensor = None
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Informer
@@ -1464,20 +1484,20 @@ class InformerDecoder(InformerPreTrainedModel):
     "The bare Informer Model outputting raw hidden-states without any specific head on top.",
     INFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER,time-series-transformer->informer
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER,time-series-transformer->informer,TimeSeries->Informer
 class InformerModel(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
 
         if config.scaling == "mean" or config.scaling:
-            self.scaler = MeanScaler(dim=1, keepdim=True)
+            self.scaler = InformerMeanScaler(dim=1, keepdim=True)
         elif config.scaling == "std":
-            self.scaler = StdScaler(dim=1, keepdim=True)
+            self.scaler = InformerStdScaler(dim=1, keepdim=True)
         else:
-            self.scaler = NOPScaler(dim=1, keepdim=True)
+            self.scaler = InformerNOPScaler(dim=1, keepdim=True)
 
         if config.num_static_categorical_features > 0:
-            self.embedder = FeatureEmbedder(
+            self.embedder = InformerFeatureEmbedder(
                 cardinalities=config.cardinality,
                 embedding_dims=config.embedding_dimension,
             )
@@ -1604,7 +1624,7 @@ class InformerModel(InformerPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(INFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqTimeSeriesModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1624,7 +1644,7 @@ class InformerModel(InformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
+    ) -> Union[Seq2SeqTSModelOutput, Tuple]:
         r"""
         Returns:
 
@@ -1707,7 +1727,7 @@ class InformerModel(InformerPreTrainedModel):
         if not return_dict:
             return decoder_outputs + encoder_outputs + (loc, scale, static_feat)
 
-        return Seq2SeqTimeSeriesModelOutput(
+        return Seq2SeqTSModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -1768,7 +1788,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
 
     @add_start_docstrings_to_model_forward(INFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqTimeSeriesModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1789,7 +1809,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
+    ) -> Union[Seq2SeqTSModelOutput, Tuple]:
         r"""
         Returns:
 
@@ -1884,7 +1904,7 @@ class InformerForPrediction(InformerPreTrainedModel):
             outputs = ((params,) + outputs[1:]) if params is not None else outputs[1:]
             return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
 
-        return Seq2SeqTimeSeriesPredictionOutput(
+        return Seq2SeqTSPredictionOutput(
             loss=prediction_loss,
             params=params,
             past_key_values=outputs.past_key_values,
@@ -1910,7 +1930,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         static_real_features: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> SampleTimeSeriesPredictionOutput:
+    ) -> SampleTSPredictionOutput:
         r"""
         Greedily generate sequences of sample predictions from a model with a probability distribution head.
 
@@ -1994,9 +2014,9 @@ class InformerForPrediction(InformerPreTrainedModel):
                 Whether or not to return the hidden states of all layers.
 
         Return:
-            [`SampleTimeSeriesPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
-            number of samples, prediction_length)` or `(batch_size, number of samples, prediction_length, input_size)`
-            for multivariate predictions.
+            [`SampleTSPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of
+            samples, prediction_length)` or `(batch_size, number of samples, prediction_length, input_size)` for
+            multivariate predictions.
         """
         outputs = self(
             static_categorical_features=static_categorical_features,
@@ -2061,7 +2081,7 @@ class InformerForPrediction(InformerPreTrainedModel):
 
         concat_future_samples = torch.cat(future_samples, dim=1)
 
-        return SampleTimeSeriesPredictionOutput(
+        return SampleTSPredictionOutput(
             sequences=concat_future_samples.reshape(
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             )
