@@ -2988,7 +2988,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 self.create_model_card(**base_model_card_args)
 
             self._upload_modified_files(
-                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=use_auth_token, create_pr = create_pr,
+                work_dir,
+                repo_id,
+                files_timestamps,
+                commit_message=commit_message,
+                token=use_auth_token,
+                create_pr=create_pr,
             )
 
     @classmethod
