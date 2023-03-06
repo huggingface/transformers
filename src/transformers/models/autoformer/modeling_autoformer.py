@@ -1593,9 +1593,11 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
-        )
+        # TODO eli remove
+        # attention_mask = self._prepare_decoder_attention_mask(
+        #     attention_mask, input_shape, inputs_embeds, past_key_values_length
+        # )
+        attention_mask = None
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
