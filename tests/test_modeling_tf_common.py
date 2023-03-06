@@ -94,6 +94,8 @@ if is_tf_available():
         TFBertModel,
         TFRagModel,
         TFSharedEmbeddings,
+        TFPreTrainedModel,
+        PreTrainedModel,
     )
     from transformers.generation import (
         TFBeamSampleDecoderOnlyOutput,
@@ -2466,6 +2468,7 @@ class TFModelPushToHubTester(unittest.TestCase):
                 break
         self.assertTrue(models_equal)
 
+
     def test_push_to_hub_callback(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2488,6 +2491,10 @@ class TFModelPushToHubTester(unittest.TestCase):
                 models_equal = False
                 break
         self.assertTrue(models_equal)
+
+        tf_push_to_hub_params = dict(inspect.signature(TFPreTrainedModel.push_to_hub).parameters)
+        pt_push_to_hub_params = dict(inspect.signature(PreTrainedModel.push_to_hub).parameters)
+        self.assertDictEaual(tf_push_to_hub_params, pt_push_to_hub_params)
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
