@@ -116,7 +116,7 @@ class ModelArguments:
     apply_spec_augment: bool = field(
         default=False,
         metadata={
-            "help": "Whether to apply *SpecAugment* data augmentation to the input features. This is currently only relevant for whisper models."
+            "help": "Whether to apply *SpecAugment* data augmentation to the input features. This is currently only relevant for Wav2Vec2, HuBERT, WavLM and Whisper models."
         },
     )
 
@@ -376,22 +376,7 @@ def main():
     config.update({"forced_decoder_ids": model_args.forced_decoder_ids, "suppress_tokens": model_args.suppress_tokens})
 
     # SpecAugment for whisper models
-    if getattr(config, "model_type", None) == "whisper":
-        config.update({"apply_spec_augment": model_args.apply_spec_augment})
-        # In order to keep the example easy to understand and to customize, we don't provide all the arguments of SpecAugment in ModelArguments
-        # You can customize the default values here as you want
-        if config.apply_spec_augment:
-            config.update(
-                {
-                    "mask_time_prob": 0.05,
-                    "mask_time_length": 10,
-                    "mask_time_min_masks": 2,
-                    "mask_feature_prob": 0.0,
-                    "mask_feature_length": 10,
-                    "mask_feature_min_masks": 0,
-                }
-            )
-
+    config.update({"apply_spec_augment": model_args.apply_spec_augment})
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.feature_extractor_name if model_args.feature_extractor_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
