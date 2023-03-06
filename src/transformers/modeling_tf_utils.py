@@ -2907,6 +2907,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
+        create_pr: bool = False,
         **model_card_kwargs,
     ) -> str:
         """
@@ -2933,7 +2934,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 by a unit (like `"5MB"`).
             model_card_kwargs:
                 Additional keyword arguments passed along to the [`~TFPreTrainedModel.create_model_card`] method.
-
+            create_pr (`bool`, *optional*, defaults to `False`):
+                Whether or not to create a PR with the uploaded files or directly commit.
         Examples:
 
         ```python
@@ -2986,7 +2988,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 self.create_model_card(**base_model_card_args)
 
             self._upload_modified_files(
-                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=use_auth_token
+                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=use_auth_token, create_pr = create_pr,
             )
 
     @classmethod
