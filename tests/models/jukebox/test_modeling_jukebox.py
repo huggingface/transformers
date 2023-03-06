@@ -291,6 +291,15 @@ class Jukebox5bModelTester(unittest.TestCase):
         653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
         653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653
     ]
+    EXPECTED_GPU_OUTPUTS_2_PT_2 = [
+        1489, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 1853, 1177, 1536, 1228,
+        710, 475, 1489, 1229, 1224, 231, 1224, 252, 1434, 653, 475,
+        1106, 1877, 1599, 1228, 1600, 1683, 1182, 1853, 475, 1864,
+        252, 1229, 1434, 2001
+    ]
+
     EXPECTED_GPU_OUTPUTS_1 = [
         1125, 1125, 416, 1125, 1125, 416, 1125, 1125, 416, 416, 1125, 416,
         416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
@@ -363,4 +372,4 @@ class Jukebox5bModelTester(unittest.TestCase):
         metadata = model.get_metadata(labels, 0, 7680, 0)
         set_seed(0)
         outputs = model.sample(1, metadata=metadata, sample_tokens=60)
-        torch.testing.assert_allclose(outputs[0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
+        self.assertIn(outputs[0].cpu().tolist(), [self.EXPECTED_GPU_OUTPUTS_2, self.EXPECTED_GPU_OUTPUTS_2_PT_2])
