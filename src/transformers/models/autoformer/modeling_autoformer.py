@@ -821,7 +821,7 @@ class AutoformerEncoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.final_layer_norm = AutoformerLayernorm(self.embed_dim)
 
     def forward(
         self,
@@ -902,7 +902,7 @@ class AutoformerDecoderLayer(nn.Module):
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.final_layer_norm = AutoformerLayernorm(self.embed_dim)
 
     def forward(
         self,
