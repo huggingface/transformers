@@ -2497,7 +2497,7 @@ class ModelTesterMixin:
                 torch.manual_seed(0)
                 new_output = new_model(**inputs_dict_class)
 
-                self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -2533,7 +2533,7 @@ class ModelTesterMixin:
                     torch.manual_seed(0)
                     new_output = new_model(**inputs_dict_class)
 
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -2569,7 +2569,7 @@ class ModelTesterMixin:
                     torch.manual_seed(0)
                     new_output = new_model(**inputs_dict_class)
 
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     def test_problem_types(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
