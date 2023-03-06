@@ -438,6 +438,8 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         loss = None
         if return_loss:
             loss = clip_loss(logits_per_text)
+            if loss.shape.rank == 0:
+                loss = tf.expand_dims(loss, 0)
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
