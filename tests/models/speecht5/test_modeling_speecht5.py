@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    require_torchaudio,
     slow,
     torch_device,
 )
@@ -717,7 +716,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 @require_sentencepiece
 @require_tokenizers
 @slow
@@ -992,7 +990,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 @require_sentencepiece
 @require_tokenizers
 @slow
@@ -1409,7 +1406,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 @require_sentencepiece
 @require_tokenizers
 @slow

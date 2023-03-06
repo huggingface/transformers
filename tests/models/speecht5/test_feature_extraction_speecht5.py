@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers import BatchFeature, is_speech_available
-from transformers.testing_utils import require_torch, require_torchaudio
+from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -144,7 +144,6 @@ class SpeechT5FeatureExtractionTester(unittest.TestCase):
 
 
 @require_torch
-@require_torchaudio
 class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
     feature_extraction_class = SpeechT5FeatureExtractor if is_speech_available() else None
 
