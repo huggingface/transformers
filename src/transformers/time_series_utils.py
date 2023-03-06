@@ -162,6 +162,10 @@ class DistributionOutput:
 
 
 class StudentTOutput(DistributionOutput):
+    """
+    Student-T distribution output class.
+    """
+
     args_dim: Dict[str, int] = {"df": 1, "loc": 1, "scale": 1}
     distribution_class: type = StudentT
 
@@ -173,6 +177,10 @@ class StudentTOutput(DistributionOutput):
 
 
 class NormalOutput(DistributionOutput):
+    """
+    Normal distribution output class.
+    """
+
     args_dim: Dict[str, int] = {"loc": 1, "scale": 1}
     distribution_class: type = Normal
 
@@ -183,6 +191,10 @@ class NormalOutput(DistributionOutput):
 
 
 class NegativeBinomialOutput(DistributionOutput):
+    """
+    Negative Binomial distribution output class.
+    """
+
     args_dim: Dict[str, int] = {"total_count": 1, "logits": 1}
     distribution_class: type = NegativeBinomial
 
@@ -214,6 +226,16 @@ class NegativeBinomialOutput(DistributionOutput):
 
 
 class FeatureEmbedder(nn.Module):
+    """
+    Embed a sequence of categorical features.
+
+    Args:
+        cardinalities (`list[int]`):
+            List of cardinalities of the categorical features.
+        embedding_dims (`list[int]`):
+            List of embedding dimensions of the categorical features.
+    """
+
     def __init__(self, cardinalities: List[int], embedding_dims: List[int]) -> None:
         super().__init__()
 
