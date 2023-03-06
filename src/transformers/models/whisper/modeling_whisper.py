@@ -1504,10 +1504,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             generation_config = self.generation_config
 
         if return_timestamps is not None:
+            # legacy check for models that do not have a generation config
+            if not hasattr(generation_config, "no_timestamps_token_id"):
+                raise ValueError("You are trying to return timestamps, but the generation config is not properly set."
+                                 "Make sure to initialize the generation config with the correct `no_timestamps_token_id`.")
             generation_config.return_timestamps = return_timestamps
-
-        if task is not None:
-            generation_config.task = task
 
         if is_multilingual is not None:
             generation_config.is_multilingual = is_multilingual
@@ -1540,11 +1541,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             )
             forced_decoder_ids = self.config.forced_decoder_ids
             
-        if (
-            hasattr(generation_config, "return_timestamps") and generation_config.return_timestamps
-        ) or return_timestamps:
+        if generation_config.return_timestamps:
             logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
         else:
+            if not hasattr(generation_config,"no_timestamps_token_id"):
+                generation_config.no_timestamp_token_id = 50363 + 1 * ()
             if forced_decoder_ids and forced_decoder_ids[-1][0] != generation_config.no_timestamps_token_id:
                 idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
                 forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
