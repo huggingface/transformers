@@ -376,7 +376,9 @@ def main():
     config.update({"forced_decoder_ids": model_args.forced_decoder_ids, "suppress_tokens": model_args.suppress_tokens})
 
     # SpecAugment for whisper models
-    config.update({"apply_spec_augment": model_args.apply_spec_augment})
+    if getattr(config, "model_type", None) == "whisper":
+        config.update({"apply_spec_augment": model_args.apply_spec_augment})
+
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.feature_extractor_name if model_args.feature_extractor_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
