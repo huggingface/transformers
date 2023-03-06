@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     Seq2SeqTSPredictionOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...time_series_utils import NegativeBinomialOutput, NegativeLogLikelihood, NormalOutput, StudentTOutput
+from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_time_series_transformer import TimeSeriesTransformerConfig
 
@@ -191,6 +191,13 @@ class TimeSeriesNOPScaler(nn.Module):
         scale = torch.ones_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         loc = torch.zeros_like(data, requires_grad=False).mean(dim=self.dim, keepdim=self.keepdim)
         return data, loc, scale
+
+
+def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the negative log likelihood loss from input distribution with respect to target.
+    """
+    return -input.log_prob(target)
 
 
 def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
@@ -1487,7 +1494,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
-            self.loss = NegativeLogLikelihood()
+            self.loss = nll
         else:
             raise ValueError(f"Unknown loss function {config.loss}")
 

@@ -30,7 +30,7 @@ from ...modeling_outputs import (
     Seq2SeqTSPredictionOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...time_series_utils import NegativeBinomialOutput, NegativeLogLikelihood, NormalOutput, StudentTOutput
+from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_informer import InformerConfig
 
@@ -219,6 +219,14 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
     else:
         return input_tensor.mean(dim=dim)
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.nll
+def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the negative log likelihood loss from input distribution with respect to target.
+    """
+    return -input.log_prob(target)
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -1762,7 +1770,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
-            self.loss = NegativeLogLikelihood()
+            self.loss = nll
         else:
             raise ValueError(f"Unknown loss function {config.loss}")
 

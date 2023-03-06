@@ -223,12 +223,3 @@ class NegativeBinomialOutput(DistributionOutput):
             logits += scale.log()
 
         return self._base_distribution((total_count, logits))
-
-
-class NegativeLogLikelihood:
-    """
-    Computes the negative log likelihood loss from input distribution with respect to target.
-    """
-
-    def __call__(self, input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
-        return -input.log_prob(target)
