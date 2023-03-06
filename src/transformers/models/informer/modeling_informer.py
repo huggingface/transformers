@@ -615,7 +615,7 @@ class InformerProbSparseAttention(nn.Module):
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.bmm(attn_probs, value_states)
 
-        # calculate contex for updating the attn_output, based on:
+        # calculate context for updating the attn_output, based on:
         # https://github.com/zhouhaoyi/Informer2020/blob/ac59c7447135473fb2aafeafe94395f884d5c7a5/models/attn.py#L74
         if self.is_decoder:
             context = value_states.cumsum(dim=-2)
