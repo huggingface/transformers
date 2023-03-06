@@ -2157,6 +2157,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if "name_or_path" in tokenizer_config:
             tokenizer_config.pop("name_or_path")
 
+        # remove torch_dtype because it is not json serializable
+        tokenizer_config.pop("torch_dtype", None)
+
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
             f.write(out_str)
