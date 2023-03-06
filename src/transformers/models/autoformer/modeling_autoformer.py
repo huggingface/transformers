@@ -868,7 +868,7 @@ class AutoformerAttention(nn.Module):
         query_states_fft = torch.fft.rfft(query_states, dim=1)
         key_states_fft = torch.fft.rfft(key_states, dim=1)
         attn_weights = query_states_fft * torch.conj(key_states_fft)
-        attn_weights = torch.fft.irfft(attn_weights, dim=1)  # Autocorrelation(Q,K)
+        attn_weights = torch.fft.irfft(attn_weights, n=tgt_len, dim=1)  # Autocorrelation(Q,K)
 
         src_len = key_states.size(1)
         channel = key_states.size(2)
