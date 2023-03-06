@@ -43,6 +43,7 @@ else:
     _import_structure["modeling_bridgetower"] = [
         "BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BridgeTowerForImageAndTextRetrieval",
+        "BridgeTowerForITC",
         "BridgeTowerForMaskedLM",
         "BridgeTowerModel",
         "BridgeTowerPreTrainedModel",
@@ -75,6 +76,7 @@ if TYPE_CHECKING:
         from .modeling_bridgetower import (
             BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST,
             BridgeTowerForImageAndTextRetrieval,
+            BridgeTowerForITC,
             BridgeTowerForMaskedLM,
             BridgeTowerModel,
             BridgeTowerPreTrainedModel,

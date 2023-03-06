@@ -1212,6 +1212,7 @@ else:
         [
             "BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BridgeTowerForImageAndTextRetrieval",
+            "BridgeTowerForITC",
             "BridgeTowerForMaskedLM",
             "BridgeTowerModel",
             "BridgeTowerPreTrainedModel",
@@ -4669,6 +4670,7 @@ if TYPE_CHECKING:
         from .models.bridgetower import (
             BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST,
             BridgeTowerForImageAndTextRetrieval,
+            BridgeTowerForITC,
             BridgeTowerForMaskedLM,
             BridgeTowerModel,
             BridgeTowerPreTrainedModel,
