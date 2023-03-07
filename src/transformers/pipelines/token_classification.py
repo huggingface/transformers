@@ -1,3 +1,4 @@
+import torch
 import types
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -20,6 +21,10 @@ if is_tf_available():
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+
+
+CLS_ID = 101
+SEP_ID = 102
 
 
 class TokenClassificationArgumentHandler(ArgumentHandler):
@@ -567,7 +572,7 @@ class TokenClassificationPipeline(ChunkPipeline):
         return entity_groups
 
 
-class SlidingWindowNERPipeline(TokenClassificationPipeline):
+class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
     """Modified version of TokenClassificationPipeline that uses a sliding
     window approach to fit long texts into the limited position embeddings of a
     transformer.
@@ -575,8 +580,7 @@ class SlidingWindowNERPipeline(TokenClassificationPipeline):
 
     def __init__(self, window_length: Optional[int] = None,
                  stride: Optional[int] = None, *args, **kwargs):
-        super(SlidingWindowNERPipeline, self).__init__(
-            *args, **kwargs, aggregation_strategy=AggregationStrategy.FIRST)
+        super().__init__(*args, **kwargs)
         self.window_length = window_length or self.tokenizer.model_max_length
         if stride is None:
             self.stride = self.window_length // 2
@@ -644,7 +648,8 @@ class SlidingWindowNERPipeline(TokenClassificationPipeline):
                     raise ValueError("SlidingWindowNERPipeline does not "
                                      "support TensorFlow models.")
                 # Forward inference pass
-                with torch.no_grad():
+                inference_context = self.get_inference_context()
+                with inference_context():
                     tokens = self.ensure_tensor_on_device(**tokens)
 
                     # Get logits (i.e. tag scores)
@@ -671,18 +676,21 @@ class SlidingWindowNERPipeline(TokenClassificationPipeline):
 
                     scores = np.exp(entities) / np.exp(entities).sum(
                         -1, keepdims=True)
+
+                    # FIXME: don't hard-code the aggregeation strategy
                     pre_entities = self.gather_pre_entities(
                         sentence, input_ids, scores, offset_mapping,
-                        special_tokens_mask)
+                        special_tokens_mask, AggregationStrategy.FIRST)
+                    # FIXME: don't hard-code the aggregeation strategy
                     grouped_entities = self.aggregate(
-                        pre_entities, self.aggregation_strategy)
+                        pre_entities, AggregationStrategy.FIRST)
                     # Filter anything that is in self.ignore_labels
                     entities = [
                         entity
                         for entity in grouped_entities
-                        if entity.get("entity", None) not in self.ignore_labels
+                        if entity.get("entity", None) not in ["O"]
                         and entity.get("entity_group", None) not in
-                        self.ignore_labels
+                        ["O"]
                     ]
                     answers.append(entities)
 
