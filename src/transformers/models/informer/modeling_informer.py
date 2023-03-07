@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
-# Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2023 Amazon and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Time Series Transformer model."""
+""" PyTorch Informer model."""
 
 import random
 from typing import List, Optional, Tuple, Union
@@ -33,21 +32,22 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
-from .configuration_time_series_transformer import TimeSeriesTransformerConfig
+from .configuration_informer import InformerConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "TimeSeriesTransformerConfig"
+_CONFIG_FOR_DOC = "InformerConfig"
 
 
-TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/time-series-transformer-tourism-monthly",
-    # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
+INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "huggingface/informer-tourism-monthly",
+    # See all Informer models at https://huggingface.co/models?filter=informer
 ]
 
 
-class TimeSeriesFeatureEmbedder(nn.Module):
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesFeatureEmbedder with TimeSeries->Informer
+class InformerFeatureEmbedder(nn.Module):
     """
     Embed a sequence of categorical features.
 
@@ -81,7 +81,8 @@ class TimeSeriesFeatureEmbedder(nn.Module):
         )
 
 
-class TimeSeriesStdScaler(nn.Module):
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeries->Informer
+class InformerStdScaler(nn.Module):
     """
     Standardize features by calculating the mean and scaling along some given dimension `dim`, and then normalizes it
     by subtracting from the mean and dividing by the standard deviation.
@@ -114,7 +115,8 @@ class TimeSeriesStdScaler(nn.Module):
         return (data - loc) / scale, loc, scale
 
 
-class TimeSeriesMeanScaler(nn.Module):
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesMeanScaler with TimeSeries->Informer
+class InformerMeanScaler(nn.Module):
     """
     Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
     accordingly.
@@ -169,7 +171,8 @@ class TimeSeriesMeanScaler(nn.Module):
         return scaled_data, torch.zeros_like(scale), scale
 
 
-class TimeSeriesNOPScaler(nn.Module):
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesNOPScaler with TimeSeries->Informer
+class InformerNOPScaler(nn.Module):
     """
     Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
 
@@ -193,13 +196,7 @@ class TimeSeriesNOPScaler(nn.Module):
         return data, loc, scale
 
 
-def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
-    """
-    Computes the negative log likelihood loss from input distribution with respect to target.
-    """
-    return -input.log_prob(target)
-
-
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.weighted_average
 def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
     """
     Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
@@ -222,6 +219,14 @@ def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor]
         return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
     else:
         return input_tensor.mean(dim=dim)
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.nll
+def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the negative log likelihood loss from input distribution with respect to target.
+    """
+    return -input.log_prob(target)
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -255,8 +260,8 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# Copied from transformers.models.marian.modeling_marian.MarianSinusoidalPositionalEmbedding with Marian->TimeSeries
-class TimeSeriesSinusoidalPositionalEmbedding(nn.Embedding):
+# Copied from transformers.models.marian.modeling_marian.MarianSinusoidalPositionalEmbedding with Marian->Informer
+class InformerSinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
@@ -290,7 +295,8 @@ class TimeSeriesSinusoidalPositionalEmbedding(nn.Embedding):
         return super().forward(positions)
 
 
-class TimeSeriesValueEmbedding(nn.Module):
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesValueEmbedding with TimeSeries->Info
+class InformerValueEmbedding(nn.Module):
     def __init__(self, feature_size, d_model):
         super().__init__()
         self.value_projection = nn.Linear(in_features=feature_size, out_features=d_model, bias=False)
@@ -299,8 +305,8 @@ class TimeSeriesValueEmbedding(nn.Module):
         return self.value_projection(x)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->TimeSeriesTransformer
-class TimeSeriesTransformerAttention(nn.Module):
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Informer
+class InformerAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -454,16 +460,264 @@ class TimeSeriesTransformerAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->TimeSeriesTransformer
-class TimeSeriesTransformerEncoderLayer(nn.Module):
-    def __init__(self, config: TimeSeriesTransformerConfig):
+class InformerProbSparseAttention(nn.Module):
+    """Probabilistic Attention mechanism to select the "active"
+    queries rather than the "lazy" queries and provides a sparse Transformer thus mitigating the quadratic compute and
+    memory requirements of vanilla attention"""
+
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        sampling_factor: int = 5,
+        bias: bool = True,
+    ):
+        super().__init__()
+        self.factor = sampling_factor
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.head_dim = embed_dim // num_heads
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
+        self.is_decoder = is_decoder
+
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states) * self.scaling
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        else:
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
+
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
+
+        key_states_time_length = key_states.size(1)  # L_K
+        log_key_states_time_length = np.ceil(np.log1p(key_states_time_length)).astype("int").item()  # log_L_K
+
+        query_states_time_length = query_states.size(1)  # L_Q
+        log_query_states_time_length = np.ceil(np.log1p(query_states_time_length)).astype("int").item()  # log_L_Q
+
+        u_part = min(self.factor * query_states_time_length * log_key_states_time_length, key_states_time_length)
+        u = min(self.factor * log_query_states_time_length, query_states_time_length)
+
+        if key_states_time_length > 0:
+            index_sample = torch.randint(0, key_states_time_length, (u_part,))
+            k_sample = key_states[:, index_sample, :]
+        else:
+            k_sample = key_states
+
+        queries_keys_sample = torch.bmm(query_states, k_sample.transpose(1, 2))  # Q_K_sampled
+
+        # find the Top_k query with sparsity measurement
+        if u > 0:
+            sparsity_measurement = queries_keys_sample.max(dim=-1)[0] - torch.div(
+                queries_keys_sample.sum(dim=-1), key_states_time_length
+            )  # M
+            top_u_sparsity_measurement = sparsity_measurement.topk(u, sorted=False)[1]  # M_top
+
+            # calculate q_reduce: query_states[:, top_u_sparsity_measurement]
+            dim_for_slice = torch.arange(query_states.size(0)).unsqueeze(-1)
+            q_reduce = query_states[dim_for_slice, top_u_sparsity_measurement]
+        else:
+            q_reduce = query_states
+            top_u_sparsity_measurement = None
+
+        # Use q_reduce to calculate attention weights
+        attn_weights = torch.bmm(q_reduce, key_states.transpose(1, 2))
+
+        src_len = key_states.size(1)
+        if attn_weights.size() != (bsz * self.num_heads, u, src_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, u, src_len)}, but is"
+                f" {attn_weights.size()}"
+            )
+
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
+            prob_mask = attention_mask.expand(bsz, self.num_heads, tgt_len, src_len).reshape(
+                bsz * self.num_heads, tgt_len, src_len
+            )
+
+            if top_u_sparsity_measurement is not None:
+                dim_for_slice = torch.arange(prob_mask.size(0)).unsqueeze(-1)
+                prob_mask = prob_mask[dim_for_slice, top_u_sparsity_measurement, :]
+
+            attn_weights = attn_weights.view(bsz, self.num_heads, u, src_len) + prob_mask.view(
+                bsz, self.num_heads, u, src_len
+            )
+            attn_weights = attn_weights.view(bsz * self.num_heads, u, src_len)
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+        if layer_head_mask is not None:
+            if layer_head_mask.size() != (self.num_heads,):
+                raise ValueError(
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
+                    f" {layer_head_mask.size()}"
+                )
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, u, src_len)
+            attn_weights = attn_weights.view(bsz * self.num_heads, u, src_len)
+
+        if output_attentions:
+            # this operation is a bit awkward, but it's required to
+            # make sure that attn_weights keeps its gradient.
+            # In order to do so, attn_weights have to be reshaped
+            # twice and have to be reused in the following
+            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, u, src_len)
+            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, u, src_len)
+        else:
+            attn_weights_reshaped = None
+
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = torch.bmm(attn_probs, value_states)
+
+        # calculate context for updating the attn_output, based on:
+        # https://github.com/zhouhaoyi/Informer2020/blob/ac59c7447135473fb2aafeafe94395f884d5c7a5/models/attn.py#L74
+        if self.is_decoder:
+            context = value_states.cumsum(dim=-2)
+        else:
+            v_mean_dim_time = value_states.mean(dim=-2)
+            context = (
+                v_mean_dim_time.unsqueeze(dim=1)
+                .expand(bsz * self.num_heads, query_states_time_length, v_mean_dim_time.size(-1))
+                .clone()
+            )
+
+        if top_u_sparsity_measurement is not None:
+            # update context: copy the attention output to the context at top_u_sparsity_measurement index
+            dim_for_slice = torch.arange(context.size(0)).unsqueeze(-1)
+            context[dim_for_slice, top_u_sparsity_measurement, :] = attn_output
+            attn_output = context
+
+        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned across GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights_reshaped, past_key_value
+
+
+# source: https://github.com/zhouhaoyi/Informer2020/blob/main/models/encoder.py
+class InformerConvLayer(nn.Module):
+    def __init__(self, c_in):
+        super().__init__()
+        self.downConv = nn.Conv1d(
+            in_channels=c_in,
+            out_channels=c_in,
+            kernel_size=3,
+            padding=1,
+            padding_mode="circular",
+        )
+        self.norm = nn.BatchNorm1d(c_in)
+        self.activation = nn.ELU()
+        self.maxPool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
+
+    def forward(self, x):
+        x = self.downConv(x.permute(0, 2, 1))
+        x = self.norm(x)
+        x = self.activation(x)
+        x = self.maxPool(x)
+        x = x.transpose(1, 2)
+        return x
+
+
+class InformerEncoderLayer(nn.Module):
+    def __init__(self, config: InformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = TimeSeriesTransformerAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
-        )
+        if config.attention_type == "prob":
+            self.self_attn = InformerProbSparseAttention(
+                embed_dim=self.embed_dim,
+                num_heads=config.encoder_attention_heads,
+                dropout=config.attention_dropout,
+                sampling_factor=config.sampling_factor,
+            )
+        else:
+            self.self_attn = InformerAttention(
+                embed_dim=self.embed_dim,
+                num_heads=config.encoder_attention_heads,
+                dropout=config.attention_dropout,
+            )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -523,24 +777,32 @@ class TimeSeriesTransformerEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->TimeSeriesTransformer
-class TimeSeriesTransformerDecoderLayer(nn.Module):
-    def __init__(self, config: TimeSeriesTransformerConfig):
+class InformerDecoderLayer(nn.Module):
+    def __init__(self, config: InformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = TimeSeriesTransformerAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-        )
+        if config.attention_type == "prob":
+            self.self_attn = InformerProbSparseAttention(
+                embed_dim=self.embed_dim,
+                num_heads=config.decoder_attention_heads,
+                dropout=config.attention_dropout,
+                sampling_factor=config.sampling_factor,
+                is_decoder=True,
+            )
+        else:
+            self.self_attn = InformerAttention(
+                embed_dim=self.embed_dim,
+                num_heads=config.decoder_attention_heads,
+                dropout=config.attention_dropout,
+                is_decoder=True,
+            )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = TimeSeriesTransformerAttention(
+        self.encoder_attn = InformerAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -641,31 +903,29 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
         return outputs
 
 
-class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
-    config_class = TimeSeriesTransformerConfig
+class InformerPreTrainedModel(PreTrainedModel):
+    config_class = InformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, TimeSeriesSinusoidalPositionalEmbedding):
-            pass
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (TimeSeriesTransformerDecoder, TimeSeriesTransformerEncoder)):
+        if isinstance(module, (InformerDecoder, InformerEncoder)):
             module.gradient_checkpointing = value
 
 
-TIME_SERIES_TRANSFORMER_START_DOCSTRING = r"""
+INFORMER_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -681,7 +941,7 @@ TIME_SERIES_TRANSFORMER_START_DOCSTRING = r"""
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
+INFORMER_INPUTS_DOCSTRING = r"""
     Args:
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
             Past values of the time series, that serve as context in order to predict the future. The sequence size of
@@ -836,31 +1096,39 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
 """
 
 
-class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
+class InformerEncoder(InformerPreTrainedModel):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    [`TimeSeriesTransformerEncoderLayer`].
+    Informer encoder consisting of *config.encoder_layers* self attention layers with distillation layers. Each
+    attention layer is an [`InformerEncoderLayer`].
 
     Args:
-        config: TimeSeriesTransformerConfig
+        config: InformerConfig
     """
 
-    def __init__(self, config: TimeSeriesTransformerConfig):
+    def __init__(self, config: InformerConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
+        self.gradient_checkpointing = False
         if config.prediction_length is None:
             raise ValueError("The `prediction_length` config needs to be specified.")
 
-        self.value_embedding = TimeSeriesValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
-        self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
+        self.value_embedding = InformerValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         )
-        self.layers = nn.ModuleList([TimeSeriesTransformerEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([InformerEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
+        if config.distil:
+            self.conv_layers = nn.ModuleList(
+                [InformerConvLayer(config.d_model) for _ in range(config.encoder_layers - 1)]
+            )
+            self.conv_layers.append(None)
+        else:
+            self.conv_layers = [None] * config.encoder_layers
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -929,7 +1197,7 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
                     f" {head_mask.size()[0]}."
                 )
 
-        for idx, encoder_layer in enumerate(self.layers):
+        for idx, (encoder_layer, conv_layer) in enumerate(zip(self.layers, self.conv_layers)):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -951,6 +1219,9 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
                     )
+                    if conv_layer is not None:
+                        output = torch.utils.checkpoint.checkpoint(conv_layer, layer_outputs[0])
+                        layer_outputs = (output,) + layer_outputs[1:]
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
@@ -958,6 +1229,9 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                         output_attentions=output_attentions,
                     )
+                    if conv_layer is not None:
+                        output = conv_layer(layer_outputs[0])
+                        layer_outputs = (output,) + layer_outputs[1:]
 
                 hidden_states = layer_outputs[0]
 
@@ -974,27 +1248,27 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
         )
 
 
-class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Informer,TimeSeriesTransformerConfig->InformerConfig,time-series-transformer->informer,Transformer->Informer,TimeSeries->Informer
+class InformerDecoder(InformerPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a
-    [`TimeSeriesTransformerDecoderLayer`]
+    Informer decoder consisting of *config.decoder_layers* layers. Each layer is a [`InformerDecoderLayer`]
 
     Args:
-        config: TimeSeriesTransformerConfig
+        config: InformerConfig
     """
 
-    def __init__(self, config: TimeSeriesTransformerConfig):
+    def __init__(self, config: InformerConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         if config.prediction_length is None:
             raise ValueError("The `prediction_length` config needs to be specified.")
 
-        self.value_embedding = TimeSeriesValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
-        self.embed_positions = TimeSeriesSinusoidalPositionalEmbedding(
+        self.value_embedding = InformerValueEmbedding(feature_size=config.feature_size, d_model=config.d_model)
+        self.embed_positions = InformerSinusoidalPositionalEmbedding(
             config.context_length + config.prediction_length, config.d_model
         )
-        self.layers = nn.ModuleList([TimeSeriesTransformerDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([InformerDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -1213,29 +1487,30 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare Time Series Transformer Model outputting raw hidden-states without any specific head on top.",
-    TIME_SERIES_TRANSFORMER_START_DOCSTRING,
+    "The bare Informer Model outputting raw hidden-states without any specific head on top.",
+    INFORMER_START_DOCSTRING,
 )
-class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
-    def __init__(self, config: TimeSeriesTransformerConfig):
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER,time-series-transformer->informer,TimeSeries->Informer
+class InformerModel(InformerPreTrainedModel):
+    def __init__(self, config: InformerConfig):
         super().__init__(config)
 
         if config.scaling == "mean" or config.scaling:
-            self.scaler = TimeSeriesMeanScaler(dim=1, keepdim=True)
+            self.scaler = InformerMeanScaler(dim=1, keepdim=True)
         elif config.scaling == "std":
-            self.scaler = TimeSeriesStdScaler(dim=1, keepdim=True)
+            self.scaler = InformerStdScaler(dim=1, keepdim=True)
         else:
-            self.scaler = TimeSeriesNOPScaler(dim=1, keepdim=True)
+            self.scaler = InformerNOPScaler(dim=1, keepdim=True)
 
         if config.num_static_categorical_features > 0:
-            self.embedder = TimeSeriesFeatureEmbedder(
+            self.embedder = InformerFeatureEmbedder(
                 cardinalities=config.cardinality,
                 embedding_dims=config.embedding_dimension,
             )
 
         # transformer encoder-decoder and mask initializer
-        self.encoder = TimeSeriesTransformerEncoder(config)
-        self.decoder = TimeSeriesTransformerDecoder(config)
+        self.encoder = InformerEncoder(config)
+        self.decoder = InformerDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1354,7 +1629,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(INFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1384,14 +1659,14 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         ```python
         >>> from huggingface_hub import hf_hub_download
         >>> import torch
-        >>> from transformers import TimeSeriesTransformerModel
+        >>> from transformers import InformerModel
 
         >>> file = hf_hub_download(
         ...     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly")
+        >>> model = InformerModel.from_pretrained("huggingface/informer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features
@@ -1474,13 +1749,14 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The Time Series Transformer Model with a distribution head on top for time-series forecasting.",
-    TIME_SERIES_TRANSFORMER_START_DOCSTRING,
+    "The Informer Model with a distribution head on top for time-series forecasting.",
+    INFORMER_START_DOCSTRING,
 )
-class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
-    def __init__(self, config: TimeSeriesTransformerConfig):
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerForPrediction with TimeSeriesTransformer->Informer,TIME_SERIES_TRANSFORMER->INFORMER,time-series-transformer->informer
+class InformerForPrediction(InformerPreTrainedModel):
+    def __init__(self, config: InformerConfig):
         super().__init__(config)
-        self.model = TimeSeriesTransformerModel(config)
+        self.model = InformerModel(config)
         if config.distribution_output == "student_t":
             self.distribution_output = StudentTOutput(dim=config.input_size)
         elif config.distribution_output == "normal":
@@ -1517,7 +1793,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             sliced_params = [p[:, -trailing_n:] for p in params]
         return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
 
-    @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(INFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1548,16 +1824,14 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         ```python
         >>> from huggingface_hub import hf_hub_download
         >>> import torch
-        >>> from transformers import TimeSeriesTransformerForPrediction
+        >>> from transformers import InformerForPrediction
 
         >>> file = hf_hub_download(
         ...     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = TimeSeriesTransformerForPrediction.from_pretrained(
-        ...     "huggingface/time-series-transformer-tourism-monthly"
-        ... )
+        >>> model = InformerForPrediction.from_pretrained("huggingface/informer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features
