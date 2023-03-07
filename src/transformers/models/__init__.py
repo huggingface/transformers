@@ -98,6 +98,7 @@ from . import (
     herbert,
     hubert,
     ibert,
+    ict,
     imagegpt,
     informer,
     instructblip,

@@ -330,6 +330,7 @@ _import_structure = {
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
+    "models.ict": ["ICT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ICTConfig"],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.instructblip": [
@@ -2742,6 +2743,15 @@ else:
             "ViTPreTrainedModel",
         ]
     )
+    _import_structure["models.ict"].extend(
+        [
+            "ICT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ICTForImageClassification",
+            "ICTForMaskedImageModeling",
+            "ICTModel",
+            "ICTPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit_hybrid"].extend(
         [
             "VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3569,6 +3579,13 @@ else:
             "TFViTPreTrainedModel",
         ]
     )
+    _import_structure["models.ict"].extend(
+        [
+            "TFICTForImageClassification",
+            "TFICTModel",
+            "TFICTPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit_mae"].extend(
         [
             "TFViTMAEForPreTraining",
@@ -3898,6 +3915,7 @@ else:
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
+    _import_structure["models.ict"].extend(["FlaxICTForImageClassification", "FlaxICTModel", "FlaxICTPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
     )
@@ -4393,6 +4411,7 @@ if TYPE_CHECKING:
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .models.ict import ICT_PRETRAINED_CONFIG_ARCHIVE_MAP, ICTConfig
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
@@ -6220,6 +6239,13 @@ if TYPE_CHECKING:
             ViTModel,
             ViTPreTrainedModel,
         )
+        from .models.ict import (
+            ICT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ICTForImageClassification,
+            ICTForMaskedImageModeling,
+            ICTModel,
+            ICTPreTrainedModel,
+        )
         from .models.vit_hybrid import (
             VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTHybridForImageClassification,
@@ -6891,6 +6917,7 @@ if TYPE_CHECKING:
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import TFVisionTextDualEncoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
+        from .models.ict import TFICTForImageClassification, TFICTModel, TFICTPreTrainedModel
         from .models.vit_mae import TFViTMAEForPreTraining, TFViTMAEModel, TFViTMAEPreTrainedModel
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7141,6 +7168,7 @@ if TYPE_CHECKING:
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
+        from .models.ict import FlaxICTForImageClassification, FlaxICTModel, FlaxICTPreTrainedModel
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,
             FlaxWav2Vec2ForPreTraining,
