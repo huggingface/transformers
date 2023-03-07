@@ -484,7 +484,8 @@ def main():
         return {"wer": wer}
 
     # 9. Create a single speech processor
-    if is_main_process(training_args.local_rank):
+    # make sure all processes wait until data is saved
+    with training_args.main_process_first():
         # save feature extractor, tokenizer and config
         feature_extractor.save_pretrained(training_args.output_dir)
         tokenizer.save_pretrained(training_args.output_dir)
