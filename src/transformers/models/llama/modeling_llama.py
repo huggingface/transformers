@@ -77,18 +77,71 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-class RMSNorm(torch.nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+class RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        RMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+    def forward(self, hidden_states):
+        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
 
-    def forward(self, x):
-        output = self._norm(x.float()).type_as(x)
-        return output * self.weight
+        # convert into half-precision if necessary
+        if self.weight.dtype in [torch.float16, torch.bfloat16]:
+            hidden_states = hidden_states.to(self.weight.dtype)
+
+        return self.weight * hidden_states
+
+
+class RotaryEmbedding(torch.nn.Module):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+        super().__init__()
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
+        self.register_buffer("inv_freq", inv_freq)
+
+        # Build here to make `torch.jit.trace` work.
+        self.max_seq_len_cached = max_position_embeddings
+        t = torch.arange(self.max_seq_len_cached, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.cos_cached = emb.cos()[None, None, :, :]
+        self.sin_cached = emb.sin()[None, None, :, :]
+
+    def forward(self, x, seq_len=None):
+        # x: [bs, num_attention_heads, seq_len, head_size]
+        # This `if` block is unlikely to be run after we build sin/cos in `__init__`. Keep the logic here just in case.
+        if seq_len > self.max_seq_len_cached:
+            self.max_seq_len_cached = seq_len
+            t = torch.arange(self.max_seq_len_cached, device=x.device, dtype=self.inv_freq.dtype)
+            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+            # Different from paper, but it uses a different permutation in order to obtain the same calculation
+            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+            self.cos_cached = emb.cos()[None, None, :, :].to(dtype=x.dtype)
+            self.sin_cached = emb.sin()[None, None, :, :].to(dtype=x.dtype)
+        return (
+            self.cos_cached[:seq_len, ...].to(dtype=x.dtype, device=x.device),
+            self.sin_cached[:seq_len, ...].to(dtype=x.dtype, device=x.device),
+        )
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
+    cos = cos[..., offset: q.shape[-2] + offset, :]
+    sin = sin[..., offset: q.shape[-2] + offset, :]
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 class LLaMAMLP(nn.Module):
@@ -105,7 +158,7 @@ class LLaMAMLP(nn.Module):
         self.act_fn = ACT2FN[hidden_act]
 
     def forward(self, x):
-        return self.up_proj(self.act_fn(self.gate_proj(x)) * self.down_proj(x))
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
 class LLaMAAttention(nn.Module):
@@ -115,7 +168,6 @@ class LLaMAAttention(nn.Module):
         self,
         hidden_size: int,
         num_heads: int,
-        complex_frequencies: torch.Tensor,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -147,7 +199,7 @@ class LLaMAAttention(nn.Module):
             hidden_size,
             bias=False,
         )
-        self.complex_frequencies = complex_frequencies
+        self.rotary_emb = RotaryEmbedding(self.head_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -157,114 +209,76 @@ class LLaMAAttention(nn.Module):
         hidden_states: torch.Tensor,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        self.complex_frequencies = self.complex_frequencies.to(hidden_states.device)
+        bsz, q_len, _ = hidden_states.size()
 
-        bsz, tgt_len, _ = hidden_states.size()
+        query_states = self.q_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        # get query proj
-        query_states = self.q_proj(hidden_states).view(bsz, tgt_len, self.num_heads, self.head_dim)
-        key_states = self.k_proj(hidden_states).view(bsz, tgt_len, self.num_heads, self.head_dim)
-        value_states = self.v_proj(hidden_states).view(bsz, tgt_len, self.num_heads, self.head_dim)
+        kv_seq_len = key_states.shape[-2]
+        offset = 0
+        if past_key_value:
+            offset = past_key_value[0].shape[-2]
+            kv_seq_len += offset
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, offset=offset)
+        # [bsz, nh, t, hd]
 
-        if past_key_value is not None:
-            start = past_key_value[0].shape[2]
-        else:
-            start = 0
-
-        sliced_complex_frequencies = self.complex_frequencies[start : start + tgt_len]
-        query_states, key_states = apply_rotary_emb(
-            query_states=query_states, key_states=key_states, complex_frequencies=sliced_complex_frequencies
-        )
-
-        # get key, value proj
-        key_states = self._shape(key_states, -1, bsz)
-        value_states = self._shape(value_states, -1, bsz)
         if past_key_value is not None:
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
         past_key_value = (key_states, value_states)
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
 
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2)) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f"Attention weights should be of size {(bsz * self.num_heads, q_len, kv_seq_len)}, but is"
                 f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = attn_weights + attention_mask
             attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(attn_weights.dtype)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_output = torch.matmul(attn_weights, value_states)
 
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to be reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_output = torch.bmm(attn_weights, value_states)
-
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
-
-        attn_output = attn_output.reshape(bsz, tgt_len, self.hidden_size)
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped, past_key_value
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
 
 
 class LLaMADecoderLayer(nn.Module):
     def __init__(self, config: LLaMAConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        complex_frequencies = precompute_complex_frequencies(
-            head_dim=self.hidden_size // config.num_attention_heads,
-            length=config.max_sequence_length * 2,
-        )
         self.self_attn = LLaMAAttention(
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
-            complex_frequencies=complex_frequencies,
         )
         self.mlp = LLaMAMLP(
             hidden_size=self.hidden_size,
@@ -278,7 +292,6 @@ class LLaMADecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
@@ -288,8 +301,6 @@ class LLaMADecoderLayer(nn.Module):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`, *optional*): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -308,7 +319,6 @@ class LLaMADecoderLayer(nn.Module):
             hidden_states=hidden_states,
             past_key_value=past_key_value,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
@@ -370,7 +380,7 @@ class LLaMAPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (LLaMADecoder)):
+        if isinstance(module, (LLaMADecoderLayer)):
             module.gradient_checkpointing = value
 
 
@@ -401,8 +411,6 @@ LLAMA_INPUTS_DOCSTRING = r"""
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
             information on the default strategy.
-        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -492,7 +500,6 @@ class LLaMAModel(LLaMAPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -517,12 +524,6 @@ class LLaMAModel(LLaMAPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(num_hidden_layers, num_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
             past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
                 Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
                 shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
@@ -595,15 +596,6 @@ class LLaMAModel(LLaMAPreTrainedModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
 
-        # check if head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask], ["head_mask"]):
-            if attn_mask is not None:
-                if attn_mask.size()[0] != (len(self.layers)):
-                    raise ValueError(
-                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
-                        f" {head_mask.size()[0]}."
-                    )
-
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -623,14 +615,12 @@ class LLaMAModel(LLaMAPreTrainedModel):
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
                     None,
                 )
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
@@ -674,10 +664,10 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.decoder.embed_tokens
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.decoder.embed_tokens = value
+        self.model.embed_tokens = value
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -686,17 +676,16 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.model.decoder = decoder
+        self.model = decoder
 
     def get_decoder(self):
-        return self.model.decoder
+        return self.model
 
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -722,12 +711,6 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(num_hidden_layers, num_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
             past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
                 Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
                 shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
@@ -786,10 +769,9 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model.decoder(
+        outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -848,31 +830,3 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
         for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
-
-
-def precompute_complex_frequencies(head_dim: int, length: int, theta: float = 10000.0):
-    frequencies = 1.0 / (theta ** (torch.arange(0, head_dim, 2)[: (head_dim // 2)].float() / head_dim))
-    t = torch.arange(length, device=frequencies.device)
-    frequencies = torch.outer(t, frequencies).float()
-    return torch.polar(torch.ones_like(frequencies), frequencies)  # complex64
-
-
-def apply_rotary_emb(
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    complex_frequencies: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    query_states_complex = torch.view_as_complex(query_states.float().reshape(*key_states.shape[:-1], -1, 2))
-    key_states_complex = torch.view_as_complex(key_states.float().reshape(*key_states.shape[:-1], -1, 2))
-    complex_frequencies = reshape_for_broadcast(complex_frequencies, query_states_complex)
-    output_query_states = torch.view_as_real(query_states_complex * complex_frequencies).flatten(3)
-    output_key_states = torch.view_as_real(key_states_complex * complex_frequencies).flatten(3)
-    return output_query_states.type_as(query_states), output_key_states.type_as(key_states)
-
-
-def reshape_for_broadcast(complex_frequencies: torch.Tensor, x: torch.Tensor):
-    ndim = x.ndim
-    assert 0 <= 1 < ndim
-    assert complex_frequencies.shape == (x.shape[1], x.shape[-1])
-    shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
-    return complex_frequencies.view(*shape)
