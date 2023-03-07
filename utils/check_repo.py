@@ -193,6 +193,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
+    "TokenGTForGraphClassification",
     "BlipForConditionalGeneration",
     "BlipForImageTextRetrieval",
     "BlipForQuestionAnswering",
