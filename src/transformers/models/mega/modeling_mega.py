@@ -33,6 +33,8 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...activations import ACT2FN
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -67,36 +69,24 @@ MEGA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # starting with activation functions
+# squared-relu and laplace are alternatives to softmax for attention activation
 def relu2(x):
-    return torch.square(F.relu(x))
-
+    relu_x = F.relu(x)
+    squared = torch.square(relu_x)
+    return squared
 
 def laplace(x, mu=0.707107, sigma=0.282095):
     x = (x - mu).div(sigma * math.sqrt(2.0))
     return 0.5 * (1.0 + torch.erf(x))
 
-
+# gelu-accurate is an alternative to gelu and is used with the remaining hidden activation functions in the 
+# original MEGA repo, which all have exact equivalents in ACT2FN
 def gelu_accurate(x):
     if not hasattr(gelu_accurate, "_a"):
         gelu_accurate._a = math.sqrt(2 / math.pi)
     return 0.5 * x * (1 + torch.tanh(gelu_accurate._a * (x + 0.044715 * torch.pow(x, 3))))
 
-
-def get_activation_fn(activation: str) -> Callable:
-    """Returns the activation function corresponding to `activation`"""
-    if activation == "relu":
-        return F.relu
-    elif activation == "gelu":
-        return F.gelu
-    elif activation == "gelu_accurate":
-        return gelu_accurate
-    elif activation == "silu":
-        return F.silu
-    elif activation == "linear":
-        return lambda x: x
-    else:
-        raise RuntimeError("--activation-fn {} not supported".format(activation))
-
+ACT2FN['gelu_accurate'] = gelu_accurate
 
 # utility for causal LM masking in the format that Mega expects
 def generate_causal_mask(seq_len):
@@ -265,7 +255,8 @@ class MultiHeadEMA(nn.Module):
         """
 
         seq_len, bsz, embed_dim = x.size()
-        assert embed_dim == self.embed_dim
+        if embed_dim != self.embed_dim:
+            raise ValueError(f"Unexpected embedding dimension received: input is {embed_dim}, model expects {self.embed_dim}")
 
         # L x B x D
         residual = x * self.omega
@@ -315,7 +306,7 @@ class MultiHeadEMA(nn.Module):
 # Gated cross-attention
 # removed before_attn_fn argument and unused static_kv
 # otherwise left as-is with the exception of hidden states
-class GatedCrossAttention(nn.Module):
+class MegaGatedCrossAttention(nn.Module):
     """Gated Structured State Attention for use in encoder-decoder model
     See Mega paper for more details.
     """
@@ -324,7 +315,7 @@ class GatedCrossAttention(nn.Module):
         super().__init__()
 
         self.config = config
-        self.activation = get_activation_fn(activation=self.config.activation)
+        self.activation = ACT2FN[self.config.activation]
         self.attention_activation = self.config.attention_activation
         self.scaling = (
             self.config.shared_representation_size**-0.5 if self.attention_activation == "softmax" else None
@@ -339,7 +330,7 @@ class GatedCrossAttention(nn.Module):
         )
 
         self.prenorm = self.config.normalize_before_mega
-        self.norm = SequenceNorm(
+        self.norm = MegaSequenceNorm(
             self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine
         )
 
@@ -386,7 +377,8 @@ class GatedCrossAttention(nn.Module):
         # L x L1
         bias = self.rel_pos_bias(max(slen, clen))[:, :clen]
         if pidx is not None:
-            assert q.size(1) == 1
+            if q.size(1) != 1:
+                raise ValueError("Position offset provided with queries longer than 1 token")
             # L1
             bias = bias[pidx]
         else:
@@ -415,7 +407,8 @@ class GatedCrossAttention(nn.Module):
         # L x L1
         bias = self.rel_pos_bias(max(slen, clen))[:, :clen]
         if pidx is not None:
-            assert q.size(1) == 1
+            if q.size(1) != 1:
+                raise ValueError("Position offset provided with queries longer than 1 token")
             # L1
             bias = bias[pidx]
         else:
@@ -468,7 +461,8 @@ class GatedCrossAttention(nn.Module):
         """
 
         seq_len, bsz, embed_dim = query.size()
-        assert embed_dim == self.config.hidden_size
+        if embed_dim != self.config.hidden_size:
+            raise ValueError(f"Unexpected embedding dimension received: input is {embed_dim} but expected {self.config.hidden_size}")
 
         if prev_key_values is not None:
             # make sure the inputs only have a sequence length of 1 if we're doing incremental decoding
@@ -501,7 +495,8 @@ class GatedCrossAttention(nn.Module):
         r = F.silu(r)
 
         if key is None:
-            assert value is None
+            if value is not None:
+                raise ValueError("Key and value must be `None` simultaneously")
             k = v = None
         else:
             # L1 x B x S
@@ -532,8 +527,10 @@ class GatedCrossAttention(nn.Module):
             key_padding_mask = None
 
         if key_padding_mask is not None:
-            assert key_padding_mask.size(0) == bsz
-            assert key_padding_mask.size(1) == ctx_len
+            if key_padding_mask.size(0) != bsz:
+                raise ValueError("Key padding mask does not align on the batch dimension")
+            if key_padding_mask.size(1) != ctx_len:
+                raise ValueError("Key padding mask does not align on the sequence length dimension")
 
         if self.attention_activation == "softmax":
             attn_weights = self.softmax_attention(q, k, key_padding_mask, num_incremental_steps)
@@ -596,7 +593,8 @@ class SimpleRelativePositionalBias(nn.Module):
 class RotaryRelativePositionalBias(nn.Module):
     def __init__(self, config: MegaConfig):
         super().__init__()
-        assert config.hidden_size % 2 == 0
+        if config.hidden_size % 2 != 0:
+            raise ValueError("Rotary positional bias requires `hidden_size` to be a multiple of 2")
         self.config = config
         self.embed_dim = config.shared_representation_size
         self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size
@@ -695,7 +693,7 @@ class RMSNorm(nn.Module):
         return x
 
 
-class SequenceNorm(nn.Module):
+class MegaSequenceNorm(nn.Module):
     def __init__(self, norm_type, embedding_dim, eps=1e-5, affine=True, export=False):
         super().__init__()
         if norm_type == "layernorm":
@@ -713,7 +711,8 @@ class SequenceNorm(nn.Module):
 
     def normalize(self, x):
         if isinstance(self.norm, nn.modules.batchnorm._BatchNorm):
-            assert x.dim() == 3
+            if x.dim() != 3:
+                raise ValueError("BatchNorm inputs must be exactly 3-dimensional")
             x = x.permute(1, 2, 0)
             x = self.norm(x)
             return x.permute(2, 0, 1)
@@ -723,6 +722,8 @@ class SequenceNorm(nn.Module):
     def forward(self, x):
         return self.normalize(x)
 
+# add this layernorm class to ALL_LAYERNORM_LAYERS
+ALL_LAYERNORM_LAYERS.append(MegaSequenceNorm)
 
 # Dropout: standard dropout + feature dropout
 # unmodified, but changed name from Fairseq->Mega
@@ -771,7 +772,8 @@ class MegaFeatureDropout(nn.Module):
                 # B x L x D -> B x D x L -> B x L x D
                 return F.dropout2d(x.transpose(-1, -2), p=self.p, training=True, inplace=inplace).transpose(-1, -2)
             else:
-                assert x.dim() == 3
+                if x.dim() != 3:
+                    raise ValueError("Feature dropout inputs must be exactly 3-dimensional if inputs are ordered [sequence length, batch size, hidden dimension]")
                 # L x B x D -> B x D x L -> L x B x D
                 return F.dropout2d(x.permute(1, 2, 0), p=self.p, training=True, inplace=inplace).permute(2, 0, 1)
         else:
@@ -807,7 +809,7 @@ class MovingAverageGatedAttention(nn.Module):
     def __init__(self, config: MegaConfig):
         super().__init__()
         self.config = config
-        self.activation = get_activation_fn(self.config.activation)
+        self.activation = ACT2FN[self.config.activation]
         self.scaling = (
             self.config.shared_representation_size**-0.5 if self.config.attention_activation == "softmax" else None
         )
@@ -819,7 +821,7 @@ class MovingAverageGatedAttention(nn.Module):
             self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__
         )
 
-        self.norm = SequenceNorm(
+        self.norm = MegaSequenceNorm(
             self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine
         )
         self.move = MultiHeadEMA(config)
@@ -892,7 +894,8 @@ class MovingAverageGatedAttention(nn.Module):
         # C x C
         bias = self.rel_pos_bias(slen)
         if slen != q.size(2):
-            assert q.size(2) == 1, "Size mismatch between Q and K in element attention"
+            if q.size(2) != 1:
+                raise ValueError("Size mismatch between Q and K in element attention")
             # 1 x C
             bias = bias[-1:]
 
@@ -920,7 +923,8 @@ class MovingAverageGatedAttention(nn.Module):
         # C x C
         bias = self.rel_pos_bias(slen)
         if slen != q.size(2):
-            assert q.size(2) == 1, "Size mismatch between Q and K in softmax attention"
+            if q.size(2) != 1:
+                raise ValueError("Size mismatch between Q and K in softmax attention")
             # 1 x C
             bias = bias[-1:]
 
@@ -984,9 +988,8 @@ class MovingAverageGatedAttention(nn.Module):
         """
 
         seq_len, bsz, embed_dim = x.size()
-        assert (
-            embed_dim == self.config.hidden_size
-        ), f"Input embedding dimension should be {self.config.hidden_size}; received {embed_dim}"
+        if embed_dim != self.config.hidden_size:
+            raise ValueError(f"Input embedding dimension should be {self.config.hidden_size}; received {embed_dim}")
 
         # store inputs for residual connection and handle pre-norm if requested
         residual = x
@@ -1130,7 +1133,7 @@ class MovingAverageGatedAttention(nn.Module):
 
 # Normalized feed-forward network
 # left as-is from original Mega repo aside from retrieving args from Hugging Face config
-class NormalizedFeedForwardNetwork(nn.Module):
+class MegaNormalizedFeedForwardNetwork(nn.Module):
     """
     Normalized feed-forward network used in Mega blocks
     """
@@ -1141,7 +1144,7 @@ class NormalizedFeedForwardNetwork(nn.Module):
         self.config = config
         self.hidden_dim = config.nffn_hidden_size
         self.act_fn = config.activation
-        self.activation = get_activation_fn(config.activation)
+        self.activation = ACT2FN[config.activation]
 
         dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
         self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
@@ -1150,7 +1153,7 @@ class NormalizedFeedForwardNetwork(nn.Module):
         )
 
         self.prenorm = self.config.normalize_before_ffn
-        self.norm = SequenceNorm(
+        self.norm = MegaSequenceNorm(
             self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine
         )
 
@@ -1232,13 +1235,13 @@ class MegaLayer(nn.Module):
         super().__init__()
         self.seq_len_dim = 1
         self.mega_layer = MovingAverageGatedAttention(config)
-        self.nffn = NormalizedFeedForwardNetwork(config) if config.use_normalized_ffn else None
+        self.nffn = MegaNormalizedFeedForwardNetwork(config) if config.use_normalized_ffn else None
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.cross_attn = GatedCrossAttention(config)
+            self.cross_attn = MegaGatedCrossAttention(config)
         else:
             self.cross_attn = None
 
