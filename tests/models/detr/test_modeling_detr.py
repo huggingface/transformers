@@ -627,6 +627,7 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertTrue(len(results["segments_info"]), expected_number_of_segments)
         self.assertDictEqual(results["segments_info"][0], expected_first_segment)
 
+
 @require_vision
 @require_torch
 @slow
