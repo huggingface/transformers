@@ -1335,7 +1335,7 @@ class BridgeTowerForImageAndTextRetrieval(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class BridgeTowerForITC(metaclass=DummyObject):
+class BridgeTowerForContrastiveLearning(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
