@@ -43,6 +43,7 @@ if is_torch_available():
 
     from transformers import (
         WhisperFeatureExtractor,
+        WhisperForAudioClassification,
         WhisperForConditionalGeneration,
         WhisperModel,
         WhisperProcessor,
@@ -1372,3 +1373,191 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
         self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+
+def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
+    if head_mask is None:
+        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+    return {"input_features": input_features, "head_mask": head_mask}
+
+
+@require_torch
+class WhisperEncoderModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        seq_length=60,
+        is_training=True,
+        use_labels=True,
+        hidden_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        input_channels=1,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=20,
+        max_source_positions=30,
+        num_mel_bins=80,
+        num_conv_layers=1,
+        suppress_tokens=None,
+        begin_suppress_tokens=None,
+        classifier_proj_size=4,
+        num_labels=2,
+        is_encoder_decoder=False,
+        is_decoder=False,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.input_channels = input_channels
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.num_mel_bins = num_mel_bins
+        self.max_position_embeddings = max_position_embeddings
+        self.max_source_positions = max_source_positions
+        self.num_conv_layers = num_conv_layers
+        self.suppress_tokens = suppress_tokens
+        self.begin_suppress_tokens = begin_suppress_tokens
+        self.classifier_proj_size = classifier_proj_size
+        self.num_labels = num_labels
+        self.is_encoder_decoder = is_encoder_decoder
+        self.is_decoder = is_decoder
+
+    def get_config(self):
+        return WhisperConfig(
+            d_model=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            input_channels=self.input_channels,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            max_source_positions=self.max_source_positions,
+            decoder_ffn_dim=self.hidden_size,
+            encoder_ffn_dim=self.hidden_size,
+            suppress_tokens=self.suppress_tokens,
+            begin_suppress_tokens=self.begin_suppress_tokens,
+            classifier_proj_size=self.classifier_proj_size,
+            num_labels=self.num_labels,
+            is_encoder_decoder=self.is_encoder_decoder,
+            is_decoder=self.is_decoder,
+        )
+
+    def prepare_config_and_inputs(self):
+        input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length])
+
+        config = self.get_config()
+        inputs_dict = prepare_whisper_encoder_inputs_dict(
+            config,
+            input_features=input_features,
+        )
+        return config, inputs_dict
+
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
+
+    def get_subsampled_output_lengths(self, input_lengths):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        for i in range(self.num_conv_layers):
+            input_lengths = (input_lengths - 1) // 2 + 1
+
+        return input_lengths
+
+    @property
+    def encoder_seq_length(self):
+        return self.get_subsampled_output_lengths(self.seq_length)
+
+    def create_and_check_model_forward(self, config, inputs_dict, freeze_encoder=False):
+        model = WhisperForAudioClassification(config=config).to(torch_device).eval()
+
+        if freeze_encoder:
+            model.freeze_encoder()
+
+        input_features = inputs_dict["input_features"]
+
+        # first forward pass
+        last_hidden_state = model(input_features).logits
+
+        self.parent.assertTrue(last_hidden_state.shape, (13, 2))
+
+
+@require_torch
+class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
+    is_encoder_decoder = False
+    fx_compatible = False
+    test_pruning = False
+    test_missing_keys = False
+
+    input_name = "input_features"
+
+    def setUp(self):
+        self.model_tester = WhisperEncoderModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=WhisperConfig)
+        self.maxDiff = 3000
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["input_features", "head_mask", "encoder_outputs"]
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    # input embeds is meaningless for an encoder-only acoustic model
+    def test_inputs_embeds(self):
+        pass
+
+    # the equivalent test is passing the encoder outputs directly to the model
+    def test_encoder_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            with torch.no_grad():
+                outputs = model(**inputs)[0]
+
+            input_ids = inputs["input_features"]
+            del inputs["input_features"]
+
+            encoder = model.encoder
+
+            with torch.no_grad():
+                inputs["encoder_outputs"] = encoder(input_ids)
+                outputs_embeds = model(**inputs)[0]
+
+            self.assertTrue((outputs_embeds == outputs).all())
+
+    # WhisperEncoder has no inputs_embeds and thus the `get_input_embeddings` fn is not implemented
+    def test_model_common_attributes(self):
+        pass
+
+    # WhisperEncoder cannot resize token embeddings since it has no tokens embeddings
+    def test_resize_tokens_embeddings(self):
+        pass
