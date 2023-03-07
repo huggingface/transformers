@@ -172,7 +172,7 @@ class PipelineTesterMixin:
 
         for tokenizer_name in tokenizer_names:
             for processor_name in processor_names:
-                if is_test_to_skip(
+                if self.is_pipeline_test_to_skip(
                     pipeline_test_class_name,
                     model_architecture.config_class,
                     model_architecture,
@@ -403,6 +403,11 @@ class PipelineTesterMixin:
     @require_torch
     def test_pipeline_zero_shot_object_detection(self):
         self.run_task_tests(task="zero-shot-object-detection")
+
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return False
 
 
 def validate_test_components(test_case, task, model, tokenizer, processor):
