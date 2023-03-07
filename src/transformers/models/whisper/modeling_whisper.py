@@ -1486,12 +1486,10 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         >>> from transformers import AutoFeatureExtractor, WhisperForAudioClassification
         >>> from datasets import load_dataset
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained(
-        ...     "sanchit-gandhi/whisper-small-ft-common-language-id"
-        ... )
-        >>> model = WhisperForAudioClassification.from_pretrained("sanchit-gandhi/whisper-small-ft-common-language-id")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("sanchit-gandhi/whisper-medium-fleurs-lang-id")
+        >>> model = WhisperForAudioClassification.from_pretrained("sanchit-gandhi/whisper-medium-fleurs-lang-id")
 
-        >>> ds = load_dataset("facebook/multilingual_librispeech", "dutch", split="validation", streaming=True)
+        >>> ds = load_dataset("google/fleurs", "all", split="validation", streaming=True)
         >>> sample = next(iter(ds))
 
         >>> inputs = feature_extractor(
@@ -1505,7 +1503,7 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         >>> predicted_class_ids = torch.argmax(logits).item()
         >>> predicted_label = model.config.id2label[predicted_class_ids]
         >>> predicted_label
-        'Dutch'
+        'af_za'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
