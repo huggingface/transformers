@@ -52,8 +52,6 @@ class LLaMAConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_sequence_length (`int`, *optional*, defaults to 2048):
-            Max sequence length for model (for RoPE computation)
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -87,7 +85,6 @@ class LLaMAConfig(PretrainedConfig):
         num_hidden_layers=32,
         num_attention_heads=32,
         hidden_act="silu",
-        max_sequence_length=2048,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
@@ -103,7 +100,6 @@ class LLaMAConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.hidden_act = hidden_act
-        self.max_sequence_length = max_sequence_length
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
