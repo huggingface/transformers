@@ -5,6 +5,7 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+from einops import rearrange
 from torch import Tensor, nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -30,7 +31,6 @@ TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # "clefourrier/graphormer-base-pcqm4mv2",
     # See all Graphormer models at https://huggingface.co/models?filter=graphormer
 ]
-
 
 def quant_noise(module, p, block_size):
     """
