@@ -129,23 +129,6 @@ class MultiHeadEMA(nn.Module):
         self._kernel = None
         self._coeffs = None
 
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        with torch.no_grad():
-            # delta & alpha
-            nn.init.normal_(self.delta, mean=0.0, std=self.config.ema_delta_alpha_range)
-            nn.init.normal_(self.alpha, mean=0.0, std=self.config.ema_delta_alpha_range)
-            # beta [1, -1, 1, -1, ...] seems more stable.
-            val = torch.ones(self.ndim, 1)
-            if self.ndim > 1:
-                idx = torch.tensor(list(range(1, self.ndim, 2)))
-                val.index_fill_(0, idx, -1.0)
-            self.b_param.normal_(mean=0.0, std=self.config.ema_beta_range).add_(val)
-            # gamma & omega
-            nn.init.normal_(self.g_param, mean=0.0, std=self.config.ema_gamma_omega_range)
-            nn.init.normal_(self.omega, mean=0.0, std=self.config.ema_gamma_omega_range)
-
     def _calc_coeffs(self):
         self._coeffs = None
         # D x N x 1
@@ -355,22 +338,7 @@ class MegaGatedCrossAttention(nn.Module):
         else:
             raise ValueError("unknown relative position bias: {}".format(self.config.relative_positional_bias))
 
-        self.reset_parameters()
         self.softmax = nn.Softmax(dim=-1)
-
-    def reset_parameters(self):
-        std = self.config.initializer_range
-        nn.init.normal_(self.k_proj.weight, mean=0.0, std=std)
-        nn.init.constant_(self.k_proj.bias, 0.0)
-
-        nn.init.normal_(self.v_proj.weight, mean=0.0, std=std)
-        nn.init.constant_(self.v_proj.bias, 0.0)
-
-        nn.init.normal_(self.q_proj.weight, mean=0.0, std=std)
-        nn.init.constant_(self.q_proj.bias, 0.0)
-
-        nn.init.normal_(self.h_proj.weight, mean=0.0, std=std)
-        nn.init.constant_(self.h_proj.bias, 0.0)
 
     def element_attention(self, q, k, key_padding_mask, pidx):
         bsz, clen, _ = k.size()
@@ -580,11 +548,6 @@ class SimpleRelativePositionalBias(nn.Module):
         self.config = config
         self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size
         self.rel_pos_bias = nn.Parameter(torch.Tensor(2 * config.max_positions - 1))
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        std = self.config.initializer_range
-        nn.init.normal_(self.rel_pos_bias, mean=0.0, std=std)
 
     def forward(self, seq_len):
         if seq_len > self.max_positions:
@@ -620,12 +583,6 @@ class RotaryRelativePositionalBias(nn.Module):
         self.alpha = nn.Parameter(torch.Tensor(1, self.embed_dim))
         self.b_param = nn.Parameter(torch.Tensor(1, self.embed_dim))
         self.register_buffer("_float_tensor", torch.FloatTensor([0.0]))
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        std = self.config.initializer_range
-        nn.init.normal_(self.alpha, mean=0.0, std=std)
-        nn.init.normal_(self.b_param, mean=0.0, std=std)
 
     @staticmethod
     def get_sinusoid_embeddings(max_positions: int, embedding_dim: int):
@@ -668,12 +625,6 @@ class ScaleNorm(nn.Module):
         else:
             self.register_parameter("scalar", None)
 
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        if self.affine:
-            nn.init.constant_(self.scalar, 1.0)
-
     def forward(self, x):
         mean_square = torch.mean(torch.square(x), dim=self.dim, keepdim=True)
         if self.scalar is not None:
@@ -693,12 +644,6 @@ class RMSNorm(nn.Module):
             self.weight = nn.Parameter(torch.Tensor(self.num_features))
         else:
             self.register_parameter("weight", None)
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        if self.affine:
-            nn.init.constant_(self.weight, 1.0)
 
     def forward(self, x):
         mean_square = torch.mean(torch.square(x), dim=-1, keepdim=True)
@@ -864,23 +809,6 @@ class MovingAverageGatedAttention(nn.Module):
         self.attention_function = (
             self.softmax_attention if self.config.attention_activation == "softmax" else self.element_attention
         )
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        # possibly remove this in favor of automated initialization by HF classes
-        std = self.config.initializer_range
-        mean = 0.0
-        nn.init.normal_(self.v_proj.weight, mean=mean, std=std)
-        nn.init.constant_(self.v_proj.bias, 0.0)
-
-        nn.init.normal_(self.mx_proj.weight, mean=mean, std=std)
-        nn.init.constant_(self.mx_proj.bias, 0.0)
-
-        nn.init.normal_(self.h_proj.weight, mean=mean, std=std)
-        nn.init.constant_(self.h_proj.bias, 0.0)
-
-        nn.init.normal_(self.g_param, mean=mean, std=std)
-        nn.init.constant_(self.b_param, 0.0)
 
     def element_attention(self, q, k, padding_mask, causal_mask):
         """
@@ -1190,16 +1118,6 @@ class MegaNormalizedFeedForwardNetwork(nn.Module):
         self.fc1 = nn.Linear(self.config.hidden_size, self.config.nffn_hidden_size)
         self.fc2 = nn.Linear(self.config.nffn_hidden_size, self.config.hidden_size)
 
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        std = self.config.initializer_range
-        nn.init.normal_(self.fc1.weight, mean=0.0, std=std)
-        nn.init.constant_(self.fc1.bias, 0.0)
-
-        nn.init.normal_(self.fc2.weight, mean=0.0, std=std)
-        nn.init.constant_(self.fc2.bias, 0.0)
-
     def forward(self, x):
         residual = x
 
@@ -1438,9 +1356,37 @@ class MegaPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
+        if isinstance(module, MultiHeadEMA):
+            with torch.no_grad():
+                # delta & alpha
+                nn.init.normal_(module.delta, mean=0.0, std=self.config.ema_delta_alpha_range)
+                nn.init.normal_(module.alpha, mean=0.0, std=self.config.ema_delta_alpha_range)
+                # beta [1, -1, 1, -1, ...] seems more stable.
+                val = torch.ones(self.config.ema_projection_size, 1)
+                if self.config.ema_projection_size > 1:
+                    idx = torch.tensor(list(range(1, self.config.ema_projection_size, 2)))
+                    val.index_fill_(0, idx, -1.0)
+                module.b_param.normal_(mean=0.0, std=self.config.ema_beta_range).add_(val)
+                # gamma & omega
+                nn.init.normal_(module.g_param, mean=0.0, std=self.config.ema_gamma_omega_range)
+                nn.init.normal_(module.omega, mean=0.0, std=self.config.ema_gamma_omega_range)
+        elif isinstance(module, SimpleRelativePositionalBias):
+            nn.init.normal_(module.rel_pos_bias, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, RotaryRelativePositionalBias):
+            nn.init.normal_(module.alpha, mean=0.0, std=self.config.initializer_range)
+            nn.init.normal_(module.b_param, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, ScaleNorm):
+            if self.config.norm_affine:
+                nn.init.constant_(module.scalar, 1.0)
+        elif isinstance(module, RMSNorm):
+            if self.config.norm_affine:
+                nn.init.constant_(module.weight, 1.0)
+        elif isinstance(module, MovingAverageGatedAttention):
+            # linear layers covered separately by the generic nn.Linear init below
+            nn.init.normal_(module.g_param, mean=0.0, std=self.config.initializer_range)
+            nn.init.constant_(module.b_param, 0.0)
+        elif isinstance(module, nn.Linear):
+            # initializes all linear layers in the entire network
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
