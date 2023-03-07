@@ -34,7 +34,6 @@ else:
     _import_structure["modeling_tokengt"] = [
         "TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TokenGTForGraphClassification",
-        # "GraphormerModel",
         "TokenGTPreTrainedModel",
     ]
 
@@ -51,7 +50,6 @@ if TYPE_CHECKING:
         from .modeling_tokengt import (
             TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TokenGTForGraphClassification,
-            # TokenGTModel,
             TokenGTPreTrainedModel,
         )
 
