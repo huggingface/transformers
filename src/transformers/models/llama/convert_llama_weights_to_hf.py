@@ -105,27 +105,27 @@ def write_model(model_path, input_base_path, model_size):
                 f"model.decoder.layers.{layer_i}.self_attn.o_proj.weight": loaded[
                     f"layers.{layer_i}.attention.wo.weight"
                 ],
-                f"model.decoder.layers.{layer_i}.feed_forward.w1.weight": loaded[
+                f"model.decoder.layers.{layer_i}.mlp.up_proj.weight": loaded[
                     f"layers.{layer_i}.feed_forward.w1.weight"
                 ],
-                f"model.decoder.layers.{layer_i}.feed_forward.w2.weight": loaded[
+                f"model.decoder.layers.{layer_i}.mlp.down_proj.weight": loaded[
                     f"layers.{layer_i}.feed_forward.w2.weight"
                 ],
-                f"model.decoder.layers.{layer_i}.feed_forward.w3.weight": loaded[
+                f"model.decoder.layers.{layer_i}.mlp.gate_proj.weight": loaded[
                     f"layers.{layer_i}.feed_forward.w3.weight"
                 ],
-                f"model.decoder.layers.{layer_i}.attention_norm.weight": loaded[
+                f"model.decoder.layers.{layer_i}.input_layernorm.weight": loaded[
                     f"layers.{layer_i}.attention_norm.weight"
                 ],
-                f"model.decoder.layers.{layer_i}.ffn_norm.weight": loaded[f"layers.{layer_i}.ffn_norm.weight"],
+                f"model.decoder.layers.{layer_i}.post_attention_layernorm.weight": loaded[f"layers.{layer_i}.ffn_norm.weight"],
             }
         else:
             # Sharded
             state_dict = {
-                f"model.decoder.layers.{layer_i}.attention_norm.weight": loaded[0][
+                f"model.decoder.layers.{layer_i}.input_layernorm.weight": loaded[0][
                     f"layers.{layer_i}.attention_norm.weight"
                 ],
-                f"model.decoder.layers.{layer_i}.ffn_norm.weight": loaded[0][f"layers.{layer_i}.ffn_norm.weight"],
+                f"model.decoder.layers.{layer_i}.post_attention_layernorm.weight": loaded[0][f"layers.{layer_i}.ffn_norm.weight"],
             }
             state_dict[f"model.decoder.layers.{layer_i}.self_attn.q_proj.weight"] = torch.cat(
                 [
@@ -152,13 +152,13 @@ def write_model(model_path, input_base_path, model_size):
             state_dict[f"model.decoder.layers.{layer_i}.self_attn.o_proj.weight"] = torch.cat(
                 [loaded[i][f"layers.{layer_i}.attention.wo.weight"] for i in range(num_shards)], dim=1
             )
-            state_dict[f"model.decoder.layers.{layer_i}.feed_forward.w1.weight"] = torch.cat(
+            state_dict[f"model.decoder.layers.{layer_i}.mlp.down_proj.weight"] = torch.cat(
                 [loaded[i][f"layers.{layer_i}.feed_forward.w1.weight"] for i in range(num_shards)], dim=0
             )
-            state_dict[f"model.decoder.layers.{layer_i}.feed_forward.w2.weight"] = torch.cat(
+            state_dict[f"model.decoder.layers.{layer_i}.mlp.up_proj.weight"] = torch.cat(
                 [loaded[i][f"layers.{layer_i}.feed_forward.w2.weight"] for i in range(num_shards)], dim=1
             )
-            state_dict[f"model.decoder.layers.{layer_i}.feed_forward.w3.weight"] = torch.cat(
+            state_dict[f"model.decoder.layers.{layer_i}.mlp.gate_proj.weight"] = torch.cat(
                 [loaded[i][f"layers.{layer_i}.feed_forward.w3.weight"] for i in range(num_shards)], dim=0
             )
 

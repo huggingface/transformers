@@ -91,7 +91,7 @@ class RMSNorm(torch.nn.Module):
         return output * self.weight
 
 
-class LLaMAFeedForward(nn.Module):
+class LLaMAMLP(nn.Module):
     def __init__(
         self,
         hidden_size: int,
@@ -99,13 +99,13 @@ class LLaMAFeedForward(nn.Module):
         hidden_act: str,
     ):
         super().__init__()
-        self.w1 = nn.Linear(hidden_size, intermediate_size, bias=False)
-        self.w2 = nn.Linear(intermediate_size, hidden_size, bias=False)
-        self.w3 = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
+        self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
+        self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.act_fn = ACT2FN[hidden_act]
 
     def forward(self, x):
-        return self.w2(self.act_fn(self.w1(x)) * self.w3(x))
+        return self.up_proj(self.act_fn(self.gate_proj(x)) * self.down_proj(x))
 
 
 class LLaMAAttention(nn.Module):
@@ -213,11 +213,8 @@ class LLaMAAttention(nn.Module):
             attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        # upcast to fp32 if the weights are in fp16. Please see https://github.com/huggingface/transformers/pull/17437
-        if attn_weights.dtype == torch.float16:
-            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(torch.float16)
-        else:
-            attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        # upcast attention to fp32
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(attn_weights.dtype)
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
@@ -269,13 +266,13 @@ class LLaMADecoderLayer(nn.Module):
             num_heads=config.num_attention_heads,
             complex_frequencies=complex_frequencies,
         )
-        self.feed_forward = LLaMAFeedForward(
+        self.mlp = LLaMAMLP(
             hidden_size=self.hidden_size,
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
         )
-        self.attention_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.ffn_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -304,7 +301,7 @@ class LLaMADecoderLayer(nn.Module):
 
         residual = hidden_states
 
-        hidden_states = self.attention_norm(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -318,8 +315,8 @@ class LLaMADecoderLayer(nn.Module):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.ffn_norm(hidden_states)
-        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
