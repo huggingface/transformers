@@ -360,7 +360,7 @@ class UDOPModelTester:
 
 
 @require_torch
-class T5ModelTest(ModelTesterMixin, unittest.TestCase):
+class UdopModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (UdopUnimodelForConditionalGeneration, UdopDualForConditionalGeneration) if is_torch_available() else ()
@@ -380,7 +380,6 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_inputs_embeds = False
     test_hidden_states_output = False
-    # The small T5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]
 
     def setUp(self):
@@ -398,7 +397,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             torch.onnx.export(
                 model,
                 (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
-                f"{tmpdirname}/t5_test.onnx",
+                f"{tmpdirname}/Udop_test.onnx",
                 export_params=True,
                 opset_version=9,
                 input_names=["input_ids", "decoder_input_ids"],
@@ -409,107 +408,6 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
 
-class T5EncoderOnlyModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=1,
-        encoder_seq_length=3,
-        # For common tests
-        use_attention_mask=True,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        is_training=False,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        is_encoder_decoder=False,
-        eos_token_id=1,
-        pad_token_id=0,
-        scope=None,
-    ):
-
-        self.parent = parent
-        self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        # For common tests
-        self.seq_length = self.encoder_seq_length
-        self.use_attention_mask = use_attention_mask
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.is_encoder_decoder = is_encoder_decoder
-        self.scope = None
-        self.is_training = is_training
-
-    def get_large_model_config(self):
-        return UdopConfig.from_pretrained("t5-base")
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
-        ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
-        # text_seg_data = torch.Tensor([0.11, 0.22, 0.43, 0.99] * self.encoder_seq_length)
-        text_seg_data = torch.Tensor([[[0.11, 0.22, 0.43, 0.99]] * self.encoder_seq_length])
-        image_input = torch.randn([1, 3, 224, 224])
-        if self.use_attention_mask:
-            ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-            ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
-
-        lm_labels = None
-        if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
-
-        config = self.get_config()
-        image_seg_data = self.get_visual_bbox(224)[None, :, :]
-        return (
-            config,
-            input_ids,
-            image_input,
-            text_seg_data,
-            image_seg_data,
-            # decoder_input_ids,
-            # attention_mask,
-            # decoder_attention_mask,
-            lm_labels,
-        )
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            image_input,
-            text_seg_data,
-            image_seg_data,
-            # decoder_input_ids,
-            # attention_mask,
-            # decoder_attention_mask,
-            lm_labels,
-        ) = config_and_inputs
-
-        inputs_dict = {
-            "input_ids": input_ids,
-            # "attention_mask": attention_mask,
-            "image": image_input,
-            "seg_data": text_seg_data,
-            "visual_seg_data": image_seg_data,
-            # "decoder_input_ids": decoder_input_ids,
-            # "decoder_attention_mask": decoder_attention_mask,
-            "labels": lm_labels,
-        }
-        return config, inputs_dict
-
-
 def use_task_specific_params(model, task):
     model.config.update(model.config.task_specific_params[task])
 
@@ -518,7 +416,7 @@ def use_task_specific_params(model, task):
 @require_accelerate
 @require_tokenizers
 @slow
-class T5ModelFp16Tests(unittest.TestCase):
+class UdopModelFp16Tests(unittest.TestCase):
     def test_fp16_fp32_conversion(self):
         r"""
         A test to check whether the argument `keep_in_fp32_modules` correctly does its job
@@ -1011,40 +909,3 @@ class T5ModelIntegrationTests(unittest.TestCase):
                 "permanent residence after the marriages, prosecutors say."
             ],
         )
-
-
-@require_torch
-class TestAsymmetricT5(unittest.TestCase):
-    def build_model_and_check_forward_pass(self, **kwargs):
-        tester = UDOPModelTester(self, **kwargs)
-        config, *inputs = tester.prepare_config_and_inputs()
-        (
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        ) = inputs
-        model = UdopUnimodelForConditionalGeneration(config=config).to(torch_device).eval()
-        outputs = model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            labels=lm_labels,
-        )
-        # outputs = model(*inputs)
-        assert len(outputs) == 4
-        assert outputs["logits"].size() == (tester.batch_size, tester.decoder_seq_length, tester.vocab_size)
-        assert outputs["loss"].size() == ()
-        return model
-
-    def test_small_decoder(self):
-        # num_hidden_layers is passed to T5Config as num_layers
-        model = self.build_model_and_check_forward_pass(decoder_layers=1, num_hidden_layers=2)
-        assert len(model.encoder.block) == 2
-        assert len(model.decoder.block) == 1
-
-    def test_defaulting_to_symmetry(self):
-        # num_hidden_layers is passed to T5Config as num_layers
-        model = self.build_model_and_check_forward_pass(num_hidden_layers=2)
-        assert len(model.decoder.block) == len(model.encoder.block) == 2

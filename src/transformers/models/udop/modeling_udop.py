@@ -35,6 +35,7 @@ from transformers.pytorch_utils import find_pruneable_heads_and_indices, prune_l
 from transformers.utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
+    ModelOutput,
     add_start_docstrings_to_model_forward,
     is_torch_fx_proxy,
     replace_return_docstrings,
@@ -875,6 +876,25 @@ class VisSeq2SeqLMOutput(BaseModelOutput):
     image_mask_label: Optional[Tuple[torch.FloatTensor]] = None
 
 
+@dataclass
+class UdopSeq2SeqLMOutput(ModelOutput):
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions_mask: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_seg_data: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions_mask: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_seg_data: Optional[Tuple[torch.FloatTensor]] = None
+    vision_embeds: Optional[Tuple[torch.FloatTensor]] = None
+
+
 class Residual(nn.Module):
     def forward(self, x, residual):
         return x + residual
@@ -1564,9 +1584,6 @@ class UdopDualStack(UdopPreTrainedModel):
     def get_input_embeddings(self):
         return self.embed_tokens
 
-    def get_output_embeddings(self):
-        return self.embed_tokens
-
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 
@@ -1723,7 +1740,7 @@ class UdopDualStack(UdopPreTrainedModel):
                     all_cross_attentions,
                     vision_embeds,
                 ]
-                if v is not None
+                # if v is not None
             )
 
         return BaseModelOutputWithVisionEmbeds(
@@ -1738,12 +1755,12 @@ class UdopDualStack(UdopPreTrainedModel):
 
 class UdopDualForConditionalGeneration(UdopPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
-        r"encoder.cell2dembedding.x_position_embeddings",
-        r"decoder.cell2dembedding.y_position_embeddings",
-        r"decoder.embed_tokens.weight",
-        r"encoder.embed_tokens.weight",
-        r"decoder.relative_bias.biases.0.relative_attention_bias.weight",
-        r"encoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "decoder.embed_tokens.weight",
+        "decoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "encoder.embed_tokens.weight",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "lm_head.weight",
+        "relative_bias.biases.0.relative_attention_bias.weight",
     ]
 
     def __init__(self, config):
@@ -1797,11 +1814,14 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
     def set_input_embeddings(self, value):
         self.shared = value
 
-    def get_output_embeddings(self):
-        return self.shared
-
     def get_input_embeddings(self):
         return self.shared
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def get_output_embeddings(self):
+        return None
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1834,7 +1854,7 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
         use_cache=True,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        return_dict: Optional[bool] = True,
         input_dict: Dict[str, Any] = None,
         **kwargs,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
@@ -1908,15 +1928,31 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
         if decoder_input_ids is None and labels is not None:
             decoder_input_ids = self._shift_right(labels)
 
-        if encoder_outputs.vision_embeds is not None:
-            vision_embeds = self.decoder.vision_fc(encoder_outputs.vision_embeds)
-            vision_embeds = self.decoder.vision_norm(vision_embeds)
-            hidden_states = torch.cat([encoder_outputs.last_hidden_state, vision_embeds], 1)
-            encoder_outputs.last_hidden_state = hidden_states
-            encoder_outputs.vision_embeds = None
+        vision_embeds = encoder_outputs.vision_embeds if return_dict else encoder_outputs[-1]
 
-        right_slice = encoder_outputs.last_hidden_state.size(1) - attention_mask.size(1)
-        right_mask = torch.ones_like(encoder_outputs.last_hidden_state[:, :right_slice, 0])
+        if vision_embeds is not None:
+            vision_embeds = self.decoder.vision_fc(vision_embeds)
+            vision_embeds = self.decoder.vision_norm(vision_embeds)
+            last_hidden_state = encoder_outputs.last_hidden_state if return_dict else encoder_outputs[0]
+            hidden_states = (
+                torch.cat([last_hidden_state, vision_embeds], 1) if last_hidden_state is not None else vision_embeds
+            )
+            if return_dict:
+                encoder_outputs.last_hidden_state = hidden_states
+            else:
+                encoder_outputs_list = list(encoder_outputs)
+                encoder_outputs_list[0] = hidden_states
+                encoder_outputs = tuple(encoder_outputs_list)
+            if return_dict:
+                encoder_outputs.vision_embeds = None
+            else:
+                encoder_outputs_list = list(encoder_outputs)
+                encoder_outputs_list[-1] = None
+                encoder_outputs = tuple(encoder_outputs_list)
+
+        last_hidden_state = encoder_outputs.last_hidden_state if return_dict else encoder_outputs[0]
+        right_slice = last_hidden_state.size(1) - attention_mask.size(1)
+        right_mask = torch.ones_like(last_hidden_state[:, :right_slice, 0])
         attention_mask = torch.cat([attention_mask, right_mask], 1)
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -1949,23 +1985,23 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
 
         hidden_states = encoder_outputs[0]
 
-        if self.model_parallel:
-            torch.cuda.set_device(self.decoder.first_device)
+        # if self.model_parallel:
+        #     torch.cuda.set_device(self.decoder.first_device)
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
             decoder_input_ids = self._shift_right(labels)
 
         # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.decoder.first_device)
-            hidden_states = hidden_states.to(self.decoder.first_device)
-            if decoder_input_ids is not None:
-                decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(self.decoder.first_device)
-            if decoder_attention_mask is not None:
-                decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
+        # if self.model_parallel:
+        #     torch.cuda.set_device(self.decoder.first_device)
+        #     hidden_states = hidden_states.to(self.decoder.first_device)
+        #     if decoder_input_ids is not None:
+        #         decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
+        #     if attention_mask is not None:
+        #         attention_mask = attention_mask.to(self.decoder.first_device)
+        #     if decoder_attention_mask is not None:
+        #         decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
 
         # Decode
         decoder_outputs = self.decoder(
@@ -1976,7 +2012,7 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
+            # cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2006,9 +2042,10 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
 
         if not return_dict:
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
-            return ((loss,) + output) if loss is not None else output
+            final_output = ((loss,) + output) if loss is not None else output
+            return tuple([value for value in final_output if value is not None])
 
-        return Seq2SeqLMOutput(
+        return UdopSeq2SeqLMOutput(
             loss=loss,
             logits=lm_logits,
             past_key_values=decoder_outputs.past_key_values,
@@ -2018,6 +2055,7 @@ class UdopDualForConditionalGeneration(UdopPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            vision_embeds=encoder_outputs.vision_embeds,
         )
 
     def get_encoder(self):
@@ -2268,12 +2306,11 @@ class UdopUniStack(UdopPreTrainedModel):
 
 class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
-        r"encoder.cell2dembedding.x_position_embeddings.weight",
-        r"decoder.cell2dembedding.y_position_embeddings.weight",
-        r"decoder.embed_tokens.weight",
-        r"encoder.embed_tokens.weight",
-        r"decoder.relative_bias.biases.0.relative_attention_bias.weight",
-        r"encoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "decoder.embed_tokens.weight",
+        "decoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "encoder.embed_tokens.weight",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "lm_head.weight",
     ]
 
     def __init__(self, config):
@@ -2324,8 +2361,11 @@ class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
             d_model = self.config.d_model
             module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
     def get_output_embeddings(self):
-        return self.shared
+        return None
 
     def get_input_embeddings(self):
         return self.shared
@@ -2426,11 +2466,11 @@ class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
                 inputs_patches=inputs_patches,
                 num_patches=num_patches,
                 special_vis_token=None,
-                ids_keep=ids_keep,
+                # ids_keep=ids_keep,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
                 head_mask=head_mask,
-                output_attentions=output_attentions,
+                # output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
@@ -2499,9 +2539,9 @@ class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
+            # cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions,
+            # output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -2529,18 +2569,23 @@ class UdopUnimodelForConditionalGeneration(UdopPreTrainedModel):
 
         if not return_dict:
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
-            return ((loss,) + output) if loss is not None else output
+            final_output = ((loss,) + output) if loss is not None else output
+            return tuple([value for value in final_output if value is not None])
 
-        outputs = Seq2SeqLMOutput(
+        outputs = UdopSeq2SeqLMOutput(
             loss=loss,
             logits=lm_logits,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
+            cross_attentions_mask=decoder_outputs.attention_mask,
+            decoder_seg_data=decoder_outputs.seg_data,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            encoder_attentions_mask=encoder_outputs.attention_mask,
+            encoder_seg_data=encoder_outputs.seg_data,
         )
 
         return outputs
