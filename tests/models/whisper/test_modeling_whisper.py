@@ -1375,17 +1375,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
 
 
-def prepare_whisper_encoder_inputs_dict(
-    config,
-    input_features,
-    head_mask=None,
-):
+def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
     if head_mask is None:
         head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
-    return {
-        "input_features": input_features,
-        "head_mask": head_mask,
-    }
+    return {"input_features": input_features, "head_mask": head_mask}
 
 
 @require_torch
