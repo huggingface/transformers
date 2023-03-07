@@ -86,12 +86,16 @@ class OneFormerModelTester:
             torch_device
         )
 
-        task_inputs = torch.randint(high=self.vocab_size, size=(self.batch_size, self.sequence_length)).to(torch_device).long()
+        task_inputs = (
+            torch.randint(high=self.vocab_size, size=(self.batch_size, self.sequence_length)).to(torch_device).long()
+        )
 
         pixel_mask = torch.ones([self.batch_size, self.min_size, self.max_size], device=torch_device)
 
         text_inputs = (
-            torch.randint(high=self.vocab_size, size=(self.batch_size, self.num_queries - self.n_ctx, self.sequence_length))
+            torch.randint(
+                high=self.vocab_size, size=(self.batch_size, self.num_queries - self.n_ctx, self.sequence_length)
+            )
             .to(torch_device)
             .long()
         )
@@ -307,7 +311,9 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         inputs = {
             "pixel_values": torch.randn((2, 3, *size), device=torch_device),
             "task_inputs": torch.randint(high=self.model_tester.vocab_size, size=(2, 77), device=torch_device).long(),
-            "text_inputs": torch.randint(high=self.model_tester.vocab_size, size=(2, 134, 77), device=torch_device).long(),
+            "text_inputs": torch.randint(
+                high=self.model_tester.vocab_size, size=(2, 134, 77), device=torch_device
+            ).long(),
             "mask_labels": torch.randn((2, 150, *size), device=torch_device),
             "class_labels": torch.zeros(2, 150, device=torch_device).long(),
         }
