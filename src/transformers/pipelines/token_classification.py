@@ -677,13 +677,11 @@ class SlidingWindowTokenClassificationPipeline(TokenClassificationPipeline):
                     scores = np.exp(entities) / np.exp(entities).sum(
                         -1, keepdims=True)
 
-                    # FIXME: don't hard-code the aggregeation strategy
                     pre_entities = self.gather_pre_entities(
                         sentence, input_ids, scores, offset_mapping,
-                        special_tokens_mask, AggregationStrategy.FIRST)
-                    # FIXME: don't hard-code the aggregeation strategy
+                        special_tokens_mask, self._postprocess_params['aggregation_strategy'])
                     grouped_entities = self.aggregate(
-                        pre_entities, AggregationStrategy.FIRST)
+                        pre_entities, self._postprocess_params['aggregation_strategy'])
                     # Filter anything that is in self.ignore_labels
                     entities = [
                         entity
