@@ -57,11 +57,24 @@ class Jukebox1bModelTester(unittest.TestCase):
         1405, 1276, 1455, 1228
     ]
 
+    EXPECTED_OUTPUT_2_PT_2 = [
+        1489, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653
+    ]
+
     EXPECTED_OUTPUT_1 = [
         1125, 1751, 697, 1776, 1141, 1476, 391, 697, 1125, 684, 867, 416,
         844, 1372, 1274, 717, 1274, 844, 1299, 1419, 697, 1370, 317, 1125,
         191, 1440, 1370, 1440, 1370, 282, 1621, 1370, 368, 349, 867, 1872,
         1262, 869, 1728, 747
+    ]
+    EXPECTED_OUTPUT_1_PT_2 = [
+        416, 416, 1125, 1125, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416
     ]
 
     EXPECTED_OUTPUT_0 = [
@@ -69,6 +82,12 @@ class Jukebox1bModelTester(unittest.TestCase):
         616, 556, 268, 1499, 933, 457, 1440, 1837, 755, 985, 308, 902,
         293, 1443, 1671, 1141, 1533, 555, 1562, 1061, 287, 417, 1022, 2008,
         1186, 1015, 1777, 268
+    ]
+    EXPECTED_OUTPUT_0_PT_2 = [
+        854, 842, 1353, 114, 1353, 842, 185, 842, 185, 114, 591, 842,
+        185, 417, 185, 842, 307, 842, 591, 842, 185, 842, 307, 842,
+        591, 842, 1353, 842, 185, 842, 591, 842, 591, 114, 591, 842,
+        185, 842, 591, 89
     ]
 
     EXPECTED_Y_COND = [1058304, 0, 786432, 7169, 507, 76, 27, 40, 30, 76]
@@ -135,15 +154,15 @@ class Jukebox1bModelTester(unittest.TestCase):
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
         zs = model._sample(zs, labels, [0], sample_length=40 * model.priors[0].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[0][0], torch.tensor(self.EXPECTED_OUTPUT_2))
+        self.assertIn(zs[0][0].detach().cpu().tolist(), [self.EXPECTED_OUTPUT_2, self.EXPECTED_OUTPUT_2_PT_2])
 
         set_seed(0)
         zs = model._sample(zs, labels, [1], sample_length=40 * model.priors[1].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[1][0], torch.tensor(self.EXPECTED_OUTPUT_1))
+        self.assertIn(zs[1][0].detach().cpu().tolist(), [self.EXPECTED_OUTPUT_1, self.EXPECTED_OUTPUT_1_PT_2])
 
         set_seed(0)
         zs = model._sample(zs, labels, [2], sample_length=40 * model.priors[2].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[2][0], torch.tensor(self.EXPECTED_OUTPUT_0))
+        self.assertIn(zs[2][0].detach().cpu().tolist(), [self.EXPECTED_OUTPUT_0, self.EXPECTED_OUTPUT_0_PT_2])
 
     @slow
     def test_conditioning(self):
@@ -248,6 +267,13 @@ class Jukebox5bModelTester(unittest.TestCase):
         653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
         1489, 1489, 1489, 1489, 1150, 1853, 1509, 1150, 1357, 1509, 6, 1272
     ]
+    EXPECTED_OUTPUT_2_PT_2 = [
+        1489, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653
+    ]
 
     EXPECTED_OUTPUT_1 = [
         1125, 416, 1125, 1125, 1125, 1125, 1125, 416, 416, 416, 416, 416,
@@ -255,6 +281,13 @@ class Jukebox5bModelTester(unittest.TestCase):
         416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
         416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
         416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416
+    ]
+    EXPECTED_OUTPUT_1_PT_2 = [
+        416, 416, 1125, 1125, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
+        416, 416, 416, 416, 416, 416, 416, 416
     ]
 
     EXPECTED_OUTPUT_0 = [
@@ -264,6 +297,13 @@ class Jukebox5bModelTester(unittest.TestCase):
         234, 234, 1755, 234, 185, 185, 307, 616, 616, 616, 616, 290,
         1755, 1755, 1755, 234, 234, 1755, 1572, 290, 307, 616, 34, 616
     ]
+    EXPECTED_OUTPUT_0_PT_2 = [
+        854, 842, 1353, 114, 1353, 842, 185, 842, 185, 114, 591, 842, 185,
+        417, 185, 842, 307, 842, 591, 842, 185, 842, 185, 842, 591, 842,
+        1353, 842, 185, 842, 591, 842, 591, 114, 591, 842, 185, 842, 591,
+        89, 591, 842, 591, 842, 591, 417, 1372, 842, 1372, 842, 34, 842,
+        185, 89, 591, 842, 185, 842, 591, 632
+    ]
 
     EXPECTED_GPU_OUTPUTS_2 = [
         1489, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
@@ -272,6 +312,15 @@ class Jukebox5bModelTester(unittest.TestCase):
         653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
         653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653
     ]
+    EXPECTED_GPU_OUTPUTS_2_PT_2 = [
+        1489, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653, 653,
+        653, 653, 653, 653, 653, 653, 653, 1853, 1177, 1536, 1228,
+        710, 475, 1489, 1229, 1224, 231, 1224, 252, 1434, 653, 475,
+        1106, 1877, 1599, 1228, 1600, 1683, 1182, 1853, 475, 1864,
+        252, 1229, 1434, 2001
+    ]
+
     EXPECTED_GPU_OUTPUTS_1 = [
         1125, 1125, 416, 1125, 1125, 416, 1125, 1125, 416, 416, 1125, 416,
         416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416, 416,
@@ -301,15 +350,15 @@ class Jukebox5bModelTester(unittest.TestCase):
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
         zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[0].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[0][0], torch.tensor(self.EXPECTED_OUTPUT_2))
+        self.assertIn(zs[0][0].detach().cpu().tolist(), [self.EXPECTED_OUTPUT_2, self.EXPECTED_OUTPUT_2_PT_2])
 
         set_seed(0)
         zs = model._sample(zs, labels, [1], sample_length=60 * model.priors[1].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[1][0], torch.tensor(self.EXPECTED_OUTPUT_1))
+        self.assertIn(zs[1][0].detach().cpu().tolist(), [self.EXPECTED_OUTPUT_1, self.EXPECTED_OUTPUT_1_PT_2])
 
         set_seed(0)
         zs = model._sample(zs, labels, [2], sample_length=60 * model.priors[2].raw_to_tokens, save_results=False)
-        torch.testing.assert_allclose(zs[2][0], torch.tensor(self.EXPECTED_OUTPUT_0))
+        self.assertIn(zs[2][0].detach().cpu().tolist(), [self.EXPECTED_OUTPUT_0, self.EXPECTED_OUTPUT_0_PT_2])
 
     @slow
     @skip("Not enough GPU memory on CI runners")
@@ -344,4 +393,4 @@ class Jukebox5bModelTester(unittest.TestCase):
         metadata = model.get_metadata(labels, 0, 7680, 0)
         set_seed(0)
         outputs = model.sample(1, metadata=metadata, sample_tokens=60)
-        torch.testing.assert_allclose(outputs[0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
+        self.assertIn(outputs[0].cpu().tolist(), [self.EXPECTED_GPU_OUTPUTS_2, self.EXPECTED_GPU_OUTPUTS_2_PT_2])
