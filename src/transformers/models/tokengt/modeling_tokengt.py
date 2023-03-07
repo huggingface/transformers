@@ -32,6 +32,7 @@ TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Graphormer models at https://huggingface.co/models?filter=graphormer
 ]
 
+
 def quant_noise(module, p, block_size):
     """
     From:

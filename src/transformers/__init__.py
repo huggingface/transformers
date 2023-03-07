@@ -301,7 +301,7 @@ _import_structure = {
         "GPTSanJapaneseTokenizer",
     ],
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
-    "models.tokengt": [ "TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TokenGTConfig"],
+    "models.tokengt": ["TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TokenGTConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
