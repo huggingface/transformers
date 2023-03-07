@@ -1479,7 +1479,34 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
 
         Returns:
 
-        """
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoFeatureExtractor, WhisperForAudioClassification
+        >>> from datasets import load_dataset
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained(
+        ...     "sanchit-gandhi/whisper-small-ft-common-language-id"
+        ... )
+        >>> model = WhisperForAudioClassification.from_pretrained("sanchit-gandhi/whisper-small-ft-common-language-id")
+
+        >>> ds = load_dataset("facebook/multilingual_librispeech", "dutch", split="validation", streaming=True)
+        >>> sample = next(iter(ds))
+
+        >>> inputs = feature_extractor(
+        ...     sample["audio"]["array"], sampling_rate=sample["audio"]["sampling_rate"], return_tensors="pt"
+        ... )
+        >>> input_features = inputs.input_features
+
+        >>> with torch.no_grad():
+        ...     logits = model(input_features).logits
+
+        >>> predicted_class_ids = torch.argmax(logits).item()
+        >>> predicted_label = model.config.id2label[predicted_class_ids]
+        >>> predicted_label
+        'Dutch'
+        ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
