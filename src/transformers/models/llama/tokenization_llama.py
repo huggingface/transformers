@@ -3,7 +3,7 @@
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # implementation in this library. It has been modified from its original
-# form to accomidate minor architectural changes to GPT-NeoX used by the
+# form to accommodate minor architectural changes to GPT-NeoX used by the
 # Meta AI team that trained the model.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
