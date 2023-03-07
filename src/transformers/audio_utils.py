@@ -25,17 +25,17 @@ from numpy.fft import fft
 
 
 def hertz_to_mel(freq: float, mel_scale: str = "htk") -> float:
-    """Convert Hertz to Mels.
+    """
+    Convert a frequency from hertz to mels.
 
     Args:
-        freqs (`float`):
-            Frequencies in Hertz
+        freq (`float`):
+            The frequency in hertz (Hz).
         mel_scale (`str`, *optional*, defaults to `"htk"`):
-            Scale to use, `htk` or `slaney`.
+            The mel frequency scale to use, `"htk"` or `"slaney"`.
 
     Returns:
-        mels (`float`):
-            Frequency in Mels
+        `float`: The frequency on the mel scale.
     """
 
     if mel_scale not in ["slaney", "htk"]:
