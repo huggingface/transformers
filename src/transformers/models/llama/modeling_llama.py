@@ -84,7 +84,6 @@ class LLaMaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, LLaMaLayerNorm):
-            module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -538,7 +537,6 @@ class LLaMaModel(LLaMaPreTrainedModel):
 )
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM with GPTNeoX->LLaMa,GPT_NEOX->LLAMA,gpt_neox->llama
 class LLaMaForCausalLM(LLaMaPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
