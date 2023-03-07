@@ -30,15 +30,11 @@ import argparse
 import os
 import pickle as pkl
 
-# import PyTorch and auto tokenizer class
+# PyTorch + new model classes
 import torch
 from torch import nn
 
-from transformers import AutoTokenizer
-
-# import new hugging face classes
-from .configuration_mega import MegaConfig
-from .modeling_mega import MegaForMaskedLM
+from transformers import AutoTokenizer, MegaConfig, MegaForMaskedLM
 
 
 # import the EncoderLayer class used to pretrain

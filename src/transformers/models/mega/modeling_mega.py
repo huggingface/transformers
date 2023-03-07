@@ -1617,7 +1617,7 @@ class MegaModel(MegaPreTrainedModel):
             if output_hidden_states:
                 # store layer-wise hidden states in the way that the user expects
                 # (seq len X batch X embed dim) --> (batch X seq len X embed dim)
-                all_hidden_states += (hidden_states.view(batch_size, sequence_length, self.config.hidden_size),)
+                all_hidden_states += (hidden_states.transpose(0, 1), )
             if output_attentions:
                 self_attn_weights = mega_outputs[1]
                 all_self_attentions += (self_attn_weights,)
@@ -1629,7 +1629,7 @@ class MegaModel(MegaPreTrainedModel):
                 next_decoder_cache += (updated_cache,)
 
         # transpose final hidden states
-        hidden_states = hidden_states.view(batch_size, sequence_length, self.config.hidden_size)
+        hidden_states = hidden_states.transpose(0, 1)
 
         # optional pooling layer
         pooled_output = self.pooler(hidden_states) if self.pooler is not None else None

@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2023 The Mega Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -91,7 +90,7 @@ class MegaConfig(PretrainedConfig):
             Whether to use the normalized feed-forward sub-layer in Mega blocks (`True`) or pass Mega encoder output
             as-is (`False`)
         nffn_hidden_size (`int`, *optional*, defaults to 256):
-            If using the NFFN layer (use_normalized_ffn = True), this is the hidden size of the NFFN
+            If using the normalized feed-forward network (NFFN) layer within Mega (use_normalized_ffn = True), this is the hidden size of the NFFN
         normalize_before_ffn (`bool`, *optional*, defaults to `True`):
             Whether to normalize before (True) or after (False) the feed-forward portion of NFFN
         nffn_activation_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -149,29 +148,29 @@ class MegaConfig(PretrainedConfig):
         vocab_size=30522,
         hidden_size=128,
         num_hidden_layers=4,
-        intermediate_size=256,  # encoder hidden size (H in the paper)
+        intermediate_size=256, 
         ema_projection_size=16,
         bidirectional=True,
-        shared_representation_size=64,  # linear projection for shared representation after silu gating (Z in the paper)
+        shared_representation_size=64, 
         use_chunking=False,
         chunk_size=-1,
         truncation=None,
         normalize_before_mega=True,
-        normalization_type="scalenorm",  # scalenorm, layernorm, rmsnorm, batchnorm, syncbatchnorm
+        normalization_type="scalenorm", 
         norm_affine=True,
-        activation="silu",  # silu, relu, linear, gelu, or gelu_accurate
-        attention_activation="softmax",  # softmax, laplace, or relu2
+        activation="silu", 
+        attention_activation="softmax", 
         dropout_prob=0.1,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        use_feature_dropout=False,  # feature-based dropout or standard dropout
+        use_feature_dropout=False, 
         use_normalized_ffn=True,
-        nffn_hidden_size=256,  # if use_normalized_ffn is True, this will be used to construct the linear layer
-        normalize_before_ffn=True,  # when to apply norm in the NFFN
+        nffn_hidden_size=256,  
+        normalize_before_ffn=True, 
         nffn_activation_dropout_prob=0.1,
         max_positions=2048,
         add_token_type_embeddings=False,
-        type_vocab_size=2,  # if add_token_type_embeddings is True, this will be used to construct the token type embeddings
+        type_vocab_size=2,  
         initializer_range=0.02,
         ema_delta_alpha_range=0.2,
         ema_beta_range=0.02,
@@ -179,9 +178,9 @@ class MegaConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        relative_positional_bias="rotary",  # rotary or simple
+        relative_positional_bias="rotary",  
         classifier_dropout=None,
-        use_cache=True,  # unsure if i'll need this or not
+        use_cache=True, 
         add_lm_hidden_dense_layer=True,
         **kwargs,
     ):
