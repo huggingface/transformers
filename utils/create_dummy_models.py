@@ -787,7 +787,6 @@ def get_config_overrides(config_class, processors):
         "ChineseCLIPConfig",
         "CLIPSegConfig",
         "ClapConfig",
-        # "OneFormerConfig",
         "CLIPConfig",
         "GroupViTConfig",
         "OwlViTConfig",
