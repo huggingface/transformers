@@ -1673,7 +1673,6 @@ else:
         [
             "TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TokenGTForGraphClassification",
-            # "GraphormerModel",
             "TokenGTPreTrainedModel",
         ]
     )
