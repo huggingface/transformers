@@ -1328,14 +1328,14 @@ class BloomPreTrainedModel(metaclass=DummyObject):
 BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class BridgeTowerForImageAndTextRetrieval(metaclass=DummyObject):
+class BridgeTowerForContrastiveLearning(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class BridgeTowerForContrastiveLearning(metaclass=DummyObject):
+class BridgeTowerForImageAndTextRetrieval(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

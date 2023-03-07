@@ -1351,7 +1351,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             image_embeds = self.vision_model.visual.forward_pre(pixel_values.type(self.vision_model.dtype))
         else:
             # Permute as BridgeTowerResidualAttention has batch_first=True
-            image_embeds = image_embeds.permute(1,0,2)
+            image_embeds = image_embeds.permute(1, 0, 2)
 
         if output_hidden_states:
             all_hidden_states_image += (image_embeds,)
