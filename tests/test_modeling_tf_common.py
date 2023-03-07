@@ -2468,6 +2468,7 @@ class TFModelPushToHubTester(unittest.TestCase):
                 break
         self.assertTrue(models_equal)
 
+    @is_pt_tf_cross_test
     def test_push_to_hub_callback(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
