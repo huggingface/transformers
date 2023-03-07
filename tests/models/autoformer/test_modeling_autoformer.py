@@ -62,7 +62,7 @@ class AutoformerModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         lags_sequence=[1, 2, 3, 4, 5],
-        moving_avg=5,
+        moving_avg=25,
         factor=5,
     ):
         self.parent = parent

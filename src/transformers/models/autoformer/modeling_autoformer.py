@@ -909,6 +909,10 @@ class AutoformerDecoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = AutoformerLayernorm(self.embed_dim)
 
+        self.decomp1 = AutoformerSeriesDecompositionLayer(config.moving_avg)
+        self.decomp2 = AutoformerSeriesDecompositionLayer(config.moving_avg)
+        self.decomp3 = AutoformerSeriesDecompositionLayer(config.moving_avg)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -954,6 +958,10 @@ class AutoformerDecoderLayer(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+        hidden_states, trend1 = self.decomp1(hidden_states)
+        # Todo: ask kashif whether apply self_attn_layer_norm here or not.
+        #  In the original paper they don't apply it after AutoCorrelation, but
+        #  we can consider applying it as improvment :).
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
@@ -974,6 +982,10 @@ class AutoformerDecoderLayer(nn.Module):
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
+            hidden_states, trend2 = self.decomp2(hidden_states)
+            # Todo: ask kashif whether apply self_attn_layer_norm here or not.
+            #  In the original paper they don't apply it after AutoCorrelation, but
+            #  we can consider applying it as improvment :).
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
@@ -986,9 +998,13 @@ class AutoformerDecoderLayer(nn.Module):
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
+        hidden_states, trend3 = self.decomp3(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
-        outputs = (hidden_states,)
+        residual_trend = trend1 + trend2 + trend3
+        # TODO apply nn.Linear to residual_trend and to hidden_states
+        #  and add residual_trend to the outputs
+        outputs = (hidden_states, )
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
@@ -1785,7 +1801,11 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
+        # decoder input
         dec_input = transformer_inputs[:, self.config.context_length :, ...]
+        # mean_enc_input = enc_input.mean(dim=1).unsqueeze(1).repeat(1, dec_input.size(1), 1)
+        # zeros = torch.zeros_like(dec_input, device=dec_input.device)
+        # seasonal_init, trend_init = self.decomposition_layer(x_enc)
         decoder_outputs = self.decoder(
             inputs_embeds=dec_input,
             attention_mask=decoder_attention_mask,
