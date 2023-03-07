@@ -782,6 +782,11 @@ def get_config_overrides(config_class, processors):
     # CLIP-like models have `text_model_tester` and `vision_model_tester`, and we need to pass `vocab_size` to
     # `text_model_tester` via `text_kwargs`. The same trick is also necessary for `Flava`.
     if config_class.__name__ in [
+        "AlignConfig",
+        "AltCLIPConfig",
+        "ChineseCLIPConfig",
+        "CLIPSegConfig",
+        "ClapConfig",
         "CLIPConfig",
         "GroupViTConfig",
         "OwlViTConfig",
