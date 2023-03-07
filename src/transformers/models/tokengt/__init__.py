@@ -22,7 +22,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 
 _import_structure = {
-    "configuration_tokengt": [ "TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP","TokenGTConfig"],
+    "configuration_tokengt": ["TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TokenGTConfig"],
 }
 
 try:

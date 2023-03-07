@@ -27,6 +27,7 @@ TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "tokengt-lap16": "https://huggingface.co/raman-ai/tokengt-base-lap-pcqm4mv2/blob/main/config.json",
 }
 
+
 class TokenGTConfig(PretrainedConfig):
     model_type = "tokengt"
 

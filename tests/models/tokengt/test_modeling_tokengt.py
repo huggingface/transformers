@@ -33,7 +33,7 @@ if is_torch_available():
     import torch
     from torch import tensor
 
-    from transformers import TokenGTForGraphClassification #, GraphormerModel
+    from transformers import TokenGTForGraphClassification  # , GraphormerModel
     from transformers.models.tokengt.modeling_tokengt import TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -114,7 +114,7 @@ class TokenGTModelTester:
         self.spatial_pos_max = spatial_pos_max
         self.max_nodes = max_nodes
         self.rand_node_id = rand_node_id
-        self.rand_node_id_dim= rand_node_id_dim
+        self.rand_node_id_dim = rand_node_id_dim
         self.orf_node_id = orf_node_id
         self.orf_node_id_dim = orf_node_id_dim
         self.lap_node_id = lap_node_id
@@ -164,7 +164,7 @@ class TokenGTModelTester:
 
     def prepare_config_and_inputs(self):
 
-        # TODO  I don't know what to do with ids_tensor , right now hardcoded 
+        # TODO  I don't know what to do with ids_tensor , right now hardcoded
         node_data = ids_tensor([34, 9], self.num_out_degree)
         num_nodes = ids_tensor([2], self.num_out_degree)
         edge_index = ids_tensor([2, 68], self.num_out_degree)
@@ -176,71 +176,94 @@ class TokenGTModelTester:
         lap_eigval = ids_tensor([34, 17], self.num_out_degree)
         labels = ids_tensor([34, 17], self.num_classes)
         config = self.get_config()
-        return config, node_data, num_nodes, edge_index, edge_data, edge_num, in_degree, out_degree, lap_eigvec, lap_eigval, labels
+        return (
+            config,
+            node_data,
+            num_nodes,
+            edge_index,
+            edge_data,
+            edge_num,
+            in_degree,
+            out_degree,
+            lap_eigvec,
+            lap_eigval,
+            labels,
+        )
 
     def get_config(self):
         return TokenGTConfig(
             tasks_weights=None,
-            num_classes = self.num_classes,
-            num_atoms = self.num_atoms,
-            num_in_degree = self.num_in_degree,
-            num_out_degree = self.num_out_degree,
-            num_edges = self.num_edges,
-            num_spatial = self.num_spatial,
-            num_edge_dis = self.num_edge_dis,
-            edge_type = self.edge_type,
-            multi_hop_max_dist = self.multi_hop_max_dist,
-            spatial_pos_max = self.spatial_pos_max,
-            max_nodes = self.max_nodes,
-            rand_node_id = self.rand_node_id,
-            rand_node_id_dim= self.rand_node_id_dim,
-            orf_node_id = self.orf_node_id,
-            orf_node_id_dim = self.orf_node_id_dim,
-            lap_node_id = self.lap_node_id,
-            lap_node_id_k = self.lap_node_id_k,
-            lap_node_id_sign_flip = self.lap_node_id_sign_flip,
-            lap_node_id_eig_dropout = self.lap_node_id_eig_dropout,
-            type_id = self.type_id,
-            share_encoder_input_output_embed = self.share_encoder_input_output_embed,
-            prenorm = self.prenorm,
-            postnorm = self.postnorm,
-            stochastic_depth = self.stochastic_depth,
-            performer = self.performer,
-            performer_finetune = self.performer_finetune,
-            performer_nb_features = self.performer_nb_features,
-            performer_feature_redraw_interval = self.performer_feature_redraw_interval,
-            performer_generalized_attention = self.performer_generalized_attention,
-            performer_auto_check_redraw = self.performer_auto_check_redraw,
-            num_layers = self.num_layers,
-            embedding_dim = self.embedding_dim,
+            num_classes=self.num_classes,
+            num_atoms=self.num_atoms,
+            num_in_degree=self.num_in_degree,
+            num_out_degree=self.num_out_degree,
+            num_edges=self.num_edges,
+            num_spatial=self.num_spatial,
+            num_edge_dis=self.num_edge_dis,
+            edge_type=self.edge_type,
+            multi_hop_max_dist=self.multi_hop_max_dist,
+            spatial_pos_max=self.spatial_pos_max,
+            max_nodes=self.max_nodes,
+            rand_node_id=self.rand_node_id,
+            rand_node_id_dim=self.rand_node_id_dim,
+            orf_node_id=self.orf_node_id,
+            orf_node_id_dim=self.orf_node_id_dim,
+            lap_node_id=self.lap_node_id,
+            lap_node_id_k=self.lap_node_id_k,
+            lap_node_id_sign_flip=self.lap_node_id_sign_flip,
+            lap_node_id_eig_dropout=self.lap_node_id_eig_dropout,
+            type_id=self.type_id,
+            share_encoder_input_output_embed=self.share_encoder_input_output_embed,
+            prenorm=self.prenorm,
+            postnorm=self.postnorm,
+            stochastic_depth=self.stochastic_depth,
+            performer=self.performer,
+            performer_finetune=self.performer_finetune,
+            performer_nb_features=self.performer_nb_features,
+            performer_feature_redraw_interval=self.performer_feature_redraw_interval,
+            performer_generalized_attention=self.performer_generalized_attention,
+            performer_auto_check_redraw=self.performer_auto_check_redraw,
+            num_layers=self.num_layers,
+            embedding_dim=self.embedding_dim,
             # hidden_size = self.embedding_dim,
-            ffn_embedding_dim = self.ffn_embedding_dim,
-            num_attention_heads = self.num_attention_heads,
-            dropout = self.dropout,
-            attention_dropout = self.attention_dropout,
-            activation_dropout = self.activation_dropout,
-            layerdrop = self.layerdrop,
-            encoder_normalize_before = self.encoder_normalize_before,
-            layernorm_style = self.layernorm_style,
-            apply_graphormer_init = self.apply_graphormer_init,
-            activation_fn = self.activation_fn,
-            embed_scale = self.embed_scale,
-            freeze_embeddings = self.freeze_embeddings,
-            n_trans_layers_to_freeze = self.n_trans_layers_to_freeze,
-            traceable = self.traceable,
-            q_noise = self.q_noise,
-            qn_block_size = self.qn_block_size,
-            init_fn = self.init_fn,
-            kdim = self.kdim,
-            vdim = self.vdim,
-            self_attention = self.self_attention,
-            uses_fixed_gaussian_features = self.uses_fixed_gaussian_features,
-            return_attention = self.return_attention,
-            bias = self.bias
+            ffn_embedding_dim=self.ffn_embedding_dim,
+            num_attention_heads=self.num_attention_heads,
+            dropout=self.dropout,
+            attention_dropout=self.attention_dropout,
+            activation_dropout=self.activation_dropout,
+            layerdrop=self.layerdrop,
+            encoder_normalize_before=self.encoder_normalize_before,
+            layernorm_style=self.layernorm_style,
+            apply_graphormer_init=self.apply_graphormer_init,
+            activation_fn=self.activation_fn,
+            embed_scale=self.embed_scale,
+            freeze_embeddings=self.freeze_embeddings,
+            n_trans_layers_to_freeze=self.n_trans_layers_to_freeze,
+            traceable=self.traceable,
+            q_noise=self.q_noise,
+            qn_block_size=self.qn_block_size,
+            init_fn=self.init_fn,
+            kdim=self.kdim,
+            vdim=self.vdim,
+            self_attention=self.self_attention,
+            uses_fixed_gaussian_features=self.uses_fixed_gaussian_features,
+            return_attention=self.return_attention,
+            bias=self.bias,
         )
 
     def create_and_check_for_graph_classification(
-        self, config, node_data, num_nodes, edge_index, edge_data, edge_num, in_degree, out_degree, lap_eigvec, lap_eigval, labels
+        self,
+        config,
+        node_data,
+        num_nodes,
+        edge_index,
+        edge_data,
+        edge_num,
+        in_degree,
+        out_degree,
+        lap_eigvec,
+        lap_eigval,
+        labels,
     ):
         model = TokenGTForGraphClassification(config)
         model.to(torch_device)
@@ -253,8 +276,8 @@ class TokenGTModelTester:
             edge_num=edge_num,
             in_degree=in_degree,
             out_degree=out_degree,
-            lap_eigvec = lap_eigvec,
-            lap_eigval = lap_eigval,
+            lap_eigvec=lap_eigvec,
+            lap_eigval=lap_eigval,
             labels=labels,
         )
         # self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
@@ -305,7 +328,7 @@ class TokenGTModelTester:
 #         self.model_tester = TokenGTModelTester(self)
 #         self.config_tester = ConfigTester(self, config_class=TokenGTConfig, has_text_modality=False)
 
-    
+
 #     # overwrite from common as `TokenGT` requires more input arguments
 #     def _create_and_check_torchscript(self, config, inputs_dict):
 #         if not self.test_torchscript:
