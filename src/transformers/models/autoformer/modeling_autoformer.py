@@ -1002,8 +1002,8 @@ class AutoformerDecoderLayer(nn.Module):
         hidden_states = self.final_layer_norm(hidden_states)
 
         residual_trend = trend1 + trend2 + trend3
-        # TODO apply nn.Linear to residual_trend and to hidden_states
-        #  and add residual_trend to the outputs
+        # TODO in the original they used another projection layer to hidden_states and residual_trend:
+        #  nn.Conv1d to residual_trend and nn.Linear to hidden_states
         outputs = (hidden_states, )
 
         if output_attentions:
@@ -1362,6 +1362,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         return combined_attention_mask
 
     def forward(
+        # TODO: add trend param
         self,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -1530,6 +1531,8 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                     use_cache=use_cache,
                 )
             hidden_states = layer_outputs[0]
+            # TODO resiudal_trend = hidden_states[1]
+            #  trend += residual_trend
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
@@ -1553,6 +1556,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
+            # TODO trend=trend, (maybe add last_trend and all_trends like in the hidden_state?)
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
