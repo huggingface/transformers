@@ -16,63 +16,59 @@
 Audio processing functions to extract features from audio waveforms.
 This code is pure numpy to support all frameworks and remove unnecessary dependencies.
 """
-import math
 import warnings
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 from numpy.fft import fft
 
 
-def hertz_to_mel(freq: float, mel_scale: str = "htk") -> float:
+def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
     """
-    Convert a frequency from hertz to mels.
+    Convert frequency from hertz to mels.
 
     Args:
-        freq (`float`):
-            The frequency in hertz (Hz).
+        freq (`float` or `np.ndarray`):
+            The frequency, or multiple frequencies, in hertz (Hz).
         mel_scale (`str`, *optional*, defaults to `"htk"`):
             The mel frequency scale to use, `"htk"` or `"slaney"`.
 
     Returns:
-        `float`: The frequency on the mel scale.
+        `float` or `np.array`: The frequencies on the mel scale.
     """
 
     if mel_scale not in ["slaney", "htk"]:
         raise ValueError('mel_scale should be one of "htk" or "slaney".')
 
     if mel_scale == "htk":
-        return 2595.0 * math.log10(1.0 + (freq / 700.0))
+        return 2595.0 * np.log10(1.0 + (freq / 700.0))
 
-    # Fill in the linear part
-    frequency_min = 0.0
-    f_sp = 200.0 / 3
-
-    mels = (freq - frequency_min) / f_sp
-
-    # Fill in the log-scale part
     min_log_hertz = 1000.0
-    min_log_mel = (min_log_hertz - frequency_min) / f_sp
-    logstep = math.log(6.4) / 27.0
+    min_log_mel = 15.0
+    logstep = 27.0 / np.log(6.4)
+    mels = 3.0 * freq / 200.0
 
-    if freq >= min_log_hertz:
-        mels = min_log_mel + math.log(freq / min_log_hertz) / logstep
+    if isinstance(freq, np.ndarray):
+        log_region = freq >= min_log_hertz
+        mels[log_region] = min_log_mel + np.log(freq[log_region] / min_log_hertz) * logstep
+    elif freq >= min_log_hertz:
+        mels = min_log_mel + np.log(freq / min_log_hertz) * logstep
 
     return mels
 
 
-def mel_to_hertz(mels: np.array, mel_scale: str = "htk") -> np.array:
-    """Convert mel bin numbers to frequencies.
+def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
+    """
+    Convert frequency from mels to hertz.
 
     Args:
-        mels (`np.array`):
-            Mel frequencies
+        mels (`float` or `np.ndarray`):
+            The frequency, or multiple frequencies, in mels.
         mel_scale (`str`, *optional*, `"htk"`):
-            Scale to use: `htk` or `slaney`.
+            The mel frequency scale to use, `"htk"` or `"slaney"`.
 
     Returns:
-        freqs (`np.array`):
-            Mels converted to Hertz
+        `float` or `np.array`: The frequencies in hertz.
     """
 
     if mel_scale not in ["slaney", "htk"]:
@@ -81,20 +77,18 @@ def mel_to_hertz(mels: np.array, mel_scale: str = "htk") -> np.array:
     if mel_scale == "htk":
         return 700.0 * (10.0 ** (mels / 2595.0) - 1.0)
 
-    # Fill in the linear scale
-    frequency_min = 0.0
-    f_sp = 200.0 / 3
-    freqs = frequency_min + f_sp * mels
-
-    # And now the nonlinear scale
     min_log_hertz = 1000.0
-    min_log_mel = (min_log_hertz - frequency_min) / f_sp
-    logstep = math.log(6.4) / 27.0
+    min_log_mel = 15.0
+    logstep = np.log(6.4) / 27.0
+    freq = 200.0 * mels / 3.0
 
-    log_t = mels >= min_log_mel
-    freqs[log_t] = min_log_hertz * np.exp(logstep * (mels[log_t] - min_log_mel))
+    if isinstance(mels, np.ndarray):
+        log_region = mels >= min_log_mel
+        freq[log_region] = min_log_hertz * np.exp(logstep * (mels[log_region] - min_log_mel))
+    elif mels >= min_log_mel:
+        freq = min_log_hertz * np.exp(logstep * (mels - min_log_mel))
 
-    return freqs
+    return freq
 
 
 def _create_triangular_filterbank(
