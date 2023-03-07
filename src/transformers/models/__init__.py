@@ -93,6 +93,7 @@ from . import (
     hubert,
     ibert,
     imagegpt,
+    informer,
     jukebox,
     layoutlm,
     layoutlmv2,
