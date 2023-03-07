@@ -261,6 +261,11 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    # TODO: check if this works again for PyTorch 2.x.y
+    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
     @unittest.skipIf(is_torch_less_than_1_9, reason="This test fails for SwinModel when torch < 1.9")
     def test_training_gradient_checkpointing(self):
         super().test_training_gradient_checkpointing()
