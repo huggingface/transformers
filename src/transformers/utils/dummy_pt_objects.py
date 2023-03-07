@@ -3167,11 +3167,11 @@ class TokenGTForGraphClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class # GraphormerModel(metaclass=DummyObject):
-    _backends = ["torch"]
+# class # GraphormerModel(metaclass=DummyObject):
+#     _backends = ["torch"]
 
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+#     def __init__(self, *args, **kwargs):
+#         requires_backends(self, ["torch"])
 
 
 class TokenGTPreTrainedModel(metaclass=DummyObject):
