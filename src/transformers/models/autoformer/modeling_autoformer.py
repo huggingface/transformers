@@ -584,14 +584,12 @@ class AutoformerLayernorm(nn.Module):
         return x_hat - bias
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Autoformer
 class AutoformerAttention(nn.Module):
     """
     AutoCorrelation Mechanism with the following two phases:
         (1) period-based dependencies discovery (2) time delay aggregation
     This block replace the canonical self-attention mechanism.
     """
-
     def __init__(
         self,
         embed_dim: int,
@@ -814,7 +812,6 @@ class AutoformerAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->Autoformer
 class AutoformerEncoderLayer(nn.Module):
     def __init__(self, config: AutoformerConfig):
         super().__init__()
@@ -890,7 +887,6 @@ class AutoformerEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->Autoformer
 class AutoformerDecoderLayer(nn.Module):
     def __init__(self, config: AutoformerConfig):
         super().__init__()
@@ -1196,7 +1192,6 @@ AUTOFORMER_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerEncoder with TimeSeriesTransformer->Autoformer
 class AutoformerEncoder(AutoformerPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1329,7 +1324,6 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         )
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Autoformer
 class AutoformerDecoder(AutoformerPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`AutoformerDecoderLayer`]
