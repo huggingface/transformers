@@ -322,6 +322,7 @@ _import_structure = {
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
+    "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.jukebox": [
         "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "JukeboxConfig",
@@ -870,52 +871,6 @@ else:
     _import_structure["models.vit_hybrid"].extend(["ViTHybridImageProcessor"])
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
 
-# Timm-backed objects
-try:
-    if not (is_timm_available() and is_vision_available()):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_timm_and_vision_objects
-
-    _import_structure["utils.dummy_timm_and_vision_objects"] = [
-        name for name in dir(dummy_timm_and_vision_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.deformable_detr"].extend(
-        [
-            "DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "DeformableDetrForObjectDetection",
-            "DeformableDetrModel",
-            "DeformableDetrPreTrainedModel",
-        ]
-    )
-    _import_structure["models.detr"].extend(
-        [
-            "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "DetrForObjectDetection",
-            "DetrForSegmentation",
-            "DetrModel",
-            "DetrPreTrainedModel",
-        ]
-    )
-    _import_structure["models.table_transformer"].extend(
-        [
-            "TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TableTransformerForObjectDetection",
-            "TableTransformerModel",
-            "TableTransformerPreTrainedModel",
-        ]
-    )
-    _import_structure["models.conditional_detr"].extend(
-        [
-            "CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ConditionalDetrForObjectDetection",
-            "ConditionalDetrForSegmentation",
-            "ConditionalDetrModel",
-            "ConditionalDetrPreTrainedModel",
-        ]
-    )
-
 
 # PyTorch-backed objects
 try:
@@ -1321,6 +1276,15 @@ else:
             "CodeGenPreTrainedModel",
         ]
     )
+    _import_structure["models.conditional_detr"].extend(
+        [
+            "CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConditionalDetrForObjectDetection",
+            "ConditionalDetrForSegmentation",
+            "ConditionalDetrModel",
+            "ConditionalDetrPreTrainedModel",
+        ]
+    )
     _import_structure["models.convbert"].extend(
         [
             "CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1418,6 +1382,14 @@ else:
             "DecisionTransformerPreTrainedModel",
         ]
     )
+    _import_structure["models.deformable_detr"].extend(
+        [
+            "DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DeformableDetrForObjectDetection",
+            "DeformableDetrModel",
+            "DeformableDetrPreTrainedModel",
+        ]
+    )
     _import_structure["models.deit"].extend(
         [
             "DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1434,6 +1406,15 @@ else:
             "DetaForObjectDetection",
             "DetaModel",
             "DetaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.detr"].extend(
+        [
+            "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DetrForObjectDetection",
+            "DetrForSegmentation",
+            "DetrModel",
+            "DetrPreTrainedModel",
         ]
     )
     _import_structure["models.dinat"].extend(
@@ -1736,6 +1717,14 @@ else:
             "ImageGPTModel",
             "ImageGPTPreTrainedModel",
             "load_tf_weights_in_imagegpt",
+        ]
+    )
+    _import_structure["models.informer"].extend(
+        [
+            "INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "InformerForPrediction",
+            "InformerModel",
+            "InformerPreTrainedModel",
         ]
     )
     _import_structure["models.jukebox"].extend(
@@ -2384,6 +2373,14 @@ else:
             "load_tf_weights_in_t5",
         ]
     )
+    _import_structure["models.table_transformer"].extend(
+        [
+            "TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TableTransformerForObjectDetection",
+            "TableTransformerModel",
+            "TableTransformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.tapas"].extend(
         [
             "TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2587,6 +2584,7 @@ else:
     _import_structure["models.whisper"].extend(
         [
             "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "WhisperForAudioClassification",
             "WhisperForConditionalGeneration",
             "WhisperModel",
             "WhisperPreTrainedModel",
@@ -2721,6 +2719,7 @@ else:
     ]
     _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward", "prune_layer"]
     _import_structure["sagemaker"] = []
+    _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
     _import_structure["trainer_seq2seq"] = ["Seq2SeqTrainer"]
@@ -3927,6 +3926,7 @@ if TYPE_CHECKING:
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
+    from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.jukebox import (
         JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP,
         JukeboxConfig,
@@ -4414,39 +4414,6 @@ if TYPE_CHECKING:
 
     # Modeling
     try:
-        if not (is_timm_available() and is_vision_available()):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        from .utils.dummy_timm_and_vision_objects import *
-    else:
-        from .models.conditional_detr import (
-            CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConditionalDetrForObjectDetection,
-            ConditionalDetrForSegmentation,
-            ConditionalDetrModel,
-            ConditionalDetrPreTrainedModel,
-        )
-        from .models.deformable_detr import (
-            DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DeformableDetrForObjectDetection,
-            DeformableDetrModel,
-            DeformableDetrPreTrainedModel,
-        )
-        from .models.detr import (
-            DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DetrForObjectDetection,
-            DetrForSegmentation,
-            DetrModel,
-            DetrPreTrainedModel,
-        )
-        from .models.table_transformer import (
-            TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TableTransformerForObjectDetection,
-            TableTransformerModel,
-            TableTransformerPreTrainedModel,
-        )
-
-    try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
@@ -4788,6 +4755,13 @@ if TYPE_CHECKING:
             CodeGenModel,
             CodeGenPreTrainedModel,
         )
+        from .models.conditional_detr import (
+            CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConditionalDetrForObjectDetection,
+            ConditionalDetrForSegmentation,
+            ConditionalDetrModel,
+            ConditionalDetrPreTrainedModel,
+        )
         from .models.convbert import (
             CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvBertForMaskedLM,
@@ -4869,6 +4843,12 @@ if TYPE_CHECKING:
             DecisionTransformerModel,
             DecisionTransformerPreTrainedModel,
         )
+        from .models.deformable_detr import (
+            DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DeformableDetrForObjectDetection,
+            DeformableDetrModel,
+            DeformableDetrPreTrainedModel,
+        )
         from .models.deit import (
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeiTForImageClassification,
@@ -4882,6 +4862,13 @@ if TYPE_CHECKING:
             DetaForObjectDetection,
             DetaModel,
             DetaPreTrainedModel,
+        )
+        from .models.detr import (
+            DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DetrForObjectDetection,
+            DetrForSegmentation,
+            DetrModel,
+            DetrPreTrainedModel,
         )
         from .models.dinat import (
             DINAT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5124,6 +5111,12 @@ if TYPE_CHECKING:
             ImageGPTModel,
             ImageGPTPreTrainedModel,
             load_tf_weights_in_imagegpt,
+        )
+        from .models.informer import (
+            INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            InformerForPrediction,
+            InformerModel,
+            InformerPreTrainedModel,
         )
         from .models.jukebox import (
             JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5647,6 +5640,12 @@ if TYPE_CHECKING:
             T5PreTrainedModel,
             load_tf_weights_in_t5,
         )
+        from .models.table_transformer import (
+            TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TableTransformerForObjectDetection,
+            TableTransformerModel,
+            TableTransformerPreTrainedModel,
+        )
         from .models.tapas import (
             TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
             TapasForMaskedLM,
@@ -5804,6 +5803,7 @@ if TYPE_CHECKING:
         )
         from .models.whisper import (
             WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            WhisperForAudioClassification,
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,

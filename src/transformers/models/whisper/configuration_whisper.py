@@ -136,6 +136,12 @@ class WhisperConfig(PretrainedConfig):
         begin_suppress_tokens (`List[int]`, *optional*, defaults to `[220,50256]`):
             A list containing tokens that will be supressed at the beginning of the sampling process. Initialized as
             the token for `" "` (`blank_token_id`) and the `eos_token_id`
+        use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
+            Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
+            instance of [`WhisperForAudioClassification`].
+        classifier_proj_size (`int`, *optional*, defaults to 256):
+            Dimensionality of the projection before token mean-pooling for classification. Only relevant when using an
+            instance of [`WhisperForAudioClassification`].
         apply_spec_augment (`bool`, *optional*, defaults to `False`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
@@ -214,6 +220,8 @@ class WhisperConfig(PretrainedConfig):
         eos_token_id=50256,
         suppress_tokens=None,
         begin_suppress_tokens=[220, 50256],
+        use_weighted_layer_sum=False,
+        classifier_proj_size=256,
         apply_spec_augment=False,
         mask_time_prob=0.05,
         mask_time_length=10,
@@ -244,6 +252,11 @@ class WhisperConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
+
+        # Audio Classification-specific parameters. Feel free to ignore for other classes.
+        self.classifier_proj_size = classifier_proj_size
+        self.use_weighted_layer_sum = use_weighted_layer_sum
+
         # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob

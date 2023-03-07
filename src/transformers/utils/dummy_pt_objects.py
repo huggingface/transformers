@@ -1685,6 +1685,37 @@ class CodeGenPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ConditionalDetrForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ConditionalDetrForSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ConditionalDetrModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ConditionalDetrPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -2097,6 +2128,30 @@ class DecisionTransformerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DeformableDetrForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DeformableDetrModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DeformableDetrPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -2153,6 +2208,37 @@ class DetaModel(metaclass=DummyObject):
 
 
 class DetaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DetrForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DetrForSegmentation(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DetrModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DetrPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -3366,6 +3452,30 @@ class ImageGPTPreTrainedModel(metaclass=DummyObject):
 
 def load_tf_weights_in_imagegpt(*args, **kwargs):
     requires_backends(load_tf_weights_in_imagegpt, ["torch"])
+
+
+INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class InformerForPrediction(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class InformerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class InformerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -6064,6 +6174,30 @@ def load_tf_weights_in_t5(*args, **kwargs):
     requires_backends(load_tf_weights_in_t5, ["torch"])
 
 
+TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TableTransformerForObjectDetection(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TableTransformerModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TableTransformerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -6819,6 +6953,13 @@ class WavLMPreTrainedModel(metaclass=DummyObject):
 
 
 WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class WhisperForAudioClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 class WhisperForConditionalGeneration(metaclass=DummyObject):

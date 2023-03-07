@@ -1,4 +1,4 @@
-# Copyright 2022 The HuggingFace Team. All rights reserved.
+# Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,18 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from typing import TYPE_CHECKING
 
+# rely on isort to merge the imports
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
-    "configuration_table_transformer": [
-        "TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "TableTransformerConfig",
-        "TableTransformerOnnxConfig",
-    ]
+    "configuration_informer": [
+        "INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "InformerConfig",
+    ],
 }
 
 try:
@@ -31,20 +30,16 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_table_transformer"] = [
-        "TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TableTransformerForObjectDetection",
-        "TableTransformerModel",
-        "TableTransformerPreTrainedModel",
+    _import_structure["modeling_informer"] = [
+        "INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "InformerForPrediction",
+        "InformerModel",
+        "InformerPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_table_transformer import (
-        TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        TableTransformerConfig,
-        TableTransformerOnnxConfig,
-    )
+    from .configuration_informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
 
     try:
         if not is_torch_available():
@@ -52,11 +47,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_table_transformer import (
-            TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TableTransformerForObjectDetection,
-            TableTransformerModel,
-            TableTransformerPreTrainedModel,
+        from .modeling_informer import (
+            INFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            InformerForPrediction,
+            InformerModel,
+            InformerPreTrainedModel,
         )
 
 else:
