@@ -51,10 +51,9 @@ def get_checkpoint_from_config_class(config_class):
     config_source = inspect.getsource(config_class)
     checkpoints = _re_checkpoint.findall(config_source)
 
-    for checkpoint in checkpoints:
-        # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
-        # For example, `('bert-base-uncased', 'https://huggingface.co/bert-base-uncased')`
-        ckpt_name, ckpt_link = checkpoint
+    # Each `checkpoint` is a tuple of a checkpoint name and a checkpoint link.
+    # For example, `('bert-base-uncased', 'https://huggingface.co/bert-base-uncased')`
+    for ckpt_name, ckpt_link in checkpoints:
 
         # allow the link to end with `/`
         if ckpt_link.endswith("/"):
