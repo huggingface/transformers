@@ -56,6 +56,10 @@ def get_checkpoint_from_config_class(config_class):
         # For example, `('bert-base-uncased', 'https://huggingface.co/bert-base-uncased')`
         ckpt_name, ckpt_link = checkpoint
 
+        # allow the link to end with `/`
+        if ckpt_link.endswith("/"):
+            ckpt_link = ckpt_link[:-1]
+
         # verify the checkpoint name corresponds to the checkpoint link
         ckpt_link_from_name = f"https://huggingface.co/{ckpt_name}"
         if ckpt_link == ckpt_link_from_name:
