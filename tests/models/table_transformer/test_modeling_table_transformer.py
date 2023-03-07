@@ -27,6 +27,7 @@ from transformers.testing_utils import require_timm, require_vision, slow, torch
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_timm_available():
@@ -175,7 +176,7 @@ class TableTransformerModelTester:
 
 
 @require_timm
-class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TableTransformerModel,
@@ -183,6 +184,11 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         )
         if is_timm_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": TableTransformerModel, "object-detection": TableTransformerForObjectDetection}
+        if is_timm_available()
+        else {}
     )
     is_encoder_decoder = True
     test_torchscript = False

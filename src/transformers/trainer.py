@@ -148,6 +148,7 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
+    is_torch_neuroncore_available,
     is_torch_tpu_available,
     logging,
 )
@@ -618,9 +619,6 @@ class Trainer:
                         self.scaler = GradScaler()
                     else:
                         self.scaler = torch.cuda.amp.GradScaler()
-                elif self.fsdp is not None:
-                    self.use_cuda_amp = False
-                    self.amp_dtype = None
             elif args.half_precision_backend == "cpu_amp":
                 self.use_cpu_amp = True
                 self.amp_dtype = torch.bfloat16
@@ -1540,6 +1538,8 @@ class Trainer:
 
             if self.args.ddp_bucket_cap_mb is not None:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
+            if is_torch_neuroncore_available:
+                return model
             model = nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
@@ -1616,7 +1616,7 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled():
+        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled() and args.deepspeed is None:
             self._load_from_checkpoint(resume_from_checkpoint)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -2087,10 +2087,7 @@ class Trainer:
                     "yield to errors or unwanted behaviors."
                 )
 
-        if self.args.deepspeed:
-            # will be resumed in deepspeed_init
-            pass
-        elif os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+        if os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
             # If the model is on the GPU, it still works!
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
@@ -2565,8 +2562,8 @@ class Trainer:
             return type(data)(self._prepare_input(v) for v in data)
         elif isinstance(data, torch.Tensor):
             kwargs = {"device": self.args.device}
-            if self.deepspeed and data.dtype != torch.int64:
-                # NLP models inputs are int64 and those get adjusted to the right dtype of the
+            if self.deepspeed and (torch.is_floating_point(data) or torch.is_complex(data)):
+                # NLP models inputs are int/uint and those get adjusted to the right dtype of the
                 # embedding. Other models such as wav2vec2's inputs are already float and thus
                 # may need special handling to match the dtypes of the model
                 kwargs.update({"dtype": self.args.hf_deepspeed_config.dtype()})
