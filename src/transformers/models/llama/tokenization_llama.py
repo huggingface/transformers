@@ -57,7 +57,7 @@ class LLaMATokenizer(PreTrainedTokenizer):
         bos_token="",
         eos_token="",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        add_bos_token=False,
+        add_bos_token=True,
         add_eos_token=False,
         **kwargs,
     ):
