@@ -820,7 +820,7 @@ if __name__ == "__main__":
 
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
-                        line = line[len("FAILED "):]
+                        line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
                         if artifact_path["gpu"] not in model_results[model]["failures"]:
@@ -911,7 +911,7 @@ if __name__ == "__main__":
             if failed:
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
-                        line = line[len("FAILED "):]
+                        line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
                         if artifact_path["gpu"] not in additional_results[key]["failures"]:
