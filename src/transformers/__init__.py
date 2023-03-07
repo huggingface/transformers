@@ -301,6 +301,7 @@ _import_structure = {
         "GPTSanJapaneseTokenizer",
     ],
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
+    "models.tokengt": [ "TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TokenGTConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -1666,6 +1667,13 @@ else:
             "GraphormerForGraphClassification",
             "GraphormerModel",
             "GraphormerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.tokengt"].extend(
+        [
+            "TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TokenGTForGraphClassification",
+            "TokenGTPreTrainedModel",
         ]
     )
     _import_structure["models.groupvit"].extend(
@@ -3875,6 +3883,7 @@ if TYPE_CHECKING:
         GPTSanJapaneseTokenizer,
     )
     from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
+    from .models.tokengt import TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP, TokenGTConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
@@ -5035,6 +5044,11 @@ if TYPE_CHECKING:
             GraphormerForGraphClassification,
             GraphormerModel,
             GraphormerPreTrainedModel,
+        )
+        from .models.tokengt import (
+            TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TokenGTForGraphClassification,
+            TokenGTPreTrainedModel,
         )
         from .models.groupvit import (
             GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
