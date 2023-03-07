@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 from huggingface_hub import hf_hub_download
+
 from transformers import is_torch_available
 from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 
@@ -177,9 +178,7 @@ class AutoformerModelTester:
 
 @require_torch
 class AutoformerModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (AutoformerModel, AutoformerForPrediction) if is_torch_available() else ()
-    )
+    all_model_classes = (AutoformerModel, AutoformerForPrediction) if is_torch_available() else ()
     all_generative_model_classes = (AutoformerForPrediction,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
@@ -382,9 +381,7 @@ def prepare_batch(filename="train-batch.pt"):
 @slow
 class AutoformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        model = AutoformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
-            torch_device
-        )
+        model = AutoformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(torch_device)
         batch = prepare_batch()
 
         with torch.no_grad():
@@ -407,9 +404,9 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = AutoformerForPrediction.from_pretrained(
-            "huggingface/time-series-transformer-tourism-monthly"
-        ).to(torch_device)
+        model = AutoformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
+            torch_device
+        )
         batch = prepare_batch("val-batch.pt")
         with torch.no_grad():
             output = model(
@@ -429,9 +426,9 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        model = AutoformerForPrediction.from_pretrained(
-            "huggingface/time-series-transformer-tourism-monthly"
-        ).to(torch_device)
+        model = AutoformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
+            torch_device
+        )
         batch = prepare_batch("val-batch.pt")
         with torch.no_grad():
             outputs = model.generate(

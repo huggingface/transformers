@@ -27,13 +27,11 @@ AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class AutoformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AutoformerModel`]. It is used to
-    instantiate a Autoformer model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Time Series
-    Transformer
+    This is the configuration class to store the configuration of a [`AutoformerModel`]. It is used to instantiate a
+    Autoformer model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Time Series Transformer
     [huggingface/time-series-transformer-tourism-monthly](https://huggingface.co/huggingface/time-series-transformer-tourism-monthly)
     architecture.
 
@@ -161,8 +159,8 @@ class AutoformerConfig(PretrainedConfig):
         use_cache=True,
         # Autoformer arguments
         moving_avg: int = 25,
-        factor: int = 3, # between 1 and 3
-        **kwargs
+        factor: int = 3,  # between 1 and 3
+        **kwargs,
     ):
         # time series specific configuration
         self.prediction_length = prediction_length

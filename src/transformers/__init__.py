@@ -155,6 +155,10 @@ _import_structure = {
         "AutoProcessor",
         "AutoTokenizer",
     ],
+    "models.autoformer": [
+        "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "AutoformerConfig",
+    ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
     "models.bartpho": [],
@@ -449,10 +453,6 @@ _import_structure = {
     "models.time_series_transformer": [
         "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TimeSeriesTransformerConfig",
-    ],
-    "models.autoformer": [
-        "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "AutoformerConfig",
     ],
     "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
     "models.trajectory_transformer": [
@@ -1084,6 +1084,14 @@ else:
             "AutoModelForVisualQuestionAnswering",
             "AutoModelForZeroShotObjectDetection",
             "AutoModelWithLMHead",
+        ]
+    )
+    _import_structure["models.autoformer"].extend(
+        [
+            "AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AutoformerForPrediction",
+            "AutoformerModel",
+            "AutoformerPreTrainedModel",
         ]
     )
     _import_structure["models.bart"].extend(
@@ -2393,14 +2401,6 @@ else:
             "TimeSeriesTransformerForPrediction",
             "TimeSeriesTransformerModel",
             "TimeSeriesTransformerPreTrainedModel",
-        ]
-    )
-    _import_structure["models.autoformer"].extend(
-        [
-            "AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "AutoformerForPrediction",
-            "AutoformerModel",
-            "AutoformerPreTrainedModel",
         ]
     )
     _import_structure["models.timesformer"].extend(
@@ -3770,6 +3770,10 @@ if TYPE_CHECKING:
         AutoProcessor,
         AutoTokenizer,
     )
+    from .models.autoformer import (
+        AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        AutoformerConfig,
+    )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
@@ -4047,10 +4051,6 @@ if TYPE_CHECKING:
     from .models.time_series_transformer import (
         TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TimeSeriesTransformerConfig,
-    )
-    from .models.autoformer import (
-        AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        AutoformerConfig,
     )
     from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
     from .models.trajectory_transformer import (
@@ -4596,6 +4596,12 @@ if TYPE_CHECKING:
             AutoModelForVisualQuestionAnswering,
             AutoModelForZeroShotObjectDetection,
             AutoModelWithLMHead,
+        )
+        from .models.autoformer import (
+            AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AutoformerForPrediction,
+            AutoformerModel,
+            AutoformerPreTrainedModel,
         )
         from .models.bart import (
             BART_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5655,12 +5661,6 @@ if TYPE_CHECKING:
             TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,
-        )
-        from .models.autoformer import (
-            AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AutoformerForPrediction,
-            AutoformerModel,
-            AutoformerPreTrainedModel,
         )
         from .models.timesformer import (
             TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

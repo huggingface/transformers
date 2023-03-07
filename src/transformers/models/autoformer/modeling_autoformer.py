@@ -15,8 +15,8 @@
 # limitations under the License.
 """ PyTorch Autoformer model."""
 
-import random
 import math
+import random
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -48,7 +48,6 @@ AUTOFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "thuml/Autoformer",
     # See all Autoformer models at https://huggingface.co/models?filter=autoformer
 ]
-
 
 
 class AffineTransformed(TransformedDistribution):
@@ -544,9 +543,9 @@ class AutoformerSeriesDecompositionLayer(nn.Module):
     """
     Highlight the trend and the seasonal parts of the time series. Calculated as:
 
-        x_trend = AvgPool(Padding(X))
-        x_seasonal = X - x_trend
+        x_trend = AvgPool(Padding(X)) x_seasonal = X - x_trend
     """
+
     def __init__(self, kernel_size):
         super().__init__()
         self.kernel_size = kernel_size
@@ -565,14 +564,16 @@ class AutoformerSeriesDecompositionLayer(nn.Module):
         x_seasonal = x - x_trend
         return x_seasonal, x_trend
 
+
 # Eli to Kashif: class based on
 # https://github.com/thuml/Autoformer/blob/c6a0694ff484753f2d986cc0bb1f99ee850fc1a8/layers/Autoformer_EncDec.py#L6
 # where AutoformerLayernorm is my_Layernorm
 class AutoformerLayernorm(nn.Module):
     """
-    Special designed layer normalization for the seasonal part, calculated as:
-    AutoformerLayernorm(x) = nn.LayerNorm(x) - torch.mean(nn.LayerNorm(x))
+    Special designed layer normalization for the seasonal part, calculated as: AutoformerLayernorm(x) = nn.LayerNorm(x)
+    - torch.mean(nn.LayerNorm(x))
     """
+
     def __init__(self, channels):
         super().__init__()
         self.layernorm = nn.LayerNorm(channels)
@@ -582,14 +583,15 @@ class AutoformerLayernorm(nn.Module):
         bias = torch.mean(x_hat, dim=1).unsqueeze(1).repeat(1, x.shape[1], 1)
         return x_hat - bias
 
+
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Autoformer
 class AutoformerAttention(nn.Module):
     """
     AutoCorrelation Mechanism with the following two phases:
-        (1) period-based dependencies discovery
-        (2) time delay aggregation
+        (1) period-based dependencies discovery (2) time delay aggregation
     This block replace the canonical self-attention mechanism.
     """
+
     def __init__(
         self,
         embed_dim: int,
@@ -689,7 +691,7 @@ class AutoformerAttention(nn.Module):
         queries_time_length = query_states.size(1)
         values_time_length = value_states.size(1)
         if queries_time_length > values_time_length:
-            query_states = query_states[:, :(queries_time_length - values_time_length), :]
+            query_states = query_states[:, : (queries_time_length - values_time_length), :]
             zeros = torch.zeros_like(query_states).float()
             value_states = torch.cat([value_states, zeros], dim=1)
             key_states = torch.cat([key_states, zeros], dim=1)
@@ -754,9 +756,12 @@ class AutoformerAttention(nn.Module):
             autocorrelations_mean_on_bsz = torch.mean(autocorrelations_mean_on_head_channel, dim=0)
             top_k_delays_index = torch.topk(autocorrelations_mean_on_bsz, top_k)[1]
             top_k_autocorrelations = torch.stack(
-                [autocorrelations_mean_on_head_channel[:, top_k_delays_index[i]] for i in range(top_k)], dim=-1)
+                [autocorrelations_mean_on_head_channel[:, top_k_delays_index[i]] for i in range(top_k)], dim=-1
+            )
         else:
-            top_k_autocorrelations, top_k_delays_index = torch.topk(autocorrelations_mean_on_head_channel, top_k, dim=1)
+            top_k_autocorrelations, top_k_delays_index = torch.topk(
+                autocorrelations_mean_on_head_channel, top_k, dim=1
+            )
 
         top_k_autocorrelations = torch.softmax(top_k_autocorrelations, dim=-1)  # bsz x top_k
 
@@ -764,21 +769,29 @@ class AutoformerAttention(nn.Module):
         if not self.training:
             # used for compute values_states.roll(delay) in inference
             tmp_values = value_states.repeat(1, 2, 1)
-            init_index = torch.arange(time_length).unsqueeze(0).unsqueeze(-1) \
-                .repeat(bsz*self.num_heads, 1, channel).to(value_states.device)
+            init_index = (
+                torch.arange(time_length)
+                .unsqueeze(0)
+                .unsqueeze(-1)
+                .repeat(bsz * self.num_heads, 1, channel)
+                .to(value_states.device)
+            )
 
         delays_agg = torch.zeros_like(value_states).float()  # bsz x time_length x channel
         for i in range(top_k):
             # compute value_states roll delay
             if not self.training:
-                tmp_delay = init_index + top_k_delays_index[:, i].unsqueeze(1).unsqueeze(1).repeat(self.num_heads, tgt_len, channel)
+                tmp_delay = init_index + top_k_delays_index[:, i].unsqueeze(1).unsqueeze(1).repeat(
+                    self.num_heads, tgt_len, channel
+                )
                 value_states_roll_delay = torch.gather(tmp_values, dim=1, index=tmp_delay)
             else:
                 value_states_roll_delay = value_states.roll(shifts=-int(top_k_delays_index[i]), dims=1)
 
             # aggregation
-            top_k_autocorrelations_at_delay = top_k_autocorrelations[:, i].unsqueeze(1).unsqueeze(1).repeat(
-                self.num_heads, tgt_len, channel)
+            top_k_autocorrelations_at_delay = (
+                top_k_autocorrelations[:, i].unsqueeze(1).unsqueeze(1).repeat(self.num_heads, tgt_len, channel)
+            )
             delays_agg += value_states_roll_delay * top_k_autocorrelations_at_delay
 
         attn_output = delays_agg.contiguous()
@@ -799,7 +812,6 @@ class AutoformerAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights_reshaped, past_key_value
-
 
 
 # Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->Autoformer
@@ -1000,10 +1012,9 @@ class AutoformerDecoderLayer(nn.Module):
         hidden_states, trend3 = self.decomp3(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
-        residual_trend = trend1 + trend2 + trend3
         # TODO in the original they used another projection layer to hidden_states and residual_trend:
         #  nn.Conv1d to residual_trend and nn.Linear to hidden_states
-        outputs = (hidden_states, )
+        outputs = (hidden_states,)
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
@@ -1321,8 +1332,7 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Autoformer
 class AutoformerDecoder(AutoformerPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a
-    [`AutoformerDecoderLayer`]
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`AutoformerDecoderLayer`]
 
     Args:
         config: AutoformerConfig
@@ -1446,7 +1456,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         input_shape = inputs_embeds.size()[:-1]
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         attention_mask = None
 
@@ -1486,7 +1496,6 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1511,7 +1520,6 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -1927,9 +1935,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = AutoformerForPrediction.from_pretrained(
-        ...     "huggingface/time-series-transformer-tourism-monthly"
-        ... )
+        >>> model = AutoformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly")
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features
