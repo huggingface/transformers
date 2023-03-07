@@ -5049,7 +5049,6 @@ if TYPE_CHECKING:
         from .models.tokengt import (
             TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TokenGTForGraphClassification,
-            # GraphormerModel,
             TokenGTPreTrainedModel,
         )
         from .models.groupvit import (
