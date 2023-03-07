@@ -140,9 +140,9 @@ UDOPDUAL_INPUTS_DOCSTRING = r"""
             `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         image: (`torch.Tensor` of shape `(image_size,image_size,in_channels)`, *optional*):
             The image of the document.
-        ids_keep: (`torch.Tensor` of shape `(batch_size, sequence_length)`): 
+        ids_keep: (`torch.Tensor` of shape `(batch_size, sequence_length)`):
             The ids to be kept when masking.
-        seg_data: (`torch.Tensor` of shape `(4,batch_size, sequence_length)`): 
+        seg_data: (`torch.Tensor` of shape `(4,batch_size, sequence_length)`):
             The bbox location for corresponding input_ids pass on.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
