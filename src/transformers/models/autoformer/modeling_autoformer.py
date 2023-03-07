@@ -1034,6 +1034,8 @@ class AutoformerPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, TimeSeriesSinusoidalPositionalEmbedding):
+            pass
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -1570,20 +1572,23 @@ class AutoformerModel(AutoformerPreTrainedModel):
     def __init__(self, config: AutoformerConfig):
         super().__init__(config)
 
-        if config.scaling:
+        if config.scaling == "mean" or config.scaling:
             self.scaler = MeanScaler(dim=1, keepdim=True)
+        elif config.scaling == "std":
+            self.scaler = StdScaler(dim=1, keepdim=True)
         else:
             self.scaler = NOPScaler(dim=1, keepdim=True)
 
-        self.embedder = FeatureEmbedder(
-            cardinalities=config.cardinality,
-            embedding_dims=config.embedding_dimension,
-        )
+        if config.num_static_categorical_features > 0:
+            self.embedder = FeatureEmbedder(
+                cardinalities=config.cardinality,
+                embedding_dims=config.embedding_dimension,
+            )
 
         # transformer encoder-decoder and mask initializer
         self.encoder = AutoformerEncoder(config)
         self.decoder = AutoformerDecoder(config)
-        self.decomposition_layer = AutoformerSeriesDecompositionLayer(config.moving_avg)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1610,14 +1615,11 @@ class AutoformerModel(AutoformerPreTrainedModel):
         sequence_length = sequence.shape[1]
         indices = [lag - shift for lag in self.config.lags_sequence]
 
-        try:
-            assert max(indices) + subsequences_length <= sequence_length, (
+        if max(indices) + subsequences_length > sequence_length:
+            raise ValueError(
                 f"lags cannot go further than history length, found lag {max(indices)} "
                 f"while history length is only {sequence_length}"
             )
-        except AssertionError as e:
-            e.args += (max(indices), sequence_length)
-            raise
 
         lagged_values = []
         for lag_index in indices:
@@ -1630,8 +1632,8 @@ class AutoformerModel(AutoformerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
-        static_categorical_features: torch.Tensor,
-        static_real_features: torch.Tensor,
+        static_categorical_features: Optional[torch.Tensor] = None,
+        static_real_features: Optional[torch.Tensor] = None,
         past_observed_mask: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
@@ -1655,59 +1657,48 @@ class AutoformerModel(AutoformerPreTrainedModel):
 
         context = past_values[:, -self.config.context_length :]
         observed_context = past_observed_mask[:, -self.config.context_length :]
-        _, scale = self.scaler(context, observed_context)
+        _, loc, scale = self.scaler(context, observed_context)
 
         inputs = (
-            torch.cat((past_values, future_values), dim=1) / scale
+            (torch.cat((past_values, future_values), dim=1) - loc) / scale
             if future_values is not None
-            else past_values / scale
+            else (past_values - loc) / scale
         )
 
-        inputs_length = (
-            self._past_length + self.config.prediction_length if future_values is not None else self._past_length
-        )
-        try:
-            assert inputs.shape[1] == inputs_length, (
-                f"input length {inputs.shape[1]} and dynamic feature lengths {inputs_length} does not match",
-            )
-        except AssertionError as e:
-            e.args += (inputs.shape[1], inputs_length)
-            raise
-
-        subsequences_length = (
-            self.config.context_length + self.config.prediction_length
-            if future_values is not None
-            else self.config.context_length
-        )
-
-        # embeddings
-        embedded_cat = self.embedder(static_categorical_features)
         # static features
+        log_abs_loc = loc.abs().log1p() if self.config.input_size == 1 else loc.squeeze(1).abs().log1p()
         log_scale = scale.log() if self.config.input_size == 1 else scale.squeeze(1).log()
-        static_feat = torch.cat((embedded_cat, static_real_features, log_scale), dim=1)
+        static_feat = torch.cat((log_abs_loc, log_scale), dim=1)
+
+        if static_real_features is not None:
+            static_feat = torch.cat((static_real_features, static_feat), dim=1)
+        if static_categorical_features is not None:
+            embedded_cat = self.embedder(static_categorical_features)
+            static_feat = torch.cat((embedded_cat, static_feat), dim=1)
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
 
         # all features
         features = torch.cat((expanded_static_feat, time_feat), dim=-1)
 
+        # lagged features
+        subsequences_length = (
+            self.config.context_length + self.config.prediction_length
+            if future_values is not None
+            else self.config.context_length
+        )
         lagged_sequence = self.get_lagged_subsequences(sequence=inputs, subsequences_length=subsequences_length)
-
         lags_shape = lagged_sequence.shape
         reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
 
+        if reshaped_lagged_sequence.shape[1] != time_feat.shape[1]:
+            raise ValueError(
+                f"input length {reshaped_lagged_sequence.shape[1]} and time feature lengths {time_feat.shape[1]} does not match"
+            )
+
+        # transformer inputs
         transformer_inputs = torch.cat((reshaped_lagged_sequence, features), dim=-1)
 
-        return transformer_inputs, scale, static_feat
-
-    def enc_dec_outputs(self, transformer_inputs):
-        enc_input = transformer_inputs[:, : self.config.context_length, ...]
-        dec_input = transformer_inputs[:, self.config.context_length :, ...]
-
-        encoder_outputs = self.encoder(inputs_embeds=enc_input)
-        decoder_outputs = self.decoder(
-            inputs_embeds=dec_input, encoder_hidden_states=encoder_outputs.last_hidden_state
-        )
-        return encoder_outputs, decoder_outputs
+        return transformer_inputs, loc, scale, static_feat
 
     def get_encoder(self):
         return self.encoder
@@ -1722,8 +1713,8 @@ class AutoformerModel(AutoformerPreTrainedModel):
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
-        static_categorical_features: torch.Tensor,
-        static_real_features: torch.Tensor,
+        static_categorical_features: Optional[torch.Tensor] = None,
+        static_real_features: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1775,7 +1766,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_inputs, scale, static_feat = self.create_network_inputs(
+        transformer_inputs, loc, scale, static_feat = self.create_network_inputs(
             past_values=past_values,
             past_time_features=past_time_features,
             past_observed_mask=past_observed_mask,
@@ -1802,11 +1793,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # decoder input
         dec_input = transformer_inputs[:, self.config.context_length :, ...]
-        # mean_enc_input = enc_input.mean(dim=1).unsqueeze(1).repeat(1, dec_input.size(1), 1)
-        # zeros = torch.zeros_like(dec_input, device=dec_input.device)
-        # seasonal_init, trend_init = self.decomposition_layer(x_enc)
         decoder_outputs = self.decoder(
             inputs_embeds=dec_input,
             attention_mask=decoder_attention_mask,
@@ -1821,7 +1808,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
         )
 
         if not return_dict:
-            return decoder_outputs + encoder_outputs + (scale, static_feat)
+            return decoder_outputs + encoder_outputs + (loc, scale, static_feat)
 
         return Seq2SeqTimeSeriesModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1832,6 +1819,7 @@ class AutoformerModel(AutoformerPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            loc=loc,
             scale=scale,
             static_features=static_feat,
         )
@@ -1876,11 +1864,11 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         return self.model.get_decoder()
 
     @torch.jit.ignore
-    def output_distribution(self, params, scale=None, trailing_n=None) -> torch.distributions.Distribution:
+    def output_distribution(self, params, loc=None, scale=None, trailing_n=None) -> torch.distributions.Distribution:
         sliced_params = params
         if trailing_n is not None:
             sliced_params = [p[:, -trailing_n:] for p in params]
-        return self.distribution_output.distribution(sliced_params, scale=scale)
+        return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
 
     @add_start_docstrings_to_model_forward(AUTOFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqTimeSeriesModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1889,8 +1877,8 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
-        static_categorical_features: torch.Tensor,
-        static_real_features: torch.Tensor,
+        static_categorical_features: Optional[torch.Tensor] = None,
+        static_real_features: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
         future_observed_mask: Optional[torch.Tensor] = None,
@@ -1907,15 +1895,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
     ) -> Union[Seq2SeqTimeSeriesModelOutput, Tuple]:
         r"""
         Returns:
-
-        future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
-            in `[0, 1]`:
-
-            - 1 for values that are **observed**,
-            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-
-            This mask is used to filter out missing values for the final loss calculation.
 
         Examples:
 
@@ -1989,7 +1968,8 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         params = None
         if future_values is not None:
             params = self.output_params(outputs[0])  # outputs.last_hidden_state
-            distribution = self.output_distribution(params, outputs[-2])  # outputs.scale
+            # loc is 3rd last and scale is 2nd last output
+            distribution = self.output_distribution(params, loc=outputs[-3], scale=outputs[-2])
 
             loss = self.loss(distribution, future_values)
 
@@ -2017,6 +1997,7 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+            loc=outputs.loc,
             scale=outputs.scale,
             static_features=outputs.static_features,
         )
@@ -2024,15 +2005,102 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        static_categorical_features: torch.Tensor,
-        static_real_features: torch.Tensor,
-        past_time_features: torch.Tensor,
         past_values: torch.Tensor,
-        past_observed_mask: torch.Tensor,
-        future_time_features: Optional[torch.Tensor],
+        past_time_features: torch.Tensor,
+        future_time_features: torch.Tensor,
+        past_observed_mask: Optional[torch.Tensor] = None,
+        static_categorical_features: Optional[torch.Tensor] = None,
+        static_real_features: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> torch.Tensor:
+    ) -> SampleTimeSeriesPredictionOutput:
+        r"""
+        Greedily generate sequences of sample predictions from a model with a probability distribution head.
+
+        Parameters:
+            past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
+                Past values of the time series, that serve as context in order to predict the future. The sequence size
+                of this tensor must be larger than the `context_length` of the model, since the model will use the
+                larger size to construct lag features, i.e. additional values from the past which are added in order to
+                serve as "extra context".
+
+                The `sequence_length` here is equal to `config.context_length` + `max(config.lags_sequence)`, which if
+                no `lags_sequence` is configured, is equal to `config.context_length` + 7 (as by default, the largest
+                look-back index in `config.lags_sequence` is 7). The property `_past_length` returns the actual length
+                of the past.
+
+                The `past_values` is what the Transformer encoder gets as input (with optional additional features,
+                such as `static_categorical_features`, `static_real_features`, `past_time_features` and lags).
+
+                Optionally, missing values need to be replaced with zeros and indicated via the `past_observed_mask`.
+
+                For multivariate time series, the `input_size` > 1 dimension is required and corresponds to the number
+                of variates in the time series per time step.
+            past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`):
+                Required time features, which the model internally will add to `past_values`. These could be things
+                like "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features).
+                These could also be so-called "age" features, which basically help the model know "at which point in
+                life" a time-series is. Age features have small values for distant past time steps and increase
+                monotonically the more we approach the current time step. Holiday features are also a good example of
+                time features.
+
+                These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT,
+                where the position encodings are learned from scratch internally as parameters of the model, the Time
+                Series Transformer requires to provide additional time features. The Time Series Transformer only
+                learns additional embeddings for `static_categorical_features`.
+
+                Additional dynamic real covariates can be concatenated to this tensor, with the caveat that these
+                features must but known at prediction time.
+
+                The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
+            future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`):
+                Required time features for the prediction window, which the model internally will add to sampled
+                predictions. These could be things like "month of year", "day of the month", etc. encoded as vectors
+                (for instance as Fourier features). These could also be so-called "age" features, which basically help
+                the model know "at which point in life" a time-series is. Age features have small values for distant
+                past time steps and increase monotonically the more we approach the current time step. Holiday features
+                are also a good example of time features.
+
+                These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT,
+                where the position encodings are learned from scratch internally as parameters of the model, the Time
+                Series Transformer requires to provide additional time features. The Time Series Transformer only
+                learns additional embeddings for `static_categorical_features`.
+
+                Additional dynamic real covariates can be concatenated to this tensor, with the caveat that these
+                features must but known at prediction time.
+
+                The `num_features` here is equal to `config.`num_time_features` + `config.num_dynamic_real_features`.
+            past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`, *optional*):
+                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+                in `[0, 1]`:
+
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+
+            static_categorical_features (`torch.LongTensor` of shape `(batch_size, number of static categorical features)`, *optional*):
+                Optional static categorical features for which the model will learn an embedding, which it will add to
+                the values of the time series.
+
+                Static categorical features are features which have the same value for all time steps (static over
+                time).
+
+                A typical example of a static categorical feature is a time series ID.
+            static_real_features (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
+                Optional static real features which the model will add to the values of the time series.
+
+                Static real features are features which have the same value for all time steps (static over time).
+
+                A typical example of a static real feature is promotion information.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers.
+
+        Return:
+            [`SampleTimeSeriesPredictionOutput`] where the outputs `sequences` tensor will have shape `(batch_size,
+            number of samples, prediction_length)` or `(batch_size, number of samples, prediction_length, input_size)`
+            for multivariate predictions.
+        """
         outputs = self(
             static_categorical_features=static_categorical_features,
             static_real_features=static_real_features,
@@ -2049,13 +2117,17 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
 
         decoder = self.model.get_decoder()
         enc_last_hidden = outputs.encoder_last_hidden_state
+        loc = outputs.loc
         scale = outputs.scale
         static_feat = outputs.static_features
 
         num_parallel_samples = self.config.num_parallel_samples
+        repeated_loc = loc.repeat_interleave(repeats=num_parallel_samples, dim=0)
         repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
-        repeated_past_values = past_values.repeat_interleave(repeats=num_parallel_samples, dim=0) / repeated_scale
+        repeated_past_values = (
+            past_values.repeat_interleave(repeats=num_parallel_samples, dim=0) - repeated_loc
+        ) / repeated_scale
 
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, future_time_features.shape[1], -1)
         features = torch.cat((expanded_static_feat, future_time_features), dim=-1)
@@ -2082,10 +2154,12 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             dec_last_hidden = dec_output.last_hidden_state
 
             params = self.parameter_projection(dec_last_hidden[:, -1:])
-            distr = self.output_distribution(params, scale=repeated_scale)
+            distr = self.output_distribution(params, loc=repeated_loc, scale=repeated_scale)
             next_sample = distr.sample()
 
-            repeated_past_values = torch.cat((repeated_past_values, next_sample / repeated_scale), dim=1)
+            repeated_past_values = torch.cat(
+                (repeated_past_values, (next_sample - repeated_loc) / repeated_scale), dim=1
+            )
             future_samples.append(next_sample)
 
         concat_future_samples = torch.cat(future_samples, dim=1)
