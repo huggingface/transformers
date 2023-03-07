@@ -88,6 +88,7 @@ from . import (
     gptj,
     gptsan_japanese,
     graphormer,
+    tokengt,
     groupvit,
     herbert,
     hubert,
