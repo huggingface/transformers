@@ -189,6 +189,8 @@ class TableTransformerConfig(PretrainedConfig):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
+            # set timm attributes to None
+            dilation, backbone, use_pretrained_backbone = None, None, None
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
