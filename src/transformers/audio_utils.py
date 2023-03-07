@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Audio processing functions to extract features from audio waveforms.
-This code is pure numpy to support all frameworks and remove unnecessary dependencies.
+Audio processing functions to extract features from audio waveforms. This code is pure numpy to support all frameworks
+and remove unnecessary dependencies.
 """
 import warnings
 from typing import Optional, Union
