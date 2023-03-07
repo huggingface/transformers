@@ -78,12 +78,7 @@ class LogitsProcessorTest(unittest.TestCase):
         scores_before_min_length = min_dist_processor(input_ids, scores)
         self.assertFalse(torch.isinf(scores_before_min_length).any())
 
-    @parameterized.expand(
-        [
-            (0,),
-            ([0, 18],),
-        ]
-    )
+    @parameterized.expand([(0,), ([0, 18],)])
     def test_new_min_length_dist_processor(self, eos_token_id: Union[int, List[int]]):
         vocab_size = 20
         batch_size = 4
