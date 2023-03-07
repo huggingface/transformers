@@ -238,20 +238,27 @@ class MultiHeadEMA(nn.Module):
         use_cache: bool = False,
     ) -> torch.Tensor:
         """
-        EMA-based self-attention
+        Mega's self-attention mechanism based on exponential moving average (EMA)
 
-        Inputs
-            x (Tensor): hidden state input with shape (Sequence Length x Batch x Embedding Size) attention_mask
-            (Tensor): indicates which inputs are to be ignored (mostly due to padding),
-                where elements are either 1 = *not masked* or 0 = *masked*
-            prev_state (Tensor, optional): if provided, the hidden state returned from the previous
-                timestep during incremental decoding
-            use_cache (boolean): if True, perfom incremental decoding; uses `prev_state` as the prior
+        Args:
+            x (`torch.Tensor` of shape `(sequence_length, batch_size, hidden_size)`): 
+                Hidden state input on which to perform self-attention
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*): 
+                Indicates which inputs are to be ignored (mostly due to padding), where 
+                elements are either 1 for *not masked* or 0 for *masked*
+            prev_state (`torch.Tensor` of shape `(batch_size, config.ndim)`, *optional*): 
+                The hidden state returned from the previous timestep during incremental 
+                decoding.
+            use_cache (`bool`, default `False`): 
+                Whether to perfom incremental decoding; uses `prev_state` as the prior
                 timestep, and returns the updated EMA hidden state for use in the next step
 
-        Returns
-            - hidden states updated by EMA self-attention, with same shapes as inputs
-            - (if use_cache), the incremental EMA state for use in the next step of incremental decoding
+        Returns:
+            `tuple(torch.FloatTensor)` containing various elements depending on configuration ([`MegaConfig`]) and inputs:
+            - **hidden_states** (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`) -- 
+              Hidden states updated by EMA self-attention, with same shapes as inputs
+            - **updated_state** (*optional*, returned when `use_cache=True`) `torch.FloatTensor of shape `(batch_size, config.ndim)` --
+              The incremental EMA state for use in the next step of incremental decoding
         """
 
         seq_len, bsz, embed_dim = x.size()
@@ -431,33 +438,42 @@ class MegaGatedCrossAttention(nn.Module):
         query,
         key: Optional[torch.Tensor],
         value: Optional[torch.Tensor],
-        padding_mask: Optional[torch.Tensor] = None,  ## NOT USED
         key_padding_mask: Optional[torch.Tensor] = None,
         prev_key_values: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
-        EMA-based self-attention
+        Gated cross-attention used in Mega
 
-        Inputs
-            query (Tensor): the self (or target) sequence input with shape (Target Sequence Length x Batch x Embedding
-            Size) key (Tensor): the cross (or source) sequence input with shape (Source Sequence Length x Batch x
-            Embedding Size) value (Tensor): the cross (or source) sequence input with shape (Source Sequence Length x
-            Batch x Embedding Size) padding_mask (Tensor): NOT USED, but left in place to match the original
-            implementation key_padding_mask (optional, Tensor): padding mask corresponding to the source sequence
-            (Batch Size x Source Sequence Length) prev_key_values (tuple of Tensors, optional): if provided, the hidden
-            state returned from the previous
-                timestep during incremental decoding; expects that prior cross-attention keys and values will be the
-                last two items in the tuple
-            output_attentions (boolean): if true, cross-attention weights will be returned use_cache (boolean): if
-            True, perfom incremental decoding; uses `prev_state` as the prior
-                timestep, and returns the updated EMA hidden state for use in the next step
+        Args:
+            query (`torch.Tensor` of shape `(target_sequence_length, batch_size, hidden_size)`): 
+                The self (or target) sequence input used as query inputs for cross-attention
+            key (`torch.Tensor` of shape `(source_sequence_length, batch_size, hidden_size)`): 
+                The cross (or source) sequence input with shape used as keys in cross-attention
+            value (`torch.Tensor` of shape `(source_sequence_length, batch_size, hidden_size)`): 
+                The cross (or source) sequence input with shape used as values in cross-attention
+            key_padding_mask (`torch.LongTensor` of shape `(batch_size, source_sequence_length)`, *optional*): 
+                Padding mask corresponding to the source sequence, where entries are 1 for *not masked* and 
+                0 for *masked* tokens
+            prev_key_values (`tuple(torch.FloatTensor)`, *optional*): 
+                If provided, the hidden state returned from the previous timestep during incremental decoding; 
+                expects that prior cross-attention keys and values will be the last two items in the tuple
+            output_attentions (`bool`, defaults to `False`): if true, cross-attention weights will be returned 
+            use_cache (`bool`, defaults to `False`): 
+                Whether to perfom incremental decoding; uses `prev_state` as the prior timestep, and returns the 
+                updated EMA hidden state for use in the next step
 
-        Returns
-            - hidden states from target sequence updated by gated cross-attention, with same shapes as target inputs
-            - (if output_attentions) the cross-attention weights
-            - (if use_cache), the incremental EMA state for use in the next step of incremental decoding
+        Returns:
+            `tuple(torch.FloatTensor)` containing various elements depending on configuration ([`MegaConfig`]) and inputs:
+            - **hidden_states** (`torch.FloatTensor` of shape `(target_sequence_length, batch_size, hidden_size)`) -- 
+              Hidden states from target sequence updated by gated cross-attention
+            - **attn_weights** (*optional*, returned when `output_attentions=True`) `torch.FloatTensor` of shape `(batch_size, source_sequence_length, target_sequence_length)` --
+              The pairwise cross-attention weights corresponding to each token in the source and target sequences
+            - **cross_key** (*optional*, returned when `use_cache=True`) `torch.FloatTensor` of shape `(batch_size, source_sequence_length, config.shared_representation_size)` --
+              The cross-attention key state for use in the next step of incremental decoding
+            - **cross_value** (*optional*, returned when `use_cache=True`) `torch.FloatTensor` of shape `(batch_size, source_sequence_length, config.hidden_size)` --
+              The cross-attention value state for use in the next step of incremental decoding
         """
 
         seq_len, bsz, embed_dim = query.size()
@@ -967,24 +983,38 @@ class MovingAverageGatedAttention(nn.Module):
         """
         Mega's self-attention block, which combines multi-headed EMA with traditional self-attention
 
-        Inputs
-            x (Tensor): hidden states to be updated by Mega's self-attention, with shape (Sequence Length x Batch x
-            Embedding Dim) padding_mask (optional, Tensor): mask to indicate padding tokens, with expected shape
-                (Batch x Sequence Length), where entries are 1 for *not masked* and 0 for *masked*
-            causal_mask (optional, Tensor): if provided, used to enforce causal attention;
-                expected shape is (Sequence Length x Sequence Length), and entries are 1 for *not masked* and 0 for
-                *masked*
-            prev_key_values (tuple of Tensors, optional): if provided, the hidden state returned from the previous
-                timestep during incremental decoding; expects that self-attention key, value, and EMA states are the
-                first 3 entries in the tuple
-            output_attentions (boolean): if true, cross-attention weights will be returned use_cache (boolean): if
-            True, perfom incremental decoding and return incremental states for next step
+        Args:
+            x (`torch.Tensor`` of shape `(sequence_length, batch_size, hidden_size)`):
+                Hidden states to be updated by Mega's self-attention
+            padding_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*): 
+                Indicates which inputs are to be ignored due to padding, where elements are either 
+                1 for *not masked* or 0 for *masked*
+            causal_mask (`torch.LongTensor` of shape `(sequence_length, sequence_length)`, *optional*): 
+                Indicates which inputs are to be ignored due to causal attention, where elements 
+                are either 1 for *not masked* or 0 for *masked*
+            prev_key_values (`tuple(torch.Tensor)`, *optional*): 
+                The hidden states returned from the previous timestep during incremental decoding; 
+                expects that self-attention key, value, and EMA states are the first 3 entries in 
+                the tuple
+            output_attentions (`bool`, default `False`): 
+                Whether to return self-attention weights 
+            use_cache (`bool`, default `False`): 
+                Whether to perfom incremental decoding; uses `prev_key_values` as prior state, and 
+                returns the updated states for use in the next step
 
-        Returns
-            - hidden states sequence updated by Mega self-attention, with same shapes as `x`
-            - (if output_attentions) the self-attention weights
-            - (if use_cache), the incremental state for use in the next step of incremental decoding;
-                a tuple of tensors representing (key, value, EMA state)
+        Returns:
+            `tuple(torch.FloatTensor)` containing various elements depending on configuration ([`MegaConfig`]) and inputs:
+            - **hidden_states** (`torch.FloatTensor` of shape `(sequence_length, batch_size, hidden_size)`) -- 
+              Hidden states from target sequence updated by Mega's self-attention
+            - **attn_weights** (*optional*, returned when `output_attentions=True`) `torch.FloatTensor` of shape `(batch_size, 1, sequence_length, sequence_length)` --
+              The self-attention weights corresponding to how each token in the input sequence 
+              attends to every other token
+            - **self_key** (*optional*, returned when `use_cache=True`) `torch.FloatTensor` of shape `(batch_size, sequence_length, config.shared_representation_size)` --
+              The self-attention key state for use in the next step of incremental decoding
+            - **self_value** (*optional*, returned when `use_cache=True`) `torch.FloatTensor` of shape `(batch_size, sequence_length, config.hidden_size)` --
+              The self-attention value state for use in the next step of incremental decoding
+            - **self_ema_state** (*optional*, returned when `use_cache=True`) `torch.FloatTensor` of shape `(batch_size, config.ndim)`
+              The incremental EMA state for use in the next step of incremental decoding.
         """
 
         seq_len, bsz, embed_dim = x.size()
@@ -1259,29 +1289,49 @@ class MegaLayer(nn.Module):
         A single Mega layer: either encoder or decoder, with optional cross-attention and optional normalized
         feed-forward layer
 
-        Inputs
-            hidden_states (Tensor): hidden states to be updated by Mega's self-attention, with shape
-                (Target Sequence Length x Batch x Embedding Dim)
-            attention_mask (optional, Tensor): mask to indicate padding tokens, with expected shape
-                (Batch x Target Sequence Length), where entries are 1 for *not masked* and 0 for *masked*
-            encoder_hidden_states (optional, Tensor): encoder hidden states required for cross-attention, with
-                shape (Source Sequence Length x Batch x Embedding Dim)
-            encoder_attention_mask (optional, Tensor): attention mask to denote padding in the source
-                sequence, with shape (Batch x Source Sequence Length)
-            past_key_value (tuple of Tensors, optional): if provided, the hidden state returned from the previous
-                timestep during incremental decoding; expects that self-attention key, value, and EMA states are the
-                first 3 entries in the tuple, and (if doing cross-attention) cross-attention key and value are the last
+        Args:
+            hidden_states (`torch.Tensor`` of shape `(target_sequence_length, batch_size, hidden_size)`):
+                Hidden states to be updated by the Mega block
+            attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*): 
+                Indicates which entries in the self/target sequence are to be ignored (mostly due to 
+                padding), where elements are either 1 for *not masked* or 0 for *masked*. Causal 
+                attention is enforced internally.
+            encoder_hidden_states (`torch.Tensor`, of shape `(source_sequence_length, batch_size, hidden_size)`, *optional*):
+                Encoder hidden states to be used for cross-attention (and required for encoder-decoder
+                model setup)
+            encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, source_sequence_length)`, *optional*): 
+                Indicates which entries in the cross/source sequence are to be ignored (mostly due 
+                to padding), where elements are either 1 for *not masked* or 0 for *masked*.
+            past_key_value (`tuple(torch.Tensor)`, *optional*): 
+                The hidden states returned from the previous timestep during incremental decoding; 
+                expects that self-attention key, value, and EMA states are the first 3 entries in 
+                the tuple, and (if doing cross-attention) cross-attention key and value are the last
                 2 entries in the tuple
-            output_attentions (boolean): if true, cross-attention weights will be returned use_cache (boolean): if
-            True, perfom incremental decoding and return incremental states for next step
+            output_attentions (`bool`, default `False`): 
+                Whether to return self-attention weights 
+            use_cache (`bool`, default `False`): 
+                Whether to perfom incremental decoding; uses `past_key_value` as prior state, and 
+                returns the updated states for use in the next step
 
-        Returns
-            - hidden states sequence updated by Mega, with same shapes as `hidden_states`
-            - (if output_attentions) the self-attention weights and (if using cross-attention) the cross-attention
-              weights
-            - (if use_cache), the incremental state for use in the next step of incremental decoding;
-                a tuple of tensors representing (key, value, EMA state) and optionally cross-attention key and value
-
+        Returns:
+            `tuple(torch.FloatTensor)` containing various elements depending on configuration ([`MegaConfig`]) and inputs:
+            - **hidden_states** (`torch.FloatTensor` of shape `(target_sequence_length, batch_size, hidden_size)`) -- 
+              Hidden states from target sequence updated by Mega
+            - **self_attn_weights** (*optional*, returned when `output_attentions=True`) `torch.FloatTensor` of shape `(batch_size, 1, target_sequence_length, target_sequence_length)` --
+              The self-attention weights corresponding to how each token in the input sequence 
+              attends to every other token
+            - **cross_attn_weights** (*optional*, returned when `output_attentions=True` and `config.add_cross_attention=True`) `torch.FloatTensor` of shape `(batch_size, source_sequence_length, target_sequence_length)` --
+              Pairwise cross-attention weights between every entry in the source sequence and target sequence
+            - **self_key** (*optional*, returned when `use_cache=True`) `torch.FloatTensor` of shape `(batch_size, sequence_length, config.shared_representation_size)` --
+              The self-attention key state for use in the next step of incremental decoding
+            - **self_value** (*optional*, returned when `use_cache=True`) `torch.FloatTensor` of shape `(batch_size, sequence_length, config.hidden_size)` --
+              The self-attention value state for use in the next step of incremental decoding
+            - **self_ema_state** (*optional*, returned when `use_cache=True`) `torch.FloatTensor` of shape `(batch_size, config.ndim)`
+              The incremental EMA state for use in the next step of incremental decoding.
+            - **cross_key** (*optional*, returned when `use_cache=True` and `config.is_decoder=True`) `torch.FloatTensor` of shape `(batch_size, source_sequence_length, config.shared_representation_size)` --
+              The cross-attention key state for use in the next step of incremental decoding
+            - **cross_value** (*optional*, returned when `use_cache=True` and `config.is_decoder=True`) `torch.FloatTensor` of shape `(batch_size, source_sequence_length, config.hidden_size)` --
+              The cross-attention value state for use in the next step of incremental decoding
         """
 
         # Mega self-attention
@@ -1324,7 +1374,6 @@ class MegaLayer(nn.Module):
                 query=new_hidden_states,
                 key=encoder_hidden_states,
                 value=encoder_hidden_states,
-                padding_mask=None,
                 key_padding_mask=encoder_attention_mask,
                 prev_key_values=past_key_value,
                 output_attentions=output_attentions,
