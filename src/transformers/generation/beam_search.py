@@ -285,8 +285,9 @@ class BeamSearchScorer(BeamScorer):
                     f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id:"
                     f" {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
                 )
-
+            
             # Check if we are done so that we can save a pad step if all(done)
+            cur_len += 1 # add up to the length which the next_scores is calculated on
             self._done[batch_idx] = self._done[batch_idx] or beam_hyp.is_done(
                 next_scores[batch_idx].max().item(), cur_len
             )
@@ -616,6 +617,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 )
 
             # Check if we are done so that we can save a pad step if all(done)
+            cur_len += 1 # add up to the length which the next_scores is calculated on
             self._done[batch_idx] = self._done[batch_idx] or beam_hyp.is_done(
                 next_scores[batch_idx].max().item(), cur_len
             )
@@ -912,7 +914,7 @@ class BeamHypotheses:
         #  when `length_penalty` is positive. See the discussion below for more details.
         # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
         elif self.early_stopping is False:
-            highest_attainable_score = best_sum_logprobs / (cur_len + 1)**self.length_penalty
+            highest_attainable_score = best_sum_logprobs / cur_len**self.length_penalty
             ret = self.worst_score >= highest_attainable_score
             return ret
         # `"never"`: compute the best possible score, depending on the signal of `length_penalty`
