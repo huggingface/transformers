@@ -15,10 +15,11 @@
 """Tokenization classes for MGT-STR CHAR."""
 
 import json
-from typing import List
+import os
+from typing import Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging, to_py_obj
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -31,9 +32,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "mgp-str": 27,
-}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"mgp-str": 27}
 
 
 class MGPSTRTokenizer(PreTrainedTokenizer):
@@ -46,20 +45,23 @@ class MGPSTRTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
-        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        unk_token (`str`, *optional*, defaults to `<|startoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `<|startoftext|>`):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
+        pad_token (`str` or `tokenizers.AddedToken`, *optional*, , defaults to `<|startoftext|>`):
+            A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
+            attention mechanisms or loss computation.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, unk_token="[UNK]", bos_token="[GO]", eos_token="[STOP]", pad_token=None, **kwargs):
+    def __init__(self, vocab_file, unk_token="[GO]", bos_token="[GO]", eos_token="[s]", pad_token="[GO]", **kwargs):
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -69,15 +71,15 @@ class MGPSTRTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
-            self.encoder = json.load(vocab_handle)
-        self.decoder = {v: k for k, v in self.encoder.items()}
+            self.vocab = json.load(vocab_handle)
+        self.decoder = {v: k for k, v in self.vocab.items()}
 
     @property
     def vocab_size(self):
-        return len(self.encoder)
+        return len(self.vocab)
 
     def get_vocab(self):
-        return dict(self.encoder)
+        return dict(self.vocab, **self.added_tokens_encoder)
 
     def _tokenize(self, text):
         """Tokenize a string."""
@@ -88,38 +90,21 @@ class MGPSTRTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        return self.encoder.get(token, self.encoder.get(self.unk_token))
+        return self.vocab.get(token, self.vocab.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
-    def batch_decode(
-        self, sequences, skip_special_tokens: bool = True, clean_up_tokenization_spaces: bool = True, **kwargs
-    ) -> List[str]:
-        """
-        This method forwards all its arguments to MGPSTRTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return [
-            self.decode(
-                seq,
-                skip_special_tokens=skip_special_tokens,
-                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                **kwargs,
-            )
-            for seq in sequences
-        ]
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not os.path.isdir(save_directory):
+            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            return
+        vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
 
-    def decode(self, token_ids, **kwargs) -> str:
-        """
-        This method forwards all its arguments to MGPSTRTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        # Convert inputs to python lists
-        token_ids = to_py_obj(token_ids)
+        with open(vocab_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(self.vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
-        tokens = []
-        for index in token_ids:
-            tokens.append(self._convert_id_to_token(index))
-        return "".join(tokens)
+        return (vocab_file,)

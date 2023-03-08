@@ -44,21 +44,21 @@ into a single instance to both extract the input features and decode the predict
 - Step-by-step Optical Character Recognition (OCR)
 
 ``` py
->>> from transformers import MGPSTRProcessor, ViTForMaskedImageModeling
+>>> from transformers import MGPSTRProcessor, MGPSTRForSceneTextRecognition
 >>> import requests
 >>> from PIL import Image
 
 >>> processor = MGPSTRProcessor.from_pretrained('alibaba-damo/mgp-str-base')
->>> model = ViTForMaskedImageModeling.from_pretrained('alibaba-damo/mgp-str-base')
+>>> model = MGPSTRForSceneTextRecognition.from_pretrained('alibaba-damo/mgp-str-base')
 
 >>> # load image from the IIIT-5k dataset
 >>> url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
 >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
 >>> pixel_values = processor(image, return_tensors="pt").pixel_values
->>> generated_ids, attens = model(pixel_values)
+>>> outputs = model(pixel_values)
 
->>> generated_text = processor.batch_decode(generated_ids)['generated_text']
+>>> generated_text = processor.batch_decode(outputs.logits)['generated_text']
 ```
 
 ## MGPSTRConfig
@@ -68,6 +68,7 @@ into a single instance to both extract the input features and decode the predict
 ## MGPSTRTokenizer
 
 [[autodoc]] MGPSTRTokenizer
+    - save_vocabulary
 
 ## MGPSTRProcessor
 

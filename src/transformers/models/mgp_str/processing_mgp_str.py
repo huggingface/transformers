@@ -16,7 +16,7 @@
 
 import warnings
 
-from transformers import BertTokenizer, GPT2Tokenizer
+from transformers import AutoTokenizer
 from transformers.utils import is_torch_available
 from transformers.utils.generic import ExplicitEnum
 
@@ -55,9 +55,9 @@ class MGPSTRProcessor(ProcessorMixin):
         tokenizer ([`MGPSTRTokenizer`]):
             The tokenizer is a required input.
     """
-    attributes = ["image_processor", "tokenizer"]
+    attributes = ["image_processor", "char_tokenizer"]
     image_processor_class = "ViTImageProcessor"
-    tokenizer_class = "MGPSTRTokenizer"
+    char_tokenizer_class = "MGPSTRTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, *kwargs):
         if "feature_extractor" in kwargs:
@@ -75,32 +75,25 @@ class MGPSTRProcessor(ProcessorMixin):
             raise ValueError("You need to specify a `tokenizer`.")
 
         self.char_tokenizer = tokenizer
-        self.bpe_tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        self.wp_tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        self.bpe_tokenizer = AutoTokenizer.from_pretrained("gpt2")
+        self.wp_tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
 
         super().__init__(image_processor, tokenizer)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """
         When used in normal mode, this method forwards all its arguments to ViTImageProcessor's
         [`~ViTImageProcessor.__call__`] and returns its output. This method also forwards the `text` and `kwargs`
         arguments to MGPSTRTokenizer's [`~MGPSTRTokenizer.__call__`] if `text` is not `None` to encode the text. Please
         refer to the doctsring of the above methods for more information.
         """
-        images = kwargs.pop("images", None)
-        text = kwargs.pop("text", None)
-
-        if len(args) > 0:
-            images = args[0]
-            args = args[1:]
-
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
-            inputs = self.image_processor(images, *args, **kwargs)
+            inputs = self.image_processor(images, return_tensors=return_tensors, **kwargs)
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+            encodings = self.char_tokenizer(text, return_tensors=return_tensors, **kwargs)
 
         if text is None:
             return inputs
@@ -167,7 +160,7 @@ class MGPSTRProcessor(ProcessorMixin):
                 score of model prediction.
         """
         if format == DecodeType.CHARACTER:
-            decoder = self.char_tokenizer.batch_decode
+            decoder = self.char_decode
             eos_token = int(DecodeType.CHARACTER_EOS_TOKEN)
             eos_str = DecodeType.CHARACTER_EOS_STR
         elif format == DecodeType.BPE:
@@ -191,16 +184,29 @@ class MGPSTRProcessor(ProcessorMixin):
         preds_max_prob = preds_max_prob[:, 1:]
 
         for index in range(batch_size):
-            pred_EOS = preds_str[index].find(eos_str)
-            pred = preds_str[index][:pred_EOS]
+            pred_eos = preds_str[index].find(eos_str)
+            pred = preds_str[index][:pred_eos]
             pred_index = preds_index[index].cpu().tolist()
-            pred_EOS_index = pred_index.index(eos_token) if eos_token in pred_index else -1
-            pred_max_prob = preds_max_prob[index][: pred_EOS_index + 1]
+            pred_eos_index = pred_index.index(eos_token) if eos_token in pred_index else -1
+            pred_max_prob = preds_max_prob[index][: pred_eos_index + 1]
             confidence_score = pred_max_prob.cumprod(dim=0)[-1] if pred_max_prob.nelement() != 0 else 0.0
             dec_strs.append(pred)
             conf_scores.append(confidence_score)
 
         return dec_strs, conf_scores
+
+    def char_decode(self, sequences):
+        """
+        Convert a list of lists of char token ids into a list of strings by calling char tokenizer.
+
+        Args:
+            sequences (`torch.Tensor`):
+                List of tokenized input ids.
+        Returns:
+            `List[str]`: The list of char decoded sentences.
+        """
+        decode_strs = [seq.replace(" ", "") for seq in self.char_tokenizer.batch_decode(sequences)]
+        return decode_strs
 
     def bpe_decode(self, sequences):
         """
@@ -212,11 +218,7 @@ class MGPSTRProcessor(ProcessorMixin):
         Returns:
             `List[str]`: The list of bpe decoded sentences.
         """
-        decode_strs = []
-        for seq in sequences:
-            tokenstr = self.bpe_tokenizer.decode(seq)
-            decode_strs.append(tokenstr)
-        return decode_strs
+        return self.bpe_tokenizer.batch_decode(sequences)
 
     def wp_decode(self, sequences):
         """
@@ -228,9 +230,5 @@ class MGPSTRProcessor(ProcessorMixin):
         Returns:
             `List[str]`: The list of wp decoded sentences.
         """
-        decode_strs = []
-        for seq in sequences:
-            tokenstr = self.wp_tokenizer.decode(seq)
-            tokenlist = tokenstr.split()
-            decode_strs.append("".join(tokenlist))
+        decode_strs = [seq.replace(" ", "") for seq in self.wp_tokenizer.batch_decode(sequences)]
         return decode_strs

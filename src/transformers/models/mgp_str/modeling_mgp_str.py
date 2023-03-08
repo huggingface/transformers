@@ -16,7 +16,6 @@
 
 import collections.abc
 from dataclasses import dataclass
-from functools import partial
 from typing import Optional, Tuple, Union
 
 import torch
@@ -51,34 +50,40 @@ MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def _drop_path(x, drop_prob: float = 0.0, training: bool = False):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input, drop_prob: float = 0.0, training: bool = False):
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
-    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
-    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
-    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
-
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
     """
     if drop_prob == 0.0 or not training:
-        return x
+        return input
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
     random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
+    output = input.div(keep_prob) * random_tensor
     return output
 
 
-class DropPath(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->MGPSTR
+class MGPSTRDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob=None):
-        super(DropPath, self).__init__()
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
+        super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x):
-        return _drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
 
 
 @dataclass
@@ -119,20 +124,34 @@ class MGPSTRModelOutput(ModelOutput):
     a3_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class MGPSTRPatchEmbeddings(nn.Module):
+class MGPSTREmbeddings(nn.Module):
     """2D Image to Patch Embedding"""
 
-    def __init__(self, image_size=224, patch_size=16, in_chans=3, embed_dim=768):
+    def __init__(self, config: MGPSTRConfig):
         super().__init__()
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        image_size = (
+            config.image_size
+            if isinstance(config.image_size, collections.abc.Iterable)
+            else (config.image_size, config.image_size)
+        )
+        patch_size = (
+            config.patch_size
+            if isinstance(config.patch_size, collections.abc.Iterable)
+            else (config.patch_size, config.patch_size)
+        )
         self.image_size = image_size
         self.patch_size = patch_size
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.num_patches = self.grid_size[0] * self.grid_size[1]
+        self.num_tokens = 2 if config.distilled else 1
 
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.proj = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
         self.norm = nn.Identity()
+
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches + self.num_tokens, config.hidden_size))
+        self.pos_drop = nn.Dropout(p=config.drop_rate)
 
     def forward(self, pixel_values):
         batch_size, channel, height, width = pixel_values.shape
@@ -141,23 +160,28 @@ class MGPSTRPatchEmbeddings(nn.Module):
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
 
-        embeddings = self.proj(pixel_values)
-        embeddings = embeddings.flatten(2).transpose(1, 2)  # BCHW -> BNC
-        embeddings = self.norm(embeddings)
-        return embeddings
+        patch_embeddings = self.proj(pixel_values)
+        patch_embeddings = patch_embeddings.flatten(2).transpose(1, 2)  # BCHW -> BNC
+        patch_embeddings = self.norm(patch_embeddings)
+
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        embedding_output = torch.cat((cls_tokens, patch_embeddings), dim=1)
+        embedding_output = embedding_output + self.pos_embed
+        embedding_output = self.pos_drop(embedding_output)
+
+        return embedding_output
 
 
 class MGPSTRMlp(nn.Module):
     """MLP as used in Vision Transformer, MLP-Mixer and related networks"""
 
-    def __init__(self, in_features, hidden_features=None, out_features=None, drop=0.0):
+    def __init__(self, config: MGPSTRConfig, hidden_features):
         super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
+        hidden_features = hidden_features or config.hidden_size
+        self.fc1 = nn.Linear(config.hidden_size, hidden_features)
         self.act = nn.GELU()
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
+        self.fc2 = nn.Linear(hidden_features, config.hidden_size)
+        self.drop = nn.Dropout(config.drop_rate)
 
     def forward(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
@@ -169,16 +193,16 @@ class MGPSTRMlp(nn.Module):
 
 
 class MGPSTRAttention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0.0, proj_drop=0.0):
+    def __init__(self, config: MGPSTRConfig):
         super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
+        self.num_heads = config.num_attention_heads
+        head_dim = config.hidden_size // config.num_attention_heads
         self.scale = head_dim**-0.5
 
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-        self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(dim, dim)
-        self.proj_drop = nn.Dropout(proj_drop)
+        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
+        self.attn_drop = nn.Dropout(config.attn_drop_rate)
+        self.proj = nn.Linear(config.hidden_size, config.hidden_size)
+        self.proj_drop = nn.Dropout(config.drop_rate)
 
     def forward(self, hidden_states):
         batch_size, num, channel = hidden_states.shape
@@ -200,16 +224,15 @@ class MGPSTRAttention(nn.Module):
 
 
 class MGPSTRLayer(nn.Module):
-    def __init__(self, dim, num_heads, mlp_ratio=4.0, qkv_bias=False, drop=0.0, attn_drop=0.0, drop_path=0.0):
+    def __init__(self, config: MGPSTRConfig, drop_path=None):
         super().__init__()
-        norm_layer = partial(nn.LayerNorm, eps=1e-6)
-        self.norm1 = norm_layer(dim)
-        self.attn = MGPSTRAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop)
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attn = MGPSTRAttention(config)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = MGPSTRMlp(in_features=dim, hidden_features=mlp_hidden_dim, drop=drop)
+        self.drop_path = MGPSTRDropPath(drop_path) if drop_path is not None else nn.Identity()
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        mlp_hidden_dim = int(config.hidden_size * config.mlp_ratio)
+        self.mlp = MGPSTRMlp(config, mlp_hidden_dim)
 
     def forward(self, hidden_states):
         self_attention_outputs = self.attn(self.norm1(hidden_states))
@@ -227,33 +250,14 @@ class MGPSTRLayer(nn.Module):
 
 
 class MGPSTREncoder(nn.Module):
-    def __init__(
-        self,
-        embed_dim=768,
-        depth=12,
-        num_heads=12,
-        mlp_ratio=4.0,
-        qkv_bias=True,
-        drop_rate=0.0,
-        attn_drop_rate=0.0,
-        drop_path_rate=0.0,
-    ):
+    def __init__(self, config: MGPSTRConfig):
         super().__init__()
-        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
+        dpr = [
+            x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)
+        ]  # stochastic depth decay rule
 
         self.blocks = nn.Sequential(
-            *[
-                MGPSTRLayer(
-                    dim=embed_dim,
-                    num_heads=num_heads,
-                    mlp_ratio=mlp_ratio,
-                    qkv_bias=qkv_bias,
-                    drop=drop_rate,
-                    attn_drop=attn_drop_rate,
-                    drop_path=dpr[i],
-                )
-                for i in range(depth)
-            ]
+            *[MGPSTRLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)]
         )
 
     def forward(
@@ -289,20 +293,19 @@ class MGPSTREncoder(nn.Module):
 
 
 class MGPSTRA3Module(nn.Module):
-    def __init__(self, input_embed_dim, out_token=30):
+    def __init__(self, config: MGPSTRConfig):
         super().__init__()
-        self.token_norm = nn.LayerNorm(input_embed_dim)
+        self.token_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.tokenLearner = nn.Sequential(
-            nn.Conv2d(input_embed_dim, input_embed_dim, kernel_size=(1, 1), stride=1, groups=8, bias=False),
-            nn.Conv2d(input_embed_dim, out_token, kernel_size=(1, 1), stride=1, bias=False),
+            nn.Conv2d(config.hidden_size, config.hidden_size, kernel_size=(1, 1), stride=1, groups=8, bias=False),
+            nn.Conv2d(config.hidden_size, config.max_token_length, kernel_size=(1, 1), stride=1, bias=False),
         )
-        self.feat = nn.Conv2d(input_embed_dim, input_embed_dim, kernel_size=(1, 1), stride=1, groups=8, bias=False)
-        self.norm = nn.LayerNorm(input_embed_dim)
+        self.feat = nn.Conv2d(
+            config.hidden_size, config.hidden_size, kernel_size=(1, 1), stride=1, groups=8, bias=False
+        )
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(
-        self,
-        hidden_states,
-    ):
+    def forward(self, hidden_states):
         hidden_states = self.token_norm(hidden_states)
         hidden_states = hidden_states.transpose(1, 2).unsqueeze(-1)
         selected = self.tokenLearner(hidden_states)
@@ -325,11 +328,21 @@ class MGPSTRPreTrainedModel(PreTrainedModel):
 
     config_class = MGPSTRConfig
     base_model_prefix = "mgp_str"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, MGPSTREmbeddings):
+            nn.init.trunc_normal_(
+                module.pos_embed,
+                mean=0.0,
+                std=self.config.initializer_range,
+            )
+            nn.init.trunc_normal_(
+                module.cls_token,
+                mean=0.0,
+                std=self.config.initializer_range,
+            )
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -361,6 +374,9 @@ MGP_STR_INPUTS_DOCSTRING = r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
+        output_a3_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of a3 modules. See `a3_attentions` under returned tensors
+            for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -377,45 +393,30 @@ class MGPSTRModel(MGPSTRPreTrainedModel):
     def __init__(self, config: MGPSTRConfig):
         super().__init__(config)
         self.config = config
-        self.num_tokens = 2 if config.distilled else 1
+        self.embeddings = MGPSTREmbeddings(config)
+        self.encoder = MGPSTREncoder(config)
 
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.patch_embed = MGPSTRPatchEmbeddings(
-            config.image_size, config.patch_size, config.num_channels, config.hidden_size
-        )
-        num_patches = self.patch_embed.num_patches
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + self.num_tokens, config.hidden_size))
-        self.pos_drop = nn.Dropout(p=config.drop_rate)
-
-        self.encoder = MGPSTREncoder(
-            config.hidden_size,
-            config.num_hidden_layers,
-            config.num_attention_heads,
-            config.mlp_ratio,
-            config.qkv_bias,
-            config.drop_rate,
-            config.attn_drop_rate,
-            config.drop_path_rate,
-        )
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embeddings.proj
 
     @add_start_docstrings_to_model_forward(MGP_STR_INPUTS_DOCSTRING)
     def forward(
         self,
         pixel_values,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        batch_size = pixel_values.shape[0]
-        embedding_output = self.patch_embed(pixel_values)
-
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embedding_output = torch.cat((cls_tokens, embedding_output), dim=1)
-        embedding_output = embedding_output + self.pos_embed
-        embedding_output = self.pos_drop(embedding_output)
+        embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -436,20 +437,23 @@ class MGPSTRModel(MGPSTRPreTrainedModel):
 @add_start_docstrings(
     """
     MGP-STR Model transformer with three classification heads on top (three A^3 modules and three linear layer on top
-    of the transformer encoder output) e.g. for scene text recognition (STR) .
+    of the transformer encoder output) for scene text recognition (STR) .
     """,
     MGP_STR_START_DOCSTRING,
 )
 class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
+    config_class = MGPSTRConfig
+    main_input_name = "pixel_values"
+
     def __init__(self, config: MGPSTRConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
         self.mgp_str = MGPSTRModel(config)
 
-        self.char_a3_module = MGPSTRA3Module(config.hidden_size, config.max_token_length)
-        self.bpe_a3_module = MGPSTRA3Module(config.hidden_size, config.max_token_length)
-        self.wp_a3_module = MGPSTRA3Module(config.hidden_size, config.max_token_length)
+        self.char_a3_module = MGPSTRA3Module(config)
+        self.bpe_a3_module = MGPSTRA3Module(config)
+        self.wp_a3_module = MGPSTRA3Module(config)
 
         self.char_head = nn.Linear(config.hidden_size, config.num_character_labels)
         self.bpe_head = nn.Linear(config.hidden_size, config.num_bpe_labels)
@@ -460,10 +464,10 @@ class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
     def forward(
         self,
         pixel_values,
-        output_attentions=False,
-        output_a3_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        output_attentions=None,
+        output_a3_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         Returns:
@@ -493,6 +497,10 @@ class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
         >>> out_strs["generated_text"]
         '['ticket']'
         ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         mgp_outputs = self.mgp_str(

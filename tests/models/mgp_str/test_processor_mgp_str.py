@@ -21,6 +21,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 
 from transformers import MGPSTRTokenizer
 from transformers.models.mgp_str.tokenization_mgp_str import VOCAB_FILES_NAMES
@@ -94,12 +95,33 @@ class MGPSTRProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
 
         processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor.save_pretrained(self.tmpdirname)
         processor = MGPSTRProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, MGPSTRTokenizer)
+        self.assertEqual(processor.char_tokenizer.get_vocab(), tokenizer.get_vocab())
+        self.assertIsInstance(processor.char_tokenizer, MGPSTRTokenizer)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
+        self.assertIsInstance(processor.image_processor, ViTImageProcessor)
+
+    def test_save_load_pretrained_additional_features(self):
+        tokenizer = self.get_tokenizer()
+        image_processor = self.get_image_processor()
+
+        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor.save_pretrained(self.tmpdirname)
+
+        tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
+        image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
+
+        processor = MGPSTRProcessor.from_pretrained(
+            self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
+        )
+
+        self.assertEqual(processor.char_tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
+        self.assertIsInstance(processor.char_tokenizer, MGPSTRTokenizer)
+
+        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, ViTImageProcessor)
 
     def test_image_processor(self):
@@ -110,9 +132,11 @@ class MGPSTRProcessorTest(unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        input_processor = processor(images=image_input, return_tensors="pt").pixel_values
+        input_image_proc = image_processor(image_input, return_tensors="np")
+        input_processor = processor(images=image_input, return_tensors="np")
 
-        self.assertEqual(input_processor[0].shape, self.image_size)
+        for key in input_image_proc.keys():
+            self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
     def test_tokenizer(self):
         image_processor = self.get_image_processor()
@@ -127,6 +151,50 @@ class MGPSTRProcessorTest(unittest.TestCase):
         encoded_tok = tokenizer(input_str)
         for key in encoded_tok.keys():
             self.assertListEqual(encoded_tok[key], encoded_processor[key])
+
+    def test_processor(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        input_str = "test"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input)
+
+        self.assertListEqual(list(inputs.keys()), ["pixel_values", "labels"])
+
+        # test if it raises when no input is passed
+        with pytest.raises(ValueError):
+            processor()
+
+    def test_tokenizer_decode(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9], [3, 4, 3, 1, 1, 8, 9]]
+
+        decoded_processor = processor.char_decode(predicted_ids)
+        decoded_tok = tokenizer.batch_decode(predicted_ids)
+        decode_strs = [seq.replace(" ", "") for seq in decoded_tok]
+
+        self.assertListEqual(decode_strs, decoded_processor)
+
+    def test_model_input_names(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        input_str = None
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input)
+
+        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
     def test_processor_batch_decode(self):
         image_processor = self.get_image_processor()

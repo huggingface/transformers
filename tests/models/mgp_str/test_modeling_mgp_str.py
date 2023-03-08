@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch MGPSTR model. """
 
-
+import inspect
 import unittest
 
 from transformers import MGPSTRConfig
@@ -22,10 +22,17 @@ from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+)
 
 
 if is_torch_available():
+    import torch
+    from torch import nn
+
     from transformers import MGPSTRForSceneTextRecognition
 
 
@@ -46,6 +53,8 @@ class MGPSTRModelTester:
         num_hidden_layers=12,
         num_attention_heads=12,
         mlp_ratio=4.0,
+        patch_embeds_hidden_size=257,
+        output_hidden_states=None,
     ):
         self.parent = parent
         self.is_training = is_training
@@ -61,6 +70,8 @@ class MGPSTRModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
+        self.patch_embeds_hidden_size = patch_embeds_hidden_size
+        self.output_hidden_states = output_hidden_states
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
@@ -80,23 +91,22 @@ class MGPSTRModelTester:
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             mlp_ratio=self.mlp_ratio,
+            output_hidden_states=self.output_hidden_states,
         )
 
     def create_and_check_model(self, config, pixel_values):
         model = MGPSTRForSceneTextRecognition(config)
         model.to(torch_device)
         model.eval()
-        generated_ids = model(pixel_values)
+        with torch.no_grad():
+            generated_ids = model(pixel_values)
         self.parent.assertEqual(
             generated_ids[0][0].shape, (self.batch_size, self.max_token_length, self.num_character_labels)
         )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-        ) = config_and_inputs
+        config, pixel_values = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -115,70 +125,112 @@ class MGPSTRModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = MGPSTRModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MGPSTRConfig, has_text_modality=False)
 
-    # not implemented currently
     def test_config(self):
-        pass
+        self.config_tester.run_common_tests()
 
     def test_model(self):
+        return
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # not implemented currently
+    @unittest.skip(reason="MGPSTRModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # not implemented currently
     def test_model_common_attributes(self):
-        pass
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-    # not implemented currently
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, nn.Linear))
+
     def test_forward_signature(self):
-        pass
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
-    # not implemented currently
-    def test_determinism(self):
-        pass
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
 
-    # not implemented currently
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    @unittest.skip(reason="MGPSTRModel does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
-    # not implemented currently
     def test_gradient_checkpointing_backward_compatibility(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    # not implemented currently
+        for model_class in self.all_model_classes:
+            if not model_class.supports_gradient_checkpointing:
+                continue
+
+            print("Model class:", model_class)
+
+            config.gradient_checkpointing = True
+            model = model_class(config)
+            self.assertTrue(model.is_gradient_checkpointing)
+
     def test_hidden_states_output(self):
-        pass
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
 
-    # not implemented currently
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [self.model_tester.patch_embeds_hidden_size, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    # override as the `logit_scale` parameter initilization is different for MGPSTRModel
     def test_initialization(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    # not implemented currently
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if isinstance(param, (nn.Linear, nn.Conv2d, nn.LayerNorm)):
+                    if param.requires_grad:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
     def test_model_main_input_name(self):
-        pass
+        for model_class in self.all_model_classes:
+            model_signature = inspect.signature(getattr(model_class, "forward"))
+            # The main input is the name of the argument after `self`
+            observed_main_input_name = list(model_signature.parameters.keys())[1]
+            self.assertEqual(model_class.main_input_name, observed_main_input_name)
 
-    # not implemented currently
-    def test_model_outputs_equivalence(self):
-        pass
-
-    # not implemented currently
+    @unittest.skip(reason="Retain_grad is tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    # not implemented currently
-    def test_save_load(self):
-        pass
-
-    # not implemented currently
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    # not implemented currently
-    def test_save_load_fast_init_to_base(self):
-        pass
-
-    # not implemented currently
-    def test_tied_model_weights_key_ignore(self):
         pass

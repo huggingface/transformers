@@ -42,13 +42,13 @@ class MGPSTRConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        max_token_length (`int`, *optional*, defaults to `27`):
+        max_token_length (`int`, *optional*, defaults to 27):
             The max number of output tokens.
-        num_character_labels (`int`, *optional*, defaults to `38`):
+        num_character_labels (`int`, *optional*, defaults to 38):
             The number of classes for character head .
-        num_bpe_labels (`int`, *optional*, defaults to `50257`):
+        num_bpe_labels (`int`, *optional*, defaults to 50257):
             The number of classes for bpe head .
-        num_wordpiece_labels (`int`, *optional*, defaults to `30522`):
+        num_wordpiece_labels (`int`, *optional*, defaults to 30522):
             The number of classes for wordpiece head .
         hidden_size (`int`, *optional*, defaults to 768):
             The embedding dimension.
@@ -56,12 +56,14 @@ class MGPSTRConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        mlp_ratio (`int`, *optional*, defaults to 12):
+        mlp_ratio (`float`, *optional*, defaults to 4.0):
             The ratio of mlp hidden dim to embedding dim.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
         distilled (`bool`, *optional*, defaults to `False`):
             Model includes a distillation token and head as in DeiT models.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
         drop_rate (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder.
         attn_drop_rate (`float`, *optional*, defaults to 0.0):
@@ -91,7 +93,7 @@ class MGPSTRConfig(PretrainedConfig):
 
     def __init__(
         self,
-        image_size=(32, 128),
+        image_size=[32, 128],
         patch_size=4,
         num_channels=3,
         max_token_length=27,
@@ -104,6 +106,7 @@ class MGPSTRConfig(PretrainedConfig):
         mlp_ratio=4.0,
         qkv_bias=True,
         distilled=False,
+        layer_norm_eps=1e-5,
         drop_rate=0.0,
         attn_drop_rate=0.0,
         drop_path_rate=0.0,
@@ -125,7 +128,7 @@ class MGPSTRConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.mlp_ratio = mlp_ratio
         self.distilled = distilled
-        self.patch_size = patch_size
+        self.layer_norm_eps = layer_norm_eps
         self.drop_rate = drop_rate
         self.qkv_bias = qkv_bias
         self.attn_drop_rate = attn_drop_rate
