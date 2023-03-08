@@ -77,6 +77,7 @@ grpcio==1.44.0
 gym==0.23.1
 gym-notices==0.0.6
 h5py==3.6.0
+einops==0.6.0
 huggingface-hub==0.4.0
 hypothesis==6.39.4
 idna==3.3

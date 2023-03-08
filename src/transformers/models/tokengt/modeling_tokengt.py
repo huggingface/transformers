@@ -26,6 +26,12 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "TokenGTConfig"
 _TOKENIZER_FOR_DOC = "AutoTokenizer"
 
+TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "raman-ai/tokengt-base-lap-pcqm4mv2",
+    # "clefourrier/graphormer-base-pcqm4mv2",
+    # See all Graphormer models at https://huggingface.co/models?filter=graphormer
+]
+
 
 def quant_noise(module, p, block_size):
     """
@@ -1024,7 +1030,6 @@ class TokenGTGraphEncoder(nn.Module):
         token_embeddings: Optional[torch.Tensor] = None,
         attn_mask: Optional[torch.Tensor] = None,
     ):
-
         if self.performer and self.performer_auto_check_redraw:
             self.performer_proj_updater.redraw_projections()
 
