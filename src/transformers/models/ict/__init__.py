@@ -19,10 +19,19 @@ from ...utils import (
     is_flax_available,
     is_tf_available,
     is_torch_available,
+    is_vision_available,
 )
 
 
 _import_structure = {"configuration_ict": ["ICT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ICTConfig", "ICTOnnxConfig"]}
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_ict"] = ["ICTImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -64,7 +73,15 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_ict import ICT_PRETRAINED_CONFIG_ARCHIVE_MAP, ICTConfig, ICTOnnxConfig
-
+    
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_ict import ICTImageProcessor
+        
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
