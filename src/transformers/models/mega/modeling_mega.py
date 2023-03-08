@@ -1105,16 +1105,16 @@ class MegaNormalizedFeedForwardNetwork(nn.Module):
         if self.prenorm:
             inputs = self.norm(inputs)
 
-        x = self.activation(self.fc1(inputs))
-        x = self.hidden_dropout(x)
-        x = self.fc2(x)
-        x = self.dropout(x)
-        x = x + residual
+        hidden = self.activation(self.fc1(inputs))
+        hidden = self.hidden_dropout(hidden)
+        output = self.fc2(hidden)
+        output = self.dropout(output)
+        output = output + residual
 
         if not self.prenorm:
-            x = self.norm(x)
+            output = self.norm(output)
 
-        return x
+        return output
 
 
 class MegaEmbeddings(nn.Module):
