@@ -93,7 +93,7 @@ def write_model(model_path, input_base_path, model_size):
     index_dict = {"weight_map": {}}
     for layer_i in range(n_layers):
         filename = "pytorch_model-{:05d}-of-{:05d}.bin".format(
-            layer_i,
+            layer_i + 1,
             n_layers + 1,
         )
         if model_size == "7B":
@@ -167,7 +167,7 @@ def write_model(model_path, input_base_path, model_size):
         torch.save(state_dict, os.path.join(model_path, filename))
 
     filename = "pytorch_model-{:05d}-of-{:05d}.bin".format(
-        n_layers,
+        n_layers + 1,
         n_layers + 1,
     )
     if model_size == "7B":
