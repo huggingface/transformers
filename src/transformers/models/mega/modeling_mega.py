@@ -131,20 +131,21 @@ class MultiHeadEMA(nn.Module):
 
     def _calc_coeffs(self):
         self._coeffs = None
-        # D x N x 1
-        p = torch.sigmoid(self.delta)
+        # convert the alpha and delta parameters (kernel_dim x EMA projection size x 1) to [0, 1] with sigmoid
+        p_coeff = torch.sigmoid(self.delta)
         alpha = torch.sigmoid(self.alpha)
-        q = 1.0 - p * alpha
-        return p, q
+        q_coeff = 1.0 - p_coeff * alpha
+        return p_coeff, q_coeff
 
     def _compute_kernel(self, length: int):
         self._kernel = None
-        # D x N x 1
-        p, q = self._calc_coeffs()
-        # D x N x L
-        vander = torch.arange(length).to(p).view(1, 1, length) * torch.log(q)
-        kernel = (p * self.b_param) * torch.exp(vander)
-        # D x L
+        # p and q have shape (kernel_dim x ema_projection_size x 1)
+        p_coeff, q_coeff = self._calc_coeffs()
+        # extend the kernel to (kernel_dim X ema_projection_size X sequence_length) and 
+        # multiply q by sequential ints up to the sequence length
+        vander = torch.arange(length).to(p_coeff).view(1, 1, length) * torch.log(q_coeff)
+        kernel = (p_coeff* self.b_param) * torch.exp(vander)
+        # (kernel_dim X ema_projection_size X sequence_length) -> (kernel_dim, sequence_length)
         return torch.einsum("dnl,dn->dl", kernel, self.g_param * self.scale)
 
     def coeffs(self):
@@ -164,58 +165,64 @@ class MultiHeadEMA(nn.Module):
                 self._kernel = self._compute_kernel(kernel_size)
             return self._kernel[..., :kernel_size]
 
-    def step(self, x, length, hx=None):
+    def step(self, inputs, length, past_state=None):
         if length == 1:
-            return self.one_step(x, hx=hx)
+            return self.one_step(inputs, past_state=past_state)
 
-        # D x N x 1
-        p, q = self.coeffs()
-        # D x N x L+1
-        vander = torch.arange(length + 1).to(p).view(1, 1, length + 1) * torch.log(q)
+        # (kernel_dim X ema_projection_size X 1)
+        p_coeff, q_coeff = self.coeffs()
+        # (kernel_dim X ema_projection_size X 1+sequence_length)
+        vander = torch.arange(length + 1).to(p_coeff).view(1, 1, length + 1) * torch.log(q_coeff)
         vander = torch.exp(vander)
-        if hx is not None:
-            # D x N x L * D x N x 1 -> D x N x L
-            k = vander[:, :, 1:] * (self.g_param * self.scale).unsqueeze(-1)
-            ox = torch.einsum("bdn,dnl->bdl", hx, k)
-            # D x N * B x D x N -> B x D x N
-            hh = vander[:, :, -1] * hx
+        if past_state is not None:
+            # (kernel_dim X ema_projection_size X sequence_length) * (kernel_dim X ema_projection_size X 1) 
+            # -> (kernel_dim X ema_projection_size X sequence_length)
+            past_ema_proj = vander[:, :, 1:] * (self.g_param * self.scale).unsqueeze(-1)
+            # past_state will be (batch_size, kernel_dim, ema_projection_size)
+            past_ema_state = torch.einsum("bdn,dnl->bdl", past_state, past_ema_proj)
+            # (kernel_dim X ema_projection_size) * (batch_size X kernel_dim X ema_projection_size) 
+            # -> (batch_size X kernel_dim X ema_projection_size)
+            past_vandermonde = vander[:, :, -1] * past_state
         else:
-            ox = None
-            hh = None
+            past_ema_state = None
+            past_vandermonde = None
 
-        # D x N x L
+        # (kernel_dim X ema_projection_size X sequence_length)
         vander = vander[:, :, :-1]
-        kernel = (p * self.b_param) * vander
-        k = torch.einsum("dnl,dn->dl", kernel, self.g_param * self.scale)
+        kernel = (p_coeff * self.b_param) * vander
+        kernel_proj = torch.einsum("dnl,dn->dl", kernel, self.g_param * self.scale)
 
-        k_f = torch.fft.rfft(k.float(), n=2 * length)
-        x_f = torch.fft.rfft(x.float(), n=2 * length)
-        # B x D x L
-        out = torch.fft.irfft(x_f * k_f, n=2 * length)[..., 0:length]
-        out = out.type_as(x)
-        if ox is not None:
-            out = out + ox
+        kernel_fourier = torch.fft.rfft(kernel_proj.float(), n=2 * length)
+        inputs_fourier = torch.fft.rfft(inputs.float(), n=2 * length)
+        # (batch_size X kernel_dim X sequence_length)
+        out = torch.fft.irfft(inputs_fourier * kernel_fourier, n=2 * length)[..., 0:length]
+        out = out.type_as(inputs)
+        if past_ema_state is not None:
+            out = out + past_ema_state
 
-        h = torch.einsum("bdl,dnl->bdn", x, torch.flip(kernel, dims=[2]))
-        if hh is not None:
-            h = h + hh
-        # L x B x D, B x D x N
-        return out.permute(2, 0, 1), h
+        updated_hidden_state = torch.einsum("bdl,dnl->bdn", inputs, torch.flip(kernel, dims=[2]))
+        if past_vandermonde is not None:
+            updated_hidden_state = updated_hidden_state + past_vandermonde
+        # return a tuple:
+        # (sequence_length, batch_size, kernel_dim)
+        # (batch_size, kernel_dim, ema_projection_size)
+        return out.permute(2, 0, 1), updated_hidden_state
 
-    def one_step(self, x, hx=None):
-        p, q = self.coeffs()
-        # (D x N) x (B x D x 1) -> B x D x N
-        h = (p * self.b_param).squeeze(-1) * x
-        if hx is not None:
-            h = h + q.squeeze(-1) * hx
-        # B x D
-        out = torch.einsum("bdn,dn->bd", h, self.g_param * self.scale)
-        # 1 x B x D, B x D x N
-        return out.unsqueeze(0), h
+    def one_step(self, inputs, past_state=None):
+        p_coeff, q_coeff = self.coeffs()
+        # (kernel_dim X ema_projection_size) x (batch_size X kernel_dim X 1) 
+        # -> (batch_size X kernel_dim X ema_projection_size)
+        updated_state = (p_coeff * self.b_param).squeeze(-1) * inputs
+        if past_state is not None:
+            updated_state = updated_state + q_coeff.squeeze(-1) * past_state
+        # (batch_size X kernel_dim)
+        out = torch.einsum("bdn,dn->bd", updated_state, self.g_param * self.scale)
+        # (1 X batch_size X kernel_dim), (batch_size X kernel_dim X ema_projection_size)
+        return out.unsqueeze(0), updated_state
 
     def forward(
         self,
-        x,
+        inputs,
         attention_mask: Optional[torch.Tensor] = None,
         prev_state: Optional[torch.Tensor] = None,
         use_cache: bool = False,
@@ -224,8 +231,8 @@ class MultiHeadEMA(nn.Module):
         Mega's self-attention mechanism based on exponential moving average (EMA)
 
         Args:
-            x (`torch.Tensor` of shape `(sequence_length, batch_size, hidden_size)`): 
-                Hidden state input on which to perform self-attention
+            inputs (`torch.Tensor` of shape `(sequence_length, batch_size, hidden_size)`): 
+                Hidden state / embedding input on which to perform self-attention
             attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*): 
                 Indicates which inputs are to be ignored (mostly due to padding), where 
                 elements are either 1 for *not masked* or 0 for *masked*
@@ -244,50 +251,51 @@ class MultiHeadEMA(nn.Module):
               The incremental EMA state for use in the next step of incremental decoding
         """
 
-        seq_len, bsz, embed_dim = x.size()
+        seq_len, bsz, embed_dim = inputs.size()
         if embed_dim != self.embed_dim:
             raise ValueError(f"Unexpected embedding dimension received: input is {embed_dim}, model expects {self.embed_dim}")
 
-        # L x B x D
-        residual = x * self.omega
+        # sequence_length X batch_size X hidden_size
+        residual = inputs * self.omega
 
-        # L x B x D -> B x D x L
-        x = x.permute(1, 2, 0)
+        # (sequence_length x batch_size x hidden_size) -> (batch_size x hidden_size x sequence_length)
+        inputs = inputs.permute(1, 2, 0)
         # mask the input: output is a tensor with 0 in the masked positions
         if attention_mask is not None:
-            x = x * (attention_mask.unsqueeze(1).type_as(x))
+            inputs = inputs * (attention_mask.unsqueeze(1).type_as(inputs))
 
         if self.bidirectional and use_cache:
-            raise ValueError("Bidirectional EMA does not support incremental state")
+            raise RuntimeError("Bidirectional EMA does not support incremental state")
 
         if use_cache:
-            out, updated_state = self.step(x, seq_len, hx=prev_state)
+            out, updated_state = self.step(inputs, seq_len, past_state=prev_state)
 
-            # B x D -> 1 x B x D
+            # (batch_size X hidden_size) -> (1 x batch_size x hidden_size)
             out = F.silu(out + residual)
 
             # if incremental decoding, return the new state along with the output
             return out, updated_state
         else:
-            # D x L
-            k = self.kernel(seq_len)
+            # (hidden_size x sequence_length)
+            kernel = self.kernel(seq_len)
             fft_len = seq_len
-            s = 0
-            kernel_size = k.size(1)
+            s_index = 0
+            kernel_size = kernel.size(1)
             if self.bidirectional:
-                k1, k2 = torch.split(k, [self.embed_dim, self.embed_dim], dim=0)
-                # D x 2*L-1
-                k = F.pad(k1, (kernel_size - 1, 0)) + F.pad(k2.flip(-1), (0, kernel_size - 1))
-                x = F.pad(x, (kernel_size - 1, 0))
+                # split the kernel for each direction of EMA
+                k1, k2 = torch.split(kernel, [self.embed_dim, self.embed_dim], dim=0)
+                # (hidden_size X 2*sequence_length - 1)
+                kernel = F.pad(k1, (kernel_size - 1, 0)) + F.pad(k2.flip(-1), (0, kernel_size - 1))
+                inputs = F.pad(inputs, (kernel_size - 1, 0))
                 fft_len = fft_len + kernel_size - 1
-                s = 2 * kernel_size - 2
+                s_index = 2 * kernel_size - 2
 
-            k_f = torch.fft.rfft(k.float(), n=2 * fft_len)
-            x_f = torch.fft.rfft(x.float(), n=2 * fft_len)
-            # B x D x L
-            out = torch.fft.irfft(x_f * k_f, n=2 * fft_len)[..., s : s + seq_len]
-            out = out.type_as(x)
-            # B x D x L -> L x B x D
+            kernel_fourier = torch.fft.rfft(kernel.float(), n=2 * fft_len)
+            inputs_fourier = torch.fft.rfft(inputs.float(), n=2 * fft_len)
+            # (batch_size X hidden_size X sequence_length)
+            out = torch.fft.irfft(inputs_fourier * kernel_fourier, n=2 * fft_len)[..., s_index : s_index + seq_len]
+            out = out.type_as(inputs)
+            # (batch_size X hidden_size X sequence_length) -> (sequence_length X batch_size X hidden_size)
             out = F.silu(out.permute(2, 0, 1) + residual)
 
             return out, None
@@ -312,12 +320,10 @@ class MegaGatedCrossAttention(nn.Module):
         )
 
         dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
-        self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
-        self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob, module_name=self.__class__.__name__)
+        self.dropout = dropout_module(self.config.dropout_prob)
+        self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob)
         # Attention dropout is standard dropout
-        self.attention_dropout = MegaDropout(
-            self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__
-        )
+        self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob)
 
         self.prenorm = self.config.normalize_before_mega
         self.norm = MegaSequenceNorm(
@@ -340,28 +346,28 @@ class MegaGatedCrossAttention(nn.Module):
 
         self.softmax = nn.Softmax(dim=-1)
 
-    def element_attention(self, q, k, key_padding_mask, pidx):
-        bsz, clen, _ = k.size()
-        slen = q.size(1) if pidx is None else pidx + 1
+    def element_attention(self, query, key, key_padding_mask, pidx):
+        bsz, clen, _ = key.size()
+        slen = query.size(1) if pidx is None else pidx + 1
         if key_padding_mask is not None:
-            # B x L1 --> B x 1 x 1
+            # (batch_size X source_sequence_length) --> (batch_size X 1 X 1)
             lengths = key_padding_mask.sum(dim=-1).view(bsz, 1, 1)
         else:
             lengths = clen
 
-        # L x L1
+        # (target_sequence_length X source_sequence_length)
         bias = self.rel_pos_bias(max(slen, clen))[:, :clen]
         if pidx is not None:
-            if q.size(1) != 1:
+            if query.size(1) != 1:
                 raise ValueError("Position offset provided with queries longer than 1 token")
-            # L1
+            # source_sequence_length
             bias = bias[pidx]
         else:
-            # L2 x L1
+            # (target_sequence_length X source_sequence_length)
             bias = bias[:slen]
 
-        # B x L2 x L1
-        qk = torch.bmm(q, k.transpose(1, 2)) / lengths + bias
+        # (batch_size X target_sequence_length X source_sequence_length)
+        qk = torch.bmm(query, key.transpose(1, 2)) / lengths + bias
 
         if self.attention_activation == "relu2":
             attn_weights = relu2(qk).type_as(qk)
@@ -375,25 +381,25 @@ class MegaGatedCrossAttention(nn.Module):
 
         return attn_weights
 
-    def softmax_attention(self, q, k, key_padding_mask, pidx):
-        bsz, clen, _ = k.size()
-        slen = q.size(1) if pidx is None else pidx + 1
+    def softmax_attention(self, query, key, key_padding_mask, pidx):
+        bsz, clen, _ = key.size()
+        slen = query.size(1) if pidx is None else pidx + 1
 
-        # L x L1
+        # (target_sequence_length X source_sequence_length)
         bias = self.rel_pos_bias(max(slen, clen))[:, :clen]
         if pidx is not None:
-            if q.size(1) != 1:
+            if query.size(1) != 1:
                 raise ValueError("Position offset provided with queries longer than 1 token")
-            # L1
+            # source_sequence_length
             bias = bias[pidx]
         else:
-            # L2 x L1
+            # (target_sequence_length X source_sequence_length)
             bias = bias[:slen]
 
         # scaled attention
-        q = q * self.scaling
-        # B x L2 x L1
-        qk = torch.bmm(q, k.transpose(1, 2)) + bias
+        query = query * self.scaling
+        # (batch_size X target_sequence_length X source_sequence_length)
+        qk = torch.bmm(query, key.transpose(1, 2)) + bias
 
         if key_padding_mask is not None:
             qk = qk.masked_fill((1 - key_padding_mask).unsqueeze(1).to(torch.bool), float("-inf"))
@@ -464,47 +470,53 @@ class MegaGatedCrossAttention(nn.Module):
             # we still need the position id if we're doing incremental decoding (past_key_values will be None for the first step)
             num_incremental_steps = 0 if use_cache and (seq_len == 1) else None
 
-        q = query
+        full_query = query
         if self.prenorm:
-            q = self.norm(q)
+            full_query = self.norm(full_query)
 
-        # L2 x B x (2*D+S)
-        base = self.q_proj(q)
-        u, r, q = torch.split(
-            base, [self.config.hidden_size, self.config.hidden_size, self.config.shared_representation_size], dim=-1
+        # (target_sequence_length X batch_size X 2*hidden_size + shared_representation_size)
+        query_projected = self.q_proj(full_query)
+        # split the query projections into separate components
+        # - residual_weight is passed through sigmoid and sent through elementwise multiplication to the gated/weighted targets prior to being added to the query directly
+        # - target_gate is a silu-gated tensor that is multiplied by the attention-weighted target below prior to residual connection
+        # - attention_query is the part that is passed to the attention function
+        residual_weight, target_gate, attention_query = torch.split(
+            query_projected, [self.config.hidden_size, self.config.hidden_size, self.config.shared_representation_size], dim=-1
         )
 
-        # L2 x B x D
-        u = torch.sigmoid(u)
-        r = F.silu(r)
+        # (target_sequence_length X batch_size X hidden_size)
+        residual_weight = torch.sigmoid(residual_weight)
+        target_gate = F.silu(target_gate)
 
         if key is None:
             if value is not None:
                 raise ValueError("Key and value must be `None` simultaneously")
-            k = v = None
+            projected_key = projected_value = None
         else:
-            # L1 x B x S
-            k = self.k_proj(key)
-            v = self.activation(self.v_proj(key))
+            # (source_sequence_length X batch_size X shared_representation_size)
+            projected_key = self.k_proj(key)
+            # (source_sequence_length X batch_size X hidden_size)
+            projected_value = self.activation(self.v_proj(key))
 
-        # L2 x B x S -> B x L2 x S
-        q = q.transpose(0, 1)
-        if k is not None:
-            k = k.transpose(0, 1)
-        if v is not None:
-            v = v.transpose(0, 1)
+        # (target_sequence_length X batch_size X shared_representation_size) 
+        # -> (batch_size X target_sequence_length X shared_representation_size)
+        attention_query = attention_query.transpose(0, 1)
+        if projected_key is not None:
+            projected_key = projected_key.transpose(0, 1)
+        if projected_value is not None:
+            projected_value = projected_value.transpose(0, 1)
 
         # if we're doing incremental decoding, k and v are None and need to be overwritten with past values
         if prev_key_values is not None:
-            k = prev_cross_key
-            v = prev_cross_value
+            projected_key = prev_cross_key
+            projected_value = prev_cross_value
 
         # if we're returning the cache for later use, store these now for later return (can be done without having prev_key_values provided)
         if use_cache:
-            updated_cross_key = k
-            updated_cross_value = v
+            updated_cross_key = projected_key
+            updated_cross_value = projected_value
 
-        ctx_len = k.size(1)
+        ctx_len = projected_key.size(1)
         # This is part of a workaround to get around fork/join parallelism
         # not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
@@ -517,18 +529,19 @@ class MegaGatedCrossAttention(nn.Module):
                 raise ValueError("Key padding mask does not align on the sequence length dimension")
 
         if self.attention_activation == "softmax":
-            attn_weights = self.softmax_attention(q, k, key_padding_mask, num_incremental_steps)
+            attn_weights = self.softmax_attention(attention_query, projected_key, key_padding_mask, num_incremental_steps)
         else:
-            attn_weights = self.element_attention(q, k, key_padding_mask, num_incremental_steps)
+            attn_weights = self.element_attention(attention_query, projected_key, key_padding_mask, num_incremental_steps)
 
-        v = self.hidden_dropout(v, batch_first=True)
+        projected_value = self.hidden_dropout(projected_value, batch_first=True)
         kernel = self.attention_dropout(attn_weights)
-        # B x L2 x D -> L2 x B x D
-        h = torch.bmm(kernel, v).transpose(0, 1)
-        # L2 x B x D
-        h = self.activation(self.h_proj(h * r))
-        h = self.dropout(h)
-        out = torch.addcmul(query, u, h - query)
+        # (batch_size X target_sequence_length X hidden_size) 
+        # -> (target_sequence_length X batch_size X hidden_size)
+        weighted_targets = torch.bmm(kernel, projected_value).transpose(0, 1)
+        # (target_sequence_length X batch_size X hidden_size)
+        weighted_targets = self.activation(self.h_proj(weighted_targets * target_gate))
+        weighted_targets = self.dropout(weighted_targets)
+        out = torch.addcmul(query, residual_weight, weighted_targets - query)
 
         if not self.prenorm:
             out = self.norm(out)
@@ -541,7 +554,7 @@ class MegaGatedCrossAttention(nn.Module):
 
 
 # Positional embeddings
-# copied without modification from original Mega code
+# copied from original Mega code and renamed variables for better readability
 class SimpleRelativePositionalBias(nn.Module):
     def __init__(self, config: MegaConfig):
         super().__init__()
@@ -553,27 +566,26 @@ class SimpleRelativePositionalBias(nn.Module):
         if seq_len > self.max_positions:
             raise ValueError("Sequence length {} going beyond max length {}".format(seq_len, self.max_positions))
 
-        # seq_len * 2 -1
-        b = self.rel_pos_bias[(self.max_positions - seq_len) : (self.max_positions + seq_len - 1)]
+        # seq_len * 2 - 1
+        bias = self.rel_pos_bias[(self.max_positions - seq_len) : (self.max_positions + seq_len - 1)]
         # seq_len * 3 - 1
-        t = F.pad(b, (0, seq_len))
+        tile = F.pad(bias, (0, seq_len))
         # (seq_len * 3 - 1) * seq_len
-        t = torch.tile(t, (seq_len,))
-        t = t[:-seq_len]
+        tile = torch.tile(tile, (seq_len,))
+        tile = tile[:-seq_len]
         # seq_len x (3 * seq_len - 2)
-        t = t.view(seq_len, 3 * seq_len - 2)
-        r = (2 * seq_len - 1) // 2
-        start = r
-        end = t.size(1) - r
-        t = t[:, start:end]
-        return t
+        tile = tile.view(seq_len, 3 * seq_len - 2)
+        start = (2 * seq_len - 1) // 2
+        end = tile.size(1) - start
+        tile = tile[:, start:end]
+        return tile
 
 
 class RotaryRelativePositionalBias(nn.Module):
     def __init__(self, config: MegaConfig):
         super().__init__()
         if config.hidden_size % 2 != 0:
-            raise ValueError("Rotary positional bias requires `hidden_size` to be a multiple of 2")
+            raise RuntimeError("Rotary positional bias requires `hidden_size` to be a multiple of 2")
         self.config = config
         self.embed_dim = config.shared_representation_size
         self.max_positions = self.config.max_positions if self.config.chunk_size < 0 else self.config.chunk_size
@@ -606,14 +618,14 @@ class RotaryRelativePositionalBias(nn.Module):
         return torch.cat([x1 * cos - x2 * sin, x2 * cos + x1 * sin], dim=1)
 
     def forward(self, seq_len):
-        a = self.rotary(self.alpha.expand(seq_len, self.embed_dim))
-        b = self.rotary(self.b_param.expand(seq_len, self.embed_dim))
-        t = torch.einsum("mk,nk->mn", a, b)
-        return t
+        rotary_alpha = self.rotary(self.alpha.expand(seq_len, self.embed_dim))
+        rotary_beta = self.rotary(self.b_param.expand(seq_len, self.embed_dim))
+        bias = torch.einsum("mk,nk->mn", rotary_alpha, rotary_beta)
+        return bias
 
 
 # Normalization modules
-# copied without modification
+# copied from original Mega repo without modification except variable names
 class ScaleNorm(nn.Module):
     def __init__(self, dim, eps=1e-6, affine=True):
         super().__init__()
@@ -625,13 +637,13 @@ class ScaleNorm(nn.Module):
         else:
             self.register_parameter("scalar", None)
 
-    def forward(self, x):
-        mean_square = torch.mean(torch.square(x), dim=self.dim, keepdim=True)
+    def forward(self, input):
+        mean_square = torch.mean(torch.square(input), dim=self.dim, keepdim=True)
         if self.scalar is not None:
-            x = self.scalar * x
+            input = self.scalar * input
 
-        x = x * torch.rsqrt(mean_square + self.eps)
-        return x
+        output = input * torch.rsqrt(mean_square + self.eps)
+        return output
 
 
 class RMSNorm(nn.Module):
@@ -645,13 +657,13 @@ class RMSNorm(nn.Module):
         else:
             self.register_parameter("weight", None)
 
-    def forward(self, x):
-        mean_square = torch.mean(torch.square(x), dim=-1, keepdim=True)
+    def forward(self, input):
+        mean_square = torch.mean(torch.square(input), dim=-1, keepdim=True)
         if self.weight is not None:
-            x = x * self.weight
+            input = input * self.weight
 
-        x = x * torch.rsqrt(mean_square + self.eps)
-        return x
+        output = input * torch.rsqrt(mean_square + self.eps)
+        return input
 
 
 class MegaSequenceNorm(nn.Module):
@@ -680,83 +692,50 @@ class MegaSequenceNorm(nn.Module):
         else:
             return self.norm(x)
 
-    def forward(self, x):
-        return self.normalize(x)
+    def forward(self, input):
+        return self.normalize(input)
 
 # add this layernorm class to ALL_LAYERNORM_LAYERS
 ALL_LAYERNORM_LAYERS.append(MegaSequenceNorm)
 
 # Dropout: standard dropout + feature dropout
-# unmodified, but changed name from Fairseq->Mega
+# copied from Mega repo, but changed name from Fairseq->Mega,
+# modified variable names, and removed unused items:
+# - `make_generation_fast_` method 
+# - `apply_during_inference` attribute 
+# - `module_name` arg
 class MegaDropout(nn.Module):
-    def __init__(self, p, module_name=None):
+    def __init__(self, p):
         super().__init__()
         self.p = p
-        self.module_name = module_name
-        self.apply_during_inference = False
 
-    def forward(self, x, batch_first: bool = False, inplace: bool = False):
-        if self.training or self.apply_during_inference:
-            return F.dropout(x, p=self.p, training=True, inplace=inplace)
+    def forward(self, input, batch_first: bool = False, inplace: bool = False):
+        if self.training:
+            return F.dropout(input, p=self.p, training=True, inplace=inplace)
         else:
-            return x
-
-    def make_generation_fast_(
-        self, name: str, retain_dropout: bool = False, retain_dropout_modules: Optional[List[str]] = None, **kwargs
-    ):
-        if retain_dropout:
-            if retain_dropout_modules is not None and self.module_name is None:
-                logger.warning(
-                    "Cannot enable dropout during inference for module {} "
-                    "because module_name was not set".format(name)
-                )
-            elif (
-                retain_dropout_modules is None  # if None, apply to all modules
-                or self.module_name in retain_dropout_modules
-            ):
-                logger.info("Enabling dropout during inference for module: {}".format(name))
-                self.apply_during_inference = True
-            else:
-                logger.info("Disabling dropout for module: {}".format(name))
-
+            return input
 
 class MegaFeatureDropout(nn.Module):
-    def __init__(self, p, module_name=None):
+    def __init__(self, p):
         super().__init__()
         self.p = p
-        self.module_name = module_name
-        self.apply_during_inference = False
 
-    def forward(self, x, batch_first: bool = False, inplace: bool = False):
-        if self.training or self.apply_during_inference:
+    def forward(self, input, batch_first: bool = False, inplace: bool = False):
+        if self.training:
             if batch_first:
-                # B x L x D -> B x D x L -> B x L x D
-                return F.dropout2d(x.transpose(-1, -2), p=self.p, training=True, inplace=inplace).transpose(-1, -2)
+                # (batch_size X sequence_length X feature_dimension) 
+                # -> (batch_size X feature_dimension X sequence_length) 
+                # -> (batch_size X sequence_length X feature_dimension) 
+                return F.dropout2d(input.transpose(-1, -2), p=self.p, training=True, inplace=inplace).transpose(-1, -2)
             else:
-                if x.dim() != 3:
+                if input.dim() != 3:
                     raise ValueError("Feature dropout inputs must be exactly 3-dimensional if inputs are ordered [sequence length, batch size, hidden dimension]")
-                # L x B x D -> B x D x L -> L x B x D
-                return F.dropout2d(x.permute(1, 2, 0), p=self.p, training=True, inplace=inplace).permute(2, 0, 1)
+                # (sequence_length X batch_size X feature_dimension) 
+                # -> (batch_size X feature_dimension X sequence_length) 
+                # -> (sequence_length X batch_size X feature_dimension)
+                return F.dropout2d(input.permute(1, 2, 0), p=self.p, training=True, inplace=inplace).permute(2, 0, 1)
         else:
-            return x
-
-    def make_generation_fast_(
-        self, name: str, retain_dropout: bool = False, retain_dropout_modules: Optional[List[str]] = None, **kwargs
-    ):
-        if retain_dropout:
-            if retain_dropout_modules is not None and self.module_name is None:
-                logger.warning(
-                    "Cannot enable dropout during inference for module {} "
-                    "because module_name was not set".format(name)
-                )
-            elif (
-                retain_dropout_modules is None  # if None, apply to all modules
-                or self.module_name in retain_dropout_modules
-            ):
-                logger.info("Enabling dropout during inference for module: {}".format(name))
-                self.apply_during_inference = True
-            else:
-                logger.info("Disabling dropout for module: {}".format(name))
+            return input
 
 
 # Mega attention: EMA + self-attention
@@ -775,12 +754,10 @@ class MovingAverageGatedAttention(nn.Module):
             self.config.shared_representation_size**-0.5 if self.config.attention_activation == "softmax" else None
         )
         dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
-        self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
-        self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob, module_name=self.__class__.__name__)
+        self.dropout = dropout_module(self.config.dropout_prob)
+        self.hidden_dropout = dropout_module(self.config.hidden_dropout_prob)
         # attention dropout is standard dropout
-        self.attention_dropout = MegaDropout(
-            self.config.attention_probs_dropout_prob, module_name=self.__class__.__name__
-        )
+        self.attention_dropout = MegaDropout(self.config.attention_probs_dropout_prob)
 
         self.norm = MegaSequenceNorm(
             self.config.normalization_type, self.config.hidden_size, affine=self.config.norm_affine
@@ -794,7 +771,7 @@ class MovingAverageGatedAttention(nn.Module):
         )
         self.h_proj = nn.Linear(self.config.intermediate_size, self.config.hidden_size)
 
-        # renamed gamma and beta to g_param and b_param respectively due to HF renaming weights
+        # renamed gamma and beta to g_param and b_param respectively due to Hugging Face renaming weights upon `.from_pretrained`
         self.g_param = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
         self.b_param = nn.Parameter(torch.Tensor(2, self.config.shared_representation_size))
 
@@ -810,24 +787,19 @@ class MovingAverageGatedAttention(nn.Module):
             self.softmax_attention if self.config.attention_activation == "softmax" else self.element_attention
         )
 
-    def element_attention(self, q, k, padding_mask, causal_mask):
+    def element_attention(self, query, key, padding_mask, causal_mask):
         """
         Apply element-wise attention via relu^2 or laplace. Same as original implementation but with standardized
         causal attention mask
-
-        padding_mask: tensor with shape (batch x no. chunks x chunk size x sequence length), or None causal_mask:
-        tensor with shape (sequence length x sequence length), or None
-
-        Both masks expect 1 to indicate *not masked* and 0 to indicate *masked*
         """
-        slen = k.size(2)
+        slen = key.size(2)
         if padding_mask is not None:
             # 1 for *not masked*
             # 0 for *masked*
 
-            # B x K x 1
+            # (batch_size X number of chunks X 1)
             lengths = padding_mask.sum(-1, keepdim=True)
-            # B x K x 1 x 1
+            # (batch_size X number of chunks X 1 X 1)
             lengths = lengths.clamp(min=1.0).unsqueeze(-1)
         else:
             lengths = slen
@@ -835,16 +807,16 @@ class MovingAverageGatedAttention(nn.Module):
         if causal_mask is not None:
             lengths = causal_mask.sum(dim=-1, keepdim=True)
 
-        # C x C
+        # (sequence_length X sequence_length)
         bias = self.rel_pos_bias(slen)
-        if slen != q.size(2):
-            if q.size(2) != 1:
+        if slen != query.size(2):
+            if query.size(2) != 1:
                 raise ValueError("Size mismatch between Q and K in element attention")
-            # 1 x C
+            # (1 X sequence_length)
             bias = bias[-1:]
 
-        # B x K x C x C
-        qk = torch.matmul(q, k.transpose(2, 3)) / lengths + bias
+        # (batch_size X number of chunks X sequence_length X sequence_length)
+        qk = torch.matmul(query, key.transpose(2, 3)) / lengths + bias
 
         if self.config.attention_activation == "relu2":
             attn_weights = relu2(qk).type_as(qk)
@@ -861,23 +833,23 @@ class MovingAverageGatedAttention(nn.Module):
 
         return attn_weights
 
-    def softmax_attention(self, q, k, padding_mask, causal_mask):
-        "Standard softmax attention with combined padding/attention mask"
-        slen = k.size(2)
-        # C x C
+    def softmax_attention(self, query, key, padding_mask, causal_mask):
+        "Standard softmax self-attention, as in the original Transformer paper"
+        slen = key.size(2)
+        # (sequence_length X sequence_length)
         bias = self.rel_pos_bias(slen)
-        if slen != q.size(2):
-            if q.size(2) != 1:
+        if slen != query.size(2):
+            if query.size(2) != 1:
                 raise ValueError("Size mismatch between Q and K in softmax attention")
-            # 1 x C
+            # (1 X sequence_length)
             bias = bias[-1:]
 
         # scaled attention
-        q = q * self.scaling
+        query = query * self.scaling
 
-        # B x K x C x C (if chunking)
-        # B x 1 x S x S (otherwise)
-        qk = torch.matmul(q, k.transpose(2, 3)) + bias
+        # (batch_size x number of chunks x chunk_size x chunk_size) if chunking
+        # (batch_size x 1 x sequence_length x sequence_length) otherwise
+        qk = torch.matmul(query, key.transpose(2, 3)) + bias
 
         # apply causal mask (presumed to be 1/0 for not masked / masked)
         # additive, but convert to 0/-inf (which is not explicitly in the Mega source code)
@@ -901,7 +873,7 @@ class MovingAverageGatedAttention(nn.Module):
 
     def forward(
         self,
-        x,
+        input,
         padding_mask: Optional[torch.Tensor] = None,
         causal_mask: Optional[torch.Tensor] = None,
         prev_key_values: Optional[Tuple[torch.Tensor]] = None,
@@ -912,7 +884,7 @@ class MovingAverageGatedAttention(nn.Module):
         Mega's self-attention block, which combines multi-headed EMA with traditional self-attention
 
         Args:
-            x (`torch.Tensor`` of shape `(sequence_length, batch_size, hidden_size)`):
+            input (`torch.Tensor`` of shape `(sequence_length, batch_size, hidden_size)`):
                 Hidden states to be updated by Mega's self-attention
             padding_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*): 
                 Indicates which inputs are to be ignored due to padding, where elements are either 
@@ -945,17 +917,17 @@ class MovingAverageGatedAttention(nn.Module):
               The incremental EMA state for use in the next step of incremental decoding.
         """
 
-        seq_len, bsz, embed_dim = x.size()
+        seq_len, bsz, embed_dim = input.size()
         if embed_dim != self.config.hidden_size:
             raise ValueError(f"Input embedding dimension should be {self.config.hidden_size}; received {embed_dim}")
 
         # store inputs for residual connection and handle pre-norm if requested
-        residual = x
+        residual = input
         if self.config.normalize_before_mega:
-            x = self.norm(x)
+            input = self.norm(input)
 
-        # L x B x E
-        v = self.activation(self.v_proj(x))
+        # (sequence_length X batch_size X hidden_size) -> (sequence_length X batch_size X intermediate_size)
+        value = self.activation(self.v_proj(input))
 
         # unpack the incremental state if provided
         # assumed to be (self K, self V, self EMA state, cross K, cross V)
@@ -968,16 +940,21 @@ class MovingAverageGatedAttention(nn.Module):
         else:
             prev_self_key = prev_self_value = prev_ema_state = None
 
-        # L x B x D
-        # updated_ema_state will be None if use_cache=False
-        mx, updated_ema_state = self.move(
-            x, attention_mask=padding_mask, prev_state=prev_ema_state, use_cache=use_cache
+        # ema output is (sequence_length x batch_size x hidden_size)
+        # updated_ema_state will be None if use_cache=False; otherwise (batch_size, config.ndim)
+        ema_out, updated_ema_state = self.move(
+            input, attention_mask=padding_mask, prev_state=prev_ema_state, use_cache=use_cache
         )
-        mx = self.dropout(mx)
+        ema_out = self.dropout(ema_out)
 
-        # L x B x D -> L x B x (2*D+S+E)
-        base = self.mx_proj(mx)
-        u, zr, hx = torch.split(
+        # (sequence_length X batch_size X hidden_size)
+        # -> (sequence_length X batch_size X 2*hidden_size + config.shared_representation_size + config.intermediate_size) 
+        # - residual_weight -> sigmoid -> applied to residual connection in torch.addcmul
+        # - query_key_gates -> split into two components: query_key becomes query and key for attention input, gates becomes gating for self-attention output
+        # - intermediate_state -> added to weighted attention output, sent through activation, and has inputs subtracted during 
+        #   torch.addcmul to create the final layer output
+        base = self.mx_proj(ema_out)
+        residual_weight, query_key_gates, intermediate_state = torch.split(
             base,
             [
                 self.config.hidden_size,
@@ -987,96 +964,102 @@ class MovingAverageGatedAttention(nn.Module):
             dim=-1,
         )
 
-        # L x B x D
-        u = torch.sigmoid(u)
+        # (sequence_length X batch_size X hidden_size)
+        residual_weight = torch.sigmoid(residual_weight)
 
-        # L x B x (E + S)
-        z, r = torch.split(F.silu(zr), [self.config.shared_representation_size, self.config.intermediate_size], dim=-1)
+        # (sequence_length X batch_size X shared_representation_size + intermediate_size)
+        # split into two different tensors: one for Q/K usage and the other for gating self-attention
+        query_key, attention_gate = torch.split(F.silu(query_key_gates), [self.config.shared_representation_size, self.config.intermediate_size], dim=-1)
 
-        # L x B x S -> L x B x 1 x S -> L x B x 2 X S
-        z = z.unsqueeze(2) * self.g_param + self.b_param
+        # (sequence_length X batch_size X shared_representation_size) 
+        # -> (sequence_length X batch_size X 1 X shared_representation_size) 
+        # -> (sequence_length X batch_size X 2 X shared_representation_size) 
+        query_key = query_key.unsqueeze(2) * self.g_param + self.b_param
 
-        # L x B x 2 x S -> L x B x S
-        q, k = torch.unbind(z, dim=2)
+        # (sequence_length X batch_size X 2 X shared_representation_size) 
+        # -> 2 tensors of (sequence_length X batch_size X shared_representation_size)
+        query, key = torch.unbind(query_key, dim=2)
 
-        # L x B x D -> B x L x D
-        q = q.transpose(0, 1)
-        k = k.transpose(0, 1)
-        v = v.transpose(0, 1)
+        # (sequence_length X batch_size X dimension) 
+        # -> (batch_size X sequence_length X dimension)
+        # where `dimension` is either shared_representation_size (queries and keys) or intermediate_size (values)
+        query = query.transpose(0, 1)
+        key = key.transpose(0, 1)
+        value = value.transpose(0, 1)
 
         if self.config.is_decoder:
             # combine history and current to save updated state (if history is provided)
             # when chunking is applied, the past states will be None at the end of the chunk, in
             # which case, proceed as if no K/V history had been provided
-            # saved states are stored with shape (bsz, seq_len, dim)
+            # saved states are stored with shape (batch_size X sequence_length X dimension)
             if prev_self_key is not None:
-                k = torch.cat([prev_self_key, k], dim=1)
+                key = torch.cat([prev_self_key, key], dim=1)
             if prev_self_value is not None:
-                v = torch.cat([prev_self_value, v], dim=1)
+                value = torch.cat([prev_self_value, value], dim=1)
 
             # if not chunking, store as-is
             if not self.config.use_chunking:
-                updated_self_key = k
-                updated_self_value = v
+                updated_self_key = key
+                updated_self_value = value
             else:
-                curr_len = k.size(1) % self.config.chunk_size
+                curr_len = key.size(1) % self.config.chunk_size
                 if curr_len == 0:
                     # if we're chunking and have reached the end of a chunk, wipe out the saved state
                     updated_self_key = None
                     updated_self_value = None
                 else:
-                    updated_self_key = k
-                    updated_self_value = v
+                    updated_self_key = key
+                    updated_self_value = value
 
-        ctx_len = k.size(1)
+        ctx_len = key.size(1) # potentially differs from seq_len because of incremental decoding
         if not self.config.use_chunking:
             # if we're not chunking, treat the entire sequence as one long chunk
-            # B x L x S -> B x 1 x L x S
-            q = q.unsqueeze(1)
-            k = k.unsqueeze(1)
-            v = v.unsqueeze(1)
+            # (batch_size X sequence_length X dimension) -> (batch_size X 1 X sequence_length X dimension)
+            query = query.unsqueeze(1)
+            key = key.unsqueeze(1)
+            value = value.unsqueeze(1)
             if padding_mask is not None:
-                # B x L -> B x 1 x L
+                # (batch_size X sequence_length) -> (batch_size X 1 X sequence_length)
                 padding_mask = padding_mask.unsqueeze(1)
         else:
-            # otherwise, split the sequences in the batch into K chunks of size C
+            # otherwise, split the sequences in the batch into `n_chunks` chunks of size `chunk_size`
             if seq_len < self.config.chunk_size:
-                q = q.unsqueeze(1)
+                query = query.unsqueeze(1)
             else:
-                # B x L x S -> B x K x C x S
-                nc = seq_len // self.config.chunk_size
-                q = q.reshape(bsz, nc, self.config.chunk_size, self.config.shared_representation_size)
+                # (batch_size X sequence_length X dimension) -> (batch_size X n_chunks X chunk_size X dimension)
+                n_chunks = seq_len // self.config.chunk_size
+                query = query.reshape(bsz, n_chunks, self.config.chunk_size, self.config.shared_representation_size)
 
             if ctx_len < self.config.chunk_size:
-                k = k.unsqueeze(1)
-                v = v.unsqueeze(1)
+                key = key.unsqueeze(1)
+                value = value.unsqueeze(1)
                 if padding_mask is not None:
                     padding_mask = padding_mask.unsqueeze(1)
             else:
-                # B x L x S -> B x K x C x S
-                nc = ctx_len // self.config.chunk_size
-                k = k.reshape(bsz, nc, self.config.chunk_size, self.config.shared_representation_size)
-                v = v.reshape(bsz, nc, self.config.chunk_size, self.config.intermediate_size)
+                # (batch_size X sequence_length X dimension) -> (batch_size X n_chunks X chunk_size X dimension)
+                n_chunks = ctx_len // self.config.chunk_size
+                key = key.reshape(bsz, n_chunks, self.config.chunk_size, self.config.shared_representation_size)
+                value = value.reshape(bsz, n_chunks, self.config.chunk_size, self.config.intermediate_size)
                 if padding_mask is not None:
-                    padding_mask = padding_mask.view(bsz, nc, self.config.chunk_size)
+                    padding_mask = padding_mask.view(bsz, n_chunks, self.config.chunk_size)
 
         # this is in the original Mega implementation to work around fork/join parallelism not supporting optional types
         if padding_mask is not None and padding_mask.dim() == 0:
             padding_mask = None
 
-        attn_weights = self.attention_function(q, k, padding_mask=padding_mask, causal_mask=causal_mask)
+        attn_weights = self.attention_function(query, key, padding_mask=padding_mask, causal_mask=causal_mask)
 
-        v = self.hidden_dropout(v, batch_first=True)
+        value = self.hidden_dropout(value, batch_first=True)
         kernel = self.attention_dropout(attn_weights)
 
-        # B x K x C x E -> B x L x E -> L x B x E
-        h = torch.matmul(kernel, v).view(bsz, seq_len, self.config.intermediate_size).transpose(0, 1)
+        # (batch_size x n_chunks x chunk_size x intermediate_size) -> (sequence_length X batch_size X intermediate_size)
+        weighted_self_output = torch.matmul(kernel, value).view(bsz, seq_len, self.config.intermediate_size).transpose(0, 1)
 
-        # L x B x E -> L x B x D
-        h = self.activation(hx + self.h_proj(h * r))
-        h = self.dropout(h)
-        # L x B x D
-        out = torch.addcmul(residual, u, h - residual)
+        # (sequence_length X batch_size X intermediate_size) -> (sequence_length X batch_size X hidden_size)
+        weighted_self_output = self.activation(intermediate_state + self.h_proj(weighted_self_output * attention_gate))
+        weighted_self_output = self.dropout(weighted_self_output)
+        # (sequence_length X batch_size X hidden_size)
+        out = torch.addcmul(residual, residual_weight, weighted_self_output - residual)
 
         if not self.config.normalize_before_mega:
             out = self.norm(out)
@@ -1105,10 +1088,8 @@ class MegaNormalizedFeedForwardNetwork(nn.Module):
         self.activation = ACT2FN[config.activation]
 
         dropout_module = MegaFeatureDropout if self.config.use_feature_dropout else MegaDropout
-        self.dropout = dropout_module(self.config.dropout_prob, module_name=self.__class__.__name__)
-        self.hidden_dropout = dropout_module(
-            self.config.nffn_activation_dropout_prob, module_name=self.__class__.__name__
-        )
+        self.dropout = dropout_module(self.config.dropout_prob)
+        self.hidden_dropout = dropout_module(self.config.nffn_activation_dropout_prob)
 
         self.prenorm = self.config.normalize_before_ffn
         self.norm = MegaSequenceNorm(
@@ -1118,13 +1099,13 @@ class MegaNormalizedFeedForwardNetwork(nn.Module):
         self.fc1 = nn.Linear(self.config.hidden_size, self.config.nffn_hidden_size)
         self.fc2 = nn.Linear(self.config.nffn_hidden_size, self.config.hidden_size)
 
-    def forward(self, x):
-        residual = x
+    def forward(self, inputs):
+        residual = inputs
 
         if self.prenorm:
-            x = self.norm(x)
+            inputs = self.norm(inputs)
 
-        x = self.activation(self.fc1(x))
+        x = self.activation(self.fc1(inputs))
         x = self.hidden_dropout(x)
         x = self.fc2(x)
         x = self.dropout(x)
@@ -1271,7 +1252,7 @@ class MegaLayer(nn.Module):
             mega_padding_mask = attention_mask
 
         mega_outputs = self.mega_layer(
-            x=hidden_states,
+            input=hidden_states,
             padding_mask=mega_padding_mask,
             causal_mask=causal_mask,
             prev_key_values=past_key_value,
