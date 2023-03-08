@@ -28,7 +28,6 @@ VGCNBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class VGCNBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VGCNBertModel`] or a [`TFVGCNBertModel`]. It
@@ -44,6 +43,8 @@ class VGCNBertConfig(PretrainedConfig):
             Dimensionality of the VGCN model hidden layer.
         vgcn_graph_embedding_dim (`int`, *optional*, defaults to 16):
             Dimensionality of the number of output embedding from VGCN model.
+        vgcn_dropout (`float`, *optional*, defaults to 0.2):
+            The dropout probability for the graph convolutional network in the embeddings, encoder, and pooler.
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the VGCN-BERT model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`VGCNBertModel`] or [`TFVGCNBertModel`].
@@ -100,6 +101,7 @@ class VGCNBertConfig(PretrainedConfig):
         self,
         vgcn_hidden_dim=128,
         vgcn_graph_embds_dim=16,
+        vgcn_dropout=0.2,
         vocab_size=30522,
         max_position_embeddings=512,
         sinusoidal_pos_embds=False,
@@ -116,8 +118,9 @@ class VGCNBertConfig(PretrainedConfig):
         pad_token_id=0,
         **kwargs,
     ):
-        self.vgcn_hidden_dim=vgcn_hidden_dim
-        self.vgcn_graph_embds_dim=vgcn_graph_embds_dim
+        self.vgcn_hidden_dim = vgcn_hidden_dim
+        self.vgcn_graph_embds_dim = vgcn_graph_embds_dim
+        self.vgcn_dropout = vgcn_dropout
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.sinusoidal_pos_embds = sinusoidal_pos_embds

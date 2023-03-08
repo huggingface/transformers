@@ -26,7 +26,6 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
 from transformers.configuration_utils import PretrainedConfig
 
 from ...activations import get_activation
@@ -61,7 +60,6 @@ VGCNBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
 
 
@@ -84,21 +82,18 @@ def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
     out.detach_()
 
 
-
 # can inherited from PreTrainedModel?
 class VocabGraphConvolution(nn.Module):
     """Vocabulary GCN module.
 
     Params:
-        `voc_dim`: The size of vocabulary graph
-        `num_adj`: The number of the adjacency matrix of Vocabulary graph
+        `vgcn_graphs`: List of vocabulary graph, normally adjacency matrix
         `hid_dim`: The hidden dimension after XAW
         `out_dim`: The output dimension after Relu(XAW)W
         `dropout_rate`: The dropout probabilitiy for all fully connected
                 layers in the embeddings, encoder, and pooler.
 
     Inputs:
-        `vocab_adj_list`: The list of the adjacency matrix
         `X_dv`: the feature of mini batch document, can be TF-IDF (batch, vocab), or word embedding (batch, word_embedding_dim, vocab)
 
     Outputs:
@@ -106,17 +101,15 @@ class VocabGraphConvolution(nn.Module):
 
     """
 
-    def __init__(self, vocab_adj_list:list, hid_dim, out_dim, dropout_rate=0.2):
+    def __init__(self, vgcn_graphs: list, hid_dim, out_dim, dropout_rate=0.2):
         super().__init__()
-        self.voc_dim = vocab_adj_list[0].shape(0)
-        self.num_adj = len(vocab_adj_list)
+        self.vgcn_graphs = vgcn_graphs
         self.hid_dim = hid_dim
         self.out_dim = out_dim
 
-        for i in range(self.num_adj):
-            setattr(
-                self, "W%d_vh" % i, nn.Parameter(torch.randn(self.voc_dim, hid_dim))
-            )
+        voc_dim = self.vgcn_graphs[0].shape(0)  # torch.sparse.FloatTensor
+        for i in range(len(self.vgcn_graphs)):
+            setattr(self, "W%d_vh" % i, nn.Parameter(torch.randn(voc_dim, hid_dim)))
 
         self.fc_hc = nn.Linear(hid_dim, out_dim)
         self.act_func = nn.ReLU()
@@ -126,16 +119,12 @@ class VocabGraphConvolution(nn.Module):
 
     def reset_parameters(self):
         for n, p in self.named_parameters():
-            if (
-                n.startswith("W")
-                or n.startswith("a")
-                or n in ("W", "a", "dense")
-            ):
+            if n.startswith("W") or n.startswith("a") or n in ("W", "a", "dense"):
                 nn.init.kaiming_uniform_(p, a=math.sqrt(5))
 
     def forward(self, X_dv, add_linear_mapping_term=False):
-        for i in range(self.num_adj):
-            H_vh = self.vocab_adj_list[i].mm(getattr(self, "W%d_vh" % i))
+        for i in range(len(self.vgcn_graphs)):
+            H_vh = self.vgcn_graphs[i].mm(getattr(self, "W%d_vh" % i))
             # H_vh=self.dropout(F.elu(H_vh))
             H_vh = self.dropout(H_vh)
             H_dh = X_dv.matmul(H_vh)
@@ -157,18 +146,15 @@ class VocabGraphConvolution(nn.Module):
 # class VocabGraphConvolutionModel(nn.Module) # -> Pretrain_VGCN
 
 
-
 class VGCNEmbeddings(nn.Module):
     """Construct the embeddings from word, VGCN graph, position and token_type embeddings.
 
     Params:
         `config`: a BertConfig class instance with the configuration to build a new model
-        `gcn_adj_dim`: The size of vocabulary graph
-        `gcn_adj_num`: The number of the adjacency matrix of Vocabulary graph
-        `gcn_embedding_dim`: The output dimension after VGCN
+        `vgcn_graphs`: List of vocabulary graph
+        `vgcn_embedding_dim`: The output dimension after VGCN
 
     Inputs:
-        `vocab_adj_list`: The list of the adjacency matrix
         `gcn_swop_eye`: The transform matrix for transform the token sequence (sentence) to the Vocabulary order (BoW order)
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
             with the word token indices in the vocabulary. Items in the batch should begin with the special "CLS" token. (see the tokens preprocessing logic in the scripts
@@ -185,11 +171,13 @@ class VGCNEmbeddings(nn.Module):
         the word embeddings fused by VGCN embedding, position embedding and token_type embeddings.
 
     """
-    def __init__(self, config: PretrainedConfig, vgcn_graphs:list):
+
+    def __init__(self, config: PretrainedConfig, vgcn_graphs: list):
         super().__init__()
 
         self.vgcn_graph_embds_dim = config.vgcn_graph_embds_dim
-        self.vgcn = VocabGraphConvolution(vgcn_graphs, config.vgcn_hidden_dim, self.vgcn_graph_embds_dim
+        self.vgcn = VocabGraphConvolution(
+            vgcn_graphs, config.vgcn_hidden_dim, self.vgcn_graph_embds_dim, config.vgcn_dropout
         )
 
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
@@ -206,9 +194,9 @@ class VGCNEmbeddings(nn.Module):
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
 
-    def forward(self, 
-        gcn_swop_eye,
-        input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self, gcn_swop_eye, input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """
         Parameters:
             input_ids (torch.Tensor):
@@ -224,21 +212,15 @@ class VGCNEmbeddings(nn.Module):
             input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
 
         if self.vgcn_graph_embds_dim > 0:
-            vocab_input = gcn_swop_eye.matmul(input_embeds).transpose(1, 2)
-            gcn_vocab_out = self.vocab_gcn(vocab_input)
+            vgcn_input_ids = gcn_swop_eye.matmul(input_embeds).transpose(1, 2)
+            vgcn_out = self.vgcn(vgcn_input_ids)
 
-            gcn_words_embeddings = input_embeds.clone()
+            vgcn_words_embeddings = input_embeds.clone()
             for i in range(self.vgcn_graph_embds_dim):
-                tmp_pos = (
-                    attention_mask.sum(-1) - 2 - self.vgcn_graph_embds_dim + 1 + i
-                ) + torch.arange(0, input_embeds.shape[0]).to(
-                    input_embeds.device
-                ) * input_embeds.shape[
-                    1
-                ]
-                gcn_words_embeddings.flatten(start_dim=0, end_dim=1)[
-                    tmp_pos, :
-                ] = gcn_vocab_out[:, :, i]
+                tmp_pos = (attention_mask.sum(-1) - 2 - self.vgcn_graph_embds_dim + 1 + i) + torch.arange(
+                    0, input_embeds.shape[0]
+                ).to(input_embeds.device) * input_embeds.shape[1]
+                vgcn_words_embeddings.flatten(start_dim=0, end_dim=1)[tmp_pos, :] = vgcn_out[:, :, i]
 
         seq_length = input_embeds.size(1)
 
@@ -254,10 +236,7 @@ class VGCNEmbeddings(nn.Module):
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
         if self.vgcn_graph_embds_dim > 0:
-            embeddings = (
-                gcn_words_embeddings
-                + position_embeddings
-            )
+            embeddings = vgcn_words_embeddings + position_embeddings
         else:
             embeddings = input_embeds + position_embeddings  # (bs, max_seq_length, dim)
 
