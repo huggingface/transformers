@@ -87,6 +87,7 @@ if TYPE_CHECKING:
         from .modeling_udop import (
             UdopDualForConditionalGeneration,
             UdopUnimodelForConditionalGeneration,
+            UdopPreTrainedModel,
         )
 else:
     import sys

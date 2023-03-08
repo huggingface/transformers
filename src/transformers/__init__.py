@@ -472,9 +472,7 @@ _import_structure = {
         "TvltConfig",
         "TvltProcessor",
     ],
-    "models.udop": [
-        "UdopConfig",
-    ],
+    "models.udop": ["UdopConfig"],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",
@@ -752,8 +750,8 @@ else:
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
-    _import_structure["models.whisper"].append("WhisperTokenizerFast")
     _import_structure["models.udop"].append("UdopTokenizerFast")
+    _import_structure["models.whisper"].append("WhisperTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
@@ -2434,8 +2432,8 @@ else:
     _import_structure["models.udop"].extend(
         [
             "UdopDualForConditionalGeneration",
+            "UdopPreTrainedModel",
             "UdopUnimodelForConditionalGeneration",
-
         ]
     )
     _import_structure["models.unispeech"].extend(
@@ -4320,8 +4318,8 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
-        from .models.whisper import WhisperTokenizerFast
         from .models.udop import UdopTokenizerFast
+        from .models.whisper import WhisperTokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
@@ -5684,6 +5682,7 @@ if TYPE_CHECKING:
         )
         from .models.udop import (
             UdopDualForConditionalGeneration,
+            UdopPreTrainedModel,
             UdopUnimodelForConditionalGeneration,
         )
         from .models.unispeech import (

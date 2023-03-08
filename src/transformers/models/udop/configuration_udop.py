@@ -137,7 +137,7 @@ class UdopConfig(PretrainedConfig):
         truncate_decoder_after_layer: Optional[int] = None,
         truncate_encoder_after_layer: Optional[int] = None,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.d_model = d_model

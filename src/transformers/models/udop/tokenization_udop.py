@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple
 
 import sentencepiece as spm
 from tokenizers import processors
+
 from transformers import PreTrainedTokenizer
 from transformers.convert_slow_tokenizer import SpmConverter
 from transformers.utils import logging
@@ -101,7 +102,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         other_extra_ids=200,
         additional_special_tokens=[],
         sp_model_kwargs=None,
-        **kwargs
+        **kwargs,
     ):
         # Add extra_ids to the special token list
         if extra_ids > 0 and "<extra_id_0>" not in additional_special_tokens:
@@ -187,7 +188,6 @@ class UdopTokenizer(PreTrainedTokenizer):
         if index < self.sp_model.get_piece_size():
             token = self.sp_model.IdToPiece(index)
         else:
-
             if index > self.sp_model.get_piece_size() + self._extra_ids * 5 + self._loc_extra_ids - 1:
                 index_loc = self.vocab_size - 1 - index
                 token = f"<other_{index_loc}>"

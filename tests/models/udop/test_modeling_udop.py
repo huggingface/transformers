@@ -70,7 +70,6 @@ class UDOPModelTester:
         scope=None,
         decoder_layers=None,
     ):
-
         self.parent = parent
         self.vocab_size = vocab_size
         self.batch_size = batch_size
@@ -361,7 +360,6 @@ class UDOPModelTester:
 
 @require_torch
 class UdopModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (UdopUnimodelForConditionalGeneration, UdopDualForConditionalGeneration) if is_torch_available() else ()
     )

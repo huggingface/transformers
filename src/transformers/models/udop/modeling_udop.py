@@ -561,7 +561,6 @@ def collate_vlembed(
     num_patches=14,
     max_len=0,
 ):
-
     L = num_patches
     ocr_points_x = torch.clip(torch.floor((seg_data[:, :, 0] + seg_data[:, :, 2]) / 2.0 * L).long(), 0, L - 1)
     ocr_points_y = torch.clip(torch.floor((seg_data[:, :, 1] + seg_data[:, :, 3]) / 2.0 * L).long(), 0, L - 1) * L
@@ -642,7 +641,6 @@ class RelativePositionBiasBase(nn.Module, ABC):
         prefix_bucket=False,
         expand=False,
     ):
-
         super().__init__()
         self.prefix_bucket = prefix_bucket
         self.augmentation = augmentation
@@ -688,7 +686,6 @@ class RelativePositionBiasBase(nn.Module, ABC):
         return relative_position.to(torch.long)
 
     def forward(self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None) -> Tensor:
-
         # re-using pretrained model with subsequent addition of prefix_bucket
         if self.expand and self.prefix_bucket:
             new_bias = nn.Embedding(self.relative_attention_num_buckets + 2, self.num_heads)
@@ -869,7 +866,6 @@ class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
 
 @dataclass
 class VisSeq2SeqLMOutput(BaseModelOutput):
-
     loss: Optional[torch.FloatTensor] = None
     image_output: Optional[Tuple[torch.FloatTensor]] = None
     image_target: Optional[Tuple[torch.FloatTensor]] = None
@@ -878,7 +874,6 @@ class VisSeq2SeqLMOutput(BaseModelOutput):
 
 @dataclass
 class UdopSeq2SeqLMOutput(ModelOutput):
-
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -1285,7 +1280,6 @@ class UdopBlock(nn.Module):
         output_attentions=False,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -1384,7 +1378,6 @@ class UdopLayerNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-
         # udop uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
         # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
@@ -2138,7 +2131,6 @@ class UdopUniStack(UdopPreTrainedModel):
         num_patches=None,
         special_vis_token=None,
     ):
-
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = (
             True  # False #True #output_attentions if output_attentions is not None else self.config.output_attentions

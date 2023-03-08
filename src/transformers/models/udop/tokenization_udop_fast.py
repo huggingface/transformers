@@ -29,7 +29,6 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 
 class UdopTokenizerFast(PreTrainedTokenizerFast):
-
     slow_tokenizer_class = UdopTokenizer
     prefix_tokens: List[int] = []
 
@@ -44,7 +43,7 @@ class UdopTokenizerFast(PreTrainedTokenizerFast):
         loc_extra_ids=201,
         other_extra_ids=200,
         additional_special_tokens=None,
-        **kwargs
+        **kwargs,
     ):
         # Add extra_ids to the special token list
         if extra_ids > 0 and additional_special_tokens is None:
