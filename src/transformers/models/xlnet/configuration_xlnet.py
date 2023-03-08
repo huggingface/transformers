@@ -95,7 +95,7 @@ class XLNetConfig(PretrainedConfig):
             Argument used when doing sequence summary. Used in the sequence classification and multiple choice models.
 
             Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
-        summary_proj_to_labels (`boo`, *optional*, defaults to `True`):
+        summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
             Used in the sequence classification and multiple choice models.
 
             Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
@@ -170,6 +170,7 @@ class XLNetConfig(PretrainedConfig):
         summary_type="last",
         summary_use_proj=True,
         summary_activation="tanh",
+        summary_proj_to_labels=True,
         summary_last_dropout=0.1,
         start_n_top=5,
         end_n_top=5,
@@ -209,6 +210,7 @@ class XLNetConfig(PretrainedConfig):
         self.summary_type = summary_type
         self.summary_use_proj = summary_use_proj
         self.summary_activation = summary_activation
+        self.summary_proj_to_labels = summary_proj_to_labels
         self.summary_last_dropout = summary_last_dropout
         self.start_n_top = start_n_top
         self.end_n_top = end_n_top
