@@ -771,13 +771,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         else:
             encoder_extended_attention_mask = None
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
-
         present_key_value_states = () if use_cache and self.is_decoder else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
