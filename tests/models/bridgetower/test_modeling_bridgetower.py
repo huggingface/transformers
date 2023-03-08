@@ -495,6 +495,7 @@ class BridgeTowerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
 
+@slow
 @require_torch
 @unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "BridgeTower is only available in torch v1.10+")
 class BridgeTowerModelTrainingTest(unittest.TestCase):
