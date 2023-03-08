@@ -301,7 +301,6 @@ _import_structure = {
         "GPTSanJapaneseTokenizer",
     ],
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
-    "models.tokengt": ["TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TokenGTConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -445,6 +444,7 @@ _import_structure = {
         "TimeSeriesTransformerConfig",
     ],
     "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
+    "models.tokengt": ["TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TokenGTConfig"],
     "models.trajectory_transformer": [
         "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrajectoryTransformerConfig",
@@ -1669,13 +1669,6 @@ else:
             "GraphormerPreTrainedModel",
         ]
     )
-    _import_structure["models.tokengt"].extend(
-        [
-            "TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TokenGTForGraphClassification",
-            "TokenGTPreTrainedModel",
-        ]
-    )
     _import_structure["models.groupvit"].extend(
         [
             "GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2387,6 +2380,13 @@ else:
             "TimesformerForVideoClassification",
             "TimesformerModel",
             "TimesformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.tokengt"].extend(
+        [
+            "TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TokenGTForGraphClassification",
+            "TokenGTPreTrainedModel",
         ]
     )
     _import_structure["models.trajectory_transformer"].extend(
@@ -3883,7 +3883,6 @@ if TYPE_CHECKING:
         GPTSanJapaneseTokenizer,
     )
     from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
-    from .models.tokengt import TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP, TokenGTConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
@@ -4020,6 +4019,7 @@ if TYPE_CHECKING:
         TimeSeriesTransformerConfig,
     )
     from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
+    from .models.tokengt import TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP, TokenGTConfig
     from .models.trajectory_transformer import (
         TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TrajectoryTransformerConfig,
@@ -5045,11 +5045,6 @@ if TYPE_CHECKING:
             GraphormerModel,
             GraphormerPreTrainedModel,
         )
-        from .models.tokengt import (
-            TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TokenGTForGraphClassification,
-            TokenGTPreTrainedModel,
-        )
         from .models.groupvit import (
             GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             GroupViTModel,
@@ -5624,6 +5619,11 @@ if TYPE_CHECKING:
             TimesformerForVideoClassification,
             TimesformerModel,
             TimesformerPreTrainedModel,
+        )
+        from .models.tokengt import (
+            TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TokenGTForGraphClassification,
+            TokenGTPreTrainedModel,
         )
         from .models.trajectory_transformer import (
             TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
