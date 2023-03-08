@@ -42,14 +42,16 @@ _CONFIG_FOR_DOC = "LLaMaConfig"
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->LLaMa
 class LLaMaLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
-        """Construct a RMSNorm"""
+        """
+        Construct a layernorm module in the LLaMa style. No bias and no subtraction of mean.
+        """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
-        # LLaMaLayerNorm uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
-        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus variance is calculated
+        # LLaMa uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
+        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
         # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
         # half-precision inputs is done in fp32
 
@@ -280,15 +282,15 @@ class LLaMaFF(nn.Module):
 class LLaMaLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention_norm = LLaMaLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.use_parallel_residual = config.use_parallel_residual
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = LLaMaAttention(config)
-        self.ff_norm = LLaMaLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.ff = LLaMaFF(config)
+        self.mlp = LLaMaMLP(config)
 
     def forward(
         self,
         hidden_states,
-        complex_freq,
         attention_mask=None,
         head_mask=None,
         use_cache=False,
@@ -296,8 +298,7 @@ class LLaMaLayer(nn.Module):
         output_attentions=False,
     ):
         attention_layer_outputs = self.attention(
-            hidden_states=self.attention_norm(hidden_states),
-            complex_freq=complex_freq,
+            self.input_layernorm(hidden_states),
             attention_mask=attention_mask,
             layer_past=layer_past,
             head_mask=head_mask,
@@ -307,9 +308,18 @@ class LLaMaLayer(nn.Module):
         attn_output = attention_layer_outputs[0]  # output_attn: attn_output, present, (attn_weights)
         outputs = attention_layer_outputs[1:]
 
-        attn_output = attn_output + hidden_states
-        ff_output = self.ff(self.ff_norm(attn_output))
-        hidden_states = ff_output + attn_output
+        if self.use_parallel_residual:
+            # pseudocode:
+            # x = x + attn(ln1(x)) + mlp(ln2(x))
+            mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
+            hidden_states = mlp_output + attn_output + hidden_states
+        else:
+            # pseudocode:
+            # x = x + attn(ln1(x))
+            # x = x + mlp(ln2(x))
+            attn_output = attn_output + hidden_states
+            mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
+            hidden_states = mlp_output + attn_output
 
         if use_cache:
             outputs = (hidden_states,) + outputs  # hidden_states, present, (attn_weights)
@@ -373,15 +383,13 @@ LLAMA_INPUTS_DOCSTRING = r"""
 )
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXModel with GPTNeoX->LLaMa,GPT_NEOX->LLAMA
 class LLaMaModel(LLaMaPreTrainedModel):
-    def __init__(self, config: LLaMaConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.config = config
 
-        self.embed = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([LLaMaLayer(config) for _ in range(config.num_hidden_layers)])
-        head_size = config.hidden_size // config.num_attention_heads
-        self.rotary_emb = RotaryEmbedding(head_size, config.max_position_embeddings)
-        self.final_layer_norm = LLaMaLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
 
@@ -389,13 +397,15 @@ class LLaMaModel(LLaMaPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embed
+        return self.embed_in
 
     def set_input_embeddings(self, value):
-        self.embed = value
+        self.embed_in = value
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -451,7 +461,15 @@ class LLaMaModel(LLaMaPreTrainedModel):
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, None, None, :].to(torch.bool)
+            attention_mask = attention_mask[:, None, None, :]
+
+            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+            # masked positions, this operation will create a tensor which is 0.0 for
+            # positions we want to attend and the dtype's smallest value for masked positions.
+            # Since we are adding it to the raw scores before the softmax, this is
+            # effectively the same as removing these entirely.
+            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -461,13 +479,7 @@ class LLaMaModel(LLaMaPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed(input_ids)
-
-        # Compute token offset for rotary embeddings (when decoding)
-        all_seq_length = seq_length
-        if past_key_values[0] is not None:
-            all_seq_length += past_key_values[0][0].shape[-2]
-        complex_freq = self.rotary_emb(device=inputs_embeds.device, seq_len=all_seq_length)
+            inputs_embeds = self.embed_in(input_ids)
 
         hidden_states = inputs_embeds
 
@@ -497,7 +509,6 @@ class LLaMaModel(LLaMaPreTrainedModel):
                 outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer),
                     hidden_states,
-                    complex_freq,
                     attention_mask,
                     head_mask[i],
                 )
@@ -505,7 +516,6 @@ class LLaMaModel(LLaMaPreTrainedModel):
                 outputs = layer(
                     hidden_states,
                     attention_mask=attention_mask,
-                    complex_freq=complex_freq,
                     head_mask=head_mask[i],
                     layer_past=layer_past,
                     use_cache=use_cache,
@@ -538,20 +548,22 @@ class LLaMaModel(LLaMaPreTrainedModel):
 )
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM with GPTNeoX->LLaMa,GPT_NEOX->LLAMA,gpt_neox->llama
 class LLaMaForCausalLM(LLaMaPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
 
         self.llama = LLaMaModel(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.embed_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.lm_head
+        return self.embed_out
 
-    def set_output_embeddings(self, value):
-        self.lm_head = value
+    def set_output_embeddings(self, new_embeddings):
+        self.embed_out = new_embeddings
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -597,9 +609,10 @@ class LLaMaForCausalLM(LLaMaPreTrainedModel):
         >>> from transformers import AutoTokenizer, LLaMaForCausalLM, LLaMaConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/llama")
-        >>> config = LLaMaConfig.from_pretrained("facebook/llama")
-        >>> model = LLaMaForCausalLM.from_pretrained("facebook/llama")
+        >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
+        >>> config = LLaMaConfig.from_pretrained("EleutherAI/gpt-neox-20b")
+        >>> config.is_decoder = True
+        >>> model = LLaMaForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -621,7 +634,7 @@ class LLaMaForCausalLM(LLaMaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        lm_logits = self.lm_head(hidden_states)
+        lm_logits = self.embed_out(hidden_states)
 
         lm_loss = None
         if labels is not None:
