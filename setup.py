@@ -117,6 +117,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
+    "einops==0.6.0",
     "huggingface-hub>=0.11.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
@@ -390,6 +391,7 @@ extras["torchhub"] = deps_list(
     "filelock",
     "huggingface-hub",
     "importlib_metadata",
+    "einops",
     "numpy",
     "packaging",
     "protobuf",
@@ -406,6 +408,7 @@ install_requires = [
     deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["huggingface-hub"],
+    deps["einops"],
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
     deps["pyyaml"],  # used for the model cards metadata
