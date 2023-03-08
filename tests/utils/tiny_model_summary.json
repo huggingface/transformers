@@ -55,6 +55,42 @@
         ],
         "processor_classes": []
     },
+    "BlipModel": {
+        "tokenizer_classes": [
+            "BertTokenizerFast",
+            "BertTokenizer"
+        ],
+        "processor_classes": [
+            "BlipImageProcessor"
+        ]
+    },
+    "BlipForConditionalGeneration": {
+        "tokenizer_classes": [
+            "BertTokenizerFast",
+            "BertTokenizer"
+        ],
+        "processor_classes": [
+            "BlipImageProcessor"
+        ]
+    },
+    "Blip2Model": {
+        "tokenizer_classes": [
+            "GPT2TokenizerFast",
+            "GPT2Tokenizer"
+        ],
+        "processor_classes": [
+            "BlipImageProcessor"
+        ]
+    },
+    "Blip2ForConditionalGeneration": {
+        "tokenizer_classes": [
+            "GPT2TokenizerFast",
+            "GPT2Tokenizer"
+        ],
+        "processor_classes": [
+            "BlipImageProcessor"
+        ]
+    },
     "BloomModel": {
         "tokenizer_classes": [
             "BloomTokenizerFast"

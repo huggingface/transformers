@@ -2245,6 +2245,24 @@ rank1:
 
 This was a very basic example and you will want to adapt it to your needs.
 
+## Testing Deepspeed Integration
+
+If you submit a PR that involves DeepSpeed integration please note our CircleCI PR CI setup has no GPUs, so we only run tests requiring gpus on a different CI nightly. Therefore if you get a green CI report in your PR it doesn't mean DeepSpeed tests pass.
+
+To run DeepSpeed tests, please run at least:
+
+```
+RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
+```
+
+If you changed any of the modeling or pytorch examples code, then run the model zoo tests as well. The following will run all DeepSpeed tests:
+
+```
+RUN_SLOW=1 pytest tests/deepspeed
+```
+
+
+
 
 ## Main DeepSpeed Resources
 
