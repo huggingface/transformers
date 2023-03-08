@@ -2492,7 +2492,8 @@ class Trainer:
                 - the documentation of [sigopt](https://app.sigopt.com/docs/endpoints/experiments/create)
 
         Returns:
-            [`trainer_utils.BestRun`]: All the information about the best run.
+            [`ray.tune.ExperimentAnalysis` or `trainer_utils.BestRun`]:
+                ExperimentAnalysis object for Ray backend or all the information about the best run for other backends.
         """
         if backend is None:
             backend = default_hp_search_backend()
