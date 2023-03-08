@@ -285,7 +285,7 @@ class BeamSearchScorer(BeamScorer):
                     f"At most {self.group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id:"
                     f" {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
                 )
-            
+
             # Check if we are done so that we can save a pad step if all(done)
             cur_len += 1 # add up to the length which the next_scores is calculated on
             self._done[batch_idx] = self._done[batch_idx] or beam_hyp.is_done(
