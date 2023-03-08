@@ -287,6 +287,7 @@ class BeamSearchScorer(BeamScorer):
                 )
 
             # Check if we are done so that we can save a pad step if all(done)
+            cur_len += 1  # add up to the length which the next_scores is calculated on
             self._done[batch_idx] = self._done[batch_idx] or beam_hyp.is_done(
                 next_scores[batch_idx].max().item(), cur_len
             )
@@ -616,6 +617,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 )
 
             # Check if we are done so that we can save a pad step if all(done)
+            cur_len += 1  # add up to the length which the next_scores is calculated on
             self._done[batch_idx] = self._done[batch_idx] or beam_hyp.is_done(
                 next_scores[batch_idx].max().item(), cur_len
             )
