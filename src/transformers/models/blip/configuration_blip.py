@@ -336,21 +336,13 @@ class BlipConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        # If `_config_dict` exist, we use them for the backward compatibility.
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        vision_config_dict = kwargs.pop("vision_config_dict", None)
-        if text_config_dict is not None:
-            text_config = text_config_dict
-        if vision_config_dict is not None:
-            vision_config = vision_config_dict
-
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the BlipTextConfig with default values.")
+            logger.info("`text_config` is `None`. Initializing the `BlipTextConfig` with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the BlipVisionConfig with default values.")
+            logger.info("`vision_config` is `None`. Initializing the `BlipVisionConfig` with default values.")
 
         self.text_config = BlipTextConfig(**text_config)
         self.vision_config = BlipVisionConfig(**vision_config)
