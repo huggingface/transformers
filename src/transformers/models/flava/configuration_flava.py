@@ -663,7 +663,7 @@ class FlavaConfig(PretrainedConfig):
                 image_codebook_config = {}
 
             # This is the complete result when using `image_codebook_config_dict`.
-            _image_codebook_config_dict = FlavaMultimodalConfig(**image_codebook_config_dict).to_dict()
+            _image_codebook_config_dict = FlavaImageCodebookConfig(**image_codebook_config_dict).to_dict()
 
             # Give a warning if the values exist in both `_image_codebook_config_dict` and `image_codebook_config` but
             # being different.
