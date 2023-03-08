@@ -137,8 +137,8 @@ def rotate_half(x):
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
-    cos = cos[..., offset: q.shape[-2] + offset, :]
-    sin = sin[..., offset: q.shape[-2] + offset, :]
+    cos = cos[..., offset : q.shape[-2] + offset, :]
+    sin = sin[..., offset : q.shape[-2] + offset, :]
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed

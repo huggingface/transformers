@@ -76,11 +76,7 @@ def write_model(model_path, input_base_path, model_size):
 
     # permute for sliced rotary
     def permute(w):
-        return w.view(
-            n_heads, dim // n_heads // 2, 2, dim
-        ).transpose(1, 2).reshape(
-            dim, dim
-        )
+        return w.view(n_heads, dim // n_heads // 2, 2, dim).transpose(1, 2).reshape(dim, dim)
 
     # Load weights
     if model_size == "7B":
@@ -103,54 +99,46 @@ def write_model(model_path, input_base_path, model_size):
         if model_size == "7B":
             # Unsharded
             state_dict = {
-                f"model.layers.{layer_i}.self_attn.q_proj.weight": permute(loaded[
-                    f"layers.{layer_i}.attention.wq.weight"
-                ]),
-                f"model.layers.{layer_i}.self_attn.k_proj.weight": permute(loaded[
-                    f"layers.{layer_i}.attention.wk.weight"
-                ]),
-                f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[
-                    f"layers.{layer_i}.attention.wv.weight"
-                ],
-                f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[
-                    f"layers.{layer_i}.attention.wo.weight"
-                ],
-                f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[
-                    f"layers.{layer_i}.feed_forward.w1.weight"
-                ],
-                f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[
-                    f"layers.{layer_i}.feed_forward.w2.weight"
-                ],
-                f"model.layers.{layer_i}.mlp.up_proj.weight": loaded[
-                    f"layers.{layer_i}.feed_forward.w3.weight"
-                ],
-                f"model.layers.{layer_i}.input_layernorm.weight": loaded[
-                    f"layers.{layer_i}.attention_norm.weight"
-                ],
+                f"model.layers.{layer_i}.self_attn.q_proj.weight": permute(
+                    loaded[f"layers.{layer_i}.attention.wq.weight"]
+                ),
+                f"model.layers.{layer_i}.self_attn.k_proj.weight": permute(
+                    loaded[f"layers.{layer_i}.attention.wk.weight"]
+                ),
+                f"model.layers.{layer_i}.self_attn.v_proj.weight": loaded[f"layers.{layer_i}.attention.wv.weight"],
+                f"model.layers.{layer_i}.self_attn.o_proj.weight": loaded[f"layers.{layer_i}.attention.wo.weight"],
+                f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w1.weight"],
+                f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w2.weight"],
+                f"model.layers.{layer_i}.mlp.up_proj.weight": loaded[f"layers.{layer_i}.feed_forward.w3.weight"],
+                f"model.layers.{layer_i}.input_layernorm.weight": loaded[f"layers.{layer_i}.attention_norm.weight"],
                 f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[f"layers.{layer_i}.ffn_norm.weight"],
             }
         else:
             # Sharded
             state_dict = {
-                f"model.layers.{layer_i}.input_layernorm.weight": loaded[0][
-                    f"layers.{layer_i}.attention_norm.weight"
+                f"model.layers.{layer_i}.input_layernorm.weight": loaded[0][f"layers.{layer_i}.attention_norm.weight"],
+                f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[0][
+                    f"layers.{layer_i}.ffn_norm.weight"
                 ],
-                f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[0][f"layers.{layer_i}.ffn_norm.weight"],
             }
-            state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(torch.cat(
-                [
-                    loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(dim, dim))
-            state_dict[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = permute(torch.cat(
-                [
-                    loaded[i][f"layers.{layer_i}.attention.wk.weight"].view(n_heads_per_shard, dims_per_head, dim)
-                    for i in range(num_shards)
-                ],
-                dim=0,
-            ).reshape(dim, dim))
+            state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
+                torch.cat(
+                    [
+                        loaded[i][f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim)
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(dim, dim)
+            )
+            state_dict[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = permute(
+                torch.cat(
+                    [
+                        loaded[i][f"layers.{layer_i}.attention.wk.weight"].view(n_heads_per_shard, dims_per_head, dim)
+                        for i in range(num_shards)
+                    ],
+                    dim=0,
+                ).reshape(dim, dim)
+            )
             state_dict[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = torch.cat(
                 [
                     loaded[i][f"layers.{layer_i}.attention.wv.weight"].view(n_heads_per_shard, dims_per_head, dim)
