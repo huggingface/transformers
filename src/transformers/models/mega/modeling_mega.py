@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Mega model."""
+"""PyTorch MEGA model."""
 
 import math
 from typing import Callable, List, Optional, Tuple, Union
@@ -1446,7 +1446,7 @@ MEGA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Mega Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare MEGA Model transformer outputting raw hidden-states without any specific head on top.",
     MEGA_START_DOCSTRING,
 )
 class MegaModel(MegaPreTrainedModel):
@@ -1632,7 +1632,7 @@ class MegaModel(MegaPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Mega Model with a `language modeling` head on top for CLM fine-tuning.""", MEGA_START_DOCSTRING
+    """MEGA Model with a `language modeling` head on top for CLM fine-tuning.""", MEGA_START_DOCSTRING
 )
 class MegaForCausalLM(MegaPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.weight", r"lm_head.bias"]
@@ -1795,7 +1795,7 @@ class MegaForCausalLM(MegaPreTrainedModel):
         return reordered_past
 
 
-@add_start_docstrings("""Mega Model with a `language modeling` head on top.""", MEGA_START_DOCSTRING)
+@add_start_docstrings("""MEGA Model with a `language modeling` head on top.""", MEGA_START_DOCSTRING)
 class MegaForMaskedLM(MegaPreTrainedModel):
     _keys_to_ignore_on_save = [r"mlm_head.weight", r"mlm_head.bias"]
     _keys_to_ignore_on_load_missing = [r"mlm_head.weight", r"mlm_head.bias"]
@@ -1900,7 +1900,7 @@ class MegaForMaskedLM(MegaPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Mega Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    MEGA Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
     output) e.g. for GLUE tasks.
     """,
     MEGA_START_DOCSTRING,
@@ -1993,7 +1993,7 @@ class MegaForSequenceClassification(MegaPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Mega Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    MEGA Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
     MEGA_START_DOCSTRING,
@@ -2080,7 +2080,7 @@ class MegaForMultipleChoice(MegaPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Mega Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    MEGA Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
     MEGA_START_DOCSTRING,
@@ -2182,7 +2182,7 @@ class MegaClassificationHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Mega Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    MEGA Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     MEGA_START_DOCSTRING,
