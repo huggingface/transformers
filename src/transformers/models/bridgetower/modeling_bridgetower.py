@@ -166,6 +166,16 @@ class BridgeTowerContrastiveOutput(ModelOutput):
     Output type of ['BridgeTowerForContrastiveLearning']
 
     Args:
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        text_embeds (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
+            The text embeddings obtained by applying the projection layer to the pooler_output.
+        image_embeds (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
+        cross_embeds  (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
+            The text-image cross-modal embeddings obtained by applying the projection layer to the pooler_output.
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Image-text contrastive loss.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -173,25 +183,15 @@ class BridgeTowerContrastiveOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
             the model at the output of each layer plus the optional initial embedding outputs.
-        text_embeds (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
-            The text embeddings obtained by applying the projection layer to the pooler_output.
-        image_embeds (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
-            The image embeddings obtained by applying the projection layer to the pooler_output.
-        cross_embeds  (`torch.FloatTensor)`, *optional*, returned when model is initialized with `with_projection=True`):
-            The text-image cross-modal embeddings obtained by applying the projection layer to the pooler_output.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Image-text contrastive loss
     """
 
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    logits: torch.FloatTensor = None
     text_embeds: Optional[Tuple[torch.FloatTensor]] = None
     image_embeds: Optional[Tuple[torch.FloatTensor]] = None
     cross_embeds: Optional[Tuple[torch.FloatTensor]] = None
-    logits: Optional[torch.FloatTensor] = None
     loss: Optional[torch.FloatTensor] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class BridgeTowerResidualAttention(nn.Module):
@@ -1476,7 +1476,11 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             all_hidden_states = (all_hidden_states_text, all_hidden_states_image, all_hidden_states_cross)
 
         if not return_dict:
-            return tuple(v for v in [text_features, image_features, cls_features] if v is not None)
+            return tuple(
+                v
+                for v in [text_features, image_features, cls_features, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
 
         return BridgeTowerModelOutput(
             text_features=text_features,
@@ -1820,12 +1824,14 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
             inputs_embeds=inputs_embeds,
             image_embeds=image_embeds,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            output_hidden_states=True,
             return_dict=return_dict,
         )
 
         pooler_output = outputs.pooler_output if return_dict else outputs[2]
-        hidden_states_txt, hidden_states_img, hidden_states_cross_modal = outputs.hidden_states
+        hidden_states_txt, hidden_states_img, hidden_states_cross_modal = (
+            outputs.hidden_states if return_dict else outputs[3]
+        )
 
         text_embeds = hidden_states_txt[-1]
         image_embeds = hidden_states_img[-1]
