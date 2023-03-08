@@ -221,7 +221,7 @@ class LLaMAAttention(nn.Module):
 
         kv_seq_len = key_states.shape[-2]
         offset = 0
-        if past_key_value:
+        if past_key_value is not None:
             offset = past_key_value[0].shape[-2]
             kv_seq_len += offset
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
