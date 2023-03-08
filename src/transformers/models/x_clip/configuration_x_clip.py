@@ -341,7 +341,7 @@ class XCLIPConfig(PretrainedConfig):
                     # If inferred from default argument values (just to be super careful)
                     else:
                         message = (
-                            f"`text_config_dict` is provided which will be used to initialize `CLIPTextConfig`. The "
+                            f"`text_config_dict` is provided which will be used to initialize `XCLIPTextConfig`. The "
                             f'value `text_config["{key}"]` will be overriden.'
                         )
                     logger.warning(message)
@@ -373,7 +373,7 @@ class XCLIPConfig(PretrainedConfig):
                     # If inferred from default argument values (just to be super careful)
                     else:
                         message = (
-                            f"`vision_config_dict` is provided which will be used to initialize `CLIPVisionConfig`. "
+                            f"`vision_config_dict` is provided which will be used to initialize `XCLIPVisionConfig`. "
                             f'The value `vision_config["{key}"]` will be overriden.'
                         )
                     logger.warning(message)

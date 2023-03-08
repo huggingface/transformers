@@ -345,8 +345,8 @@ class ChineseCLIPConfig(PretrainedConfig):
                     # If inferred from default argument values (just to be super careful)
                     else:
                         message = (
-                            f"`text_config_dict` is provided which will be used to initialize `CLIPTextConfig`. The "
-                            f'value `text_config["{key}"]` will be overriden.'
+                            f"`text_config_dict` is provided which will be used to initialize `ChineseCLIPTextConfig`. "
+                            f'The value `text_config["{key}"]` will be overriden.'
                         )
                     logger.warning(message)
 
@@ -377,8 +377,8 @@ class ChineseCLIPConfig(PretrainedConfig):
                     # If inferred from default argument values (just to be super careful)
                     else:
                         message = (
-                            f"`vision_config_dict` is provided which will be used to initialize `CLIPVisionConfig`. "
-                            f'The value `vision_config["{key}"]` will be overriden.'
+                            f"`vision_config_dict` is provided which will be used to initialize "
+                            f'`ChineseCLIPVisionConfig`. The value `vision_config["{key}"]` will be overriden.'
                         )
                     logger.warning(message)
 

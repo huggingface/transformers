@@ -586,7 +586,7 @@ class FlavaConfig(PretrainedConfig):
                     # If inferred from default argument values (just to be super careful)
                     else:
                         message = (
-                            f"`text_config_dict` is provided which will be used to initialize `CLIPTextConfig`. The "
+                            f"`text_config_dict` is provided which will be used to initialize `FlavaTextConfig`. The "
                             f'value `text_config["{key}"]` will be overriden.'
                         )
                     logger.warning(message)
@@ -618,7 +618,7 @@ class FlavaConfig(PretrainedConfig):
                     # If inferred from default argument values (just to be super careful)
                     else:
                         message = (
-                            f"`image_config_dict` is provided which will be used to initialize `CLIPVisionConfig`. "
+                            f"`image_config_dict` is provided which will be used to initialize `FlavaImageConfig`. "
                             f'The value `image_config["{key}"]` will be overriden.'
                         )
                     logger.warning(message)
@@ -650,8 +650,8 @@ class FlavaConfig(PretrainedConfig):
                     # If inferred from default argument values (just to be super careful)
                     else:
                         message = (
-                            f"`multimodal_config_dict` is provided which will be used to initialize `CLIPVisionConfig`."
-                            f' The value `multimodal_config["{key}"]` will be overriden.'
+                            f"`multimodal_config_dict` is provided which will be used to initialize "
+                            f'`FlavaMultimodalConfig`. The value `multimodal_config["{key}"]` will be overriden.'
                         )
                     logger.warning(message)
 
@@ -684,7 +684,7 @@ class FlavaConfig(PretrainedConfig):
                     else:
                         message = (
                             f"`image_codebook_config_dict` is provided which will be used to initialize "
-                            f'`CLIPVisionConfig`. The value `image_codebook_config["{key}"]` will be overriden.'
+                            f'`FlavaImageCodebookConfig`. The value `image_codebook_config["{key}"]` will be overriden.'
                         )
                     logger.warning(message)
 
