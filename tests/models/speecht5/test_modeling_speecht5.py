@@ -103,6 +103,7 @@ class SpeechT5ModelTester:
         batch_size=13,
         seq_length=7,
         is_training=False,
+        vocab_size=81,
         hidden_size=24,
         num_hidden_layers=4,
         num_attention_heads=2,
@@ -112,6 +113,7 @@ class SpeechT5ModelTester:
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
+        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -140,6 +142,7 @@ class SpeechT5ModelTester:
 
     def get_config(self):
         return SpeechT5Config(
+            vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
