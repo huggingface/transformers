@@ -14,6 +14,7 @@
 
 from . import (
     albert,
+    align,
     altclip,
     audio_spectrogram_transformer,
     auto,
@@ -92,6 +93,7 @@ from . import (
     hubert,
     ibert,
     imagegpt,
+    informer,
     jukebox,
     layoutlm,
     layoutlmv2,

@@ -21,6 +21,7 @@ from transformers.testing_utils import require_torch, require_torch_gpu, slow, t
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -362,7 +363,7 @@ class FlaubertModelTester(object):
 
 
 @require_torch
-class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
+class FlaubertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             FlaubertModel,
@@ -375,6 +376,18 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": FlaubertModel,
+            "fill-mask": FlaubertWithLMHeadModel,
+            "question-answering": FlaubertForQuestionAnsweringSimple,
+            "text-classification": FlaubertForSequenceClassification,
+            "token-classification": FlaubertForTokenClassification,
+            "zero-shot": FlaubertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     # Flaubert has 2 QA models -> need to manually set the correct labels for one of them here
