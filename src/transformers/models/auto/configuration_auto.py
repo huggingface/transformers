@@ -469,7 +469,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mbart", "mBART"),
         ("mbart50", "mBART-50"),
         ("mctct", "M-CTC-T"),
-        ("mega", "Mega"),
+        ("mega", "MEGA"),
         ("megatron-bert", "Megatron-BERT"),
         ("megatron_gpt2", "Megatron-GPT2"),
         ("mluke", "mLUKE"),
