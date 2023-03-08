@@ -15,18 +15,13 @@
 """ Testing suite for the PyTorch Graphormer model. """
 
 
-import copy
-import inspect
-import os
-import tempfile
 import unittest
+from typing import Callable
 
 from transformers import TokenGTConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
-from typing import Callable
 
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
+from ...test_modeling_common import ids_tensor
 
 
 if is_torch_available():
@@ -34,7 +29,6 @@ if is_torch_available():
     from torch import tensor
 
     from transformers import TokenGTForGraphClassification  # , GraphormerModel
-    from transformers.models.tokengt.modeling_tokengt import TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class TokenGTModelTester:
@@ -163,7 +157,6 @@ class TokenGTModelTester:
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-
         # TODO  I don't know what to do with ids_tensor , right now hardcoded
         node_data = ids_tensor([34, 9], self.num_out_degree)
         num_nodes = ids_tensor([2], self.num_out_degree)
@@ -589,13 +582,13 @@ class TokenGTModelIntegrationTest(unittest.TestCase):
             "num_nodes": tensor([17, 17]),
             "edge_index": tensor(
                 [
-                    [ 
+                    [
                         0,  1,  1,  2,  2,  3,  3,  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,  9,
                         9, 10, 10, 11, 11, 12, 12, 13, 12, 14, 10, 15,  9, 16,  7,  2,  0,  1,
                         1,  2,  2,  3,  3,  4,  4,  5,  5,  6,  6,  7,  7,  8,  8,  9,  9, 10,
                         10, 11, 11, 12, 12, 13, 12, 14, 10, 15,  9, 16,  7,  2
                     ],
-                    [ 
+                    [
                         1,  0,  2,  1,  3,  2,  4,  3,  5,  4,  6,  5,  7,  6,  8,  7,  9,  8,
                         10,  9, 11, 10, 12, 11, 13, 12, 14, 12, 15, 10, 16,  9,  2,  7,  1,  0,
                         2,  1,  3,  2,  4,  3,  5,  4,  6,  5,  7,  6,  8,  7,  9,  8, 10,  9,
@@ -824,7 +817,7 @@ class TokenGTModelIntegrationTest(unittest.TestCase):
                 ]
             ),
             "lap_eigval": tensor(
-                [   
+                [
                     [3.7835e-08, 3.4440e-02, 1.5683e-01, 2.1841e-01, 4.0099e-01, 5.3572e-01,
                     6.2089e-01, 1.0000e+00, 1.0000e+00, 1.0000e+00, 1.3791e+00, 1.4643e+00,
                     1.5990e+00, 1.7816e+00, 1.8432e+00, 1.9656e+00, 2.0000e+00],

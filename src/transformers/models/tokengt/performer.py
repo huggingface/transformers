@@ -161,6 +161,7 @@ def gaussian_orthogonal_random_matrix_batched(nb_samples, nb_rows, nb_columns, d
 
 # linear attention classes with softmax kernel
 
+
 # non-causal linear attention
 def linear_attention(q, k, v):
     k_cumsum = k.sum(dim=-2)
