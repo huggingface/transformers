@@ -22,16 +22,21 @@ import os
 
 import tensorflow as tf
 
-from transformers import AutoConfig, AutoTokenizer, PushToHubCallback, TFAutoModelForMaskedLM, create_optimizer
+from transformers import (
+    AutoConfig,
+    AutoTokenizer,
+    DataCollatorForLanguageModeling,
+    PushToHubCallback,
+    TFAutoModelForMaskedLM,
+    create_optimizer,
+)
 
 
 logger = logging.getLogger(__name__)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Prepare TFRecord shards from pre-tokenized samples of the wikitext dataset."
-    )
+    parser = argparse.ArgumentParser(description="Train a masked language model on TPU.")
     parser.add_argument(
         "--pretrained_model_config",
         type=str,
@@ -46,8 +51,25 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--samples_per_epoch",
+        type=int,
+        help="Number of samples to use per epoch.",
+        required=True
+        # TODO Can we get this number during dataset creation? It's hard to figure it out afterwards.
+    )
+
+    parser.add_argument(
+        "--num_validation_samples",
+        type=int,
+        help="Number of samples to use for validation",
+        required=True
+        # TODO Same here
+    )
+
+    parser.add_argument(
         "--per_replica_batch_size",
         type=int,
+        default=8,
         help="Batch size per TPU core.",
     )
 
@@ -89,8 +111,8 @@ def parse_args():
     parser.add_argument(
         "--shuffle_buffer_size",
         type=int,
-        default=2**17,
-        help="Size of the shuffle buffer to use for the training dataset.",
+        default=2**18,  # Default corresponds to a 1GB buffer for seq_len 512
+        help="Size of the shuffle buffer (in samples)",
     )
 
     parser.add_argument(
@@ -115,13 +137,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--warmup_fraction",
-        type=float,
-        default=0.05,
-        help="Fraction of training steps to use for learning rate warmup.",
-    )
-
-    parser.add_argument(
         "--weight_decay_rate",
         type=float,
         default=1e-3,
@@ -131,7 +146,7 @@ def parse_args():
     parser.add_argument(
         "--max_length",
         type=int,
-        default=128,
+        default=512,
         help="Maximum length of tokenized sequences. Should match the setting used in prepare_tfrecord_shards.py",
     )
 
@@ -170,12 +185,24 @@ def main(args):
         tf.keras.mixed_precision.set_global_policy("mixed_bfloat16")
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
-    config = AutoConfig.from_pretrained(args.pretrained_config)
+    config = AutoConfig.from_pretrained(args.pretrained_model_config)
     config.vocab_size = tokenizer.vocab_size
+
+    steps_per_epoch = args.samples_per_epoch // (args.per_replica_batch_size * strategy.num_replicas_in_sync)
+    validation_steps = args.num_validation_samples // (args.per_replica_batch_size * strategy.num_replicas_in_sync)
+    total_train_steps = steps_per_epoch * args.num_epochs
 
     with strategy.scope():
         model = TFAutoModelForMaskedLM.from_config(config)
         model(model.dummy_inputs)  # Pass some dummy inputs through the model to ensure all the weights are built
+        optimizer, schedule = create_optimizer(
+            num_train_steps=total_train_steps,
+            num_warmup_steps=total_train_steps // 20,
+            init_lr=args.learning_rate,
+            weight_decay_rate=args.weight_decay_rate,
+            # TODO Add the other Adam parameters?
+        )
+        model.compile(optimizer=optimizer, metrics=["accuracy"])
 
     def decode_fn(example):
         features = {
@@ -184,15 +211,40 @@ def main(args):
         }
         return tf.io.parse_single_example(example, features)
 
+    # Many of the data collators in Transformers are TF-compilable when return_tensors == "tf", so we can
+    # use their methods in our data pipeline.
+    data_collator = DataCollatorForLanguageModeling(
+        tokenizer=tokenizer, mlm_probability=0.15, mlm=True, return_tensors="tf"
+    )
+
     batch_size = args.per_replica_batch_size * strategy.num_replicas_in_sync
     training_records = tf.io.gfile.glob(os.path.join(args.train_dataset, "*.tfrecord"))
     if not training_records:
         raise ValueError(f"No .tfrecord files found in {args.train_dataset}.")
-    training_records = tf.data.Dataset.from_tensor_slices([training_records]).shuffle(len(training_records))
+    training_records = tf.data.Dataset.from_tensor_slices(training_records).shuffle(len(training_records))
     train_dataset = tf.data.TFRecordDataset(training_records, num_parallel_reads=tf.data.experimental.AUTOTUNE)
     train_dataset = train_dataset.shuffle(args.shuffle_buffer_size)
     train_dataset = train_dataset.map(decode_fn)
+    train_dataset = train_dataset.shuffle(args.shuffle_buffer_size)
     train_dataset = train_dataset.batch(batch_size, drop_remainder=True)
+    train_dataset = train_dataset.prefetch(tf.data.experimental.AUTOTUNE)
+
+    def mask_with_collator(batch):
+        # TF really needs an isin() function
+        special_tokens_mask = (
+            ~tf.cast(batch["attention_mask"], tf.bool)
+            | (batch["input_ids"] == tokenizer.cls_token_id)
+            | (batch["input_ids"] == tokenizer.sep_token_id)
+        )
+        batch["input_ids"], batch["labels"] = data_collator.tf_mask_tokens(
+            batch["input_ids"],
+            vocab_size=len(tokenizer),
+            mask_token_id=tokenizer.mask_token_id,
+            special_tokens_mask=special_tokens_mask,
+        )
+        return batch
+
+    train_dataset = train_dataset.map(mask_with_collator)
 
     eval_records = tf.io.gfile.glob(os.path.join(args.eval_dataset, "*.tfrecord"))
     if not eval_records:
@@ -200,22 +252,23 @@ def main(args):
     eval_dataset = tf.data.TFRecordDataset(eval_records, num_parallel_reads=tf.data.experimental.AUTOTUNE)
     eval_dataset = eval_dataset.map(decode_fn)
     eval_dataset = eval_dataset.batch(batch_size, drop_remainder=True)
+    eval_dataset.map(mask_with_collator)
+    eval_dataset = eval_dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
-    optimizer = create_optimizer(
-        init_lr=args.learning_rate,
-        num_train_steps=len(train_dataset) * args.num_epochs,
-        num_warmup_steps=int(len(train_dataset) * args.num_epochs * args.warmup_fraction),
-        weight_decay_rate=args.weight_decay_rate,
-    )
-
-    model.compile(optimizer=optimizer, metrics=["accuracy"])
     callbacks = []
     if args.hub_model_id:
         callbacks.append(
             PushToHubCallback(output_dir=args.output_dir, hub_model_id=args.hub_model_id, tokenizer=tokenizer)
         )
 
-    model.fit(train_dataset, validation_data=eval_dataset, epochs=args.num_epochs, callbacks=callbacks)
+    model.fit(
+        train_dataset,
+        validation_data=eval_dataset,
+        epochs=args.num_epochs,
+        callbacks=callbacks,
+        steps_per_epoch=steps_per_epoch,
+        validation_steps=validation_steps,
+    )
 
     model.save_pretrained(args.output_dir)
 
