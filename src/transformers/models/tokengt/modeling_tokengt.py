@@ -1030,7 +1030,6 @@ class TokenGTGraphEncoder(nn.Module):
         token_embeddings: Optional[torch.Tensor] = None,
         attn_mask: Optional[torch.Tensor] = None,
     ):
-
         if self.performer and self.performer_auto_check_redraw:
             self.performer_proj_updater.redraw_projections()
 
