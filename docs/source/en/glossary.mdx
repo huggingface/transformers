@@ -152,7 +152,9 @@ embeddings that are computed in parallel and thus defines the trade-off between 
 
 ### finetuned models
 
-Finetuning is a form of transfer learning which involves taking a pretrained model, fixing its weights and training on a newly added [model head](#head). This changes the learning objective of the model based on the dataset used to finetune the model. See the [Fine-tune a pretrained model](https://huggingface.co/docs/transformers/training) document for more details, as well as to learn how to fine-tune models through the 🤗 Transformers API.
+Finetuning is a form of transfer learning which involves taking a pretrained model, freezing its weights, and replacing the output layer with a newly added [model head](#head). The model head is trained on your target dataset.
+
+See the [Fine-tune a pretrained model](https://huggingface.co/docs/transformers/training) tutorial for more details, and learn how to fine-tune models with 🤗 Transformers.
 
 ## H
 
