@@ -341,6 +341,11 @@ class CLIPConfig(PretrainedConfig):
 
             # This is the complete result when using `vision_config_dict`.
             _vision_config_dict = CLIPVisionConfig(**vision_config_dict).to_dict()
+            # convert keys to string instead of integer
+            if "id2label" in _vision_config_dict:
+                _vision_config_dict["id2label"] = {
+                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+                }
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
