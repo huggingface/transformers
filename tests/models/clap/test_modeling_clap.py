@@ -665,3 +665,55 @@ class ClapModelIntegrationTest(unittest.TestCase):
             self.assertTrue(
                 torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
             )
+
+    def test_batched_fused(self):
+        EXPECTED_MEANS_FUSED = {
+            "repeatpad": 0.0010,
+            "repeat": 0.0020,
+            "pad": 0.0006,
+        }
+
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        audio_samples = [sample["array"] for sample in librispeech_dummy[0:4]["audio"]]
+
+        model_id = "laion/clap-htsat-fused"
+
+        model = ClapModel.from_pretrained(model_id).to(torch_device)
+        processor = ClapProcessor.from_pretrained(model_id)
+
+        for padding in self.paddings:
+            inputs = processor(audios=audio_samples, return_tensors="pt", padding=padding, truncation="fusion").to(
+                torch_device
+            )
+
+            audio_embed = model.get_audio_features(**inputs)
+            expected_mean = EXPECTED_MEANS_FUSED[padding]
+
+            self.assertTrue(
+                torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
+            )
+
+    def test_batched_unfused(self):
+        EXPECTED_MEANS_FUSED = {
+            "repeatpad": 0.0016,
+            "repeat": 0.0019,
+            "pad": 0.0019,
+        }
+
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        audio_samples = [sample["array"] for sample in librispeech_dummy[0:4]["audio"]]
+
+        model_id = "laion/clap-htsat-unfused"
+
+        model = ClapModel.from_pretrained(model_id).to(torch_device)
+        processor = ClapProcessor.from_pretrained(model_id)
+
+        for padding in self.paddings:
+            inputs = processor(audios=audio_samples, return_tensors="pt", padding=padding).to(torch_device)
+
+            audio_embed = model.get_audio_features(**inputs)
+            expected_mean = EXPECTED_MEANS_FUSED[padding]
+
+            self.assertTrue(
+                torch.allclose(audio_embed.cpu().mean(), torch.tensor([expected_mean]), atol=1e-3, rtol=1e-3)
+            )

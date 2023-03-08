@@ -29,6 +29,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
         ("albert", "AlbertModel"),
+        ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
         ("audio-spectrogram-transformer", "ASTModel"),
         ("bart", "BartModel"),
@@ -42,7 +43,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("blenderbot", "BlenderbotModel"),
         ("blenderbot-small", "BlenderbotSmallModel"),
         ("blip", "BlipModel"),
-        ("blip_2", "Blip2Model"),
+        ("blip-2", "Blip2Model"),
         ("bloom", "BloomModel"),
         ("bridgetower", "BridgeTowerModel"),
         ("camembert", "CamembertModel"),
@@ -63,7 +64,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deberta", "DebertaModel"),
         ("deberta-v2", "DebertaV2Model"),
         ("decision_transformer", "DecisionTransformerModel"),
-        ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
         ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
         ("deta", "DetaModel"),
@@ -98,6 +98,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
         ("imagegpt", "ImageGPTModel"),
+        ("informer", "InformerModel"),
         ("jukebox", "JukeboxModel"),
         ("layoutlm", "LayoutLMModel"),
         ("layoutlmv2", "LayoutLMv2Model"),
@@ -127,7 +128,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mvp", "MvpModel"),
         ("nat", "NatModel"),
         ("nezha", "NezhaModel"),
-        ("nllb", "M2M100Model"),
         ("nystromformer", "NystromformerModel"),
         ("oneformer", "OneFormerModel"),
         ("openai-gpt", "OpenAIGPTModel"),
@@ -304,7 +304,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("mpnet", "MPNetForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
         ("nezha", "NezhaForMaskedLM"),
-        ("nllb", "M2M100ForConditionalGeneration"),
         ("nystromformer", "NystromformerForMaskedLM"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
         ("pegasus_x", "PegasusXForConditionalGeneration"),
@@ -497,6 +496,8 @@ MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
+        ("blip", "BlipForConditionalGeneration"),
+        ("blip-2", "Blip2ForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
     ]
 )
@@ -593,7 +594,6 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartForConditionalGeneration"),
         ("mt5", "MT5ForConditionalGeneration"),
         ("mvp", "MvpForConditionalGeneration"),
-        ("nllb", "M2M100ForConditionalGeneration"),
         ("pegasus", "PegasusForConditionalGeneration"),
         ("pegasus_x", "PegasusXForConditionalGeneration"),
         ("plbart", "PLBartForConditionalGeneration"),
@@ -878,6 +878,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2ForSequenceClassification"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForSequenceClassification"),
         ("wavlm", "WavLMForSequenceClassification"),
+        ("whisper", "WhisperForAudioClassification"),
     ]
 )
 
@@ -922,6 +923,7 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
 _MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Image Classification mapping
+        ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
         ("blip", "BlipModel"),
         ("chinese_clip", "ChineseCLIPModel"),
@@ -936,7 +938,6 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("bit", "BitBackbone"),
         ("convnext", "ConvNextBackbone"),
         ("dinat", "DinatBackbone"),
-        ("efficientnet", "EfficientNetBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("nat", "NatBackbone"),
         ("resnet", "ResNetBackbone"),

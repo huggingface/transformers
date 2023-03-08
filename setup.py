@@ -98,6 +98,7 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
+    "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
     "black~=23.1",
     "codecarbon==1.2.0",
@@ -289,7 +290,7 @@ extras["timm"] = deps_list("timm")
 extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["video"] = deps_list("decord")
+extras["video"] = deps_list("decord", "av")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (

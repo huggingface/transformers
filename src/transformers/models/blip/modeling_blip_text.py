@@ -22,20 +22,19 @@ import torch.utils.checkpoint
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
-from transformers.activations import ACT2FN
-from transformers.modeling_outputs import (
+from ...activations import ACT2FN
+from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
 )
-from transformers.modeling_utils import (
+from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from transformers.utils import logging
-
+from ...utils import logging
 from .configuration_blip import BlipTextConfig
 
 
@@ -394,6 +393,12 @@ class BlipTextEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warn(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.is_decoder else None
@@ -409,11 +414,6 @@ class BlipTextEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warn(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
