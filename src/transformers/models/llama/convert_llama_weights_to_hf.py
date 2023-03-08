@@ -52,12 +52,12 @@ NUM_SHARDS = {
 
 def read_json(path):
     with open(path, "r") as f:
-        return json.loads(f.read())
+        return json.load(f)
 
 
 def write_json(text, path):
     with open(path, "w") as f:
-        f.write(json.dumps(text))
+        json.dump(text, f)
 
 
 def write_model(model_path, input_base_path, model_size):

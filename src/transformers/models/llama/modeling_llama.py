@@ -780,7 +780,8 @@ class LLaMAForCausalLM(LLaMAPreTrainedModel):
             return_dict=return_dict,
         )
 
-        logits = self.lm_head(outputs[0]).contiguous()
+        hidden_states = outputs[0]
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
