@@ -317,7 +317,7 @@ class MGPSTRA3Module(nn.Module):
         feat = torch.einsum("...si,...id->...sd", attentions, feat)
         a3_out = self.norm(feat)
 
-        return tuple((a3_out, attentions))
+        return (a3_out, attentions)
 
 
 class MGPSTRPreTrainedModel(PreTrainedModel):
