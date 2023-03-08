@@ -1789,12 +1789,11 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = True,
         return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+        return_loss: Optional[bool] = True,
     ) -> Union[BridgeTowerContrastiveOutput, Tuple[torch.FloatTensor]]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
-            Labels for computing the image-text matching loss. 0 means the pairs don't match and 1 means they match.
-            The pairs with 0 will be skipped for calculation.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss. Default is True.
         Returns:
 
         Examples:
@@ -1803,14 +1802,25 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForContrastiveLearning
         >>> import requests
         >>> from PIL import Image
+        >>> import torch
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> texts = "An image of two cats chilling on a couch"
+        >>> image_urls = ["https://farm4.staticflickr.com/3395/3428278415_81c3e27f15_z.jpg", "http://images.cocodataset.org/val2017/000000039769.jpg"]
+        >>> texts = ["two dogs in a car", "two cats sleeping on a couch"]
+        >>> images = [Image.open(requests.get(url, stream=True).raw) for url in image_urls]
 
-        >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
+        >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm")
         >>> model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
-        >>> outputs = model(**inputs, output_hidden_states=True)
+
+        >>> inputs  = processor(images, texts, padding=True, return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> inputs  = processor(images, texts[::-1], padding=True, return_tensors="pt")
+        >>> outputs_swapped = model(**inputs)
+
+        >>> print('Loss', outputs.loss.item())
+        Loss 0.00191505195107311
+        >>> print('Loss with swapped images', outputs_swapped.loss.item())
+        Loss with swapped images 2.1259872913360596
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1857,8 +1867,8 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
 
         itc_loss = None
 
-        if labels is not None:
-            labels = torch.arange(len(labels), device=logits.device)
+        if return_loss:
+            labels = torch.arange(len(logits), device=logits.device)
             text_to_image_loss = nn.functional.cross_entropy(logits_text_to_image, labels)
             text_to_cross_loss = nn.functional.cross_entropy(logits_text_to_cross, labels)
             image_to_cross_loss = nn.functional.cross_entropy(logits_image_to_cross, labels)
