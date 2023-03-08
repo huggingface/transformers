@@ -6378,6 +6378,13 @@ class UdopDualForConditionalGeneration(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class UdopPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class UdopUnimodelForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
