@@ -84,11 +84,117 @@ def _create_sinusoidal_embeddings(n_pos: int, dim: int, out: torch.Tensor):
     out.detach_()
 
 
-class Embeddings(nn.Module):
-    def __init__(self, config: PretrainedConfig):
+
+# can inherited from PreTrainedModel?
+class VocabGraphConvolution(nn.Module):
+    """Vocabulary GCN module.
+
+    Params:
+        `voc_dim`: The size of vocabulary graph
+        `num_adj`: The number of the adjacency matrix of Vocabulary graph
+        `hid_dim`: The hidden dimension after XAW
+        `out_dim`: The output dimension after Relu(XAW)W
+        `dropout_rate`: The dropout probabilitiy for all fully connected
+                layers in the embeddings, encoder, and pooler.
+
+    Inputs:
+        `vocab_adj_list`: The list of the adjacency matrix
+        `X_dv`: the feature of mini batch document, can be TF-IDF (batch, vocab), or word embedding (batch, word_embedding_dim, vocab)
+
+    Outputs:
+        The graph embedding representation, dimension (batch, `out_dim`) or (batch, word_embedding_dim, `out_dim`)
+
+    """
+
+    def __init__(self, vocab_adj_list:list, hid_dim, out_dim, dropout_rate=0.2):
         super().__init__()
+        self.voc_dim = vocab_adj_list[0].shape(0)
+        self.num_adj = len(vocab_adj_list)
+        self.hid_dim = hid_dim
+        self.out_dim = out_dim
+
+        for i in range(self.num_adj):
+            setattr(
+                self, "W%d_vh" % i, nn.Parameter(torch.randn(self.voc_dim, hid_dim))
+            )
+
+        self.fc_hc = nn.Linear(hid_dim, out_dim)
+        self.act_func = nn.ReLU()
+        self.dropout = nn.Dropout(dropout_rate)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        for n, p in self.named_parameters():
+            if (
+                n.startswith("W")
+                or n.startswith("a")
+                or n in ("W", "a", "dense")
+            ):
+                nn.init.kaiming_uniform_(p, a=math.sqrt(5))
+
+    def forward(self, X_dv, add_linear_mapping_term=False):
+        for i in range(self.num_adj):
+            H_vh = self.vocab_adj_list[i].mm(getattr(self, "W%d_vh" % i))
+            # H_vh=self.dropout(F.elu(H_vh))
+            H_vh = self.dropout(H_vh)
+            H_dh = X_dv.matmul(H_vh)
+
+            if add_linear_mapping_term:
+                H_linear = X_dv.matmul(getattr(self, "W%d_vh" % i))
+                H_linear = self.dropout(H_linear)
+                H_dh += H_linear
+
+            if i == 0:
+                fused_H = H_dh
+            else:
+                fused_H += H_dh
+
+        out = self.fc_hc(fused_H)
+        return out
+
+
+# class VocabGraphConvolutionModel(nn.Module) # -> Pretrain_VGCN
+
+
+
+class VGCNEmbeddings(nn.Module):
+    """Construct the embeddings from word, VGCN graph, position and token_type embeddings.
+
+    Params:
+        `config`: a BertConfig class instance with the configuration to build a new model
+        `gcn_adj_dim`: The size of vocabulary graph
+        `gcn_adj_num`: The number of the adjacency matrix of Vocabulary graph
+        `gcn_embedding_dim`: The output dimension after VGCN
+
+    Inputs:
+        `vocab_adj_list`: The list of the adjacency matrix
+        `gcn_swop_eye`: The transform matrix for transform the token sequence (sentence) to the Vocabulary order (BoW order)
+        `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]
+            with the word token indices in the vocabulary. Items in the batch should begin with the special "CLS" token. (see the tokens preprocessing logic in the scripts
+            `extract_features.py`, `run_classifier.py` and `run_squad.py`)
+        `token_type_ids`: an optional torch.LongTensor of shape [batch_size, sequence_length] with the token
+            types indices selected in [0, 1]. Type 0 corresponds to a `sentence A` and type 1 corresponds to
+            a `sentence B` token (see BERT paper for more details).
+        `attention_mask`: an optional torch.LongTensor of shape [batch_size, sequence_length] with indices
+            selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
+            input sequence length in the current batch. It's the mask that we typically use for attention when
+            a batch has varying length sentences.
+
+    Outputs:
+        the word embeddings fused by VGCN embedding, position embedding and token_type embeddings.
+
+    """
+    def __init__(self, config: PretrainedConfig, vgcn_graphs:list):
+        super().__init__()
+
+        self.vgcn_graph_embds_dim = config.vgcn_graph_embds_dim
+        self.vgcn = VocabGraphConvolution(vgcn_graphs, config.vgcn_hidden_dim, self.vgcn_graph_embds_dim
+        )
+
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.dim)
+
         if config.sinusoidal_pos_embds:
             create_sinusoidal_embeddings(
                 n_pos=config.max_position_embeddings, dim=config.dim, out=self.position_embeddings.weight
@@ -100,7 +206,9 @@ class Embeddings(nn.Module):
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
 
-    def forward(self, input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, 
+        gcn_swop_eye,
+        input_ids: torch.Tensor, input_embeds: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Parameters:
             input_ids (torch.Tensor):
@@ -115,6 +223,23 @@ class Embeddings(nn.Module):
         if input_ids is not None:
             input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
 
+        if self.vgcn_graph_embds_dim > 0:
+            vocab_input = gcn_swop_eye.matmul(input_embeds).transpose(1, 2)
+            gcn_vocab_out = self.vocab_gcn(vocab_input)
+
+            gcn_words_embeddings = input_embeds.clone()
+            for i in range(self.vgcn_graph_embds_dim):
+                tmp_pos = (
+                    attention_mask.sum(-1) - 2 - self.vgcn_graph_embds_dim + 1 + i
+                ) + torch.arange(0, input_embeds.shape[0]).to(
+                    input_embeds.device
+                ) * input_embeds.shape[
+                    1
+                ]
+                gcn_words_embeddings.flatten(start_dim=0, end_dim=1)[
+                    tmp_pos, :
+                ] = gcn_vocab_out[:, :, i]
+
         seq_length = input_embeds.size(1)
 
         # Setting the position-ids to the registered buffer in constructor, it helps
@@ -128,7 +253,14 @@ class Embeddings(nn.Module):
 
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
 
-        embeddings = input_embeds + position_embeddings  # (bs, max_seq_length, dim)
+        if self.vgcn_graph_embds_dim > 0:
+            embeddings = (
+                gcn_words_embeddings
+                + position_embeddings
+            )
+        else:
+            embeddings = input_embeds + position_embeddings  # (bs, max_seq_length, dim)
+
         embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
         embeddings = self.dropout(embeddings)  # (bs, max_seq_length, dim)
         return embeddings
@@ -466,10 +598,10 @@ VGCNBERT_INPUTS_DOCSTRING = r"""
 )
 # Copied from transformers.models.distilbert.modeling_distilbert.DistilBertModel with DISTILBERT->VGCNBERT,DistilBert->VGCNBert
 class VGCNBertModel(VGCNBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PretrainedConfig, vgcn_graphs: list):
         super().__init__(config)
 
-        self.embeddings = Embeddings(config)  # Embeddings
+        self.embeddings = VGCNEmbeddings(config, vgcn_graphs)  # Graph Embeddings
         self.transformer = Transformer(config)  # Encoder
 
         # Initialize weights and apply final processing

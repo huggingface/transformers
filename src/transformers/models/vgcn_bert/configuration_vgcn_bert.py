@@ -40,6 +40,10 @@ class VGCNBertConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        vgcn_hidden_dim (`int`, *optional*, defaults to 128):
+            Dimensionality of the VGCN model hidden layer.
+        vgcn_graph_embedding_dim (`int`, *optional*, defaults to 16):
+            Dimensionality of the number of output embedding from VGCN model.
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the VGCN-BERT model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`VGCNBertModel`] or [`TFVGCNBertModel`].
@@ -85,7 +89,7 @@ class VGCNBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "VGCNBert"
+    model_type = "vgcn-bert"
     attribute_map = {
         "hidden_size": "dim",
         "num_attention_heads": "n_heads",
@@ -94,6 +98,8 @@ class VGCNBertConfig(PretrainedConfig):
 
     def __init__(
         self,
+        vgcn_hidden_dim=128,
+        vgcn_graph_embds_dim=16,
         vocab_size=30522,
         max_position_embeddings=512,
         sinusoidal_pos_embds=False,
@@ -110,6 +116,8 @@ class VGCNBertConfig(PretrainedConfig):
         pad_token_id=0,
         **kwargs,
     ):
+        self.vgcn_hidden_dim=vgcn_hidden_dim
+        self.vgcn_graph_embds_dim=vgcn_graph_embds_dim
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.sinusoidal_pos_embds = sinusoidal_pos_embds
