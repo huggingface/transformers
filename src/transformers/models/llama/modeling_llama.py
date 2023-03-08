@@ -38,6 +38,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LLaMaConfig"
 
+
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->LLaMa
 class LLaMaLayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -537,7 +538,6 @@ class LLaMaModel(LLaMaPreTrainedModel):
 )
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXForCausalLM with GPTNeoX->LLaMa,GPT_NEOX->LLAMA,gpt_neox->llama
 class LLaMaForCausalLM(LLaMaPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
