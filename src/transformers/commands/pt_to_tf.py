@@ -291,7 +291,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             try:
                 tf_class = getattr(import_module("transformers"), "TF" + architectures[0])
             except AttributeError:
-                raise ValueError(f"TF model class {self._override_model_class} not found in transformers.")
+                raise ValueError(f"TF model class TF{self._override_model_class} not found in transformers.")
         elif architectures is None:  # No architecture defined -- use auto classes
             pt_class = getattr(import_module("transformers"), "AutoModel")
             tf_class = getattr(import_module("transformers"), "TFAutoModel")
