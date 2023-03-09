@@ -29,7 +29,6 @@ _import_structure = {
     "configuration_nllb_moe": [
         "NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NllbMoeConfig",
-        "NllbMoeOnnxConfig",
     ]
 }
 
