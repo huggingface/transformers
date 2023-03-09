@@ -731,7 +731,7 @@ class FlaxWhisperEncoderModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=20,
-        max_source_positions=1500,
+        max_source_positions=30,
         num_mel_bins=80,
         num_conv_layers=1,
         suppress_tokens=None,
@@ -838,10 +838,20 @@ class WhisperEncoderModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     input_name = "input_features"
 
+    # def setUp(self):
+    #     self.model_tester = FlaxWhisperEncoderModelTester(self)
+    #     self.config_tester = ConfigTester(self, config_class=WhisperConfig)
+    #     self.maxDiff = 3000
+
     def setUp(self):
-        self.model_tester = FlaxWhisperEncoderModelTester(self)
+        self.model_tester = FlaxWhisperModelTester(self)
+        _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        self.init_shape = (1,) + inputs_dict["input_features"].shape[1:]
+
+        self.all_model_classes = (
+            make_partial_class(model_class, input_shape=self.init_shape) for model_class in self.all_model_classes
+        )
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
-        self.maxDiff = 3000
 
     def test_config(self):
         self.config_tester.run_common_tests()
