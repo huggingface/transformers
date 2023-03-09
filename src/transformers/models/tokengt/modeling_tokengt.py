@@ -22,7 +22,7 @@ from .performer import FastAttention, ProjectionUpdater, gaussian_orthogonal_ran
 
 logger = logging.get_logger(__name__)
 
-
+_CHECKPOINT_FOR_DOC = "tokengt-base-lap-pcqm4mv2"
 _CONFIG_FOR_DOC = "TokenGTConfig"
 _TOKENIZER_FOR_DOC = "AutoTokenizer"
 
