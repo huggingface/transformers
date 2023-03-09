@@ -48,38 +48,35 @@ class Pix2StructTextConfig(PretrainedConfig):
             represented by the `inputs_ids` passed when calling [`Pix2StructModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        encoder_hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers from the vision model.
+        d_kv (`int`, *optional*, defaults to 64):
+            Dimensionality of the key, query, value projections in each attention head.
         d_ff (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
+        num_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 77):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
-            to 1e-5): The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
+        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
+            The number of buckets to use for each attention layer.
+        relative_attention_max_distance (`int`, *optional*, defaults to 128):
+            The maximum distance of the longer sequences for the bucket separation.
+        dropout_rate (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-6):
+            The epsilon used by the layer normalization layers.
         initializer_factor (`float``, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        bos_token_id (`int`, *optional*, defaults to 30522):
-            The id of the `beginning-of-sequence` token.
-        eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the `end-of-sequence` token.
+        feed_forward_proj (`str`, *optional*, defaults to `gated-gelu`):
+            The non-linear activation function (function or string) used in the feed-forward layer.
+        decoder_start_token_id (`int`, *optional*, defaults to 0):
+            The id of the `decoder_start_token_id` token.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
         pad_token_id (`int`, *optional*, defaults to 0):
             The id of the `padding` token.
-        sep_token_id (`int`, *optional*, defaults to 102):
-            The id of the `separator` token.
+        eos_token_id (`int`, *optional*, defaults to 1):
+            The id of the `end-of-sequence` token.
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -114,7 +111,6 @@ class Pix2StructTextConfig(PretrainedConfig):
         d_kv=64,
         d_ff=2048,
         num_layers=12,
-        num_decoder_layers=None,
         num_heads=12,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
@@ -122,12 +118,10 @@ class Pix2StructTextConfig(PretrainedConfig):
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
         feed_forward_proj="gated-gelu",
-        is_encoder_decoder=False,
         decoder_start_token_id=0,
         use_cache=False,
         pad_token_id=0,
         eos_token_id=1,
-        is_decoder=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -135,9 +129,6 @@ class Pix2StructTextConfig(PretrainedConfig):
         self.d_kv = d_kv
         self.d_ff = d_ff
         self.num_layers = num_layers
-        self.num_decoder_layers = (
-            num_decoder_layers if num_decoder_layers is not None else self.num_layers
-        )  # default = symmetry
         self.num_heads = num_heads
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
@@ -146,7 +137,6 @@ class Pix2StructTextConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
-        self.is_decoder = is_decoder
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -169,8 +159,6 @@ class Pix2StructTextConfig(PretrainedConfig):
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            is_decoder=is_decoder,
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
@@ -210,20 +198,29 @@ class Pix2StructVisionConfig(PretrainedConfig):
             Dimensionality of the encoder layers and the pooler layer.
         d_ff (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        d_kv (`int`, *optional*, defaults to 64):
+            Dimensionality of the key, query, value projections per attention head.
+        projection_dim (`int`, *optional*, defaults to 768):
+            Dimensionality of the projection layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels of the input images.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
             The size (resolution) of each patch.
         dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
-            to 1e-5): The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
+            `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
+        dropout_rate (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -231,6 +228,16 @@ class Pix2StructVisionConfig(PretrainedConfig):
         initializer_factor (`float``, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        qkv_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not to add a bias to the query, key, and value transformations.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not to add a bias to the mlp layers.
+        layer_norm_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not to add a bias to the layer normalization layers.
+        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
+            The number of buckets to use for each attention layer.
+        relative_attention_max_distance (`int`, *optional*, defaults to 128):
+            The maximum distance (in tokens) to use for each attention layer.
 
     Example:
 
@@ -253,6 +260,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
         self,
         hidden_size=768,
         d_ff=2048,
+        d_kv=64,
         projection_dim=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -272,7 +280,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
         layer_norm_bias=False,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
-        d_kv=64,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -335,13 +342,10 @@ class Pix2StructConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Pix2StructTextConfig`].
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`Pix2StructVisionConfig`].
-        projection_dim (`int`, *optional*, defaults to 512):
-            Dimentionality of text and vision projection layers.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original PIX2STRUCT
-            implementation.
-        image_text_hidden_size (`int`, *optional*, defaults to 768):
-            Dimentionality of the hidden state of the image-text fusion layer.
+        initializer_factor (`float`, *optional*, defaults to 1.0):
+            Factor to multiply the initialization range with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -375,6 +379,8 @@ class Pix2StructConfig(PretrainedConfig):
         self,
         text_config=None,
         vision_config=None,
+        initializer_factor=1.0,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -407,8 +413,8 @@ class Pix2StructConfig(PretrainedConfig):
 
         self.text_config.encoder_hidden_size = self.vision_config.hidden_size
 
-        self.initializer_factor = 1.0
-        self.initializer_range = 0.02
+        self.initializer_factor = initializer_factor
+        self.initializer_range = initializer_range
 
         self.text_config.initializer_range = self.initializer_range
         self.vision_config.initializer_range = self.initializer_range

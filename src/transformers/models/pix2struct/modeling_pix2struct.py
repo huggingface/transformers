@@ -16,7 +16,6 @@
 
 import copy
 import math
-import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -705,7 +704,6 @@ class Pix2StructTextLayerFF(nn.Module):
 class Pix2StructTextAttention(nn.Module):
     def __init__(self, config: Pix2StructTextConfig, has_relative_attention_bias=False):
         super().__init__()
-        self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
@@ -783,7 +781,7 @@ class Pix2StructTextAttention(nn.Module):
         relative_position = memory_position - context_position  # shape (query_length, key_length)
         relative_position_bucket = self._relative_position_bucket(
             relative_position,  # shape (query_length, key_length)
-            bidirectional=(not self.is_decoder),
+            bidirectional=False,
             num_buckets=self.relative_attention_num_buckets,
             max_distance=self.relative_attention_max_distance,
         )
@@ -912,7 +910,7 @@ class Pix2StructTextAttention(nn.Module):
         attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
 
-        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
+        present_key_value_state = (key_states, value_states) if use_cache else None
         outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
 
         if output_attentions:
@@ -991,7 +989,6 @@ class Pix2StructTextLayerCrossAttention(nn.Module):
 class Pix2StructTextBlock(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.is_decoder = config.is_decoder
 
         self.self_attention = Pix2StructTextLayerSelfAttention(
             config, has_relative_attention_bias=has_relative_attention_bias
@@ -1017,8 +1014,6 @@ class Pix2StructTextBlock(nn.Module):
         return_dict=True,
     ):
         if past_key_value is not None:
-            if not self.is_decoder:
-                logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
             expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
 
             if len(past_key_value) != expected_num_past_key_values:
@@ -1050,7 +1045,7 @@ class Pix2StructTextBlock(nn.Module):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        do_cross_attention = self.is_decoder and encoder_hidden_states is not None
+        do_cross_attention = encoder_hidden_states is not None
         if do_cross_attention:
             # the actual query length is unknown for cross attention
             # if using past key value states. Need to inject it here
@@ -1115,8 +1110,6 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
-
-        self.is_decoder = config.is_decoder
 
         self.layer = nn.ModuleList(
             [Pix2StructTextBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
@@ -1184,18 +1177,14 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(
-                f"You cannot specify both {err_msg_prefix}input_ids and {err_msg_prefix}inputs_embeds at the same time"
-            )
+            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}input_ids or {err_msg_prefix}inputs_embeds")
+            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
@@ -1206,12 +1195,9 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         # required mask seq length can be calculated via length of past
         mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
 
-        if use_cache is True:
-            assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
-
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
-        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
+        if encoder_attention_mask is None and encoder_hidden_states is not None:
             encoder_seq_length = encoder_hidden_states.shape[1]
             encoder_attention_mask = torch.ones(
                 batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
@@ -1227,7 +1213,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.is_decoder and encoder_hidden_states is not None:
+        if encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
@@ -1242,7 +1228,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         present_key_value_states = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and self.is_decoder) else None
+        all_cross_attentions = () if (output_attentions) else None
         position_bias = None
         encoder_decoder_position_bias = None
 
@@ -1305,7 +1291,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
             # layer_outputs = hidden-states, key-value-states (self-attention position bias), (self-attention weights),
             # (cross-attention position bias), (cross-attention weights)
             position_bias = layer_outputs[2]
-            if self.is_decoder and encoder_hidden_states is not None:
+            if encoder_hidden_states is not None:
                 encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
             # append next layer key value states
             if use_cache:
@@ -1313,8 +1299,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)
-                if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[3],)
+                all_cross_attentions = all_cross_attentions + (layer_outputs[3],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1552,13 +1537,9 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     def __init__(self, config: Pix2StructConfig):
         super().__init__(config)
         encoder_config = copy.deepcopy(config.vision_config)
-        encoder_config.is_decoder = False
-        encoder_config.is_encoder_decoder = False
         self.encoder = Pix2StructVisionModel(encoder_config)
 
         decoder_config = copy.deepcopy(config.text_config)
-        decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
         self.decoder_input_ids = decoder_config.pad_token_id
         self.decoder_eos_token_ids = decoder_config.eos_token_id
         self.decoder = Pix2StructTextModel(decoder_config)
@@ -1627,12 +1608,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.text_config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
-        if head_mask is not None and decoder_head_mask is None:
-            if self.config.num_layers == self.config.num_decoder_layers:
-                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
-                decoder_head_mask = head_mask
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
