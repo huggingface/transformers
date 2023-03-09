@@ -605,7 +605,6 @@ class Pix2StructIntegrationTest(unittest.TestCase):
 
         # image only
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
-        inputs["decoder_input_ids"] = torch.LongTensor([[0]]).to(torch_device)
 
         predictions = model.generate(**inputs)
 
@@ -627,7 +626,6 @@ class Pix2StructIntegrationTest(unittest.TestCase):
 
         # image only
         inputs = processor(images=[image_1, image_2], return_tensors="pt").to(torch_device)
-        inputs["decoder_input_ids"] = torch.LongTensor([[0]]).to(torch_device)
 
         predictions = model.generate(**inputs)
 

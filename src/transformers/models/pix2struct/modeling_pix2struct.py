@@ -1665,7 +1665,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         pixel_embeds: torch.FloatTensor,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         **generate_kwargs,
     ):
