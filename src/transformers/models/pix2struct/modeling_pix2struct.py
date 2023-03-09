@@ -1677,8 +1677,32 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
 
         image_embeds = vision_outputs[0]
 
-        if isinstance(input_ids, list):
-            input_ids = torch.LongTensor(input_ids)
+        if isinstance(input_ids, torch.Tensor):
+            # check if the first element of `input_ids` is equal to `decoder_input_ids`:
+            if (input_ids[:, 0] != self.decoder_input_ids).all().item():
+                # add `decoder_input_ids` as first token to `input_ids`
+                input_ids = torch.cat(
+                    [
+                        torch.ones((input_ids.shape[0], 1), dtype=torch.long, device=input_ids.device)
+                        * self.decoder_input_ids,
+                        input_ids,
+                    ],
+                    dim=-1,
+                )
+
+                if decoder_attention_mask is not None:
+                    decoder_attention_mask = torch.cat(
+                        [
+                            torch.ones(
+                                (decoder_attention_mask.shape[0], 1),
+                                dtype=torch.long,
+                                device=decoder_attention_mask.device,
+                            ),
+                            decoder_attention_mask,
+                        ],
+                        dim=-1,
+                    )
+
         elif input_ids is None:
             input_ids = torch.LongTensor([[self.decoder_input_ids]]).repeat(batch_size, 1).to(image_embeds.device)
 
