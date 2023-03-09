@@ -2222,10 +2222,12 @@ class Mask2FormerVideoTransformerModule(nn.Module):
         for i in range(self.num_feature_levels):
             size_list.append(multi_scale_features[i].shape[-2:])
             
-            ppos = self.position_embedder(multi_scale_features[i].view(batch_size, t, -1, size_list[-1][0], size_list[-1][1]), None).flatten(3)
-            multi_stage_positional_embeddings.append(ppos)
-            src2 = self.input_projections[i](multi_scale_features[i]).flatten(2) + self.level_embed.weight[i][None, :, None]
-            multi_stage_features.append(src2)
+            position_embeddings_3d = self.position_embedder(multi_scale_features[i].view(batch_size, t, -1, size_list[-1][0], size_list[-1][1]), None).flatten(3)
+            multi_stage_positional_embeddings.append(position_embeddings_3d)
+            multi_stage_features.append(
+                self.input_projections[i](multi_scale_features[i]).flatten(2) 
+                    + self.level_embed.weight[i][None, :, None]
+                )
 
             _, channels, height_width = multi_stage_features[-1].shape
             
