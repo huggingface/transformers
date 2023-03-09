@@ -1167,6 +1167,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        labels=None,
         return_dict=None,
         **kwargs,
     ):
@@ -1311,6 +1312,11 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
+        loss = None
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
+            loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
+
         if not return_dict:
             return tuple(
                 v
@@ -1325,9 +1331,8 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                 if v is not None
             )
         return CausalLMOutputWithCrossAttentions(
-            loss=None,
+            loss=loss,
             logits=logits,
-            # last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
@@ -1565,7 +1570,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     def forward(
         self,
         pixel_embeds: Optional[torch.FloatTensor] = None,
-        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
@@ -1574,7 +1578,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1628,6 +1631,10 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
 
         hidden_states = encoder_outputs[0]
 
+        if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
+            # get decoder inputs from shifting lm labels to the right
+            decoder_input_ids = self._shift_right(labels)
+
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -1641,6 +1648,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            labels=labels,
             return_dict=return_dict,
         )
 
@@ -1648,7 +1656,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
             return decoder_outputs + encoder_outputs
 
         return Seq2SeqLMOutput(
-            loss=None,
+            loss=decoder_outputs.loss,
             logits=decoder_outputs.logits,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
