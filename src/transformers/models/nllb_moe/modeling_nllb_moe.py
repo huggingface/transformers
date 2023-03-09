@@ -16,15 +16,25 @@
 
 
 import math
-from typing import Optional, Tuple, Union
+import random
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...deepspeed import is_deepspeed_zero3_enabled
+from ...modeling_outputs import (
+    MoEModelOutput,
+    MoEModelOutputWithPastAndCrossAttentions,
+    Seq2SeqMoEModelOutput,
+    Seq2SeqMoEOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    add_code_sample_docstrings,
+    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -46,6 +56,7 @@ NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/nllb-moe",
     # See all NLLB-MOE models at https://huggingface.co/models?filter=nllb-moe
 ]
+
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
@@ -104,8 +115,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
-
-
 
 
 def router_z_loss_func(router_logits: torch.Tensor) -> float:
@@ -1116,9 +1125,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return MoEModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions)
 
 
 class NllbMoeDecoder(NllbMoePreTrainedModel):
@@ -1381,7 +1388,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                 for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
                 if v is not None
             )
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return MoEModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
@@ -1433,7 +1440,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
     @add_start_docstrings_to_model_forward(NLLB_MOE_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqModelOutput,
+        output_type=Seq2SeqMoEModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -1453,7 +1460,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqMoEModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1472,8 +1479,8 @@ class NllbMoeModel(NllbMoePreTrainedModel):
                 return_dict=return_dict,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
+        elif return_dict and not isinstance(encoder_outputs, MoEModelOutput):
+            encoder_outputs = MoEModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
@@ -1498,7 +1505,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         if not return_dict:
             return decoder_outputs + encoder_outputs
 
-        return Seq2SeqModelOutput(
+        return Seq2SeqMoEModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -1552,7 +1559,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(NLLB_MOE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqMoEOutput, config_class=_CONFIG_FOR_DOC)
     @add_end_docstrings(NLLB_MOE_GENERATION_EXAMPLE)
     def forward(
         self,
@@ -1572,7 +1579,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqMoEOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1617,7 +1624,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
-        return Seq2SeqLMOutput(
+        return Seq2SeqMoEOutput(
             loss=masked_lm_loss,
             logits=lm_logits,
             past_key_values=outputs.past_key_values,
