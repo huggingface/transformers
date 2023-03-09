@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Feature extractor class for Pop2Piano
-"""
+""" Feature extractor class for Pop2Piano """
+
 import copy
 from typing import Any, Dict, List, Optional, Union
 
 import os
+import torch
 import scipy
 import librosa
 import essentia
@@ -26,6 +26,7 @@ import warnings
 import note_seq
 import pretty_midi
 import numpy as np
+import soundfile as sf
 import essentia.standard
 import IPython.display as ipd
 from IPython.display import display
@@ -54,52 +55,48 @@ PAD: int = 0
 class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Pop2Piano feature extractor.
-    This feature extractor inherits from [`Pop2PianoFeatureExtractor`] which contains most of the main methods. Users
+    This feature extractor inherits from [`SequenceFeatureExtractor`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
-    This class extracts mel-filter bank features from raw speech
+    This class loads audio, extracts rhythm and does preprocesses before being passed through `LogMelSpectrogram`.
+    This class also contains postprocessing methods to convert model outputs to midi audio and stereo-mix.
     Args:
-        feature_size (`int`, defaults to 80):
-            The feature dimension of the extracted features.
-        sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-        hop_length (`int`, defaults to 160):
-            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
-        chunk_length (`int`, defaults to 30):
-            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
-            sequences.
-        n_fft (`int`, defaults to 400):
-            Size of the Fourier transform.
-        padding_value (`float`, *optional*, defaults to 0.0):
+        n_bars (`int`, *optional*, defaults to 2):
+            Determines `n_steps` in method `preprocess_mel`.
+        sample_rate (`int`, *optional*, defaults to 22050):
+            Sample rate of audio signal.
+        use_mel (`bool`, *optional*, defaults to `True`):
+            Whether to preprocess for `LogMelSpectrogram` or not.
+            For the current implementation this must be `True`.
+        pad_token_id (`int`, *optional*, defaults to 0):
             Padding value used to pad the audio. Should correspond to silences.
+        vocab_size_special (`int`, *optional*, 4):
+            No of special values.
+        vocab_size_note (`int`, *optional*, defaults to 128):
+             Note values indicate a pitch event for one of the MIDI pitches. But only the 88 pitches corresponding to piano keys are actually used.
+             This represents the number of Note Values.
+        vocab_size_velocity (`int`, *optional*, defaults to 2):
+            No of Velocity tokens.
+        vocab_size_time (`int`, *optional*, defaults to 100):
+            Beat Shift [100 values] Indicates the relative time shift within the segment quantized into 8th-note beats(half-beats).
+            This represents the number of Beat Shifts.
     """
-
     model_input_names = ["input_features"]
 
     def __init__(self,
-                 start_token_id:int = 0,
-                 target_length:int = 256,
-                 input_length:int = 1024,
                  n_bars:int = 2,
                  sample_rate:int = 22050,
                  use_mel:int = True,
-                 mel_is_conditioned:int = True,
                  pad_token_id:int = 0,
-                 eos_token_id:int = 1,
                  vocab_size_special:int = 4,
                  vocab_size_note:int = 128,
                  vocab_size_velocity:int = 2,
                  vocab_size_time:int = 100,
                  **kwargs
         ):
-        self.start_token_id = start_token_id
-        self.target_length = target_length
-        self.input_length = input_length
         self.n_bars = n_bars
         self.sample_rate = sample_rate
         self.use_mel = use_mel
-        self.mel_is_conditioned = mel_is_conditioned
         self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
         self.vocab_size_special = vocab_size_special
         self.vocab_size_note = vocab_size_note
         self.vocab_size_velocity = vocab_size_velocity
@@ -107,8 +104,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
     def extract_rhythm(self, raw_audio):
         """
-        This algorithm(`RhythmExtractor2013`) extracts the beat positions and estimates their confidence as well as tempo in bpm for
-        an audio signal
+        This algorithm(`RhythmExtractor2013`) extracts the beat positions and estimates their confidence as well as tempo in bpm for an audio signal.
+        For more information please visit https://essentia.upf.edu/reference/std_RhythmExtractor2013.html .
         """
         essentia_tracker = essentia.standard.RhythmExtractor2013(method="multifeature")
         bpm, beat_times, confidence, estimates, essentia_beat_intervals = essentia_tracker(raw_audio)
@@ -146,15 +143,20 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
     def preprocess_mel(
             self, audio, beatstep, n_bars, padding_value,
-    ):
+        ):
+        """ Preprocessing for `LogMelSpectrogram` """
+
         n_steps = n_bars * 4
         n_target_step = len(beatstep)
         ext_beatstep = self.extrapolate_beat_times(beatstep, (n_bars + 1) * 4 + 1)
 
         def split_audio(audio):
-            # Split audio corresponding beat intervals.
-            # Each audio's lengths are different.
-            # Because each corresponding beat interval times are different.
+            """
+            Split audio corresponding beat intervals.
+            Each audio's lengths are different.
+            Because each corresponding beat interval times are different.
+            """
+
             batch = []
 
             for i in range(0, n_target_step, n_steps):
@@ -170,8 +172,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         batch = split_audio(audio)
         batch = pad_sequence(batch, batch_first=True, padding_value=padding_value)
 
-        ext_beatstep = torch.from_numpy(ext_beatstep)
-
         return batch, ext_beatstep
 
     def single_preprocess(
@@ -181,16 +181,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             audio=None,
             n_bars=None,
     ):
-        """
-        generate a long audio sequence
-        feature_tokens or audio : shape (time, )
-        beatstep : shape (time, )
-        - input_ids가 해당하는 beatstep 값들
-        (offset 빠짐, 즉 beatstep[0] == 0)
-        - beatstep[-1] : input_ids가 끝나는 지점의 시간값
-        (즉 beatstep[-1] == len(y)//sr)
-        """
-
+        """ preprocessing method for a single sequence. """
         if feature_tokens is None and audio is None:
             raise ValueError("Both `feature_tokens` and `audio` can't be None at the same time!")
         if feature_tokens is not None:
@@ -207,27 +198,48 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         if self.use_mel:
             input_ids = None
-            batch, ext_beatstep = self.preprocess_mel(
-                                                        audio,
-                                                        beatstep,
-                                                        n_bars=n_bars,
-                                                        padding_value=self.pad_token_id,
-                                                        )
+            batch, ext_beatstep = self.preprocess_mel(audio,
+                                                      beatstep,
+                                                      n_bars=n_bars,
+                                                      padding_value=self.pad_token_id,
+                                                      )
         else:
             raise NotImplementedError("use_mel must be True")
 
         return input_ids, batch, ext_beatstep
 
     def __call__(self,
-                 audio_path: str = None,
+                 audio_path:str = None,
                  raw_audio:Union[np.ndarray, torch.tensor, list] = None,
                  audio_sr:int =None,
                  beatsteps=None,
                  steps_per_beat=2,
-                 n_bars=2,
-                 click_amp=0.2,
+                 # n_bars=2,
                  add_click=False,
+                 click_amp=0.2,
                  ):
+        """
+        Main method to featurize and prepare for the model one or several sequence(s).
+        Args:
+            audio_path (`string`):
+                Audio path from where the audio sequence will be loaded.
+                Can be `None if `raw_audio` and `audio_sr` is given.
+            raw_audio (`np.ndarray`, `torch.tensor`, `List`):
+                Denotes the raw_audio. Can be `None` if `audio_path` is present.
+                If `audio_path` is `None` then `raw_audio` and `audio_sr` must not be `None`.
+            audio_sr (`int`):
+                Denotes the Sample Rate of `raw_audio`.
+                If `audio_path` is `None` then `audio_sr` and `raw_audio` must not be `None`.
+            beatsteps (`np.ndarray`):
+                beatsteps is generated by extracting rhythm from raw_audio and then using interpolation.
+                If beatsteps is given then it reduces the computation.
+            steps_per_beat (`int`, *optional*, defaults to 2):
+                Denotes Steps per beat.
+            add_click (`bool`, *optional*, defaults to `False`):
+                Constructs a `"click track"`.
+            click_amp (`float`, *optional*, defaults to 0.2):
+                Amplitude for `"click track"`.
+        """
 
         # If only raw_audio is present then audio_sr also must be present
         if raw_audio is not None and audio_sr is None and audio_path is None:
@@ -251,7 +263,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         if self.use_mel is not None:
             if self.sample_rate != ESSENTIA_SAMPLERATE and self.sample_rate is not None:
-                # Change raw_audio_sr to config.dataset.sample_rate
+                # Change `raw_audio_sr` to `self.sample_rate`
                 raw_audio = librosa.core.resample(
                     raw_audio, orig_sr=sr, target_sr=self.sample_rate, res_type='kaiser_best'
                 )
@@ -267,10 +279,10 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             feature_tokens=fzs,
             audio=_audio,
             beatstep=beatsteps - beatsteps[0],
-            n_bars=n_bars,
+            n_bars=self.n_bars,
         )
 
-        return {"input_ids" : torch.from_numpy(input_ids) if input_ids is not None else None,
+        return {"input_ids" : input_ids,
                 "batch" : batch,
                 "beatsteps" : beatsteps,
                 "ext_beatstep" : ext_beatstep,
@@ -301,10 +313,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             bars_per_batch=None,
             cutoff_time_idx=None,
     ):
-        """
-        tokens : (batch, sequence)
-        beatstep : (times, )
-        """
         beat_offset_idx = 0 if beat_offset_idx is None else beat_offset_idx
         notes = None
         bars_per_batch = 2 if bars_per_batch is None else bars_per_batch
@@ -335,15 +343,13 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     def relative_tokens_to_notes(self, tokens, start_idx, cutoff_time_idx=None):
         # TODO remove legacy
         # decoding If the first token is an arranger
-        if tokens[0] >= sum(self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity + self.vocab_size_time):
+        if tokens[0] >= (self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity + self.vocab_size_time):
             tokens = tokens[1:]
 
         words = [self.detokenize(token, time_idx_offset=0) for token in tokens]
 
         if hasattr(start_idx, "item"):
-            """
-            if numpy or torch tensor
-            """
+            """ if numpy or torch tensor """
             start_idx = start_idx.item()
 
         current_idx = start_idx
@@ -437,7 +443,16 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         new_pm.remove_invalid_notes()
         return new_pm
 
-    def output_midi(self,
+    def get_stereo(self, pop_y, midi_y, pop_scale=0.99):
+        """ Generates stereo audio using `"pop audio(`pop_y`)"` and `"generated midi audio(`midi_y`)"` """
+        if len(pop_y) > len(midi_y):
+            midi_y = np.pad(midi_y, (0, len(pop_y) - len(midi_y)))
+        elif len(pop_y) < len(midi_y):
+            pop_y = np.pad(pop_y, (0, -len(pop_y) + len(midi_y)))
+        stereo = np.stack((midi_y, pop_y * pop_scale))
+        return stereo
+
+    def postprocess(self,
                     relative_tokens,
                     beatsteps,
                     ext_beatstep,
@@ -451,8 +466,16 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                     click_amp = 0.2,
                     stereo_amp=0.5,
                     add_click = False,
-                    show_plot=False,
-    ):
+                    show_plot=True,
+        ):
+        """ Postprocess step. It also saves the `"generated midi audio"`, `"stereo-mix"` """
+        if (save_midi is not False or save_mix is not False) and save_path is None:
+            raise ValueError("If you want to save any mix or midi file then you must define save_path.")
+
+        if save_path is not None and (save_midi is False and save_mix is False):
+            raise ValueError("You are setting save_path but not saving anything, use save_midi=True to "
+                             "save the midi file and use save_mix to save the mix file or do both!")
+
         if output_name is None:
             import time
             output_name = int(time.time())
@@ -477,8 +500,9 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         if save_midi:
             pm.write(midi_path)
+            print(f"midi file saved at {midi_path}!")
 
-        if  save_mix:
+        if show_plot or save_mix:
             if mix_sample_rate != sr:
                 raw_audio = librosa.core.resample(raw_audio, orig_sr=sr, target_sr=mix_sample_rate)
                 sr = mix_sample_rate
@@ -488,7 +512,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 )
                 raw_audio = raw_audio + clicks
             pm_raw_audio = pm.fluidsynth(sr)
-            stereo = get_stereo(raw_audio, pm_raw_audio, pop_scale=stereo_amp)
+            stereo = self.get_stereo(raw_audio, pm_raw_audio, pop_scale=stereo_amp)
 
             sf.write(
                 file=mix_path,
@@ -496,6 +520,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 samplerate=sr,
                 format="wav",
             )
+            print(f"stereo-mix file saved at {mix_path}!")
 
         if show_plot:
             display("Stereo MIX", ipd.Audio(stereo, rate=sr))
@@ -503,4 +528,4 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             display("Original Song", ipd.Audio(raw_audio, rate=sr))
             display(note_seq.plot_sequence(note_seq.midi_to_note_sequence(pm)))
 
-
+        return pm
