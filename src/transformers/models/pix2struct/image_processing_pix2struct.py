@@ -21,7 +21,7 @@ import numpy as np
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import convert_to_rgb, normalize, torch_extract_patches
 from ...image_utils import ChannelDimension, ImageInput, is_batched, to_numpy_array, valid_images
-from ...utils import logging, is_torch_available, is_vision_available, TensorType
+from ...utils import TensorType, is_torch_available, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 
