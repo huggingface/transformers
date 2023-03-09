@@ -215,11 +215,15 @@ class Message:
             # Use the actual job link
             job_link = f"{github_actions_job_links['Extract warnings in CI artifacts']}"
 
+        huggingface_hub_warnings = [x for x in self.selected_warnings if "huggingface_hub" in x]
+        text = f"There are {len(self.selected_warnings)} warnings being selected."
+        text += f"\n{len(huggingface_hub_warnings)} of them are from `huggingface_hub`."
+
         return {
             "type": "section",
             "text": {
                 "type": "plain_text",
-                "text": f"There were {len(self.selected_warnings)} warnings being selected.",
+                "text": text,
                 "emoji": True,
             },
             "accessory": {
