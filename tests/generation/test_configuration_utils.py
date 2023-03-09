@@ -17,7 +17,7 @@ import copy
 import tempfile
 import unittest
 
-from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 
@@ -99,7 +99,6 @@ class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod
