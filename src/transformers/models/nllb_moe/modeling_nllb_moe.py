@@ -358,12 +358,12 @@ class NllbMoeTop1Router(nn.Module):
         return expert_index, router_probs, router_logits
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->NllbMoe
+# Adapted from transformers.models.t5.modeling_t5.T5DenseActDense with T5->NllbMoe
 class NllbMoeDenseActDense(nn.Module):
-    def __init__(self, config: NllbMoeConfig):
+    def __init__(self, config: NllbMoeConfig, ffn_dim: int):
         super().__init__()
-        self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.wi = nn.Linear(config.d_model, ffn_dim, bias=False)
+        self.wo = nn.Linear(ffn_dim, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
         self.act = ACT2FN[config.dense_act_fn]
 
@@ -381,13 +381,13 @@ class NllbMoeDenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersSparseMLP with SwitchTransformers->NllbMoe
+# Adapted from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersSparseMLP with SwitchTransformers->NllbMoe
 class NllbMoeSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module.
     """
 
-    def __init__(self, config: NllbMoeConfig, expert_class: nn.Module = NllbMoeDenseActDense):
+    def __init__(self, config: NllbMoeConfig, ffn_dim: int, expert_class: nn.Module = NllbMoeDenseActDense):
         super().__init__()
         # Step 1: Get the correct router according to its class
         self.router = NllbMoeTop1Router(config)
@@ -395,7 +395,7 @@ class NllbMoeSparseMLP(nn.Module):
         # Step 2: Get the experts
         self.experts = nn.ModuleDict()
         for idx in range(config.num_experts):
-            self.experts[f"expert_{idx}"] = expert_class(config)
+            self.experts[f"expert_{idx}"] = expert_class(config, ffn_dim)
 
     def forward(self, hidden_states):
         r"""
@@ -425,7 +425,7 @@ class NllbMoeSparseMLP(nn.Module):
         return hidden_states, (router_logits, expert_index)
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersLayerFF with SwitchTransformers->NllbMoe,NllbMoeLayerNorm->nn.LayerNorm
+# Adapted from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersLayerFF with SwitchTransformers->NllbMoe,NllbMoeLayerNorm->nn.LayerNorm
 class NllbMoeLayerFF(nn.Module):
     r"""
     Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts module.
@@ -438,15 +438,15 @@ class NllbMoeLayerFF(nn.Module):
             Whether the MLP layer is a `Sparse` layer (contains a Mixture of Experts) or not
     """
 
-    def __init__(self, config: NllbMoeConfig, is_sparse=False):
+    def __init__(self, config: NllbMoeConfig, ffn_dim, is_sparse=False):
         super().__init__()
         self.is_sparse = is_sparse
 
         # Check if it is a sparse layer, if not then it is a dense layer
         if not self.is_sparse:
-            self.mlp = NllbMoeDenseActDense(config)
+            self.mlp = NllbMoeDenseActDense(config, ffn_dim)
         else:
-            self.mlp = NllbMoeSparseMLP(config)
+            self.mlp = NllbMoeSparseMLP(config, ffn_dim)
 
         self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -636,7 +636,7 @@ class NllbMoeEncoderLayer(nn.Module):
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
-        self.ffn = NllbMoeLayerFF(config, is_sparse=self.is_sparse)
+        self.ffn = NllbMoeLayerFF(config, ffn_dim=config.encoder_ffn_dim, is_sparse=self.is_sparse)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
@@ -721,7 +721,7 @@ class NllbMoeDecoderLayer(nn.Module):
             is_decoder=True,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.ffn = NllbMoeLayerFF(config, is_sparse=self.is_sparse)
+        self.ffn = NllbMoeLayerFF(config, config.decoder_ffn_dim, is_sparse=self.is_sparse)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
@@ -831,6 +831,7 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     _no_split_modules = ["NllbMoeAttention"]
 
     def _init_weights(self, module):
+        """Initialize the weights"""
         std = self.config.init_std
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)

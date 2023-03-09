@@ -26,137 +26,149 @@ NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class NllbMoeConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`NllbMoeModel`]. It is used to instantiate a
-    NllbMoe model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the NllbMoe
-    [facebook/nllb-moe](https://huggingface.co/facebook/nllb-moe) architecture.
+    This is the configuration class to store the configuration of a [`M2M100Model`]. It is used to instantiate an
+    M2M100 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the M2M100
+    [facebook/m2m100_418M](https://huggingface.co/facebook/m2m100_418M) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-    Arguments:
-        vocab_size (`int`, *optional*, defaults to 32128):
-            Vocabulary size of the NllbMoe model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`NllbMoeModel`].
-        d_model (`int`, *optional*, defaults to 512):
-            Size of the encoder layers and the pooler layer.
-        d_kv (`int`, *optional*, defaults to 64):
-            Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model //
-            num_heads`.
-        d_ff (`int`, *optional*, defaults to 2048):
-            Size of the intermediate feed forward layer in each `NllbMoeBlock`.
-        expert_capacity (`int`, *optional*, defaults to 64):
-            Number of tokens that can be stored in each expert. If set to 1, the model will behave like a regular
-            Transformer.
-        num_layers (`int`, *optional*, defaults to 12):
-            Number of dense hidden layers in the Transformer encoder layer.
-        num_sparse_encoder_layers (`int`, *optional*, defaults to 6):
-            Number of sparse (MoE) dense hidden layers in the Transformer encoder layer.
-        num_decoder_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
-        num_sparse_decoder_layers (`int`, *optional*, defaults to 12):
-            Number of sparse (MoE) dense hidden layers in the Transformer decoder layer.
-        num_heads (`int`, *optional*, defaults to 8):
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 50265):
+            Vocabulary size of the M2M100 model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`M2M100Model`] or
+        d_model (`int`, *optional*, defaults to 1024):
+            Dimensionality of the layers and the pooler layer.
+        encoder_layers (`int`, *optional*, defaults to 12):
+            Number of encoder layers.
+        decoder_layers (`int`, *optional*, defaults to 12):
+            Number of decoder layers.
+        encoder_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_experts (`int`, *optional*, defaults to 8):
-            Number of experts for each SwitchTransformer layer.
-        router_type (`str`, *optional*, defaults to `"tokens_masked"`):
-            Router type - choose between `"tokens_masked", `"tokens_scatter"` and `"experts_masked"`.
-        router_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the router.
-        router_jitter_noise (`float`, *optional*, defaults to 0.1):
-            Amount of noise to add to the router.
-        router_dtype (`str`, *optional*, default to `"float32"`):
-            The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the
-            *selective precision* discussion in [the paper](https://arxiv.org/abs/2101.03961).
-        router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
-            Whether to ignore padding tokens when routing.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance of the longer sequences for the bucket separation.
-        dropout_rate (`float`, *optional*, defaults to 0.1):
-            The ratio for all dropout layers.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
-            The epsilon used by the layer normalization layers.
-        router_z_loss_coef (`float`, *optional*, defaults to 0.001):
-            The z loss factor for the total loss.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
-            The aux loss factor for the total loss.
-        initializer_factor (`float`, *optional*, defaults to 1):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
-        feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. NllbMoev1.1 uses the
-            `"gated-gelu"` feed forward projection. Original NllbMoe uses `"relu"`.
-        add_router_probs (`bool`, *optional*, defaults to `False`):
-            Whether to output router probabilities to compute router auxiliary loss.
+        decoder_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        decoder_ffn_dim (`int`, *optional*, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        encoder_ffn_dim (`int`, *optional*, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        classifier_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for classifier.
+        max_position_embeddings (`int`, *optional*, defaults to 1024):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-    """
-    model_type = "nllb-moe"
+
+    Example:
+
+    ```python
+    >>> from transformers import M2M100Model, M2M100Config
+
+    >>> # Initializing a M2M100 facebook/m2m100_418M style configuration
+    >>> configuration = M2M100Config()
+
+    >>> # Initializing a model from the facebook/m2m100_418M style configuration
+    >>> model = M2M100Model(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+    model_type = "nllb_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
+    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
     def __init__(
         self,
-        vocab_size=32128,
-        d_model=768,
-        d_kv=64,
-        d_ff=2048,
-        expert_capacity=64,
-        num_layers=12,
-        num_sparse_encoder_layers=3,
-        num_decoder_layers=12,
-        num_sparse_decoder_layers=3,
-        num_heads=12,
-        num_experts=8,
+        vocab_size=128112,
+        max_position_embeddings=1024,
+        encoder_layers=12,
+        encoder_ffn_dim=4096,
+        encoder_attention_heads=16,
+        decoder_layers=12,
+        decoder_ffn_dim=4096,
+        decoder_attention_heads=16,
+        encoder_layerdrop=0.05,
+        decoder_layerdrop=0.05,
+        use_cache=True,
+        is_encoder_decoder=True,
+        activation_function="relu",
+        d_model=1024,
+        dropout=0.1,
+        attention_dropout=0.1,
+        activation_dropout=0.0,
+        init_std=0.02,
+        decoder_start_token_id=2,
+        scale_embedding=True,
         router_type="tokens_masked",
         router_bias=False,
         router_jitter_noise=0.01,
         router_dtype="float32",
         router_ignore_padding_tokens=False,
-        relative_attention_num_buckets=32,
-        relative_attention_max_distance=128,
-        dropout_rate=0.1,
-        layer_norm_epsilon=1e-6,
+        num_experts=64,
+        num_sparse_encoder_layers=3,
+        expert_capacity=64,
+        num_sparse_decoder_layers=3,
         router_z_loss_coef=0.001,
         router_aux_loss_coef=0.001,
         initializer_factor=1.0,
-        feed_forward_proj="relu",
-        is_encoder_decoder=True,
-        add_router_probs=False,
-        use_cache=True,
-        pad_token_id=0,
-        eos_token_id=1,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
-        self.d_kv = d_kv
-        self.d_ff = d_ff
-
-        self.num_sparse_encoder_layers = num_sparse_encoder_layers
-
-        self.num_layers = num_layers
-        self.num_decoder_layers = (
-            num_decoder_layers if num_decoder_layers is not None else self.num_layers
-        )  # default = symmetry
-        self.num_sparse_decoder_layers = num_sparse_decoder_layers
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.encoder_layers = encoder_layers
+        self.encoder_attention_heads = encoder_attention_heads
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.decoder_layers = decoder_layers
+        self.decoder_attention_heads = decoder_attention_heads
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
+        self.activation_function = activation_function
+        self.init_std = init_std
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
+        self.use_cache = use_cache
+        self.num_hidden_layers = encoder_layers
+        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.router_z_loss_coef = router_z_loss_coef
+        self.router_aux_loss_coef = router_aux_loss_coef
+        self.initializer_factor = initializer_factor
+        # This tells us, each how many encoder layer we'll have to set a sparse layer.
+        if num_sparse_encoder_layers > 0:
+            self.encoder_sparse_step = self.encoder_layers // num_sparse_encoder_layers
+        else:
+            self.encoder_sparse_step = self.encoder_layers  # HACK: this will create 0 sparse layers
 
         # This tells us, each how many encoder layer we'll have to set a sparse layer.
-        if self.num_sparse_encoder_layers > 0:
-            self.encoder_sparse_step = self.num_layers // self.num_sparse_encoder_layers
+        if num_sparse_decoder_layers > 0:
+            self.decoder_sparse_step = self.decoder_layers // num_sparse_decoder_layers
         else:
-            self.encoder_sparse_step = self.num_layers  # HACK: this will create 0 sparse layers
+            self.decoder_sparse_step = self.decoder_layers  # HACK: this will create 0 sparse layers
 
-        # This tells us, each how many encoder layer we'll have to set a sparse layer.
-        if self.num_sparse_decoder_layers > 0:
-            self.decoder_sparse_step = self.num_decoder_layers // self.num_sparse_decoder_layers
-        else:
-            self.decoder_sparse_step = self.num_decoder_layers  # HACK: this will create 0 sparse layers
-
-        self.num_heads = num_heads
         self.router_type = router_type
         self.num_experts = num_experts
         self.expert_capacity = expert_capacity
@@ -167,37 +179,12 @@ class NllbMoeConfig(PretrainedConfig):
         self.router_dtype = router_dtype
 
         self.router_ignore_padding_tokens = router_ignore_padding_tokens
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.relative_attention_max_distance = relative_attention_max_distance
-
-        self.dropout_rate = dropout_rate
-        self.layer_norm_epsilon = layer_norm_epsilon
-        self.initializer_factor = initializer_factor
-        self.feed_forward_proj = feed_forward_proj
-        self.use_cache = use_cache
-        self.add_router_probs = add_router_probs
-
-        self.router_z_loss_coef = router_z_loss_coef
-        self.router_aux_loss_coef = router_aux_loss_coef
-
-        act_info = self.feed_forward_proj.split("-")
-        self.dense_act_fn = act_info[-1]
-        self.is_gated_act = act_info[0] == "gated"
-
-        if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
-            raise ValueError(
-                f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer."
-                "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
-                "'gated-gelu' or 'relu'"
-            )
-
-        # for backwards compatibility
-        if feed_forward_proj == "gated-gelu":
-            self.dense_act_fn = "gelu_new"
 
         super().__init__(
             pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
