@@ -33,9 +33,10 @@ class TokenGTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`~TokenGTModel`]. It is used to instantiate an
     Graphormer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Graphormer
-    [tokengt-base-lap-pcqm4mv2](https://huggingface.co/tokengt-base-lap-pcqm4mv2) architecture.
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    [tokengt-base-lap-pcqm4mv2](https://huggingface.co/tokengt-base-lap-pcqm4mv2) architecture. Configuration objects
+    inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the documentation from
+    [`PretrainedConfig`] for more information.
+
     Args:
         num_classes (`int`, *optional*, defaults to 2):
             Number of target classes or labels, set to 1 if the task is a regression task.
@@ -115,6 +116,7 @@ class TokenGTConfig(PretrainedConfig):
         Example:
             ```python
             >>> from transformers import GraphormerForGraphClassification, GraphormerConfig
+
             >>> # Initializing a Graphormer graphormer-base-pcqm4mv2 style configuration
             >>> configuration = GraphormerConfig()
             >>> # Initializing a model from the graphormer-base-pcqm4mv1 style configuration
