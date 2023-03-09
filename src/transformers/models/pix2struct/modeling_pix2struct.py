@@ -107,7 +107,8 @@ ALL_LAYERNORM_LAYERS.append(Pix2StructLayerNorm)
 class Pix2StructVisionEmbeddings(nn.Module):
     r"""
     Construct the embeddings from patch. In `Pix2Struct` the input is different from classic Vision-transformer models.
-    Here the input is a sequence of `seq_len` patches. Each patch is represented by a vector of `hidden_size` values.
+    Here the input is a sequence of `seq_len` flattened patches that also combines padding patches (tokens). Each patch
+    is represented by a vector of `hidden_size` values.
     """
 
     def __init__(self, config: Pix2StructConfig) -> None:
