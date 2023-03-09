@@ -1538,7 +1538,7 @@ class Trainer:
 
             if self.args.ddp_bucket_cap_mb is not None:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
-            if is_torch_neuroncore_available:
+            if is_torch_neuroncore_available():
                 return model
             model = nn.parallel.DistributedDataParallel(
                 model,

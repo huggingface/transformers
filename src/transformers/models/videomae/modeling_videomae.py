@@ -790,7 +790,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
         >>> import torch
 
         >>> num_frames = 16
-        >>> video = list(np.random.randn(16, 3, 224, 224))
+        >>> video = list(np.random.randint(0, 256, (num_frames, 3, 224, 224)))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base")
         >>> model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base")
