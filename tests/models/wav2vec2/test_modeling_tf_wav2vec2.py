@@ -28,6 +28,7 @@ from datasets import load_dataset
 from huggingface_hub import snapshot_download
 
 from transformers import Wav2Vec2Config, is_tf_available
+from transformers.models.wav2vec2.modeling_tf_wav2vec2 import TFWav2Vec2ForSequenceClassification
 from transformers.testing_utils import (
     CaptureLogger,
     is_flaky,
@@ -400,7 +401,9 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
 
 @require_tf
 class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFWav2Vec2Model, TFWav2Vec2ForCTC) if is_tf_available() else ()
+    all_model_classes = (
+        (TFWav2Vec2Model, TFWav2Vec2ForCTC, TFWav2Vec2ForSequenceClassification) if is_tf_available() else ()
+    )
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False
