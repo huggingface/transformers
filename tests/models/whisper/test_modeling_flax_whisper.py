@@ -40,8 +40,8 @@ if is_flax_available():
 
     from transformers import (
         FLAX_MODEL_MAPPING,
-        FlaxWhisperForConditionalGeneration,
         FlaxWhisperForAudioClassification,
+        FlaxWhisperForConditionalGeneration,
         FlaxWhisperModel,
         WhisperFeatureExtractor,
         WhisperProcessor,
