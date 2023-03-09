@@ -18,25 +18,35 @@ Feature extractor class for Pop2Piano
 import copy
 from typing import Any, Dict, List, Optional, Union
 
-import numpy as np
-import torch.cuda
-
-from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
-from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, logging
-
 import os
 import scipy
 import librosa
 import essentia
 import warnings
+import pretty_midi
+import numpy as np
 import essentia.standard
 from torch.nn.utils.rnn import pad_sequence
 from .configuration_pop2piano import Pop2PianoConfig
 
+from ...utils import TensorType, logging
+from ...feature_extraction_utils import BatchFeature
+from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
+
 logger = logging.get_logger(__name__)
 
 ESSENTIA_SAMPLERATE = 44100
+
+TOKEN_SPECIAL: int = 0
+TOKEN_NOTE: int = 1
+TOKEN_VELOCITY: int = 2
+TOKEN_TIME: int = 3
+
+DEFAULT_VELOCITY: int = 77
+
+TIE: int = 2
+EOS: int = 1
+PAD: int = 0
 
 class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     r"""
@@ -71,6 +81,11 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                  use_mel:int = True,
                  mel_is_conditioned:int = True,
                  pad_token_id:int = 0,
+                 eos_token_id:int = 1,
+                 vocab_size_special:int = 4,
+                 vocab_size_note:int = 128,
+                 vocab_size_velocity:int = 2,
+                 vocab_size_time:int = 100,
                  **kwargs
         ):
         self.start_token_id = start_token_id
@@ -81,6 +96,11 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         self.use_mel = use_mel
         self.mel_is_conditioned = mel_is_conditioned
         self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.vocab_size_special = vocab_size_special
+        self.vocab_size_note = vocab_size_note
+        self.vocab_size_velocity = vocab_size_velocity
+        self.vocab_size_time = vocab_size_time
 
     def extract_rhythm(self, raw_audio):
         """
@@ -252,3 +272,164 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 "batch" : batch,
                 "ext_beatstep" : ext_beatstep,
                 }
+
+
+    def detokenize(self, token, time_idx_offset):
+        if token >= (self.config.vocab_size.special + self.config.vocab_size.note + self.config.vocab_size.velocity):
+            type, value =  TOKEN_TIME, ((token - (self.config.vocab_size.special + self.config.vocab_size.note + self.config.vocab_size.velocity)) + time_idx_offset)
+        elif token >= (self.config.vocab_size.special + self.config.vocab_size.note):
+            type, value =  TOKEN_VELOCITY, (token - (self.config.vocab_size.special + self.config.vocab_size.note))
+            value = int(value)
+        elif token >= self.config.vocab_size.special:
+            type, value =  TOKEN_NOTE, (token - self.config.vocab_size.special)
+            value = int(value)
+        else:
+            type, value = TOKEN_SPECIAL, token
+            value = int(value)
+
+        return [type, value]
+
+    def relative_batch_tokens_to_midi(
+            self,
+            tokens,
+            beatstep,
+            beat_offset_idx=None,
+            bars_per_batch=None,
+            cutoff_time_idx=None,
+    ):
+        """
+        tokens : (batch, sequence)
+        beatstep : (times, )
+        """
+        beat_offset_idx = 0 if beat_offset_idx is None else beat_offset_idx
+        notes = None
+        bars_per_batch = 2 if bars_per_batch is None else bars_per_batch
+
+        N = len(tokens)
+        for n in range(N):
+            _tokens = tokens[n]
+            _start_idx = beat_offset_idx + n * bars_per_batch * 4
+            _cutoff_time_idx = cutoff_time_idx + _start_idx
+            _notes = self.relative_tokens_to_notes(
+                _tokens,
+                start_idx=_start_idx,
+                cutoff_time_idx=_cutoff_time_idx,
+            )
+
+            if len(_notes) == 0:
+                pass
+            elif notes is None:
+                notes = _notes
+            else:
+                notes = np.concatenate((notes, _notes), axis=0)
+
+        if notes is None:
+            notes = []
+        midi = self.notes_to_midi(notes, beatstep, offset_sec=beatstep[beat_offset_idx])
+        return midi, notes
+
+    def relative_tokens_to_notes(self, tokens, start_idx, cutoff_time_idx=None):
+        # TODO remove legacy
+        # decoding If the first token is an arranger
+        if tokens[0] >= sum(self.config.vocab_size.values()):
+            tokens = tokens[1:]
+
+        words = [self.detokenize(token, time_idx_offset=0) for token in tokens]
+
+        if hasattr(start_idx, "item"):
+            """
+            if numpy or torch tensor
+            """
+            start_idx = start_idx.item()
+
+        current_idx = start_idx
+        current_velocity = 0
+        note_onsets_ready = [None for i in range(self.config.vocab_size.note + 1)]
+        notes = []
+        for type, number in words:
+            if type == TOKEN_SPECIAL:
+                if number == EOS:
+                    break
+            elif type == TOKEN_TIME:
+                current_idx += number
+                if cutoff_time_idx is not None:
+                    current_idx = min(current_idx, cutoff_time_idx)
+
+            elif type == TOKEN_VELOCITY:
+                current_velocity = number
+            elif type == TOKEN_NOTE:
+                pitch = number
+                if current_velocity == 0:
+                    # note_offset
+                    if note_onsets_ready[pitch] is None:
+                        # offset without onset
+                        pass
+                    else:
+                        onset_idx = note_onsets_ready[pitch]
+                        if onset_idx >= current_idx:
+                            # No time shift after previous note_on
+                            pass
+                        else:
+                            offset_idx = current_idx
+                            notes.append(
+                                [onset_idx, offset_idx, pitch, DEFAULT_VELOCITY]
+                            )
+                            note_onsets_ready[pitch] = None
+                else:
+                    # note_on
+                    if note_onsets_ready[pitch] is None:
+                        note_onsets_ready[pitch] = current_idx
+                    else:
+                        # note-on already exists
+                        onset_idx = note_onsets_ready[pitch]
+                        if onset_idx >= current_idx:
+                            # No time shift after previous note_on
+                            pass
+                        else:
+                            offset_idx = current_idx
+                            notes.append(
+                                [onset_idx, offset_idx, pitch, DEFAULT_VELOCITY]
+                            )
+                            note_onsets_ready[pitch] = current_idx
+            else:
+                raise ValueError
+
+        for pitch, note_on in enumerate(note_onsets_ready):
+            # force offset if no offset for each pitch
+            if note_on is not None:
+                if cutoff_time_idx is None:
+                    cutoff = note_on + 1
+                else:
+                    cutoff = max(cutoff_time_idx, note_on + 1)
+
+                offset_idx = max(current_idx, cutoff)
+                notes.append([note_on, offset_idx, pitch, DEFAULT_VELOCITY])
+
+        if len(notes) == 0:
+            return []
+        else:
+            notes = np.array(notes)
+            note_order = notes[:, 0] * 128 + notes[:, 1]
+            notes = notes[note_order.argsort()]
+            return notes
+
+    def notes_to_midi(self, notes, beatstep, offset_sec=None):
+        new_pm = pretty_midi.PrettyMIDI(resolution=384, initial_tempo=120.0)
+        new_inst = pretty_midi.Instrument(program=0)
+        new_notes = []
+        if offset_sec is None:
+            offset_sec = 0.0
+
+        for onset_idx, offset_idx, pitch, velocity in notes:
+            new_note = pretty_midi.Note(
+                velocity=velocity,
+                pitch=pitch,
+                start=beatstep[onset_idx] - offset_sec,
+                end=beatstep[offset_idx] - offset_sec,
+            )
+            new_notes.append(new_note)
+        new_inst.notes = new_notes
+        new_pm.instruments.append(new_inst)
+        new_pm.remove_invalid_notes()
+        return new_pm
+

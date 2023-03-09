@@ -220,14 +220,17 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
 
 
 class LogMelSpectrogram(nn.Module):
-    def __init__(self):
+    def __init__(self, sample_rate=22050, n_fft=4096, hop_length=1024, f_min=10.0, n_mels=512):
+        ## TODO
+        ## make values n_fft hop_length accessible
+        ## TODO
         super(LogMelSpectrogram, self).__init__()
         self.melspectrogram = torchaudio.transforms.MelSpectrogram(
-            sample_rate=22050,
-            n_fft=4096,
-            hop_length=1024,
-            f_min=10.0,
-            n_mels=512,
+            sample_rate=sample_rate,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            f_min=f_min,
+            n_mels=n_mels,
         )
 
     def forward(self, x):
@@ -1314,33 +1317,21 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
         super(Pop2PianoModel, self).__init__(config)
         self.config = config
 
-        self.spectrogram = LogMelSpectrogram()
+        self.spectrogram = LogMelSpectrogram(sample_rate=self.config.dataset.get("sample_rate"),
+                                             n_fft=self.config.n_fft,
+                                             hop_length=self.config.hop_length,
+                                             f_min=self.config.f_min,
+                                             n_mels=self.config.n_mels
+                                             )
         if self.config.dataset.get("mel_is_conditioned", None):
             n_dim = 512
             composer_n_vocab = len(config.composer_to_feature_token)
             embedding_offset = min(config.composer_to_feature_token.values())
-            self.mel_conditioner = ConcatEmbeddingToMel(
-                        embedding_offset=embedding_offset,
-                        n_vocab=composer_n_vocab,
-                        n_dim=n_dim)
-        # self.transformer = Pop2PianoForConditionalGeneration(config)
-
-
-        from transformers import T5ForConditionalGeneration, T5Config
-        t5config = T5Config.from_pretrained("t5-small")
-        custom_config_t5 = {
-                "feed_forward_proj": "gated-gelu",
-                "tie_word_embeddings": False,
-                "tie_encoder_decoder": False,
-                "vocab_size": 2400,
-                "n_positions": 1024,
-                "is_gated_act": True,
-                "relative_attention_num_buckets": 32,
-        }
-        for k, v in custom_config_t5.items():
-            t5config.__setattr__(k, v)
-        self.transformer = T5ForConditionalGeneration(t5config)
-
+            self.mel_conditioner = ConcatEmbeddingToMel(embedding_offset=embedding_offset,
+                                                        n_vocab=composer_n_vocab,
+                                                        n_dim=n_dim
+                                                        )
+        self.transformer = Pop2PianoForConditionalGeneration(config)
 
         self.post_init()
 
@@ -1424,8 +1415,6 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
                 input_ids=_input_ids,
                 inputs_embeds=_inputs_embeds,
                 max_length=max_length,
-                # min_length=10,
-                do_sample=False,
             )
             _relative_tokens = _relative_tokens.cpu().numpy()
             relative_tokens.append(_relative_tokens)
