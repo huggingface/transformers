@@ -121,7 +121,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mbart", "MBartConfig"),
         ("mctct", "MCTCTConfig"),
         ("megatron-bert", "MegatronBertConfig"),
-        ("mgp-str", "MGPSTRConfig"),
+        ("mgp-str", "MgpstrConfig"),
         ("mobilebert", "MobileBertConfig"),
         ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),

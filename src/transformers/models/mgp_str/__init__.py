@@ -21,9 +21,9 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_mgp_str": ["MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP", "MGPSTRConfig"],
-    "processing_mgp_str": ["MGPSTRProcessor"],
-    "tokenization_mgp_str": ["MGPSTRTokenizer"],
+    "configuration_mgp_str": ["MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP", "MgpstrConfig"],
+    "processing_mgp_str": ["MgpstrProcessor"],
+    "tokenization_mgp_str": ["MgpstrTokenizer"],
 }
 
 try:
@@ -34,15 +34,15 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_mgp_str"] = [
         "MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "MGPSTRModel",
-        "MGPSTRPreTrainedModel",
-        "MGPSTRForSceneTextRecognition",
+        "MgpstrModel",
+        "MgpstrPreTrainedModel",
+        "MgpstrForSceneTextRecognition",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MGPSTRConfig
-    from .processing_mgp_str.py import MGPSTRProcessor
-    from .tokenization_mgp_str import MGPSTRTokenizer
+    from .configuration_mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MgpstrConfig
+    from .processing_mgp_str.py import MgpstrProcessor
+    from .tokenization_mgp_str import MgpstrTokenizer
 
     try:
         if not is_torch_available():
@@ -52,9 +52,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_mgp_str import (
             MGP_STR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MGPSTRForSceneTextRecognition,
-            MGPSTRModel,
-            MGPSTRPreTrainedModel,
+            MgpstrForSceneTextRecognition,
+            MgpstrModel,
+            MgpstrPreTrainedModel,
         )
 else:
     import sys

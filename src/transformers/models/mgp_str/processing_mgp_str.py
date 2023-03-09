@@ -29,37 +29,31 @@ if is_torch_available():
 
 class DecodeType(ExplicitEnum):
     CHARACTER = "char"
-    CHARACTER_EOS_TOKEN = 1
-    CHARACTER_EOS_STR = "[s]"
     BPE = "bpe"
-    BPE_EOS_TOKEN = 2
-    BPE_EOS_STR = "#"
     WORDPIECE = "wp"
-    WORDPIECE_EOS_TOKEN = 102
-    WORDPIECE_EOS_STR = "[SEP]"
 
 
 SUPPORTED_ANNOTATION_FORMATS = (DecodeType.CHARACTER, DecodeType.BPE, DecodeType.WORDPIECE)
 
 
-class MGPSTRProcessor(ProcessorMixin):
+class MgpstrProcessor(ProcessorMixin):
     r"""
     Constructs a MGP-STR processor which wraps an image processor and MGP-STR tokenizers into a single
 
-    [`MGPSTRProcessor`] offers all the functionalities of `ViTImageProcessor`] and [`MGPSTRTokenizer`]. See the
-    [`~MGPSTRProcessor.__call__`] and [`~MGPSTRProcessor.batch_decode`] for more information.
+    [`MgpstrProcessor`] offers all the functionalities of `ViTImageProcessor`] and [`MgpstrTokenizer`]. See the
+    [`~MgpstrProcessor.__call__`] and [`~MgpstrProcessor.batch_decode`] for more information.
 
     Args:
         image_processor (`ViTImageProcessor`):
-            An instance of `ViTImageProcessor`. The image extractor is a required input.
-        tokenizer ([`MGPSTRTokenizer`]):
+            An instance of `ViTImageProcessor`. The image processor is a required input.
+        tokenizer ([`MgpstrTokenizer`]):
             The tokenizer is a required input.
     """
     attributes = ["image_processor", "char_tokenizer"]
     image_processor_class = "ViTImageProcessor"
-    char_tokenizer_class = "MGPSTRTokenizer"
+    char_tokenizer_class = "MgpstrTokenizer"
 
-    def __init__(self, image_processor=None, tokenizer=None, *kwargs):
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         if "feature_extractor" in kwargs:
             warnings.warn(
                 "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
@@ -84,7 +78,7 @@ class MGPSTRProcessor(ProcessorMixin):
         """
         When used in normal mode, this method forwards all its arguments to ViTImageProcessor's
         [`~ViTImageProcessor.__call__`] and returns its output. This method also forwards the `text` and `kwargs`
-        arguments to MGPSTRTokenizer's [`~MGPSTRTokenizer.__call__`] if `text` is not `None` to encode the text. Please
+        arguments to MgpstrTokenizer's [`~MgpstrTokenizer.__call__`] if `text` is not `None` to encode the text. Please
         refer to the doctsring of the above methods for more information.
         """
         if images is None and text is None:
@@ -152,7 +146,7 @@ class MGPSTRProcessor(ProcessorMixin):
         Args:
             pred_logits (`torch.Tensor`):
                 List of model prediction logits.
-            format (`Enum`):
+            format (`Union[DecoderType, str]`):
                 Type of model prediction. Must be one of ['char', 'bpe', 'wp'].
         Returns:
             `tuple`:
@@ -161,16 +155,16 @@ class MGPSTRProcessor(ProcessorMixin):
         """
         if format == DecodeType.CHARACTER:
             decoder = self.char_decode
-            eos_token = int(DecodeType.CHARACTER_EOS_TOKEN)
-            eos_str = DecodeType.CHARACTER_EOS_STR
+            eos_token = 1
+            eos_str = "[s]"
         elif format == DecodeType.BPE:
             decoder = self.bpe_decode
-            eos_token = int(DecodeType.BPE_EOS_TOKEN)
-            eos_str = DecodeType.BPE_EOS_STR
+            eos_token = 2
+            eos_str = "#"
         elif format == DecodeType.WORDPIECE:
             decoder = self.wp_decode
-            eos_token = int(DecodeType.WORDPIECE_EOS_TOKEN)
-            eos_str = DecodeType.WORDPIECE_EOS_STR
+            eos_token = 102
+            eos_str = "[SEP]"
         else:
             raise ValueError(f"Format {format} is not supported.")
 

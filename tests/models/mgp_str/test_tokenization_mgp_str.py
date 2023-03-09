@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 
-from transformers import MGPSTRTokenizer
+from transformers import MgpstrTokenizer
 from transformers.models.mgp_str.tokenization_mgp_str import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
@@ -26,8 +26,8 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
-class MGPSTRTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = MGPSTRTokenizer
+class MgpstrTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = MgpstrTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {}
     test_seq2seq = False
@@ -45,16 +45,15 @@ class MGPSTRTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             fp.write(json.dumps(vocab_tokens) + "\n")
 
     def get_tokenizer(self, **kwargs):
-        return MGPSTRTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return MgpstrTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "tester"
         output_text = "tester"
         return input_text, output_text
 
-    # overwrite common test
+    @unittest.skip("MGP-STR always lower cases letters.")
     def test_added_tokens_do_lower_case(self):
-        # MGP-STR always lower cases letters
         pass
 
     def test_add_special_tokens(self):
@@ -92,6 +91,6 @@ class MGPSTRTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_maximum_encoding_length_pair_input(self):
         pass
 
-    # inputs cannot be pretokenized in MGPSTRTokenizer
+    @unittest.skip("inputs cannot be pretokenized in MgpstrTokenizer")
     def test_pretokenized_inputs(self):
         pass

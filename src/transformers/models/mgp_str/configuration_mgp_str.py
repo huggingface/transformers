@@ -25,9 +25,9 @@ MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class MGPSTRConfig(PretrainedConfig):
+class MgpstrConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of an [`MGPSTRModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of an [`MgpstrModel`]. It is used to instantiate an
     MGP-STR model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the MGP-STR
     [alibaba-damo/mgp-str-base](https://huggingface.co/alibaba-damo/mgp-str-base) architecture.
@@ -78,13 +78,13 @@ class MGPSTRConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MGPSTRConfig, MGPSTRForSceneTextRecognition
+    >>> from transformers import MgpstrConfig, MgpstrForSceneTextRecognition
 
-    >>> # Initializing a MGPSTR mgp-str-base style configuration
-    >>> configuration = MGPSTRConfig()
+    >>> # Initializing a Mgpstr mgp-str-base style configuration
+    >>> configuration = MgpstrConfig()
 
     >>> # Initializing a model (with random weights) from the mgp-str-base style configuration
-    >>> model = MGPSTRForSceneTextRecognition(configuration)
+    >>> model = MgpstrForSceneTextRecognition(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

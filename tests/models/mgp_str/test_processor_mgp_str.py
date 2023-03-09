@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the MGPSTRProcessor. """
+""" Testing suite for the MgpstrProcessor. """
 
 import json
 import os
@@ -23,7 +23,7 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import MGPSTRTokenizer
+from transformers import MgpstrTokenizer
 from transformers.models.mgp_str.tokenization_mgp_str import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_torch_available, is_vision_available
@@ -36,12 +36,12 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MGPSTRProcessor, ViTImageProcessor
+    from transformers import MgpstrProcessor, ViTImageProcessor
 
 
 @require_torch
 @require_vision
-class MGPSTRProcessorTest(unittest.TestCase):
+class MgpstrProcessorTest(unittest.TestCase):
     image_processing_class = ViTImageProcessor if is_vision_available() else None
 
     @property
@@ -73,7 +73,7 @@ class MGPSTRProcessorTest(unittest.TestCase):
             json.dump(image_processor_map, fp)
 
     def get_tokenizer(self, **kwargs):
-        return MGPSTRTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return MgpstrTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_image_processor(self, **kwargs):
         return ViTImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
@@ -94,12 +94,12 @@ class MGPSTRProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
 
-        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = MgpstrProcessor(tokenizer=tokenizer, image_processor=image_processor)
         processor.save_pretrained(self.tmpdirname)
-        processor = MGPSTRProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        processor = MgpstrProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
         self.assertEqual(processor.char_tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.char_tokenizer, MGPSTRTokenizer)
+        self.assertIsInstance(processor.char_tokenizer, MgpstrTokenizer)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.image_processor, ViTImageProcessor)
@@ -108,18 +108,18 @@ class MGPSTRProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
 
-        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = MgpstrProcessor(tokenizer=tokenizer, image_processor=image_processor)
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = MGPSTRProcessor.from_pretrained(
+        processor = MgpstrProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
         self.assertEqual(processor.char_tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.char_tokenizer, MGPSTRTokenizer)
+        self.assertIsInstance(processor.char_tokenizer, MgpstrTokenizer)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, ViTImageProcessor)
@@ -128,7 +128,7 @@ class MGPSTRProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = MgpstrProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         image_input = self.prepare_image_inputs()
 
@@ -142,7 +142,7 @@ class MGPSTRProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = MgpstrProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "test"
 
@@ -156,7 +156,7 @@ class MGPSTRProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = MgpstrProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "test"
         image_input = self.prepare_image_inputs()
@@ -173,7 +173,7 @@ class MGPSTRProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = MgpstrProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -187,7 +187,7 @@ class MGPSTRProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = MgpstrProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = None
         image_input = self.prepare_image_inputs()
@@ -200,7 +200,7 @@ class MGPSTRProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = MGPSTRProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = MgpstrProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         char_input = torch.randn(1, 27, 38)
         bpe_input = torch.randn(1, 27, 50257)

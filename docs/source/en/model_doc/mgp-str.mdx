@@ -28,28 +28,27 @@ alt="drawing" width="600"/>
 Tips:
 
 - MGP-STR is trained on two synthetic datasets [MJSynth]((http://www.robots.ox.ac.uk/~vgg/data/text/)) (MJ) and SynthText(http://www.robots.ox.ac.uk/~vgg/data/scenetext/) (ST) without fine-tuning on other datasets. It achieves state-of-the-art results on six standard Latin scene text benchmarks, including 3 regular text datasets (IC13, SVT, IIIT) and 3 irregular ones (IC15, SVTP, CUTE).
-- This model was contributed by [yuekun](https://huggingface.co/yuekun). The original code can be found
-[here](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/OCR/MGP-STR).
+- This model was contributed by [yuekun](https://huggingface.co/yuekun). The original code can be found [here](https://github.com/AlibabaResearch/AdvancedLiterateMachinery/tree/main/OCR/MGP-STR).
 
 ## Inference
 
-[`MGPSTRModel`] accepts images as input and generates three types of predictions, which represent textual information at different granularities.
+[`MgpstrModel`] accepts images as input and generates three types of predictions, which represent textual information at different granularities.
 The three types of predictions are fused to give the final prediction result.
 
 The [`ViTImageProcessor`] class is responsible for preprocessing the input image and
-[`MGPSTRTokenizer`] decodes the generated character tokens to the target string. The
-[`MGPSTRProcessor`] wraps [`ViTImageProcessor`] and [`MGPSTRTokenizer`]
+[`MgpstrTokenizer`] decodes the generated character tokens to the target string. The
+[`MgpstrProcessor`] wraps [`ViTImageProcessor`] and [`MgpstrTokenizer`]
 into a single instance to both extract the input features and decode the predicted token ids.
 
 - Step-by-step Optical Character Recognition (OCR)
 
 ``` py
->>> from transformers import MGPSTRProcessor, MGPSTRForSceneTextRecognition
+>>> from transformers import MgpstrProcessor, MgpstrForSceneTextRecognition
 >>> import requests
 >>> from PIL import Image
 
->>> processor = MGPSTRProcessor.from_pretrained('alibaba-damo/mgp-str-base')
->>> model = MGPSTRForSceneTextRecognition.from_pretrained('alibaba-damo/mgp-str-base')
+>>> processor = MgpstrProcessor.from_pretrained('alibaba-damo/mgp-str-base')
+>>> model = MgpstrForSceneTextRecognition.from_pretrained('alibaba-damo/mgp-str-base')
 
 >>> # load image from the IIIT-5k dataset
 >>> url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
@@ -61,27 +60,27 @@ into a single instance to both extract the input features and decode the predict
 >>> generated_text = processor.batch_decode(outputs.logits)['generated_text']
 ```
 
-## MGPSTRConfig
+## MgpstrConfig
 
-[[autodoc]] MGPSTRConfig
+[[autodoc]] MgpstrConfig
 
-## MGPSTRTokenizer
+## MgpstrTokenizer
 
-[[autodoc]] MGPSTRTokenizer
+[[autodoc]] MgpstrTokenizer
     - save_vocabulary
 
-## MGPSTRProcessor
+## MgpstrProcessor
 
-[[autodoc]] MGPSTRProcessor
+[[autodoc]] MgpstrProcessor
     - __call__
     - batch_decode
 
-## MGPSTRModel
+## MgpstrModel
 
-[[autodoc]] MGPSTRModel
+[[autodoc]] MgpstrModel
     - forward
 
-## MGPSTRForSceneTextRecognition
+## MgpstrForSceneTextRecognition
 
-[[autodoc]] MGPSTRForSceneTextRecognition
+[[autodoc]] MgpstrForSceneTextRecognition
     - forward

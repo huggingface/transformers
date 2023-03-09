@@ -12,31 +12,35 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MGPSTR model. """
+""" Testing suite for the PyTorch MGP-STR model. """
 
 import inspect
 import unittest
 
-from transformers import MGPSTRConfig
-from transformers.testing_utils import require_torch, torch_device
-from transformers.utils import is_torch_available
+import requests
+
+from transformers import MgpstrConfig
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-)
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
 
 
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import MGPSTRForSceneTextRecognition
+    from transformers import MgpstrForSceneTextRecognition
 
 
-class MGPSTRModelTester:
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import MgpstrProcessor
+
+
+class MgpstrModelTester:
     def __init__(
         self,
         parent,
@@ -79,7 +83,7 @@ class MGPSTRModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return MGPSTRConfig(
+        return MgpstrConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -95,7 +99,7 @@ class MGPSTRModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = MGPSTRForSceneTextRecognition(config)
+        model = MgpstrForSceneTextRecognition(config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -112,8 +116,8 @@ class MGPSTRModelTester:
 
 
 @require_torch
-class MGPSTRModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (MGPSTRForSceneTextRecognition,) if is_torch_available() else ()
+class MgpstrModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (MgpstrForSceneTextRecognition,) if is_torch_available() else ()
     fx_compatible = False
 
     test_pruning = False
@@ -122,18 +126,17 @@ class MGPSTRModelTest(ModelTesterMixin, unittest.TestCase):
     test_attention_outputs = False
 
     def setUp(self):
-        self.model_tester = MGPSTRModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MGPSTRConfig, has_text_modality=False)
+        self.model_tester = MgpstrModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MgpstrConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_model(self):
-        return
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="MGPSTRModel does not use inputs_embeds")
+    @unittest.skip(reason="MgpstrModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -158,7 +161,7 @@ class MGPSTRModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    @unittest.skip(reason="MGPSTRModel does not support feedforward chunking")
+    @unittest.skip(reason="MgpstrModel does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
@@ -168,8 +171,6 @@ class MGPSTRModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             if not model_class.supports_gradient_checkpointing:
                 continue
-
-            print("Model class:", model_class)
 
             config.gradient_checkpointing = True
             model = model_class(config)
@@ -208,7 +209,7 @@ class MGPSTRModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    # override as the `logit_scale` parameter initilization is different for MGPSTRModel
+    # override as the `logit_scale` parameter initilization is different for MgpstrModel
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -224,13 +225,41 @@ class MGPSTRModelTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    def test_model_main_input_name(self):
-        for model_class in self.all_model_classes:
-            model_signature = inspect.signature(getattr(model_class, "forward"))
-            # The main input is the name of the argument after `self`
-            observed_main_input_name = list(model_signature.parameters.keys())[1]
-            self.assertEqual(model_class.main_input_name, observed_main_input_name)
-
     @unittest.skip(reason="Retain_grad is tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
+
+
+# We will verify our results on an image from the IIIT-5k dataset
+def prepare_img():
+    url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
+    im = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    return im
+
+
+@require_vision
+@require_torch
+class MgpstrModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference(self):
+        model_name = "alibaba-damo/mgp-str-base"
+        model = MgpstrForSceneTextRecognition.from_pretrained(model_name).to(torch_device)
+        processor = MgpstrProcessor.from_pretrained(model_name)
+
+        image = prepare_img()
+        inputs = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the logits
+        self.assertEqual(
+            outputs.logits.shape,
+            torch.Size((1, 27, 38)),
+        )
+
+        out_strs = processor.batch_decode(outputs.logits)
+        expected_text = "ticket"
+
+        self.assertEqual(out_strs["generated_text"][0], expected_text)

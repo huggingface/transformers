@@ -35,7 +35,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"mgp-str": 27}
 
 
-class MGPSTRTokenizer(PreTrainedTokenizer):
+class MgpstrTokenizer(PreTrainedTokenizer):
     """
     Construct a MGP-STR char tokenizer.
 
@@ -45,14 +45,14 @@ class MGPSTRTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
-        unk_token (`str`, *optional*, defaults to `<|startoftext|>`):
+        unk_token (`str`, *optional*, defaults to `"[GO]"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|startoftext|>`):
+        bos_token (`str`, *optional*, defaults to `"[GO]"`):
             The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `"[s]"`):
             The end of sequence token.
-        pad_token (`str` or `tokenizers.AddedToken`, *optional*, , defaults to `<|startoftext|>`):
+        pad_token (`str` or `tokenizers.AddedToken`, *optional*, , defaults to `"[GO]"`):
             A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
             attention mechanisms or loss computation.
     """

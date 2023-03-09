@@ -32,14 +32,14 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_mgp_str import MGPSTRConfig
+from .configuration_mgp_str import MgpstrConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "MGPSTRConfig"
-_TOKENIZER_FOR_DOC = "MGPSTRTokenizer"
+_CONFIG_FOR_DOC = "MgpstrConfig"
+_TOKENIZER_FOR_DOC = "MgpstrTokenizer"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "alibaba-damo/mgp-str-base"
@@ -71,8 +71,8 @@ def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->MGPSTR
-class MGPSTRDropPath(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->Mgpstr
+class MgpstrDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -87,7 +87,7 @@ class MGPSTRDropPath(nn.Module):
 
 
 @dataclass
-class MGPSTRModelOutput(ModelOutput):
+class MgpstrModelOutput(ModelOutput):
     """
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
 
@@ -124,10 +124,10 @@ class MGPSTRModelOutput(ModelOutput):
     a3_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class MGPSTREmbeddings(nn.Module):
+class MgpstrEmbeddings(nn.Module):
     """2D Image to Patch Embedding"""
 
-    def __init__(self, config: MGPSTRConfig):
+    def __init__(self, config: MgpstrConfig):
         super().__init__()
         image_size = (
             config.image_size
@@ -146,7 +146,6 @@ class MGPSTREmbeddings(nn.Module):
         self.num_tokens = 2 if config.distilled else 1
 
         self.proj = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
-        self.norm = nn.Identity()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
@@ -162,7 +161,6 @@ class MGPSTREmbeddings(nn.Module):
 
         patch_embeddings = self.proj(pixel_values)
         patch_embeddings = patch_embeddings.flatten(2).transpose(1, 2)  # BCHW -> BNC
-        patch_embeddings = self.norm(patch_embeddings)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embedding_output = torch.cat((cls_tokens, patch_embeddings), dim=1)
@@ -172,10 +170,10 @@ class MGPSTREmbeddings(nn.Module):
         return embedding_output
 
 
-class MGPSTRMlp(nn.Module):
+class MgpstrMlp(nn.Module):
     """MLP as used in Vision Transformer, MLP-Mixer and related networks"""
 
-    def __init__(self, config: MGPSTRConfig, hidden_features):
+    def __init__(self, config: MgpstrConfig, hidden_features):
         super().__init__()
         hidden_features = hidden_features or config.hidden_size
         self.fc1 = nn.Linear(config.hidden_size, hidden_features)
@@ -192,8 +190,8 @@ class MGPSTRMlp(nn.Module):
         return hidden_states
 
 
-class MGPSTRAttention(nn.Module):
-    def __init__(self, config: MGPSTRConfig):
+class MgpstrAttention(nn.Module):
+    def __init__(self, config: MgpstrConfig):
         super().__init__()
         self.num_heads = config.num_attention_heads
         head_dim = config.hidden_size // config.num_attention_heads
@@ -223,16 +221,16 @@ class MGPSTRAttention(nn.Module):
         return (context_layer, attention_probs)
 
 
-class MGPSTRLayer(nn.Module):
-    def __init__(self, config: MGPSTRConfig, drop_path=None):
+class MgpstrLayer(nn.Module):
+    def __init__(self, config: MgpstrConfig, drop_path=None):
         super().__init__()
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attn = MGPSTRAttention(config)
+        self.attn = MgpstrAttention(config)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = MGPSTRDropPath(drop_path) if drop_path is not None else nn.Identity()
+        self.drop_path = MgpstrDropPath(drop_path) if drop_path is not None else nn.Identity()
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_dim = int(config.hidden_size * config.mlp_ratio)
-        self.mlp = MGPSTRMlp(config, mlp_hidden_dim)
+        self.mlp = MgpstrMlp(config, mlp_hidden_dim)
 
     def forward(self, hidden_states):
         self_attention_outputs = self.attn(self.norm1(hidden_states))
@@ -249,24 +247,17 @@ class MGPSTRLayer(nn.Module):
         return outputs
 
 
-class MGPSTREncoder(nn.Module):
-    def __init__(self, config: MGPSTRConfig):
+class MgpstrEncoder(nn.Module):
+    def __init__(self, config: MgpstrConfig):
         super().__init__()
-        dpr = [
-            x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)
-        ]  # stochastic depth decay rule
+        # stochastic depth decay rule
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
 
         self.blocks = nn.Sequential(
-            *[MGPSTRLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)]
+            *[MgpstrLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)]
         )
 
-    def forward(
-        self,
-        hidden_states,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+    def forward(self, hidden_states, output_attentions=False, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -292,8 +283,8 @@ class MGPSTREncoder(nn.Module):
         )
 
 
-class MGPSTRA3Module(nn.Module):
-    def __init__(self, config: MGPSTRConfig):
+class MgpstrA3Module(nn.Module):
+    def __init__(self, config: MgpstrConfig):
         super().__init__()
         self.token_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.tokenLearner = nn.Sequential(
@@ -320,28 +311,20 @@ class MGPSTRA3Module(nn.Module):
         return (a3_out, attentions)
 
 
-class MGPSTRPreTrainedModel(PreTrainedModel):
+class MgpstrPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = MGPSTRConfig
+    config_class = MgpstrConfig
     base_model_prefix = "mgp_str"
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-        if isinstance(module, MGPSTREmbeddings):
-            nn.init.trunc_normal_(
-                module.pos_embed,
-                mean=0.0,
-                std=self.config.initializer_range,
-            )
-            nn.init.trunc_normal_(
-                module.cls_token,
-                mean=0.0,
-                std=self.config.initializer_range,
-            )
+        if isinstance(module, MgpstrEmbeddings):
+            nn.init.trunc_normal_(module.pos_embed, mean=0.0, std=self.config.initializer_range)
+            nn.init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -350,8 +333,8 @@ class MGPSTRPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: MGPSTREncoder, value: bool = False) -> None:
-        if isinstance(module, MGPSTREncoder):
+    def _set_gradient_checkpointing(self, module: MgpstrEncoder, value: bool = False) -> None:
+        if isinstance(module, MgpstrEncoder):
             module.gradient_checkpointing = value
 
 
@@ -361,7 +344,7 @@ MGP_STR_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`MGPSTRConfig`]): Model configuration class with all the parameters of the model.
+        config ([`MgpstrConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -374,9 +357,6 @@ MGP_STR_INPUTS_DOCSTRING = r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
-        output_a3_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of a3 modules. See `a3_attentions` under returned tensors
-            for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -389,24 +369,18 @@ MGP_STR_INPUTS_DOCSTRING = r"""
     "The bare MGP-STR Model transformer outputting raw hidden-states without any specific head on top.",
     MGP_STR_START_DOCSTRING,
 )
-class MGPSTRModel(MGPSTRPreTrainedModel):
-    def __init__(self, config: MGPSTRConfig):
+class MgpstrModel(MgpstrPreTrainedModel):
+    def __init__(self, config: MgpstrConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = MGPSTREmbeddings(config)
-        self.encoder = MGPSTREncoder(config)
+        self.embeddings = MgpstrEmbeddings(config)
+        self.encoder = MgpstrEncoder(config)
 
     def get_input_embeddings(self) -> nn.Module:
         return self.embeddings.proj
 
     @add_start_docstrings_to_model_forward(MGP_STR_INPUTS_DOCSTRING)
-    def forward(
-        self,
-        pixel_values,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+    def forward(self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -441,26 +415,26 @@ class MGPSTRModel(MGPSTRPreTrainedModel):
     """,
     MGP_STR_START_DOCSTRING,
 )
-class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
-    config_class = MGPSTRConfig
+class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
+    config_class = MgpstrConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: MGPSTRConfig) -> None:
+    def __init__(self, config: MgpstrConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.mgp_str = MGPSTRModel(config)
+        self.mgp_str = MgpstrModel(config)
 
-        self.char_a3_module = MGPSTRA3Module(config)
-        self.bpe_a3_module = MGPSTRA3Module(config)
-        self.wp_a3_module = MGPSTRA3Module(config)
+        self.char_a3_module = MgpstrA3Module(config)
+        self.bpe_a3_module = MgpstrA3Module(config)
+        self.wp_a3_module = MgpstrA3Module(config)
 
         self.char_head = nn.Linear(config.hidden_size, config.num_character_labels)
         self.bpe_head = nn.Linear(config.hidden_size, config.num_bpe_labels)
         self.wp_head = nn.Linear(config.hidden_size, config.num_wordpiece_labels)
 
     @add_start_docstrings_to_model_forward(MGP_STR_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MGPSTRModelOutput, config_class=MGPSTRConfig)
+    @replace_return_docstrings(output_type=MgpstrModelOutput, config_class=MgpstrConfig)
     def forward(
         self,
         pixel_values,
@@ -470,14 +444,18 @@ class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
         return_dict=None,
     ):
         r"""
+        output_a3_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of a3 modules. See `a3_attentions` under returned tensors
+            for more detail.
+
         Returns:
 
         Example:
 
         ```python
         >>> from transformers import (
-        ...     MGPSTRProcessor,
-        ...     MGPSTRForSceneTextRecognition,
+        ...     MgpstrProcessor,
+        ...     MgpstrForSceneTextRecognition,
         ... )
         >>> import requests
         >>> from PIL import Image
@@ -486,16 +464,16 @@ class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
         >>> url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-        >>> processor = MGPSTRProcessor.from_pretrained("alibaba-damo/mgp-str-base")
+        >>> processor = MgpstrProcessor.from_pretrained("alibaba-damo/mgp-str-base")
         >>> pixel_values = processor(images=image, return_tensors="pt").pixel_values
 
-        >>> model = MGPSTRForSceneTextRecognition.from_pretrained("alibaba-damo/mgp-str-base")
+        >>> model = MgpstrForSceneTextRecognition.from_pretrained("alibaba-damo/mgp-str-base")
 
         >>> # inference
         >>> outputs = model(pixel_values)
         >>> out_strs = processor.batch_decode(outputs.logits)
         >>> out_strs["generated_text"]
-        '['ticket']'
+        '["ticket"]'
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -526,7 +504,7 @@ class MGPSTRForSceneTextRecognition(MGPSTRPreTrainedModel):
         if not return_dict:
             outputs = (all_logits, all_a3_attentions) + mgp_outputs[1:]
             return tuple(output for output in outputs if output is not None)
-        return MGPSTRModelOutput(
+        return MgpstrModelOutput(
             logits=all_logits,
             hidden_states=mgp_outputs.hidden_states,
             attentions=mgp_outputs.attentions,
