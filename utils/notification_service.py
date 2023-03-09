@@ -217,7 +217,7 @@ class Message:
 
         huggingface_hub_warnings = [x for x in self.warnings if "huggingface_hub" in x]
         text = f"There are {len(self.selected_warnings)} warnings being selected."
-        text += f"{len(huggingface_hub_warnings)} of them are from `huggingface_hub`."
+        text += f"\n{len(huggingface_hub_warnings)} of them are from `huggingface_hub`."
 
         return {
             "type": "section",
