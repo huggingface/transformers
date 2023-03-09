@@ -34,7 +34,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -626,7 +625,7 @@ class NllbMoeAttention(nn.Module):
 
 # Adapted from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->NllbMoe
 class NllbMoeEncoderLayer(nn.Module):
-    def __init__(self, config: NllbMoeConfig, is_sparse:bool = False):
+    def __init__(self, config: NllbMoeConfig, is_sparse: bool = False):
         super().__init__()
         self.embed_dim = config.d_model
         self.is_sparse = is_sparse
@@ -674,12 +673,12 @@ class NllbMoeEncoderLayer(nn.Module):
         hidden_states = self.final_layer_norm(hidden_states)
 
         hidden_states = self.ffn(hidden_states, output_router_logits)
-        
+
         if isinstance(hidden_states, tuple):
             hidden_states, router_states = hidden_states
         else:
             router_states = (None,)
-            
+
         hidden_states = residual + hidden_states
 
         if hidden_states.dtype == torch.float16 and (
@@ -700,7 +699,7 @@ class NllbMoeEncoderLayer(nn.Module):
 
 # Adapted from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->NllbMoe
 class NllbMoeDecoderLayer(nn.Module):
-    def __init__(self, config: NllbMoeConfig, is_sparse:bool = False):
+    def __init__(self, config: NllbMoeConfig, is_sparse: bool = False):
         super().__init__()
         self.embed_dim = config.d_model
         self.is_sparse = is_sparse
@@ -799,14 +798,12 @@ class NllbMoeDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.ffn(hidden_states, output_router_logits)
-        
+
         if isinstance(hidden_states, tuple):
             hidden_states, router_states = hidden_states
         else:
             router_states = (None,)
-        
 
-        
         hidden_states = residual + hidden_states
 
         # clamp inf values to enable fp16 training
@@ -821,7 +818,7 @@ class NllbMoeDecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
-        
+
         outputs += (router_states,)
 
         return outputs
@@ -1007,8 +1004,8 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         self.layers = nn.ModuleList()
         for i in range(config.num_layers):
             is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
-            self.layers.append(NllbMoeEncoderLayer(config,is_sparse))
-            
+            self.layers.append(NllbMoeEncoderLayer(config, is_sparse))
+
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -1137,7 +1134,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
                         attention_mask,
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                         output_attentions=output_attentions,
-                        output_router_logits=output_router_logits
+                        output_router_logits=output_router_logits,
                     )
 
                 hidden_states, router_probs = layer_outputs[:2]
@@ -1147,9 +1144,9 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
-            
+
             if output_router_logits:
-                all_router_probs += (router_probs)
+                all_router_probs += router_probs
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -1158,7 +1155,12 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions, all_router_probs] if v is not None)
-        return MoEModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions, router_probs=all_router_probs)
+        return MoEModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
+            router_probs=all_router_probs,
+        )
 
 
 class NllbMoeDecoder(NllbMoePreTrainedModel):
@@ -1188,12 +1190,12 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             config.d_model,
             self.padding_idx,
         )
-        
+
         sparse_step = config.decoder_sparse_step
         self.layers = nn.ModuleList()
         for i in range(config.num_layers):
             is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
-            self.layers.append(NllbMoeDecoderLayer(config,is_sparse))
+            self.layers.append(NllbMoeDecoderLayer(config, is_sparse))
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1368,7 +1370,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 layer_head_mask = head_mask[idx] if head_mask is not None else None
                 cross_attn_layer_head_mask = cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
-                
+
                 past_key_value = past_key_values[idx] if past_key_values is not None else None
 
                 # under deepspeed zero3 all gpus must run in sync
@@ -1783,7 +1785,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                 total_router_logits.append(router_logits)
                 total_expert_indexes.append(expert_indexes)
         return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
-    
+
     # Copied from transfomers.models.switch_transformers.SwitchTransformersForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
