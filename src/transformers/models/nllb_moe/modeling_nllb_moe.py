@@ -1142,8 +1142,8 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
                 layer_outputs = (None, None, None)
 
             if output_router_logits:
-                all_router_probs += (layer_outputs[-1],)
-                layer_outputs = layer_outputs[:-1]  # pop the router_logits
+                *layer_outputs, router_probs = layer_outputs
+                all_router_probs += router_probs
 
             if output_attentions:
                 all_attentions += (layer_outputs[-1],)
@@ -1415,11 +1415,9 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                     )
 
                 if output_router_logits:
-                    if self.decoder_layer.is_sparse:
-                        *layer_outputs, router_probs = layer_outputs
-                    else:
-                        router_probs = None
-
+                    *layer_outputs, router_probs = layer_outputs
+                    all_router_probs += (router_probs,)
+    
                 hidden_states, present_key_value_state = layer_outputs[:2]
 
             if skip_the_layer:
@@ -1431,9 +1429,6 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
                 all_cross_attentions += (layer_outputs[2],)
-
-            if output_router_logits:
-                all_router_probs += (router_probs,)
 
         hidden_states = self.layer_norm(hidden_states)
 
