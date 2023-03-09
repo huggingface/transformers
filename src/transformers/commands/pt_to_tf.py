@@ -132,8 +132,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             type=str,
             default=None,
             help="If you think you know better than the auto-detector, you can specify the model class here. "
-                 "Can be either an AutoModel class or a specific model class like BertForSequenceClassification."
-
+            "Can be either an AutoModel class or a specific model class like BertForSequenceClassification.",
         )
         train_parser.set_defaults(func=convert_command_factory)
 
