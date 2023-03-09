@@ -1096,7 +1096,7 @@ class Pix2StructTextBlock(nn.Module):
         else:
             outputs = outputs + attention_outputs
 
-        return outputs  # hidden-states, present_key_value_states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
+        return outputs
 
 
 class Pix2StructTextModel(Pix2StructPreTrainedModel):

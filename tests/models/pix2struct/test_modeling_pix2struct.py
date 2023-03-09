@@ -612,3 +612,30 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         self.assertEqual(
             processor.decode(predictions[0], skip_special_tokens=True), "A stop sign is on a street corner."
         )
+
+    def test_batched_inference_image_captioning(self):
+        model = Pix2StructForConditionalGeneration.from_pretrained("ybelkada/pix2struct-textcaps-base").to(
+            torch_device
+        )
+        processor = Pix2StructProcessor.from_pretrained("ybelkada/pix2struct-textcaps-base")
+        image_1 = prepare_img()
+
+        second_url = (
+            "https://www.connollycove.com/wp-content/uploads/2019/06/temple-bar-dublin-world-famous-irish-pub.jpg"
+        )
+        image_2 = Image.open(requests.get(second_url, stream=True).raw)
+
+        # image only
+        inputs = processor(images=[image_1, image_2], return_tensors="pt").to(torch_device)
+        inputs["decoder_input_ids"] = torch.LongTensor([[0]]).to(torch_device)
+
+        predictions = model.generate(**inputs)
+
+        self.assertEqual(
+            processor.decode(predictions[0], skip_special_tokens=True), "A stop sign is on a street corner."
+        )
+
+        self.assertEqual(
+            processor.decode(predictions[1], skip_special_tokens=True),
+            "A collection of books including The Temple Bar.",
+        )
