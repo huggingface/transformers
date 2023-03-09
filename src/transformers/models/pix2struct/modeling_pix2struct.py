@@ -1321,8 +1321,8 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
             return tuple(
                 v
                 for v in [
+                    loss,
                     logits,
-                    # hidden_states,
                     present_key_value_states,
                     all_hidden_states,
                     all_attentions,

@@ -402,7 +402,7 @@ class Pix2StructTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             output = model(**input_dict)
             self.assertEqual(
-                output[0].shape,
+                output[1].shape,
                 (
                     self.model_tester.vision_model_tester.batch_size,
                     self.model_tester.text_model_tester.seq_length,
