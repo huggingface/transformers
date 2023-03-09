@@ -207,6 +207,16 @@ class GraphFeatureTokenizer(nn.Module):
         super(GraphFeatureTokenizer, self).__init__()
 
         self.embedding_dim = config.embedding_dim
+        # self.edge_type = config.edge_type
+        # self.multi_hop_max_dist = config.multi_hop_max_dist
+        # self.num_edge_dis = config.num_edge_dis
+        # self.num_in_degree = config.num_in_degree
+        # self.num_out_degree = config.num_out_degree
+        # self.num_spatial = config.num_spatial
+        # self.postnorm = config.postnorm
+        # self.prenorm = config.prenorm
+        # self.spatial_pos_max = config.spatial_pos_max
+        # self.uses_fixed_gaussian_features = config.uses_fixed_gaussian_features
 
         self.atom_encoder = nn.Embedding(config.num_atoms, config.embedding_dim, padding_idx=0)
         self.edge_encoder = nn.Embedding(config.num_edges, config.embedding_dim, padding_idx=0)
