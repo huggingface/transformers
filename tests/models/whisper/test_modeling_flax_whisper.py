@@ -20,7 +20,6 @@ import unittest
 
 import transformers
 from transformers import WhisperConfig, is_flax_available
-from transformers.models.whisper import FlaxWhisperForAudioClassification
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
@@ -42,6 +41,7 @@ if is_flax_available():
     from transformers import (
         FLAX_MODEL_MAPPING,
         FlaxWhisperForConditionalGeneration,
+        FlaxWhisperForAudioClassification,
         FlaxWhisperModel,
         WhisperFeatureExtractor,
         WhisperProcessor,
