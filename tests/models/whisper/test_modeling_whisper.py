@@ -1532,6 +1532,7 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
     def test_disk_offload(self):
         pass
+
     @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
     def test_model_parallelism(self):
         pass
