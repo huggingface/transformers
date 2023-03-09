@@ -23,9 +23,12 @@ import scipy
 import librosa
 import essentia
 import warnings
+import note_seq
 import pretty_midi
 import numpy as np
 import essentia.standard
+import IPython.display as ipd
+from IPython.display import display
 from torch.nn.utils.rnn import pad_sequence
 from .configuration_pop2piano import Pop2PianoConfig
 
@@ -35,7 +38,7 @@ from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 
 logger = logging.get_logger(__name__)
 
-ESSENTIA_SAMPLERATE = 44100
+ESSENTIA_SAMPLERATE: int = 44100
 
 TOKEN_SPECIAL: int = 0
 TOKEN_NOTE: int = 1
@@ -221,7 +224,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                  audio_sr:int =None,
                  beatsteps=None,
                  steps_per_beat=2,
-                 stereo_amp=0.5,
                  n_bars=2,
                  click_amp=0.2,
                  add_click=False,
@@ -236,7 +238,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             raise ValueError("Either `raw_audio` or `audio_path` is needed!")
             return
         elif raw_audio is not None and audio_path is not  None:
-            warnings.warn("Found both `raw_audio` and `audio_path` to be present, so using `audio_path`")
+            warnings.warn("Found both `raw_audio` and `audio_path` to be present, so using `raw_audio`")
         elif raw_audio is None and audio_path is not None:
             raw_audio, sr = librosa.load(audio_path, sr=ESSENTIA_SAMPLERATE)
         else:
@@ -270,18 +272,20 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         return {"input_ids" : torch.from_numpy(input_ids) if input_ids is not None else None,
                 "batch" : batch,
+                "beatsteps" : beatsteps,
                 "ext_beatstep" : ext_beatstep,
+                "raw_audio" : raw_audio,
+                "sr" : sr,
                 }
 
-
     def detokenize(self, token, time_idx_offset):
-        if token >= (self.config.vocab_size.special + self.config.vocab_size.note + self.config.vocab_size.velocity):
-            type, value =  TOKEN_TIME, ((token - (self.config.vocab_size.special + self.config.vocab_size.note + self.config.vocab_size.velocity)) + time_idx_offset)
-        elif token >= (self.config.vocab_size.special + self.config.vocab_size.note):
-            type, value =  TOKEN_VELOCITY, (token - (self.config.vocab_size.special + self.config.vocab_size.note))
+        if token >= (self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity):
+            type, value =  TOKEN_TIME, ((token - (self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity)) + time_idx_offset)
+        elif token >= (self.vocab_size_special + self.vocab_size_note):
+            type, value =  TOKEN_VELOCITY, (token - (self.vocab_size_special + self.vocab_size_note))
             value = int(value)
-        elif token >= self.config.vocab_size.special:
-            type, value =  TOKEN_NOTE, (token - self.config.vocab_size.special)
+        elif token >= self.vocab_size_special:
+            type, value =  TOKEN_NOTE, (token - self.vocab_size_special)
             value = int(value)
         else:
             type, value = TOKEN_SPECIAL, token
@@ -331,7 +335,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
     def relative_tokens_to_notes(self, tokens, start_idx, cutoff_time_idx=None):
         # TODO remove legacy
         # decoding If the first token is an arranger
-        if tokens[0] >= sum(self.config.vocab_size.values()):
+        if tokens[0] >= sum(self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity + self.vocab_size_time):
             tokens = tokens[1:]
 
         words = [self.detokenize(token, time_idx_offset=0) for token in tokens]
@@ -344,7 +348,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         current_idx = start_idx
         current_velocity = 0
-        note_onsets_ready = [None for i in range(self.config.vocab_size.note + 1)]
+        note_onsets_ready = [None for i in range(self.vocab_size_note + 1)]
         notes = []
         for type, number in words:
             if type == TOKEN_SPECIAL:
@@ -432,4 +436,71 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         new_pm.instruments.append(new_inst)
         new_pm.remove_invalid_notes()
         return new_pm
+
+    def output_midi(self,
+                    relative_tokens,
+                    beatsteps,
+                    ext_beatstep,
+                    raw_audio,
+                    sr,
+                    mix_sample_rate=None,
+                    save_path=None,
+                    output_name=None,
+                    save_midi = False,
+                    save_mix = False,
+                    click_amp = 0.2,
+                    stereo_amp=0.5,
+                    add_click = False,
+                    show_plot=False,
+    ):
+        if output_name is None:
+            import time
+            output_name = int(time.time())
+            warnings.warn("output_name is set to None, so using the name output_name")
+
+        mix_sample_rate = self.sample_rate if mix_sample_rate is None else mix_sample_rate
+
+        if save_path is not None:
+            if os.path.isdir(save_path):
+                midi_path = os.path.join(save_path, f"midi_output_{output_name}.mid")
+                mix_path =  os.path.join(save_path, f"mix_output_{output_name}.wav")
+            else:
+                raise ValueError(f"Is {save_path} a directory?")
+        pm, notes = self.relative_batch_tokens_to_midi(relative_tokens,
+                                                       beatstep=ext_beatstep,
+                                                       bars_per_batch=self.n_bars,
+                                                       cutoff_time_idx=(self.n_bars + 1) * 4,
+                                                       )
+        for n in pm.instruments[0].notes:
+            n.start += beatsteps[0]
+            n.end += beatsteps[0]
+
+        if save_midi:
+            pm.write(midi_path)
+
+        if  save_mix:
+            if mix_sample_rate != sr:
+                raw_audio = librosa.core.resample(raw_audio, orig_sr=sr, target_sr=mix_sample_rate)
+                sr = mix_sample_rate
+            if add_click:
+                clicks = (
+                        librosa.clicks(times=beatsteps, sr=sr, length=len(raw_audio)) * click_amp
+                )
+                raw_audio = raw_audio + clicks
+            pm_raw_audio = pm.fluidsynth(sr)
+            stereo = get_stereo(raw_audio, pm_raw_audio, pop_scale=stereo_amp)
+
+            sf.write(
+                file=mix_path,
+                data=stereo.T,
+                samplerate=sr,
+                format="wav",
+            )
+
+        if show_plot:
+            display("Stereo MIX", ipd.Audio(stereo, rate=sr))
+            display("Rendered MIDI", ipd.Audio(pm_raw_audio, rate=sr))
+            display("Original Song", ipd.Audio(raw_audio, rate=sr))
+            display(note_seq.plot_sequence(note_seq.midi_to_note_sequence(pm)))
+
 

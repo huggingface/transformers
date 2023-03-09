@@ -1359,15 +1359,8 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
                 batch,
                 ext_beatstep,
                 composer=None,
-                model="generated",
                 max_batch_size:int = None,
                 n_bars: int = 2,
-                save_midi=False,
-                save_mix=False,
-                midi_path=None,
-                mix_path=None,
-                mix_sample_rate = None,
-                save_path = None,
                 ):
 
         # select composer randomly if not already given
@@ -1377,14 +1370,6 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
         elif composer not in composer_to_feature_token.keys():
             raise ValueError(f"Composer not found in list, Please choose from {list(composer_to_feature_token.keys())}")
         composer_value = composer_to_feature_token[composer]
-        mix_sample_rate = (
-            self.config.dataset.get("sample_rate", None) if mix_sample_rate is None else mix_sample_rate
-        )
-
-        if save_path is not None:
-            extension = os.path.splitext(save_path)[1]
-            mix_path = save_path.replace(extension, f".{model}.{composer}.wav")
-            midi_path = save_path.replace(extension, f".{model}.{composer}.mid")
 
         n_bars = self.config.dataset.get("n_bars", None) if n_bars is None else n_bars
         max_batch_size = 64 // n_bars if max_batch_size is None else max_batch_size
