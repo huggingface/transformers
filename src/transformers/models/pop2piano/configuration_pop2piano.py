@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Pop2Piano model configuration"""
+""" Pop2Piano model configuration """
 
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
@@ -90,23 +90,23 @@ class Pop2PianoConfig(PretrainedConfig):
             Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        n_fft ('int', *optional*, defaults to 4096):
+        n_fft (`int`, *optional*, defaults to 4096):
             Size of Fast Fourier Transform, creates n_fft // 2 + 1 bins.
-        hop_length ('int', *optional*, defaults to 1024):
+        hop_length (`int`, *optional*, defaults to 1024):
             Length of hop between Short-Time Fourier Transform windows.
-        f_min ('float', *optional*, defaults to 10.0):
+        f_min (`float`, *optional*, defaults to 10.0):
             Minimum frequency.
-        n_mels ('int', *optional*, defaults to 512):
+        n_mels (`int`, *optional*, defaults to 512):
             Number of mel filterbanks.
-        dense_act_fn ('string', *optional*, defaults to `"relu"`):
+        dense_act_fn (`string`, *optional*, defaults to `"relu"`):
             Type of Activation Function to be used in `Pop2PianoDenseActDense` and in `Pop2PianoDenseGatedActDense`.
-        dataset_sample_rate ('int' *optional*, defaults to 22050):
+        dataset_sample_rate (`int` *optional*, defaults to 22050):
             Sample rate of audio signal.
-        dataset_mel_is_conditioned ('bool', *optional*, defaults to `True`):
+        dataset_mel_is_conditioned (`bool`, *optional*, defaults to `True`):
             Whether to use `ConcatEmbeddingToMel` or not.
-        dataset_target_length ('int', *optional*, defaults to 256):
+        dataset_target_length (`int`, *optional*, defaults to 256):
             Determines `max_length` for transformer `generate` function along with `dataset_n_bars`.
-        dataset_n_bars ('int', *optional*, defaults to 2):
+        dataset_n_bars (`int`, *optional*, defaults to 2):
             Determines `max_length` for transformer `generate` function along with `dataset_target_length`.
     """
 
