@@ -310,7 +310,6 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         pt_model = pt_class.from_pretrained(self._local_dir)
         pt_model.eval()
 
-        tf_from_pt_model = tf_class.from_pretrained(self._local_dir, from_pt=True)
         pt_input, tf_input = self.get_inputs(pt_model, config)
 
         with torch.no_grad():
