@@ -18,14 +18,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig, OnnxSeq2SeqConfigWithPast
 from ...utils import logging
-
-
-if TYPE_CHECKING:
-    from ...feature_extraction_utils import FeatureExtractionMixin
-    from ...tokenization_utils_base import PreTrainedTokenizerBase
-    from ...utils import TensorType
 
 logger = logging.get_logger(__name__)
 
@@ -72,8 +65,8 @@ class Pop2PianoConfig(PretrainedConfig):
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
-            Size of the key, query, value projections per attention head. `d_kv` has to be equal to `d_model //
-            num_heads`.
+            Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
+            be defined as `num_heads * d_kv`.
         d_ff (`int`, *optional*, defaults to 2048):
             Size of the intermediate feed forward layer in each `Pop2PianoBlock`.
         num_layers (`int`, *optional*, defaults to 6):
@@ -88,24 +81,42 @@ class Pop2PianoConfig(PretrainedConfig):
             The maximum distance of the longer sequences for the bucket separation.
         dropout_rate (`float`, *optional*, defaults to 0.1):
             The ratio for all dropout layers.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. Pop2Piano uses the
-            `"gated-gelu"` feed forward projection. Original Pop2Piano uses `"relu"`.
+        feed_forward_proj (`string`, *optional*, defaults to `"gated-gelu"`):
+            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        n_fft ('int', *optional*, defaults to 4096):
+            Size of Fast Fourier Transform, creates n_fft // 2 + 1 bins.
+        hop_length ('int', *optional*, defaults to 1024):
+            Length of hop between Short-Time Fourier Transform windows.
+        f_min ('float', *optional*, defaults to 10.0):
+            Minimum frequency.
+        n_mels ('int', *optional*, defaults to 512):
+            Number of mel filterbanks.
+        dense_act_fn ('string', *optional*, defaults to `"relu"`):
+            Type of Activation Function to be used in `Pop2PianoDenseActDense` and in `Pop2PianoDenseGatedActDense`.
+        dataset_sample_rate ('int' *optional*, defaults to 22050):
+            Sample rate of audio signal.
+        dataset_mel_is_conditioned ('bool', *optional*, defaults to `True`):
+            Whether to use `ConcatEmbeddingToMel` or not.
+        dataset_target_length ('int', *optional*, defaults to 256):
+            Determines `max_length` for transformer `generate` function along with `dataset_n_bars`.
+        dataset_n_bars ('int', *optional*, defaults to 2):
+            Determines `max_length` for transformer `generate` function along with `dataset_target_length`.
     """
+
     model_type = "pop2piano"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
-        vocab_size=2400, # for Pop2PianoModel(embedding)
+        vocab_size=2400,
         d_model=512,
         d_kv=64,
         d_ff=2048,
@@ -120,33 +131,19 @@ class Pop2PianoConfig(PretrainedConfig):
         feed_forward_proj="gated-gelu",
         is_encoder_decoder=True,
         use_cache=True,
-
-        # TODO
-        # docs not present for these variables below
         pad_token_id=0,
         eos_token_id=1,
-        n_positions = 1024,
-        tie_encoder_decoder = False,
-        tie_word_embeddings = False,
-        dense_act_fn = "relu",
-        is_gated_act = False,
-
-        # for dataset
-        dataset_target_length: int = 256,
-        dataset_input_length:int = 1024,
-        dataset_n_bars:int = 2,
-        dataset_sample_rate:int = 22050,
-        dataset_use_mel:bool = True,
-        dataset_mel_is_conditioned:bool = True,
-
-        # for tokenizer
-        vocab_size_special: int = 4, # for Pop2PianoTokenizer(post-processing)
-        vocab_size_note: int = 128, # for Pop2PianoTokenizer(post-processing)
-        vocab_size_velocity: int = 2, # for Pop2PianoTokenizer(post-processing)
-        vocab_size_time: int = 100, # for Pop2PianoTokenizer(post-processing)
-
+        dense_act_fn="relu",
+        dataset_target_length=256,
+        dataset_n_bars=2,
+        dataset_sample_rate=22050,
+        dataset_mel_is_conditioned=True,
+        n_fft=4096,
+        hop_length=1024,
+        f_min=10.0,
+        n_mels=512,
         **kwargs,
-    ):
+        ):
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -164,10 +161,6 @@ class Pop2PianoConfig(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
 
-        self.n_positions = n_positions
-        self.tie_encoder_decoder = tie_encoder_decoder
-        self.tie_word_embeddings = tie_word_embeddings
-
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = dense_act_fn
         self.is_gated_act = act_info[0] == "gated"
@@ -179,24 +172,13 @@ class Pop2PianoConfig(PretrainedConfig):
             **kwargs,
         )
 
-        # for extractor
         self.composer_to_feature_token = COMPOSER_TO_FEATURE_TOKEN
         self.dataset = {'target_length': dataset_target_length,
-                        'input_length': dataset_input_length,
                         'n_bars': dataset_n_bars,
                         'sample_rate': dataset_sample_rate,
-                        'use_mel': dataset_use_mel,
                         'mel_is_conditioned': dataset_mel_is_conditioned
                         }
-
-        # for tokenizer(post-processing)
-        self.tokenizer = {'vocab_size':
-                                      {'special': vocab_size_special,
-                                       'note': vocab_size_note,
-                                       'velocity': vocab_size_velocity,
-                                       'time': vocab_size_time
-                                        }
-                           }
-
-
-
+        self.n_fft = n_fft
+        self.hop_length = hop_length
+        self.f_min = f_min
+        self.n_mels = n_mels
