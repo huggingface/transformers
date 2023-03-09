@@ -71,16 +71,12 @@ class Pix2StructTextConfig(PretrainedConfig):
             The non-linear activation function (function or string) used in the feed-forward layer.
         decoder_start_token_id (`int`, *optional*, defaults to 0):
             The id of the `decoder_start_token_id` token.
-        use_cache (`bool`, *optional*, defaults to `True`):
+        use_cache (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         pad_token_id (`int`, *optional*, defaults to 0):
             The id of the `padding` token.
         eos_token_id (`int`, *optional*, defaults to 1):
             The id of the `end-of-sequence` token.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether the model is used as a decoder.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
 
     Example:
 
