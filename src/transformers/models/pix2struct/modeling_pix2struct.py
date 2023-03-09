@@ -543,7 +543,6 @@ VIT_INPUTS_DOCSTRING = r"""
 )
 class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructVisionConfig
-    base_model_prefix = "pix2struct_encoder"
     main_input_name = "pixel_embeds"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Pix2StructVisionLayer"]
@@ -1101,7 +1100,6 @@ class Pix2StructTextBlock(nn.Module):
 
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructTextConfig
-    base_model_prefix = "transformer"
     _no_split_modules = ["Pix2StructTextBlock"]
     supports_gradient_checkpointing = True
 
@@ -1526,7 +1524,6 @@ num_heads)`.
 )
 class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     config_class = Pix2StructConfig
-    base_model_prefix = "pix2struct"
     main_input_name = "pixel_embeds"
 
     _keys_to_ignore_on_load_missing = [
