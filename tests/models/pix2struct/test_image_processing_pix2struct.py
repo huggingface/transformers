@@ -77,7 +77,8 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
         or a list of PyTorch tensors if one specifies torchify=True.
         """
 
-        assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+        if (numpify and torchify):
+            raise ValueError("You cannot specify both numpy and PyTorch tensors at the same time")
 
         if equal_resolution:
             image_inputs = []
@@ -247,7 +248,7 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, 
 
         # Test not batched input
         expected_hidden_dim = (
-            (self.image_processor_tester.patch_size**2) * self.image_processor_tester.num_channels
+            (self.image_processor_tester.patch_size**2) * (self.image_processor_tester.num_channels - 1)
         ) + 2
 
         for max_patch in self.image_processor_tester.max_patches:
