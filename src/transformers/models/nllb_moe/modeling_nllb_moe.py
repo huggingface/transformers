@@ -364,8 +364,8 @@ class NllbMoeDenseActDense(nn.Module):
         super().__init__()
         self.wi = nn.Linear(config.d_model, ffn_dim, bias=False)
         self.wo = nn.Linear(ffn_dim, config.d_model, bias=False)
-        self.dropout = nn.Dropout(config.dropout_rate)
-        self.act = ACT2FN[config.dense_act_fn]
+        self.dropout = nn.Dropout(config.activation_dropout)
+        self.act = ACT2FN[config.activation_function]
 
     def forward(self, hidden_states):
         hidden_states = self.wi(hidden_states)
@@ -390,6 +390,8 @@ class NllbMoeSparseMLP(nn.Module):
     def __init__(self, config: NllbMoeConfig, ffn_dim: int, expert_class: nn.Module = NllbMoeDenseActDense):
         super().__init__()
         # Step 1: Get the correct router according to its class
+        self.router_type = config.router_type
+        # TODO handle the type of router chosen
         self.router = NllbMoeTop1Router(config)
 
         # Step 2: Get the experts
@@ -448,8 +450,8 @@ class NllbMoeLayerFF(nn.Module):
         else:
             self.mlp = NllbMoeSparseMLP(config, ffn_dim)
 
-        self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(config.dropout_rate)
+        self.layer_norm = nn.LayerNorm(config.d_model)
+        self.dropout = nn.Dropout(config.activation_dropout)
 
     def forward(self, hidden_states, output_router_logits):
         forwarded_states = self.layer_norm(hidden_states)
@@ -458,11 +460,11 @@ class NllbMoeLayerFF(nn.Module):
         if isinstance(forwarded_states, tuple):
             forwarded_states, router_tuple = forwarded_states
         else:
-            router_tuple = None
+            router_tuple = None  # layer is not sparse
 
         output = hidden_states + self.dropout(forwarded_states)
 
-        if output_router_logits and router_tuple is not None:
+        if output_router_logits:
             output = (output, router_tuple)
 
         return output
@@ -674,10 +676,8 @@ class NllbMoeEncoderLayer(nn.Module):
 
         hidden_states = self.ffn(hidden_states, output_router_logits)
 
-        if isinstance(hidden_states, tuple):
+        if output_router_logits:
             hidden_states, router_states = hidden_states
-        else:
-            router_states = (None,)
 
         hidden_states = residual + hidden_states
 
@@ -692,7 +692,8 @@ class NllbMoeEncoderLayer(nn.Module):
         if output_attentions:
             outputs += (attn_weights,)
 
-        outputs += (router_states,)
+        if output_router_logits:
+            outputs += (router_states,)
 
         return outputs
 
@@ -799,10 +800,8 @@ class NllbMoeDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.ffn(hidden_states, output_router_logits)
 
-        if isinstance(hidden_states, tuple):
+        if output_router_logits:
             hidden_states, router_states = hidden_states
-        else:
-            router_states = (None,)
 
         hidden_states = residual + hidden_states
 
@@ -811,15 +810,16 @@ class NllbMoeDecoderLayer(nn.Module):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,)
+        outputs = (
+            hidden_states,
+            present_key_value if use_cache else None,
+        )
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
 
-        if use_cache:
-            outputs += (present_key_value,)
-
-        outputs += (router_states,)
+        if output_router_logits:
+            outputs += (router_states,)
 
         return outputs
 
@@ -1138,26 +1138,28 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
                         output_router_logits=output_router_logits,
                     )
 
-                hidden_states, router_probs = layer_outputs[:2]
-
             if skip_the_layer:
                 layer_outputs = (None, None, None)
 
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
             if output_router_logits:
-                all_router_probs += router_probs
+                all_router_probs += (layer_outputs[-1],)
+                layer_outputs = layer_outputs[:-1]  # pop the router_logits
 
-        hidden_states = self.layer_norm(hidden_states)
+            if output_attentions:
+                all_attentions += (layer_outputs[-1],)
+
+        last_hidden_state = self.layer_norm(hidden_states)
 
         if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
+            encoder_states += (last_hidden_state,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions, all_router_probs] if v is not None)
+            return tuple(
+                v for v in [last_hidden_state, encoder_states, all_attentions, all_router_probs] if v is not None
+            )
+
         return MoEModelOutput(
-            last_hidden_state=hidden_states,
+            last_hidden_state=last_hidden_state,
             hidden_states=encoder_states,
             attentions=all_attentions,
             router_probs=all_router_probs,
@@ -1412,12 +1414,11 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                         output_router_logits=output_router_logits,
                     )
 
-                router_probs = layer_outputs[-1]
-                layer_outputs = layer_outputs[:-1]
-                # layer_outputs is a tuple with:
-                # hidden-states, key-value-states, (self-attention position bias), (self-attention weights), (cross-attention position bias), (cross-attention weights)
-                if use_cache is False:
-                    layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
+                if output_router_logits:
+                    if self.decoder_layer.is_sparse:
+                        *layer_outputs, router_probs = layer_outputs
+                    else:
+                        router_probs = None
 
                 hidden_states, present_key_value_state = layer_outputs[:2]
 
@@ -1432,7 +1433,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                 all_cross_attentions += (layer_outputs[2],)
 
             if output_router_logits:
-                all_router_probs = all_router_probs + (router_probs,)
+                all_router_probs += (router_probs,)
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -1723,14 +1724,14 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
             if output_router_logits:
                 # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
                 encoder_router_logits, encoder_expert_indexes = self._unpack_router_logits(
-                    outputs.encoder_router_probs
+                    outputs.encoder_router_logits
                 )
                 encoder_z_loss = router_z_loss_func(encoder_router_logits)
                 encoder_router_probs = nn.Softmax(dim=-1)(encoder_router_logits)
                 encoder_aux_loss = load_balancing_loss_func(encoder_router_probs, encoder_expert_indexes)
 
                 decoder_router_logits, decoder_expert_indexes = self._unpack_router_logits(
-                    outputs.decoder_router_probs
+                    outputs.decoder_router_logits
                 )
                 decoder_z_loss = router_z_loss_func(decoder_router_logits)
                 decoder_router_probs = nn.Softmax(dim=-1)(decoder_router_logits)
@@ -1754,7 +1755,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                     *outputs[1:],
                 )
             else:
-                output += (*outputs[1:], *encoder_outputs)
+                output += outputs[1:]
 
             return ((loss,) + output) if loss is not None else output
 
@@ -1767,13 +1768,13 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
             decoder_z_loss=decoder_z_loss,
             encoder_aux_loss=encoder_aux_loss,
             decoder_aux_loss=decoder_aux_loss,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.decoder_hidden_states,
             decoder_hidden_states=outputs.decoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
             decoder_attentions=outputs.decoder_attentions,
-            encoder_router_logits=outputs.encoder_router_probs,
-            decoder_router_logits=outputs.decoder_router_probs,
+            encoder_router_logits=outputs.encoder_router_logits,
+            decoder_router_logits=outputs.decoder_router_logits,
         )
 
     # Copied from transfomers.models.switch_transformers.SwitchTransformersForConditionalGeneration._unpack_router_logits

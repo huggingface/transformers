@@ -129,7 +129,6 @@ class NllbMoeConfig(PretrainedConfig):
         num_sparse_decoder_layers=3,
         router_z_loss_coef=0.001,
         router_aux_loss_coef=0.001,
-        initializer_factor=1.0,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -156,7 +155,6 @@ class NllbMoeConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.router_z_loss_coef = router_z_loss_coef
         self.router_aux_loss_coef = router_aux_loss_coef
-        self.initializer_factor = initializer_factor
         # This tells us, each how many encoder layer we'll have to set a sparse layer.
         if num_sparse_encoder_layers > 0:
             self.encoder_sparse_step = self.encoder_layers // num_sparse_encoder_layers
