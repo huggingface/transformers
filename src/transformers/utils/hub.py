@@ -918,7 +918,7 @@ def get_checkpoint_shard_files(
     last_shard = try_to_load_from_cache(
         pretrained_model_name_or_path, shard_filenames[-1], cache_dir=cache_dir, revision=_commit_hash
     )
-    show_progress_bar = last_shard is _CACHED_NO_EXIST or force_download
+    show_progress_bar = last_shard is None or last_shard is _CACHED_NO_EXIST or force_download
     for shard_filename in tqdm(shard_filenames, desc="Downloading shards", disable=not show_progress_bar):
         try:
             # Load from URL
