@@ -202,7 +202,7 @@ class BestRun(NamedTuple):
             The objective that was obtained for this run.
         hyperparameters (`Dict[str, Any]`):
             The hyperparameters picked to get this run.
-        run_summary (`Optional[Any]`)
+        run_summary (`Optional[Any]`):
             A summary of tuning experiments. `ray.tune.ExperimentAnalysis` object for Ray backend.
     """
 
