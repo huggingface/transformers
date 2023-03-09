@@ -34,6 +34,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -584,7 +585,7 @@ class Blip2TextModelTester:
 
 
 # this model tester uses an encoder-decoder language model (T5)
-class Blip2ForConditionalGenerationModelTester:
+class Blip2ModelTester:
     def __init__(
         self, parent, vision_kwargs=None, qformer_kwargs=None, text_kwargs=None, is_training=True, num_query_tokens=10
     ):
@@ -664,8 +665,13 @@ class Blip2ForConditionalGenerationModelTester:
 
 
 @require_torch
-class Blip2ModelTest(ModelTesterMixin, unittest.TestCase):
+class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": Blip2Model, "image-to-text": Blip2ForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -674,7 +680,7 @@ class Blip2ModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = Blip2ForConditionalGenerationModelTester(self)
+        self.model_tester = Blip2ModelTester(self)
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
