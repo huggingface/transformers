@@ -18,13 +18,10 @@ from typing import Dict, Optional, Union
 
 import numpy as np
 
-from transformers.utils import is_torch_available, is_vision_available
-from transformers.utils.generic import TensorType
-
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import convert_to_rgb, normalize, torch_extract_patches
 from ...image_utils import ChannelDimension, ImageInput, is_batched, to_numpy_array, valid_images
-from ...utils import logging
+from ...utils import logging, is_torch_available, is_vision_available, TensorType
 from ...utils.import_utils import requires_backends
 
 
