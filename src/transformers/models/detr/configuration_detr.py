@@ -239,6 +239,7 @@ class DetrConfig(PretrainedConfig):
     @classmethod
     def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
         """Instantiate a [`DetrConfig`] (or a derived class) from a pre-trained backbone model configuration.
+
         Args:
             backbone_config ([`PretrainedConfig`]):
                 The backbone configuration.

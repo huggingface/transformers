@@ -390,7 +390,7 @@ def cached_file(
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
-    if _commit_hash is not None:
+    if _commit_hash is not None and not force_download:
         # If the file is cached under that commit hash, we return it directly.
         resolved_file = try_to_load_from_cache(
             path_or_repo_id, full_filename, cache_dir=cache_dir, revision=_commit_hash
@@ -913,7 +913,13 @@ def get_checkpoint_shard_files(
 
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub
     cached_filenames = []
-    for shard_filename in shard_filenames:
+    # Check if the model is already cached or not. We only try the last checkpoint, this should cover most cases of
+    # downloaded (if interrupted).
+    last_shard = try_to_load_from_cache(
+        pretrained_model_name_or_path, shard_filenames[-1], cache_dir=cache_dir, revision=_commit_hash
+    )
+    show_progress_bar = last_shard is None or force_download
+    for shard_filename in tqdm(shard_filenames, desc="Downloading shards", disable=not show_progress_bar):
         try:
             # Load from URL
             cached_filename = cached_file(
