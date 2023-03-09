@@ -94,9 +94,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                 image = torch.from_numpy(image)
 
         patch_height, patch_width = self.patch_size
-        image_shape = image.shape
-        image_height = image_shape[1]
-        image_width = image_shape[2]
+        image_height,  image_width=image.shape
         image_height = float(image_height)
         image_width = float(image_width)
 
