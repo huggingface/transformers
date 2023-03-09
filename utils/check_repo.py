@@ -62,7 +62,9 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "DetaDecoder",  # Building part of bigger (tested) model.
     "ErnieMForInformationExtraction",
     "GraphormerEncoder",  # Building part of bigger (tested) model.
+    "TokenGTEncoder",
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
+    "TokenGTDecoderHead",
     "CLIPSegDecoder",  # Building part of bigger (tested) model.
     "TableTransformerEncoder",  # Building part of bigger (tested) model.
     "TableTransformerDecoder",  # Building part of bigger (tested) model.
@@ -195,6 +197,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
+    "TokenGTForGraphClassification",
     "BlipForConditionalGeneration",
     "BlipForImageTextRetrieval",
     "BlipForQuestionAnswering",

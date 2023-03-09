@@ -452,6 +452,7 @@ _import_structure = {
         "TimeSeriesTransformerConfig",
     ],
     "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
+    "models.tokengt": ["TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TokenGTConfig"],
     "models.trajectory_transformer": [
         "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrajectoryTransformerConfig",
@@ -2397,6 +2398,13 @@ else:
             "TimesformerPreTrainedModel",
         ]
     )
+    _import_structure["models.tokengt"].extend(
+        [
+            "TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TokenGTForGraphClassification",
+            "TokenGTPreTrainedModel",
+        ]
+    )
     _import_structure["models.trajectory_transformer"].extend(
         [
             "TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4038,6 +4046,7 @@ if TYPE_CHECKING:
         TimeSeriesTransformerConfig,
     )
     from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
+    from .models.tokengt import TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP, TokenGTConfig
     from .models.trajectory_transformer import (
         TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TrajectoryTransformerConfig,
@@ -5646,6 +5655,11 @@ if TYPE_CHECKING:
             TimesformerForVideoClassification,
             TimesformerModel,
             TimesformerPreTrainedModel,
+        )
+        from .models.tokengt import (
+            TOKENGT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TokenGTForGraphClassification,
+            TokenGTPreTrainedModel,
         )
         from .models.trajectory_transformer import (
             TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

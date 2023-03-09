@@ -171,6 +171,7 @@ from . import (
     tapex,
     time_series_transformer,
     timesformer,
+    tokengt,
     trajectory_transformer,
     transfo_xl,
     trocr,
