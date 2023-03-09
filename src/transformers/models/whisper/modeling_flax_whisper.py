@@ -1490,7 +1490,6 @@ class FlaxWhisperForAudioClassificationModule(nn.Module):
         encoder_outputs=None,
         output_attenions=None,
         output_hidden_states: bool = True,
-        decoder_input_ids=None,
         return_dict: bool = True,
     ):
         output_attentions = output_attenions if output_attenions is not None else self.config.output_attentions
