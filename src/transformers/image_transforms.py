@@ -727,7 +727,7 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
     Utiliy function to extract patches from a given image tensor.
 
     Args:
-        image_tensor (torch.Tensor): 
+        image_tensor (torch.Tensor):
             The image tensor to extract patches from.
         patch_height (int):
             The height of the patches to extract.
@@ -740,6 +740,8 @@ def torch_extract_patches(image_tensor, patch_height, patch_width):
     patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
     patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
     patches = patches.permute(0, 4, 2, 3, 1).reshape(
-        image_tensor.size(2) // patch_height, image_tensor.size(3) // patch_width, image_tensor.size(1) * patch_height * patch_width
+        image_tensor.size(2) // patch_height,
+        image_tensor.size(3) // patch_width,
+        image_tensor.size(1) * patch_height * patch_width,
     )
     return patches.unsqueeze(0)

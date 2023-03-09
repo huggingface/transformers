@@ -77,7 +77,7 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
         or a list of PyTorch tensors if one specifies torchify=True.
         """
 
-        if (numpify and torchify):
+        if numpify and torchify:
             raise ValueError("You cannot specify both numpy and PyTorch tensors at the same time")
 
         if equal_resolution:

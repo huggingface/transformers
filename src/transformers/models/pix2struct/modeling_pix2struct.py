@@ -389,7 +389,11 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
         if isinstance(module, Pix2StructLayerNorm):
             module.weight.data.fill_(factor * 1.0)
         elif isinstance(module, Pix2StructTextDenseActDense):
-            hidden_size = self.config.text_config.hidden_size if isinstance(self.config, Pix2StructConfig) else self.config.hidden_size
+            hidden_size = (
+                self.config.text_config.hidden_size
+                if isinstance(self.config, Pix2StructConfig)
+                else self.config.hidden_size
+            )
 
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
@@ -401,7 +405,11 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
         elif isinstance(module, Pix2StructTextDenseGatedActDense):
-            hidden_size = self.config.text_config.hidden_size if isinstance(self.config, Pix2StructConfig) else self.config.hidden_size
+            hidden_size = (
+                self.config.text_config.hidden_size
+                if isinstance(self.config, Pix2StructConfig)
+                else self.config.hidden_size
+            )
             d_ff = self.config.text_config.d_ff if isinstance(self.config, Pix2StructConfig) else self.config.d_ff
 
             module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((hidden_size) ** -0.5))
@@ -416,9 +424,19 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Pix2StructTextAttention):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
-            hidden_size = self.config.text_config.hidden_size if isinstance(self.config, Pix2StructConfig) else self.config.hidden_size
-            key_value_proj_dim = self.config.text_config.d_kv if isinstance(self.config, Pix2StructConfig) else self.config.hidden_size
-            n_heads = self.config.text_config.num_heads if isinstance(self.config, Pix2StructConfig) else self.config.num_heads
+            hidden_size = (
+                self.config.text_config.hidden_size
+                if isinstance(self.config, Pix2StructConfig)
+                else self.config.hidden_size
+            )
+            key_value_proj_dim = (
+                self.config.text_config.d_kv if isinstance(self.config, Pix2StructConfig) else self.config.hidden_size
+            )
+            n_heads = (
+                self.config.text_config.num_heads
+                if isinstance(self.config, Pix2StructConfig)
+                else self.config.num_heads
+            )
 
             module.query.weight.data.normal_(mean=0.0, std=factor * ((hidden_size * key_value_proj_dim) ** -0.5))
             module.key.weight.data.normal_(mean=0.0, std=factor * (hidden_size**-0.5))
@@ -427,13 +445,21 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((hidden_size) ** -0.5))
         elif isinstance(module, nn.Embedding):
-            hidden_size = self.config.text_config.hidden_size if isinstance(self.config, Pix2StructConfig) else self.config.hidden_size
+            hidden_size = (
+                self.config.text_config.hidden_size
+                if isinstance(self.config, Pix2StructConfig)
+                else self.config.hidden_size
+            )
 
             module.weight.data.normal_(mean=0.0, std=factor * ((hidden_size) ** -0.5))
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, Pix2StructTextModel):
-            hidden_size = self.config.text_config.hidden_size if isinstance(self.config, Pix2StructConfig) else self.config.hidden_size
+            hidden_size = (
+                self.config.text_config.hidden_size
+                if isinstance(self.config, Pix2StructConfig)
+                else self.config.hidden_size
+            )
 
             module.lm_head.weight.data.normal_(mean=0.0, std=factor * ((hidden_size) ** -0.5))
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
