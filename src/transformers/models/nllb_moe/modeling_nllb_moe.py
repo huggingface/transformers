@@ -425,7 +425,7 @@ class NllbMoeSparseMLP(nn.Module):
         return hidden_states, (router_logits, expert_index)
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersLayerFF with SwitchTransformers->NllbMoe
+# Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersLayerFF with SwitchTransformers->NllbMoe,NllbMoeLayerNorm->nn.LayerNorm
 class NllbMoeLayerFF(nn.Module):
     r"""
     Switch Transformers Feed Forward layer module. This is a wrapper around the Mixture of Experts module.

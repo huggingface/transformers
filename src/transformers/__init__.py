@@ -2011,7 +2011,6 @@ else:
     _import_structure["models.nllb_moe"].extend(
         [
             "NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "NllbMoeEncoderModel",
             "NllbMoeForConditionalGeneration",
             "NllbMoeModel",
             "NllbMoePreTrainedModel",
@@ -5340,7 +5339,6 @@ if TYPE_CHECKING:
         )
         from .models.nllb_moe import (
             NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            NllbMoeEncoderModel,
             NllbMoeForConditionalGeneration,
             NllbMoeModel,
             NllbMoePreTrainedModel,

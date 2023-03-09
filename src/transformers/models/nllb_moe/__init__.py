@@ -41,7 +41,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_nllb_moe"] = [
         "NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "NllbMoeEncoderModel",
         "NllbMoeForConditionalGeneration",
         "NllbMoeModel",
         "NllbMoePreTrainedModel",
@@ -54,7 +53,6 @@ if TYPE_CHECKING:
     from .configuration_nllb_moe import (
         NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         NllbMoeConfig,
-        NllbMoeOnnxConfig,
     )
 
     try:
@@ -65,7 +63,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_nllb_moe import (
             NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            NllbMoeEncoderModel,
             NllbMoeForConditionalGeneration,
             NllbMoeModel,
             NllbMoePreTrainedModel,

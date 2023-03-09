@@ -20,24 +20,24 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/nllb-moe": "https://huggingface.co/facebook/nllb-moe/resolve/main/config.json",
+    "facebook/nllb-moe-340B": "https://huggingface.co/facebook/nllb-moe/resolve/main/config.json",
 }
 
 
 class NllbMoeConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`NllbMoeModel`]. It is used to
-    instantiate a NllbMoe model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    NllbMoe [facebook/nllb-moe](https://huggingface.co/facebook/nllb-moe) architecture.
+    This is the configuration class to store the configuration of a [`NllbMoeModel`]. It is used to instantiate a
+    NllbMoe model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the NllbMoe
+    [facebook/nllb-moe](https://huggingface.co/facebook/nllb-moe) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
         vocab_size (`int`, *optional*, defaults to 32128):
-            Vocabulary size of the NllbMoe model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`NllbMoeModel`].
+            Vocabulary size of the NllbMoe model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`NllbMoeModel`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
@@ -87,8 +87,8 @@ class NllbMoeConfig(PretrainedConfig):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
         feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
-            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. NllbMoev1.1
-            uses the `"gated-gelu"` feed forward projection. Original NllbMoe uses `"relu"`.
+            Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. NllbMoev1.1 uses the
+            `"gated-gelu"` feed forward projection. Original NllbMoe uses `"relu"`.
         add_router_probs (`bool`, *optional*, defaults to `False`):
             Whether to output router probabilities to compute router auxiliary loss.
         use_cache (`bool`, *optional*, defaults to `True`):
