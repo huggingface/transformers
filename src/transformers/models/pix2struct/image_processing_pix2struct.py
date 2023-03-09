@@ -116,7 +116,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         ).squeeze(0)
 
         # [1, rows, columns, patch_height * patch_width * image_channels]
-        patches = torch_extract_patches(image, patch_height, patch_width, padding="SAME")
+        patches = torch_extract_patches(image, patch_height, patch_width)
 
         patches_shape = patches.shape
         rows = patches_shape[1]

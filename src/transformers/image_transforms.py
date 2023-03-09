@@ -721,14 +721,24 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
 
 
 # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
-def torch_extract_patches(x, patch_height, patch_width, padding=None):
-    """TODO: @younesbelkada docstring"""
+def torch_extract_patches(image_tensor, patch_height, patch_width):
+    """
+    Utiliy function to extract patches from a given image tensor.
+
+    Args:
+        image_tensor (torch.Tensor): 
+            The image tensor to extract patches from.
+        patch_height (int):
+            The height of the patches to extract.
+        patch_width (int):
+            The width of the patches to extract.
+    """
     requires_backends(torch_extract_patches, ["torch"])
 
-    x = x.unsqueeze(0)
-    patches = torch.nn.functional.unfold(x, (patch_height, patch_width), stride=(patch_height, patch_width))
-    patches = patches.reshape(x.size(0), x.size(1), patch_height, patch_width, -1)
+    image_tensor = image_tensor.unsqueeze(0)
+    patches = torch.nn.functional.unfold(image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width))
+    patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
     patches = patches.permute(0, 4, 2, 3, 1).reshape(
-        x.size(2) // patch_height, x.size(3) // patch_width, x.size(1) * patch_height * patch_width
+        image_tensor.size(2) // patch_height, image_tensor.size(3) // patch_width, image_tensor.size(1) * patch_height * patch_width
     )
     return patches.unsqueeze(0)
