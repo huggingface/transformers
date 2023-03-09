@@ -124,8 +124,8 @@ class RotaryEmbedding(torch.nn.Module):
             self.cos_cached = emb.cos()[None, None, :, :].to(dtype=x.dtype)
             self.sin_cached = emb.sin()[None, None, :, :].to(dtype=x.dtype)
         return (
-            self.cos_cached[:seq_len, ...].to(dtype=x.dtype, device=x.device),
-            self.sin_cached[:seq_len, ...].to(dtype=x.dtype, device=x.device),
+            self.cos_cached[:, :, :seq_len, ...].to(dtype=x.dtype, device=x.device),
+            self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype, device=x.device),
         )
 
 

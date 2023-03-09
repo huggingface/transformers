@@ -221,7 +221,7 @@ def write_model(model_path, input_base_path, model_size):
         "_from_model_config": True,
         "bos_token_id": 0,
         "eos_token_id": 1,
-        "pad_token_id": -1,
+        "pad_token_id": 0,
         "transformers_version": "4.27.0.dev0",
     }
     write_json(
