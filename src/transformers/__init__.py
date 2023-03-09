@@ -1190,6 +1190,7 @@ else:
     _import_structure["models.bridgetower"].extend(
         [
             "BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BridgeTowerForContrastiveLearning",
             "BridgeTowerForImageAndTextRetrieval",
             "BridgeTowerForMaskedLM",
             "BridgeTowerModel",
@@ -4691,6 +4692,7 @@ if TYPE_CHECKING:
         )
         from .models.bridgetower import (
             BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BridgeTowerForContrastiveLearning,
             BridgeTowerForImageAndTextRetrieval,
             BridgeTowerForMaskedLM,
             BridgeTowerModel,
