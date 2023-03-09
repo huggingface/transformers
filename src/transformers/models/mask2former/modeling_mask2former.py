@@ -433,6 +433,7 @@ class Mask2FormerHungarianMatcher(nn.Module):
     @torch.no_grad()
     def forward(
         self,
+        video_input: bool,
         masks_queries_logits: torch.Tensor,
         class_queries_logits: torch.Tensor,
         mask_labels: torch.Tensor,
@@ -440,6 +441,8 @@ class Mask2FormerHungarianMatcher(nn.Module):
     ) -> List[Tuple[Tensor]]:
         """
         Params:
+            video_input (`bool`):
+                Whether original input given to model is a video.
             masks_queries_logits (`torch.Tensor`):
                 A tensor of dim `batch_size, num_queries, num_labels` with the classification logits.
             class_queries_logits (`torch.Tensor`):
@@ -469,17 +472,27 @@ class Mask2FormerHungarianMatcher(nn.Module):
             # Compute the classification cost. Contrary to the loss, we don't use the NLL, but approximate it in 1 - proba[target class]. The 1 is a constant that doesn't change the matching, it can be ommitted.
             cost_class = -pred_probs[:, class_labels[i]]
             target_mask = mask_labels[i].to(pred_mask)
-            target_mask = target_mask[:, None]
-            pred_mask = pred_mask[:, None]
+            
+            if not video_input:
+                target_mask = target_mask[:, None]
+                pred_mask = pred_mask[:, None]
 
             # Sample ground truth and predicted masks
             point_coordinates = torch.rand(1, self.num_points, 2, device=pred_mask.device)
 
             target_coordinates = point_coordinates.repeat(target_mask.shape[0], 1, 1)
-            target_mask = sample_point(target_mask, target_coordinates, align_corners=False).squeeze(1)
+            target_mask = sample_point(target_mask, target_coordinates, align_corners=False)
+            if video_input:
+                target_mask = target_mask.flatten(1)
+            else:
+                target_mask = target_mask.squeeze(1)
 
             pred_coordinates = point_coordinates.repeat(pred_mask.shape[0], 1, 1)
-            pred_mask = sample_point(pred_mask, pred_coordinates, align_corners=False).squeeze(1)
+            pred_mask = sample_point(pred_mask, pred_coordinates, align_corners=False)
+            if video_input:
+                pred_mask = pred_mask.flatten(1)
+            else:
+                pred_mask = pred_mask.squeeze(1)
 
             # compute the cross entropy loss between each mask pairs -> shape (num_queries, num_labels)
             cost_mask = pair_wise_sigmoid_cross_entropy_loss(pred_mask, target_mask)
@@ -596,6 +609,7 @@ class Mask2FormerLoss(nn.Module):
 
     def loss_masks(
         self,
+        video_input: bool,
         masks_queries_logits: torch.Tensor,
         mask_labels: List[torch.Tensor],
         indices: Tuple[np.array],
@@ -604,6 +618,8 @@ class Mask2FormerLoss(nn.Module):
         """Compute the losses related to the masks using sigmoid_cross_entropy_loss and dice loss.
 
         Args:
+            video_input (`bool`):
+                Whether the original input given to the model is a video.
             masks_queries_logits (`torch.Tensor`):
                 A tensor of shape `(batch_size, num_queries, height, width)`.
             mask_labels (`torch.Tensor`):
@@ -624,14 +640,22 @@ class Mask2FormerLoss(nn.Module):
         tgt_idx = self._get_targets_permutation_indices(indices)
         # shape (batch_size * num_queries, height, width)
         pred_masks = masks_queries_logits[src_idx]
-        # shape (batch_size, num_queries, height, width)
-        # pad all and stack the targets to the num_labels dimension
-        target_masks, _ = self._pad_images_to_max_in_batch(mask_labels)
-        target_masks = target_masks[tgt_idx]
+        
+        if video_input:
+            target_masks = torch.cat([t['masks'][i] for t, (_, i) in zip(targets, indices)]).to(pred_masks)
+            
+            # No need to upsample predictions as we are using normalized coordinates
+            pred_masks = pred_masks.flatten(0, 1)[:, None]
+            target_masks = target_masks.flatten(0, 1)[:, None]
+        else:
+            # shape (batch_size, num_queries, height, width)
+            # pad all and stack the targets to the num_labels dimension
+            target_masks, _ = self._pad_images_to_max_in_batch(mask_labels)
+            target_masks = target_masks[tgt_idx]
 
-        # No need to upsample predictions as we are using normalized coordinates
-        pred_masks = pred_masks[:, None]
-        target_masks = target_masks[:, None]
+            # No need to upsample predictions as we are using normalized coordinates
+            pred_masks = pred_masks[:, None]
+            target_masks = target_masks[:, None]
 
         # Sample point coordinates
         with torch.no_grad():
@@ -747,6 +771,7 @@ class Mask2FormerLoss(nn.Module):
         mask_labels: List[torch.Tensor],
         class_labels: List[torch.Tensor],
         auxiliary_predictions: Optional[Dict[str, torch.Tensor]] = None,
+        video_input: Optional[bool] = False,
     ) -> Dict[str, torch.Tensor]:
         """
         This performs the loss computation.
@@ -763,6 +788,8 @@ class Mask2FormerLoss(nn.Module):
             auxiliary_predictions (`Dict[str, torch.Tensor]`, *optional*):
                 if `use_auxiliary_loss` was set to `true` in [`Mask2FormerConfig`], then it contains the logits from
                 the inner layers of the Mask2FormerMaskedAttentionDecoder.
+            video_input (`bool`):
+                Whether the original input given to the model is a video.
 
         Returns:
             losses (`Dict[str, Tensor]`): A dict of `torch.Tensor` containing three keys:
@@ -781,7 +808,7 @@ class Mask2FormerLoss(nn.Module):
         num_masks = self.get_num_masks(class_labels, device=class_labels[0].device)
         # get all the losses
         losses: Dict[str, Tensor] = {
-            **self.loss_masks(masks_queries_logits, mask_labels, indices, num_masks),
+            **self.loss_masks(video_input, masks_queries_logits, mask_labels, indices, num_masks),
             **self.loss_labels(class_queries_logits, class_labels, indices),
         }
         # in case of auxiliary losses, we repeat this process with the output of each intermediate layer.
@@ -843,6 +870,51 @@ def multi_scale_deformable_attention(
     )
     return output.transpose(1, 2).contiguous()
 
+class Mask2Former3DSinePositionEmbedding(nn.Module):
+    """
+    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
+    need paper, generalized to work on images.
+    """
+
+    def __init__(
+        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+    ):
+        super().__init__()
+        if scale is not None and normalize is False:
+            raise ValueError("normalize should be True if scale is passed")
+        self.num_pos_feats = num_pos_feats
+        self.temperature = temperature
+        self.normalize = normalize
+        self.scale = 2 * math.pi if scale is None else scale
+
+    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+        
+        if mask is None:
+            mask = torch.zeros((x.size(0), x.size(2), x.size(3), x.size(4)), device=x.device, dtype=torch.bool)
+        not_mask = ~mask
+        y_embed = not_mask.cumsum(1, dtype=torch.float32)
+        x_embed = not_mask.cumsum(2, dtype=torch.float32)
+        z_embed = not_mask.cumsum(3, dtype=torch.float32)
+        if self.normalize:
+            eps = 1e-6
+            y_embed = y_embed / (y_embed[:, :, -1:, :] + eps) * self.scale
+            x_embed = x_embed / (x_embed[:, :, :, -1:] + eps) * self.scale
+            z_embed = z_embed / (z_embed[:, -1, :, :] + eps) * self.scale
+
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        
+        dim_t_z = torch.arange((self.num_pos_feats * 2), dtype=torch.float32, device=x.device)
+        dim_t_z = self.temperature ** (2 * torch.div(dim_t_z, 2, rounding_mode="floor") / (self.num_pos_feats * 2))
+
+        pos_x = x_embed[:, :, :, :, None] / dim_t
+        pos_y = y_embed[:, :, :, :, None] / dim_t
+        pos_z = z_embed[:, :, :, :, None] / dim_t_z
+        pos_x = torch.stack((pos_x[:, :, :, :, 0::2].sin(), pos_x[:, :, :, :, 1::2].cos()), dim=5).flatten(4)
+        pos_y = torch.stack((pos_y[:, :, :, :, 0::2].sin(), pos_y[:, :, :, :, 1::2].cos()), dim=5).flatten(4)
+        pos_z = torch.stack((pos_z[:, :, :, :, 0::2].sin(), pos_z[:, :, :, :, 1::2].cos()), dim=5).flatten(4)
+        pos = (torch.cat((pos_y, pos_x), dim=4) + pos_z).permute(0, 1, 4, 2, 3)
+        return pos
 
 # Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerSinePositionEmbedding with MaskFormer->Mask2Former
 class Mask2FormerSinePositionEmbedding(nn.Module):
@@ -1804,6 +1876,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
         feature_size_list: List = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        video_input: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ):
         r"""
@@ -1828,6 +1901,8 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
+            video_input (`bool`, *optional*):
+                Whether original input given to model is a video.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
@@ -1854,7 +1929,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
         intermediate += (intermediate_hidden_states,)
 
         predicted_mask, attention_mask = self.mask_predictor(
-            intermediate_hidden_states, pixel_embeddings, feature_size_list[0]
+            video_input,intermediate_hidden_states, pixel_embeddings, feature_size_list[0]
         )
         intermediate_mask_predictions += (predicted_mask,)
 
@@ -1902,6 +1977,7 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
                 intermediate_hidden_states = self.layernorm(layer_outputs[0])
 
                 predicted_mask, attention_mask = self.mask_predictor(
+                    video_input,
                     intermediate_hidden_states,
                     pixel_embeddings,
                     feature_size_list[(idx + 1) % self.num_feature_levels],
@@ -2012,15 +2088,22 @@ class Mask2FormerMaskPredictor(nn.Module):
 
         self.mask_embedder = Mask2FormerMLPPredictionHead(self.hidden_size, self.hidden_size, mask_feature_size)
 
-    def forward(self, outputs: torch.Tensor, pixel_embeddings: torch.Tensor, attention_mask_target_size: int = None):
+    def forward(self, video_input: bool, outputs: torch.Tensor, pixel_embeddings: torch.Tensor, attention_mask_target_size: int = None):
         mask_embeddings = self.mask_embedder(outputs.transpose(0, 1))
 
-        # Sum up over the channels
-        outputs_mask = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
+        if video_input:
+            outputs = torch.einsum("bqc,btchw->bqthw", mask_embeddings, pixel_embeddings)
+            b, q, t, _, _ = outputs.shape
+            # [B, Q, T, H, W] -> [B, Q, T*H*W] -> [B, h, Q, T*H*W] -> [B*h, Q, T*HW]
+            attention_mask = F.interpolate(outputs.flatten(0, 1), size=attention_mask_target_size, mode="bilinear", align_corners=False)
+            attention_mask = attention_mask.view(b, q, t, attention_mask_target_size[0], attention_mask_target_size[1])
+        else:
+            # Sum up over the channels
+            outputs_mask = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
 
-        attention_mask = nn.functional.interpolate(
-            outputs_mask, size=attention_mask_target_size, mode="bilinear", align_corners=False
-        )
+            attention_mask = nn.functional.interpolate(
+                outputs_mask, size=attention_mask_target_size, mode="bilinear", align_corners=False
+            )
 
         attention_mask = attention_mask.sigmoid().flatten(2).unsqueeze(1).repeat(1, self.num_heads, 1, 1)
         attention_mask = (attention_mask.flatten(0, 1) < 0.5).bool()
@@ -2095,6 +2178,81 @@ class Mask2FormerTransformerModule(nn.Module):
 
         return decoder_output
 
+class Mask2FormerVideoTransformerModule(nn.Module):
+    """
+    The Mask2Former's video transformer module.
+    """
+
+    def __init__(self, in_features: int, config: Mask2FormerConfig):
+        super().__init__()
+        hidden_dim = config.hidden_dim
+        self.num_feature_levels = 3
+        self.position_embedder = Mask2Former3DSinePositionEmbedding(num_pos_feats=hidden_dim // 2, normalize=True)
+        self.queries_embedder = nn.Embedding(config.num_queries, hidden_dim)
+        self.queries_features = nn.Embedding(config.num_queries, hidden_dim)
+        self.input_projections = []
+
+        for _ in range(self.num_feature_levels):
+            if in_features != hidden_dim or config.enforce_input_projection:
+                self.input_projections.append(nn.Conv2d(in_features, hidden_dim, kernel_size=1))
+            else:
+                self.input_projections.append(nn.Sequential())
+
+        self.decoder = Mask2FormerMaskedAttentionDecoder(config=config)
+        self.level_embed = nn.Embedding(self.num_feature_levels, hidden_dim)
+        self.num_frames = config.num_frames
+
+    def forward(
+        self,
+        multi_scale_features: List[Tensor],
+        mask_features: Tensor,
+        output_hidden_states: bool = False,
+        output_attentions: bool = False,
+    ) -> Mask2FormerMaskedAttentionDecoderOutput:
+        
+        multi_stage_features = []
+        multi_stage_positional_embeddings = []
+        size_list = []
+        
+        m_batch_size,  m_channels, m_height, m_width = mask_features.shape
+        batch_size = (m_batch_size // self.num_frames) if self.training else 1
+        t = m_batch_size // batch_size
+        mask_features = mask_features.view(batch_size, t, m_channels, m_height, m_width)
+        
+        for i in range(self.num_feature_levels):
+            size_list.append(multi_scale_features[i].shape[-2:])
+            
+            ppos = self.position_embedder(multi_scale_features[i].view(batch_size, t, -1, size_list[-1][0], size_list[-1][1]), None).flatten(3)
+            multi_stage_positional_embeddings.append(ppos)
+            src2 = self.input_projections[i](multi_scale_features[i]).flatten(2) + self.level_embed.weight[i][None, :, None]
+            multi_stage_features.append(src2)
+
+            _, channels, height_width = multi_stage_features[-1].shape
+            
+            multi_stage_positional_embeddings[-1] = multi_stage_positional_embeddings[-1].view(batch_size, t, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)            
+            
+            multi_stage_features[-1] = multi_stage_features[-1].view(batch_size, t, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)
+        
+
+        # [num_queries, batch_size, num_channels]
+        query_embeddings = self.queries_embedder.weight.unsqueeze(1).repeat(1, batch_size, 1)
+        query_features = self.queries_features.weight.unsqueeze(1).repeat(1, batch_size, 1)
+
+        decoder_output = self.decoder(
+            video_input=True,
+            inputs_embeds=query_features,
+            multi_stage_positional_embeddings=multi_stage_positional_embeddings,
+            pixel_embeddings=mask_features,
+            encoder_hidden_states=multi_stage_features,
+            query_position_embeddings=query_embeddings,
+            feature_size_list=size_list,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            return_dict=True,
+        )
+
+        return decoder_output
+
 
 MASK2FORMER_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
@@ -2139,6 +2297,13 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
         std = self.config.init_std
 
         if isinstance(module, Mask2FormerTransformerModule):
+            if module.input_projections is not None:
+                for input_projection in module.input_projections:
+                    if not isinstance(input_projection, nn.Sequential):
+                        nn.init.xavier_uniform_(input_projection.weight, gain=xavier_std)
+                        nn.init.constant_(input_projection.bias, 0)
+
+        if isinstance(module, Mask2FormerVideoTransformerModule):
             if module.input_projections is not None:
                 for input_projection in module.input_projections:
                     if not isinstance(input_projection, nn.Sequential):
@@ -2215,7 +2380,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         super().__init__(config)
         self.pixel_level_module = Mask2FormerPixelLevelModule(config)
         self.transformer_module = Mask2FormerTransformerModule(in_features=config.feature_size, config=config)
-
+        self.video_transformer_module = Mask2FormerVideoTransformerModule(in_features=config.feature_size, config=config)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(MASK2FORMER_INPUTS_DOCSTRING)
@@ -2224,6 +2389,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         self,
         pixel_values: Tensor,
         pixel_mask: Optional[Tensor] = None,
+        video_input: Optional[bool] = False,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2272,12 +2438,20 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             pixel_values=pixel_values, output_hidden_states=output_hidden_states
         )
 
-        transformer_module_output = self.transformer_module(
-            multi_scale_features=pixel_level_module_output.decoder_hidden_states,
-            mask_features=pixel_level_module_output.decoder_last_hidden_state,
-            output_hidden_states=True,
-            output_attentions=output_attentions,
-        )
+        if video_input:
+            transformer_module_output = self.video_transformer_module(
+                multi_scale_features=pixel_level_module_output.decoder_hidden_states,
+                mask_features=pixel_level_module_output.decoder_last_hidden_state,
+                output_hidden_states=True,
+                output_attentions=output_attentions,
+            )
+        else:
+            transformer_module_output = self.transformer_module(
+                multi_scale_features=pixel_level_module_output.decoder_hidden_states,
+                mask_features=pixel_level_module_output.decoder_last_hidden_state,
+                output_hidden_states=True,
+                output_attentions=output_attentions,
+            )
 
         encoder_hidden_states = None
         pixel_decoder_hidden_states = None
@@ -2337,6 +2511,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         mask_labels: Tensor,
         class_labels: Tensor,
         auxiliary_predictions: Dict[str, Tensor],
+        video_input: bool,
     ) -> Dict[str, Tensor]:
         loss_dict: Dict[str, Tensor] = self.criterion(
             masks_queries_logits=masks_queries_logits,
@@ -2344,6 +2519,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             mask_labels=mask_labels,
             class_labels=class_labels,
             auxiliary_predictions=auxiliary_predictions,
+            video_input=video_input,
         )
 
         # weight each loss by `self.weight_dict[<LOSS_NAME>]` including auxiliary losses
@@ -2373,6 +2549,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         mask_labels: Optional[List[Tensor]] = None,
         class_labels: Optional[List[Tensor]] = None,
         pixel_mask: Optional[Tensor] = None,
+        video_input: Optional[bool] = False,
         output_hidden_states: Optional[bool] = None,
         output_auxiliary_logits: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -2384,7 +2561,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         class_labels (`List[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
-
+        video_input (`bool`, *optional`):
+            Whether input given to the model is a video.
         Returns:
             `Mask2FormerUniversalSegmentationOutput`
 
@@ -2496,10 +2674,11 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        
         outputs = self.model(
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
+            video_input=video_input,
             output_hidden_states=output_hidden_states or self.config.use_auxiliary_loss,
             output_attentions=output_attentions,
             return_dict=True,
@@ -2523,6 +2702,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
                 mask_labels=mask_labels,
                 class_labels=class_labels,
                 auxiliary_predictions=auxiliary_logits,
+                video_input=video_input,
             )
             loss = self.get_loss(loss_dict)
 

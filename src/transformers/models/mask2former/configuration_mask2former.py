@@ -94,7 +94,7 @@ class Mask2FormerConfig(PretrainedConfig):
             Ratio of points that are sampled via importance sampling.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        init_xavier_std (`float``, *optional*, defaults to 1.0):
+        init_xavier_std (`float`, *optional*, defaults to 1.0):
             The scaling factor used for the Xavier initialization gain in the HM Attention map module.
         use_auxiliary_loss (`boolean``, *optional*, defaults to `True`):
             If `True` [`Mask2FormerForUniversalSegmentationOutput`] will contain the auxiliary losses computed using
@@ -103,6 +103,14 @@ class Mask2FormerConfig(PretrainedConfig):
             Feature strides corresponding to features generated from backbone network.
         output_auxiliary_logits (`bool`, *optional*):
             Should the model output its `auxiliary_logits` or not.
+        num_frames (`int`, *optional*, defaults to 2):
+            Number of frames in the video
+        frame_range (`int`, *optional*, defaults to 20):
+            Range of frames in the video
+        frame_shuffle (`bool`, *optional*, defaults to False): 
+            Whether to shuffle the frames or not
+        input_augmentations(`List[str]`, *optional*, defaults to []):
+            List of augmentations to apply on the video input such as brightness", "contrast", etc.
 
     Examples:
 
@@ -154,6 +162,10 @@ class Mask2FormerConfig(PretrainedConfig):
         use_auxiliary_loss: bool = True,
         feature_strides: List[int] = [4, 8, 16, 32],
         output_auxiliary_logits: bool = None,
+        num_frames: int = 2,
+        frame_range: int = 20,
+        frame_shuffle: bool = False,
+        input_augmentations: List[str] = [],
         **kwargs,
     ):
         if backbone_config is None:
@@ -204,6 +216,10 @@ class Mask2FormerConfig(PretrainedConfig):
         self.feature_strides = feature_strides
         self.output_auxiliary_logits = output_auxiliary_logits
         self.num_hidden_layers = decoder_layers
+        self.num_frames = num_frames
+        self.frame_range = frame_range
+        self.frame_shuffle = frame_shuffle
+        self.input_augmentations = input_augmentations
 
         super().__init__(**kwargs)
 
