@@ -28,6 +28,8 @@ Tips:
   usage to 1x. There is also a [fp16 branch](https://huggingface.co/EleutherAI/gpt-j-6B/tree/float16) which stores
   the fp16 weights, which could be used to further minimize the RAM usage. Combining all this it should take roughly
   12.1GB of CPU RAM to load the model.
+  **Note**: The implementation of half precision is specific to the GPT-J model. Typically, on CPU, models can only be
+  run in float32.
 
 ```python
 >>> from transformers import GPTJForCausalLM
