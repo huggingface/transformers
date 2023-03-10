@@ -153,7 +153,7 @@ class Pix2StructVisionAttention(nn.Module):
         self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.key = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
         self.value = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
-        self.o = nn.Linear(self.inner_dim, self.hidden_size, bias=False)
+        self.output = nn.Linear(self.inner_dim, self.hidden_size, bias=False)
 
         self.gradient_checkpointing = False
 
@@ -226,7 +226,7 @@ class Pix2StructVisionAttention(nn.Module):
             attn_weights = attn_weights * layer_head_mask
 
         attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
-        attn_output = self.o(attn_output)
+        attn_output = self.output(attn_output)
 
         outputs = (attn_output,) + (position_bias,)
 
@@ -439,7 +439,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
             module.query.weight.data.normal_(mean=0.0, std=factor * ((hidden_size * key_value_proj_dim) ** -0.5))
             module.key.weight.data.normal_(mean=0.0, std=factor * (hidden_size**-0.5))
             module.value.weight.data.normal_(mean=0.0, std=factor * (hidden_size**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            module.output.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((hidden_size) ** -0.5))
         elif isinstance(module, nn.Embedding):
@@ -716,7 +716,7 @@ class Pix2StructTextAttention(nn.Module):
         self.query = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.key = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-        self.o = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.output = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -909,7 +909,7 @@ class Pix2StructTextAttention(nn.Module):
             attn_weights = attn_weights * layer_head_mask
 
         attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
-        attn_output = self.o(attn_output)
+        attn_output = self.output(attn_output)
 
         present_key_value_state = (key_states, value_states) if use_cache else None
         outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)

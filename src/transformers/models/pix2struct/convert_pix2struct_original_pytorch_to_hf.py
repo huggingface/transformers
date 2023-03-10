@@ -12,182 +12,144 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import argparse
+import os
 import re
 
 import requests
 import torch
-
-# git clone https://github.com/salesforce/PIX2STRUCT.git
-from models.pix2struct import pix2struct_decoder
-from models.pix2struct_itm import pix2struct_itm
-from models.pix2struct_vqa import pix2struct_vqa
+from flax.traverse_util import flatten_dict
 from PIL import Image
-from torchvision import transforms
-from torchvision.transforms.functional import InterpolationMode
+from t5x import checkpoints
 
 from transformers import (
+    AutoTokenizer,
     Pix2StructConfig,
     Pix2StructForConditionalGeneration,
-    Pix2StructForImageTextRetrieval,
-    Pix2StructForQuestionAnswering,
-    Pix2StructTokenizer,
+    Pix2StructImageProcessor,
+    Pix2StructProcessor,
+    Pix2StructTextConfig,
+    Pix2StructVisionConfig,
 )
 
 
-def load_demo_image(image_size, device):
-    img_url = "https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/demo.jpg"
+def get_flax_param(t5x_checkpoint_path):
+    flax_params = checkpoints.load_t5x_checkpoint(t5x_checkpoint_path)
+    flax_params = flatten_dict(flax_params)
+    return flax_params
+
+
+def rename_and_convert_flax_params(flax_dict):
+    converted_dict = {}
+
+    CONVERSION_MAPPING = {
+        "token_embedder": "embeddings",
+        "encoder_norm": "layernorm",
+        "kernel": "weight",
+        ".out": ".output",
+        "scale": "weight",
+        "embedders_0.pos_embedding": "row_embedder.weight",
+        "embedders_1.pos_embedding": "column_embedder.weight",
+    }
+
+    DECODER_CONVERSION_MAPPING = {
+        "query": "attention.query",
+        "key": "attention.key",
+        "value": "attention.value",
+        "output.dense": "output",
+        "encoder_decoder_attention.o": "encoder_decoder_attention.attention.o",
+        "pre_self_attention_layer_norm": "self_attention.layer_norm",
+        "pre_cross_attention_layer_norm": "encoder_decoder_attention.layer_norm",
+        "mlp.": "mlp.DenseReluDense.",
+        "pre_mlp_layer_norm": "mlp.layer_norm",
+        "self_attention.o": "self_attention.attention.o",
+        "decoder.embeddings.embedding": "decoder.embed_tokens.weight",
+        "decoder.relpos_bias.rel_embedding": "decoder.layer.0.self_attention.attention.relative_attention_bias.weight",
+        "decoder.decoder_norm.weight": "decoder.final_layer_norm.weight",
+        "decoder.logits_dense.weight": "decoder.lm_head.weight",
+    }
+
+    for key in flax_dict.keys():
+        if "target" in key:
+            # remove the first prefix from the key
+            new_key = ".".join(key[1:])
+
+            # rename the key
+            for old, new in CONVERSION_MAPPING.items():
+                new_key = new_key.replace(old, new)
+
+            if "decoder" in new_key:
+                for old, new in DECODER_CONVERSION_MAPPING.items():
+                    new_key = new_key.replace(old, new)
+
+            if "layers" in new_key and "decoder" not in new_key:
+                # use regex to replace the layer number
+                new_key = re.sub(r"layers_(\d+)", r"layer.\1", new_key)
+                new_key = new_key.replace("encoder", "encoder.encoder")
+
+            elif "layers" in new_key and "decoder" in new_key:
+                # use regex to replace the layer number
+                new_key = re.sub(r"layers_(\d+)", r"layer.\1", new_key)
+
+            converted_dict[new_key] = flax_dict[key]
+
+    converted_torch_dict = {}
+    # convert converted_dict into torch format
+    for key in converted_dict.keys():
+        if ("embed_tokens" not in key) and ("embedder" not in key):
+            converted_torch_dict[key] = torch.from_numpy(converted_dict[key].T)
+        else:
+            converted_torch_dict[key] = torch.from_numpy(converted_dict[key])
+
+    return converted_torch_dict
+
+
+def convert_pix2struct_original_pytorch_checkpoint_to_hf(
+    t5x_checkpoint_path, pytorch_dump_folder_path, use_large=False
+):
+    flax_params = get_flax_param(t5x_checkpoint_path)
+
+    encoder_config = Pix2StructVisionConfig()
+
+    decoder_config = Pix2StructTextConfig()
+    config = Pix2StructConfig(vision_config=encoder_config, text_config=decoder_config)
+
+    model = Pix2StructForConditionalGeneration(config)
+
+    torch_params = rename_and_convert_flax_params(flax_params)
+    model.load_state_dict(torch_params)
+
+    tok = AutoTokenizer.from_pretrained("ybelkada/test-pix2struct-tokenizer")
+    image_processor = Pix2StructImageProcessor()
+    processor = Pix2StructProcessor(image_processor=image_processor, tokenizer=tok)
+
+    img_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+
+    model.eval()
+
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
-    transform = transforms.Compose(
-        [
-            transforms.Resize((image_size, image_size), interpolation=InterpolationMode.BICUBIC),
-            transforms.ToTensor(),
-            transforms.Normalize((0.48145466, 0.4578275, 0.40821073), (0.26862954, 0.26130258, 0.27577711)),
-        ]
-    )
-    image = transform(raw_image).unsqueeze(0).to(device)
-    return image
+    inputs = processor(raw_image, return_tensors="pt", max_patches=2048)
+    # inputs["decoder_input_ids"] = torch.LongTensor([[0]])
 
+    output = model.generate(**inputs, do_sample=False)
 
-def rename_key(key):
-    if "visual_encoder" in key:
-        key = re.sub("visual_encoder*", "vision_model.encoder", key)
-    if "blocks" in key:
-        key = re.sub(r"blocks", "layers", key)
-    if "attn" in key:
-        key = re.sub(r"attn", "self_attn", key)
-    if "norm1" in key:
-        key = re.sub(r"norm1", "layer_norm1", key)
-    if "norm2" in key:
-        key = re.sub(r"norm2", "layer_norm2", key)
-    if "encoder.norm" in key:
-        key = re.sub(r"encoder.norm", "post_layernorm", key)
-    if "encoder.patch_embed.proj" in key:
-        key = re.sub(r"encoder.patch_embed.proj", "embeddings.patch_embedding", key)
+    # assert processor.decode(output[0], skip_special_tokens=True) == "A stop sign is on a street corner."
+    print(processor.decode(output[0], skip_special_tokens=True))
 
-    if "encoder.pos_embed" in key:
-        key = re.sub(r"encoder.pos_embed", "embeddings.position_embedding", key)
-    if "encoder.cls_token" in key:
-        key = re.sub(r"encoder.cls_token", "embeddings.class_embedding", key)
+    # mkdir if needed
+    os.makedirs(pytorch_dump_folder_path, exist_ok=True)
 
-    if "self_attn" in key:
-        key = re.sub(r"self_attn.proj", "self_attn.projection", key)
+    model.save_pretrained(pytorch_dump_folder_path)
+    processor.save_pretrained(pytorch_dump_folder_path)
 
-    return key
-
-
-@torch.no_grad()
-def convert_pix2struct_checkpoint(pytorch_dump_folder_path, config_path=None):
-    """
-    Copy/paste/tweak model's weights to transformers design.
-    """
-    if config_path is not None:
-        config = Pix2StructConfig.from_pretrained(config_path)
-    else:
-        config = Pix2StructConfig(projection_dim=512, text_config={}, vision_config={})
-
-    hf_model = Pix2StructForConditionalGeneration(config).eval()
-
-    model_url = (
-        "https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/models/model_base_capfilt_large.pth"
-    )
-
-    pt_model = pix2struct_decoder(pretrained=model_url, image_size=384, vit="base")
-    pt_model = pt_model.eval()
-
-    modified_state_dict = pt_model.state_dict()
-    for key in modified_state_dict.copy():
-        value = modified_state_dict.pop(key)
-        renamed_key = rename_key(key)
-        modified_state_dict[renamed_key] = value
-
-    hf_model.load_state_dict(modified_state_dict)
-
-    image_size = 384
-    image = load_demo_image(image_size=image_size, device="cpu")
-    tokenizer = Pix2StructTokenizer.from_pretrained("bert-base-uncased")
-    input_ids = tokenizer(["a picture of"]).input_ids
-
-    out = hf_model.generate(image, input_ids)
-
-    assert out[0].tolist() == [30522, 1037, 3861, 1997, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102]
-
-    out = hf_model.generate(image)
-
-    assert out[0].tolist() == [30522, 1037, 2450, 3564, 2006, 1996, 3509, 2007, 2014, 3899, 102]
-
-    if pytorch_dump_folder_path is not None:
-        hf_model.save_pretrained(pytorch_dump_folder_path)
-
-    # model_url = 'https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/models/model_vqa.pth'
-    model_url = "https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/models/model_base_vqa_capfilt_large.pth"
-
-    vqa_model = pix2struct_vqa(pretrained=model_url, image_size=image_size, vit="base")
-    vqa_model.eval()
-
-    modified_state_dict = vqa_model.state_dict()
-    for key in modified_state_dict.copy():
-        value = modified_state_dict.pop(key)
-        renamed_key = rename_key(key)
-        modified_state_dict[renamed_key] = value
-
-    hf_vqa_model = Pix2StructForQuestionAnswering(config)
-
-    hf_vqa_model.load_state_dict(modified_state_dict)
-
-    question = ["How many dogs are in this image?"]
-    question_input_ids = tokenizer(question, return_tensors="pt").input_ids
-
-    answer = hf_vqa_model.generate(question_input_ids, image)
-    print(tokenizer.decode(answer[0]))
-
-    assert tokenizer.decode(answer[0]) == "[UNK] 1 [SEP]"
-    if pytorch_dump_folder_path is not None:
-        hf_vqa_model.save_pretrained(pytorch_dump_folder_path + "_vqa")
-
-    model_url = (
-        "https://storage.googleapis.com/sfr-vision-language-research/PIX2STRUCT/models/model_base_retrieval_coco.pth"
-    )
-
-    itm_model = pix2struct_itm(pretrained=model_url, image_size=image_size, vit="base")
-    itm_model.eval()
-
-    modified_state_dict = itm_model.state_dict()
-    for key in modified_state_dict.copy():
-        value = modified_state_dict.pop(key)
-        renamed_key = rename_key(key)
-        modified_state_dict[renamed_key] = value
-
-    hf_itm_model = Pix2StructForImageTextRetrieval(config)
-
-    question = ["A picture of a woman with a dog sitting in a beach"]
-    question_input_ids = tokenizer(
-        question,
-        return_tensors="pt",
-        padding="max_length",
-        truncation=True,
-        max_length=35,
-    ).input_ids
-
-    hf_itm_model.load_state_dict(modified_state_dict)
-    hf_itm_model.eval()
-
-    out_itm = hf_itm_model(question_input_ids, image, use_itm_head=True)
-    out = hf_itm_model(question_input_ids, image, use_itm_head=False)
-
-    assert out[0].item() == 0.2110687494277954
-    assert torch.nn.functional.softmax(out_itm[0], dim=1)[:, 1].item() == 0.45698845386505127
-
-    if pytorch_dump_folder_path is not None:
-        hf_itm_model.save_pretrained(pytorch_dump_folder_path + "_itm")
+    print("Model saved in {}".format(pytorch_dump_folder_path))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--t5x_checkpoint_path", default=None, type=str, help="Path to the original T5x checkpoint.")
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     args = parser.parse_args()
 
-    convert_pix2struct_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path)
+    convert_pix2struct_original_pytorch_checkpoint_to_hf(args.t5x_checkpoint_path, args.pytorch_dump_folder_path)
