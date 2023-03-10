@@ -19,7 +19,7 @@ from typing import Dict, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import convert_to_rgb, normalize, torch_extract_patches
+from ...image_transforms import convert_to_rgb, normalize
 from ...image_utils import ChannelDimension, ImageInput, is_batched, to_numpy_array, valid_images
 from ...utils import TensorType, is_torch_available, is_vision_available, logging
 from ...utils.import_utils import requires_backends
@@ -61,6 +61,33 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
 
+    # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
+    def torch_extract_patches(self, image_tensor, patch_height, patch_width):
+        """
+        Utiliy function to extract patches from a given image tensor.
+
+        Args:
+            image_tensor (torch.Tensor):
+                The image tensor to extract patches from.
+            patch_height (int):
+                The height of the patches to extract.
+            patch_width (int):
+                The width of the patches to extract.
+        """
+        requires_backends(self.torch_extract_patches, ["torch"])
+
+        image_tensor = image_tensor.unsqueeze(0)
+        patches = torch.nn.functional.unfold(
+            image_tensor, (patch_height, patch_width), stride=(patch_height, patch_width)
+        )
+        patches = patches.reshape(image_tensor.size(0), image_tensor.size(1), patch_height, patch_width, -1)
+        patches = patches.permute(0, 4, 2, 3, 1).reshape(
+            image_tensor.size(2) // patch_height,
+            image_tensor.size(3) // patch_width,
+            image_tensor.size(1) * patch_height * patch_width,
+        )
+        return patches.unsqueeze(0)
+
     def extract_flattened_patches(self, image: np.ndarray, max_patches: int, **kwargs) -> np.ndarray:
         """
         Extract flattened patches from an image.
@@ -100,7 +127,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         ).squeeze(0)
 
         # [1, rows, columns, patch_height * patch_width * image_channels]
-        patches = torch_extract_patches(image, patch_height, patch_width)
+        patches = self.torch_extract_patches(image, patch_height, patch_width)
 
         patches_shape = patches.shape
         rows = patches_shape[1]
