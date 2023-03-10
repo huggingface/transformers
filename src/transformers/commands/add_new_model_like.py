@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import ast
 import difflib
 import json
 import os
@@ -134,7 +133,7 @@ def find_indent(line: str) -> int:
     return len(search.groups()[0])
 
 
-def parse_module_content(content: str) -> List[str]:
+def parse_module_content(content: str, indent_level: int = 0) -> List[str]:
     """
     Parse the content of a module in the list of objects it defines.
 
@@ -151,11 +150,14 @@ def parse_module_content(content: str) -> List[str]:
     end_markers = [")", "]", "}", '"""']
 
     for line in lines:
+        if find_indent(line) < indent_level and not is_empty_line(line):
+            break
+
         # End of an object
         is_valid_object = len(current_object) > 0
         if is_valid_object and len(current_object) == 1:
             is_valid_object = not current_object[0].startswith("# Copied from")
-        if not is_empty_line(line) and find_indent(line) == 0 and is_valid_object:
+        if not is_empty_line(line) and find_indent(line) == indent_level and is_valid_object:
             # Closing parts should be included in current object
             if line in end_markers:
                 current_object.append(line)
@@ -403,63 +405,33 @@ SPECIAL_PATTERNS = {
 _re_class_func = re.compile(r"^(?:class|def)\s+([^\s:\(]+)\s*(?:\(|\:)", flags=re.MULTILINE)
 
 
-def remove_attributes(obj, attrs_to_remove=None):
-    """Remove some attributes in `obj`.
-
-    The string `obj` needs to be able to be parsed by `ast.parse`.
-    """
-    if not attrs_to_remove:
-        return obj
-
-    _parsed_obj = ast.parse(obj)
-
-    if not _parsed_obj.body:
-        return obj
-
-    # The end line number in the last previous block
-    prev_end = -1
-
+def remove_attributes(obj, target_attr):
+    """Remove `target_attr` in `obj`."""
     lines = obj.split(os.linesep)
-    for parsed_obj in _parsed_obj.body:
-        # So far we only look the class definitions
-        if not isinstance(parsed_obj, ast.ClassDef):
-            continue
 
-        class_def = parsed_obj
-        attributes = class_def.body
+    target_idx = None
+    for idx, line in enumerate(lines):
+        if line.lstrip().startswith(f"{target_attr} = "):
+            target_idx = idx
+            break
+        elif line.lstrip().startswith(f"def {target_attr}("):
+            target_idx = idx
+            break
 
-        if not attributes:
-            continue
+    # Not found
+    if target_idx is None:
+        return obj
 
-        for attribute in attributes:
-            # These are 1-based line numbers, with `end_lineno` being inclusive
-            start, end = attribute.lineno, attribute.end_lineno  # noqa: F841
+    line = lines[target_idx]
+    indent_level = find_indent(line)
+    parsed = parse_module_content("\n".join(lines[target_idx:]), indent_level)
+    if len(parsed) > 0:
+        parsed = parsed[0]
+        num_lines = len(parsed.split("\n"))
+        for idx in range(num_lines):
+            lines[target_idx + idx] = None
 
-            found = False
-            if isinstance(attribute, ast.Assign):
-                # The targets are the names of variables
-                for x in attribute.targets:
-                    if x.id in attrs_to_remove:
-                        found = True
-                    break
-            elif isinstance(attribute, ast.FunctionDef) and attribute.name in attrs_to_remove:
-                found = True
-
-            if not found:
-                prev_end = end
-                continue
-
-            # The start and end line numbers within which the block will be removed
-            # 1-based and both  side inclusive
-            start_lineno = prev_end + 1
-            end_lineno = end
-
-            # Be careful with the 0-based indices
-            for idx in range(start_lineno - 1, end_lineno):
-                lines[idx] = None
-
-    lines = [x for x in lines if x is not None]
-    new_obj = os.linesep.join(lines)
+    new_obj = os.linesep.join([x for x in lines if x is not None])
 
     return new_obj
 
@@ -554,8 +526,10 @@ def duplicate_module(
 
         new_objects.append(obj)
 
+    content = "\n".join(new_objects)
     # Remove some attributes that we don't want to copy to the new file(s)
-    content = remove_attributes("\n".join(new_objects), attrs_to_remove=attrs_to_remove)
+    for attr in attrs_to_remove:
+        content = remove_attributes(content, target_attr=attr)
 
     with open(dest_file, "w", encoding="utf-8") as f:
         f.write(content)
