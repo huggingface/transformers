@@ -157,7 +157,7 @@ def parse_module_content(content: str, indent_level: int = 0) -> List[str]:
         is_valid_object = len(current_object) > 0
         if is_valid_object and len(current_object) == 1:
             is_valid_object = not current_object[0].startswith("# Copied from")
-        if not is_empty_line(line) and find_indent(line) == indent_level and is_valid_object:
+        if not is_empty_line(line) and not line.endswith(":") and find_indent(line) == indent_level and is_valid_object:
             # Closing parts should be included in current object
             if line.lstrip() in end_markers:
                 current_object.append(line)
