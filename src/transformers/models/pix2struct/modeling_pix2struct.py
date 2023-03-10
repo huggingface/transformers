@@ -199,20 +199,17 @@ class Pix2StructVisionAttention(nn.Module):
             if self.gradient_checkpointing and self.training:
                 position_bias.requires_grad = True
 
-            if attention_mask is not None:
-                if attention_mask.dim() == 2:
-                    position_bias = position_bias + attention_mask[:, None, :, None].to(position_bias.device)
-                else:
-                    position_bias = position_bias + attention_mask.to(
-                        position_bias.device
-                    )  # (batch_size, n_heads, seq_length, key_length)
+            if attention_mask is None:
+                attention_mask = torch.ones((batch_size, seq_length), device=scores.device, dtype=scores.dtype)
 
-        position_bias_masked = position_bias
-        if position_bias_masked is not None:
-            # replace 0 by -inf
-            position_bias_masked = position_bias_masked.masked_fill(position_bias_masked == 0, -10000.0)
-            position_bias_masked = position_bias_masked.masked_fill(position_bias_masked != -10000, 0)
+            if attention_mask.dim() == 2:
+                position_bias = position_bias + attention_mask[:, None, :, None].to(position_bias.device)
+            else:
+                # (batch_size, n_heads, seq_length, key_length)
+                position_bias = position_bias + attention_mask.to(position_bias.device)
+            position_bias = 1 - position_bias
 
+        position_bias_masked = position_bias.masked_fill(position_bias == 1, torch.finfo(scores.dtype).min)
         scores += position_bias_masked
 
         # (batch_size, n_heads, seq_length, key_length)
