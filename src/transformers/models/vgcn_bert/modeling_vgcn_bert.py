@@ -208,8 +208,16 @@ class VGCNEmbeddings(nn.Module):
         Returns: torch.tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings, no token_type
         embeddings)
         """
+
         if input_ids is not None:
             input_embeds = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
+
+        device = input_embeds.device
+        input_lengths = (
+            (input_ids > 0).sum(-1)
+            if input_ids is not None
+            else torch.ones(input_embeds.size(0), device=device, dtype=torch.int64) * input_embeds.size(1)
+        )
 
         if self.vgcn_graph_embds_dim > 0:
             vgcn_input_ids = gcn_swop_eye.matmul(input_embeds).transpose(1, 2)
@@ -217,9 +225,9 @@ class VGCNEmbeddings(nn.Module):
 
             vgcn_words_embeddings = input_embeds.clone()
             for i in range(self.vgcn_graph_embds_dim):
-                tmp_pos = (attention_mask.sum(-1) - 2 - self.vgcn_graph_embds_dim + 1 + i) + torch.arange(
+                tmp_pos = (input_lengths - 2 - self.vgcn_graph_embds_dim + 1 + i) + torch.arange(
                     0, input_embeds.shape[0]
-                ).to(input_embeds.device) * input_embeds.shape[1]
+                ).to(device) * input_embeds.shape[1]
                 vgcn_words_embeddings.flatten(start_dim=0, end_dim=1)[tmp_pos, :] = vgcn_out[:, :, i]
 
         seq_length = input_embeds.size(1)
@@ -687,6 +695,7 @@ class VGCNBertModel(VGCNBertPreTrainedModel):
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
+        # TODO: add vgcn_swop_eye
         embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
 
         return self.transformer(
