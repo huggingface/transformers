@@ -193,26 +193,26 @@ class Pix2StructVisionConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels of the input images.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
-        dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu"`):
+        dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         dropout_rate (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
+        initializer_range (`float`, *optional*, defaults to 1e-10):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         initializer_factor (`float``, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        seq_len (`int`, *optional*, defaults to 4096):
+            Maximum sequence length (here number of patches) supported by the model.
         qkv_bias (`bool`, *optional*, defaults to `False`):
             Whether or not to add a bias to the query, key, and value transformations.
         mlp_bias (`bool`, *optional*, defaults to `False`):
@@ -251,7 +251,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
         num_hidden_layers=12,
         num_attention_heads=12,
         num_channels=3,
-        image_size=384,
         patch_size=16,
         dense_act_fn="gelu_new",
         layer_norm_eps=1e-6,
@@ -280,7 +279,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
         self.patch_size = patch_size
-        self.image_size = image_size
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
