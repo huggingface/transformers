@@ -528,8 +528,9 @@ def duplicate_module(
 
     content = "\n".join(new_objects)
     # Remove some attributes that we don't want to copy to the new file(s)
-    for attr in attrs_to_remove:
-        content = remove_attributes(content, target_attr=attr)
+    if attrs_to_remove is not None:
+        for attr in attrs_to_remove:
+            content = remove_attributes(content, target_attr=attr)
 
     with open(dest_file, "w", encoding="utf-8") as f:
         f.write(content)
