@@ -29,7 +29,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, delete_repo
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 
@@ -2005,7 +2005,6 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod

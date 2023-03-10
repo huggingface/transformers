@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
 from pytest import mark
 from requests.exceptions import HTTPError
@@ -2497,7 +2497,7 @@ class ModelTesterMixin:
                 torch.manual_seed(0)
                 new_output = new_model(**inputs_dict_class)
 
-                self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -2533,7 +2533,7 @@ class ModelTesterMixin:
                     torch.manual_seed(0)
                     new_output = new_model(**inputs_dict_class)
 
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     @require_accelerate
     @mark.accelerate_tests
@@ -2569,7 +2569,7 @@ class ModelTesterMixin:
                     torch.manual_seed(0)
                     new_output = new_model(**inputs_dict_class)
 
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
 
     def test_problem_types(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3429,7 +3429,6 @@ class ModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod

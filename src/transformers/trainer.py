@@ -148,6 +148,7 @@ from .utils import (
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_compile_available,
+    is_torch_neuroncore_available,
     is_torch_tpu_available,
     logging,
 )
@@ -1537,6 +1538,8 @@ class Trainer:
 
             if self.args.ddp_bucket_cap_mb is not None:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
+            if is_torch_neuroncore_available():
+                return model
             model = nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank] if self.args._n_gpu != 0 else None,
@@ -2489,7 +2492,8 @@ class Trainer:
                 - the documentation of [sigopt](https://app.sigopt.com/docs/endpoints/experiments/create)
 
         Returns:
-            [`trainer_utils.BestRun`]: All the information about the best run.
+            [`trainer_utils.BestRun`]: All the information about the best run. Experiment summary can be found in
+            `run_summary` attribute for Ray backend.
         """
         if backend is None:
             backend = default_hp_search_backend()

@@ -70,6 +70,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TableTransformerDecoder",  # Building part of bigger (tested) model.
     "TimeSeriesTransformerEncoder",  # Building part of bigger (tested) model.
     "TimeSeriesTransformerDecoder",  # Building part of bigger (tested) model.
+    "InformerEncoder",  # Building part of bigger (tested) model.
+    "InformerDecoder",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
     "JukeboxPrior",  # Building part of bigger (tested) model.
     "DeformableDetrEncoder",  # Building part of bigger (tested) model.
@@ -204,12 +206,14 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Swin2SRForImageSuperResolution",
     "BridgeTowerForImageAndTextRetrieval",
     "BridgeTowerForMaskedLM",
+    "BridgeTowerForContrastiveLearning",
     "CLIPSegForImageSegmentation",
     "CLIPSegVisionModel",
     "CLIPSegTextModel",
     "EsmForProteinFolding",
     "GPTSanJapaneseModel",
     "TimeSeriesTransformerForPrediction",
+    "InformerForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
     "PegasusXEncoder",
@@ -323,6 +327,30 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
 
 # This is to make sure the transformers module imported is the one in the repo.
 transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
+
+
+def check_missing_backends():
+    missing_backends = []
+    if not is_torch_available():
+        missing_backends.append("PyTorch")
+    if not is_tf_available():
+        missing_backends.append("TensorFlow")
+    if not is_flax_available():
+        missing_backends.append("Flax")
+    if len(missing_backends) > 0:
+        missing = ", ".join(missing_backends)
+        if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
+            raise Exception(
+                "Full repo consistency checks require all backends to be installed (with `pip install -e .[dev]` in the "
+                f"Transformers repo, the following are missing: {missing}."
+            )
+        else:
+            warnings.warn(
+                "Full repo consistency checks require all backends to be installed (with `pip install -e .[dev]` in the "
+                f"Transformers repo, the following are missing: {missing}. While it's probably fine as long as you "
+                "didn't make any change in one of those backends modeling files, you should probably execute the "
+                "command above to be on the safe side."
+            )
 
 
 def check_model_list():
@@ -580,27 +608,7 @@ def check_models_are_auto_configured(module, all_auto_models):
 
 def check_all_models_are_auto_configured():
     """Check all models are each in an auto class."""
-    missing_backends = []
-    if not is_torch_available():
-        missing_backends.append("PyTorch")
-    if not is_tf_available():
-        missing_backends.append("TensorFlow")
-    if not is_flax_available():
-        missing_backends.append("Flax")
-    if len(missing_backends) > 0:
-        missing = ", ".join(missing_backends)
-        if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
-            raise Exception(
-                "Full quality checks require all backends to be installed (with `pip install -e .[dev]` in the "
-                f"Transformers repo, the following are missing: {missing}."
-            )
-        else:
-            warnings.warn(
-                "Full quality checks require all backends to be installed (with `pip install -e .[dev]` in the "
-                f"Transformers repo, the following are missing: {missing}. While it's probably fine as long as you "
-                "didn't make any change in one of those backends modeling files, you should probably execute the "
-                "command above to be on the safe side."
-            )
+    check_missing_backends()
     modules = get_model_modules()
     all_auto_models = get_all_auto_configured_models()
     failures = []
@@ -614,8 +622,9 @@ def check_all_models_are_auto_configured():
 
 def check_all_auto_object_names_being_defined():
     """Check all names defined in auto (name) mappings exist in the library."""
-    failures = []
+    check_missing_backends()
 
+    failures = []
     mappings_to_check = {
         "TOKENIZER_MAPPING_NAMES": TOKENIZER_MAPPING_NAMES,
         "IMAGE_PROCESSOR_MAPPING_NAMES": IMAGE_PROCESSOR_MAPPING_NAMES,
@@ -625,7 +634,9 @@ def check_all_auto_object_names_being_defined():
 
     # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
     for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
-        module = getattr(transformers.models.auto, module_name)
+        module = getattr(transformers.models.auto, module_name, None)
+        if module is None:
+            continue
         # all mappings in a single auto modeling file
         mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
         mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
@@ -652,8 +663,9 @@ def check_all_auto_object_names_being_defined():
 
 def check_all_auto_mapping_names_in_config_mapping_names():
     """Check all keys defined in auto mappings (mappings of names) appear in `CONFIG_MAPPING_NAMES`."""
-    failures = []
+    check_missing_backends()
 
+    failures = []
     # `TOKENIZER_PROCESSOR_MAPPING_NAMES` and `AutoTokenizer` is special, and don't need to follow the rule.
     mappings_to_check = {
         "IMAGE_PROCESSOR_MAPPING_NAMES": IMAGE_PROCESSOR_MAPPING_NAMES,
@@ -663,7 +675,9 @@ def check_all_auto_mapping_names_in_config_mapping_names():
 
     # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
     for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
-        module = getattr(transformers.models.auto, module_name)
+        module = getattr(transformers.models.auto, module_name, None)
+        if module is None:
+            continue
         # all mappings in a single auto modeling file
         mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
         mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
