@@ -193,7 +193,7 @@ class CodeGenAttention(nn.Module):
             embed_positions = embed_positions.to(position_ids.device)
             self.embed_positions = embed_positions
 
-        sincos = embed_positions[position_ids]
+        sincos = embed_positions[position_ids.long()]
         sincos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
         if self.rotary_dim is not None:
@@ -552,6 +552,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
                     hidden_states,
                     None,
                     attention_mask,
+                    position_ids,
                     head_mask[i],
                 )
             else:
