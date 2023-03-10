@@ -3583,7 +3583,6 @@ else:
     _import_structure["models.ict"].extend(
         [
             "TFICTForImageClassification",
-            "TFICTModel",
             "TFICTPreTrainedModel",
         ]
     )
@@ -3916,7 +3915,6 @@ else:
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
-    _import_structure["models.ict"].extend(["FlaxICTForImageClassification", "FlaxICTModel", "FlaxICTPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
         ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
     )
@@ -6919,7 +6917,6 @@ if TYPE_CHECKING:
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import TFVisionTextDualEncoderModel
         from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
-        from .models.ict import TFICTForImageClassification, TFICTModel, TFICTPreTrainedModel
         from .models.vit_mae import TFViTMAEForPreTraining, TFViTMAEModel, TFViTMAEPreTrainedModel
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7170,7 +7167,6 @@ if TYPE_CHECKING:
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
         from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
-        from .models.ict import FlaxICTForImageClassification, FlaxICTModel, FlaxICTPreTrainedModel
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,
             FlaxWav2Vec2ForPreTraining,

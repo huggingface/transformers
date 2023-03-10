@@ -47,30 +47,6 @@ else:
         "ICTPreTrainedModel",
     ]
 
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_ict"] = [
-        "TFICTForImageClassification",
-        "TFICTModel",
-        "TFICTPreTrainedModel",
-    ]
-
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_flax_ict"] = [
-        "FlaxICTForImageClassification",
-        "FlaxICTModel",
-        "FlaxICTPreTrainedModel",
-    ]
-
 if TYPE_CHECKING:
     from .configuration_ict import ICT_PRETRAINED_CONFIG_ARCHIVE_MAP, ICTConfig, ICTOnnxConfig
     
@@ -95,23 +71,6 @@ if TYPE_CHECKING:
             ICTModel,
             ICTPreTrainedModel,
         )
-
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_ict import TFICTForImageClassification, TFICTModel, TFICTPreTrainedModel
-
-    try:
-        if not is_flax_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_flax_ict import FlaxICTForImageClassification, FlaxICTModel, FlaxICTPreTrainedModel
-
 
 else:
     import sys

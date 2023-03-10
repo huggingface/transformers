@@ -57,7 +57,6 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("gptj", "TFGPTJModel"),
         ("groupvit", "TFGroupViTModel"),
         ("hubert", "TFHubertModel"),
-        ("ict", "TFICTModel"),
         ("layoutlm", "TFLayoutLMModel"),
         ("layoutlmv3", "TFLayoutLMv3Model"),
         ("led", "TFLEDModel"),
@@ -214,7 +213,6 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("segformer", "TFSegformerForImageClassification"),
         ("swin", "TFSwinForImageClassification"),
         ("vit", "TFViTForImageClassification"),
-        ("ict", "TFICTForImageClassification"),
     ]
 )
 
