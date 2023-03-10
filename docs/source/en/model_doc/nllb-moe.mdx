@@ -79,9 +79,7 @@ See example below for a translation from romanian to german:
 ```py
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained(
-...     "facebook/nllb-moe-128", use_auth_token=True, src_lang="ron_Latn"
-... )
+>>> tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-128", use_auth_token=True, src_lang="ron_Latn")
 >>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-128", use_auth_token=True)
 
 >>> article = "Şeful ONU spune că nu există o soluţie militară în Siria"

@@ -24,9 +24,9 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
-    require_torch_gpu,
 )
 from transformers.utils import cached_property
 
