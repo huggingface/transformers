@@ -433,8 +433,10 @@ def remove_attributes(obj, target_attr):
 
     for idx in range(target_idx - 1, -1, -1):
         line = lines[idx]
-        if (line.startswith("#") or line.startswith("@")) and find_indent(line) == indent_level:
+        if (line.lstrip().startswith("#") or line.lstrip().startswith("@")) and find_indent(line) == indent_level:
             lines[idx] = None
+        else:
+            break
 
     new_obj = os.linesep.join([x for x in lines if x is not None])
 
