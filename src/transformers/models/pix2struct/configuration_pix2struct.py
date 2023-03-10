@@ -67,8 +67,8 @@ class Pix2StructTextConfig(PretrainedConfig):
         initializer_factor (`float``, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        feed_forward_proj (`str`, *optional*, defaults to `gated-gelu`):
-            The non-linear activation function (function or string) used in the feed-forward layer.
+        dense_act_fn (`str`, *optional*, defaults to "gelu_new"):
+            The non-linear activation function (function or string).
         decoder_start_token_id (`int`, *optional*, defaults to 0):
             The id of the `decoder_start_token_id` token.
         use_cache (`bool`, *optional*, defaults to `False`):
@@ -113,7 +113,7 @@ class Pix2StructTextConfig(PretrainedConfig):
         dropout_rate=0.1,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
-        feed_forward_proj="gated-gelu",
+        dense_act_fn="gelu_new",
         decoder_start_token_id=0,
         use_cache=False,
         pad_token_id=0,
@@ -131,26 +131,13 @@ class Pix2StructTextConfig(PretrainedConfig):
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
-        self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
-
-        act_info = self.feed_forward_proj.split("-")
-        self.dense_act_fn = act_info[-1]
-        self.is_gated_act = act_info[0] == "gated"
 
         self.eos_token_id = eos_token_id
         self.decoder_start_token_id = decoder_start_token_id
 
-        if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
-            raise ValueError(
-                f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer."
-                "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
-                "'gated-gelu' or 'relu'"
-            )
-
         # for backwards compatibility
-        if feed_forward_proj == "gated-gelu":
-            self.dense_act_fn = "gelu_new"
+        self.dense_act_fn = dense_act_fn
 
         super().__init__(
             pad_token_id=pad_token_id,

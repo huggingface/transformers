@@ -386,22 +386,6 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, Pix2StructLayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, Pix2StructTextDenseActDense):
-            hidden_size = (
-                self.config.text_config.hidden_size
-                if isinstance(self.config, Pix2StructConfig)
-                else self.config.hidden_size
-            )
-
-            # Mesh TensorFlow FF initialization
-            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
-            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((hidden_size) ** -0.5))
-            if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
         elif isinstance(module, Pix2StructTextDenseGatedActDense):
             hidden_size = (
                 self.config.text_config.hidden_size
@@ -639,24 +623,6 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         )
 
 
-class Pix2StructTextDenseActDense(nn.Module):
-    def __init__(self, config: Pix2StructTextConfig):
-        super().__init__()
-        self.wi = nn.Linear(config.hidden_size, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.hidden_size, bias=False)
-        self.dropout = nn.Dropout(config.dropout_rate)
-        self.act = ACT2FN[config.dense_act_fn]
-
-    def forward(self, hidden_states):
-        hidden_states = self.wi(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        if hidden_states.dtype != self.wo.weight.dtype and self.wo.weight.dtype != torch.int8:
-            hidden_states = hidden_states.to(self.wo.weight.dtype)
-        hidden_states = self.wo(hidden_states)
-        return hidden_states
-
-
 class Pix2StructTextDenseGatedActDense(nn.Module):
     def __init__(self, config: Pix2StructTextConfig):
         super().__init__()
@@ -685,10 +651,7 @@ class Pix2StructTextDenseGatedActDense(nn.Module):
 class Pix2StructTextLayerFF(nn.Module):
     def __init__(self, config: Pix2StructTextConfig):
         super().__init__()
-        if config.is_gated_act:
-            self.DenseReluDense = Pix2StructTextDenseGatedActDense(config)
-        else:
-            self.DenseReluDense = Pix2StructTextDenseActDense(config)
+        self.DenseReluDense = Pix2StructTextDenseGatedActDense(config)
 
         self.layer_norm = Pix2StructLayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
