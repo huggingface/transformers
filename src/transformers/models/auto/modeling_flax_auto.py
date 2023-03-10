@@ -261,6 +261,9 @@ FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = _LazyAutoMapping(
 FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES
 )
+FLAX_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, FLAX_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
+)
 
 
 class FlaxAutoModel(_BaseAutoModelClass):
@@ -359,6 +362,10 @@ FlaxAutoModelForVision2Seq = auto_class_update(FlaxAutoModelForVision2Seq, head_
 
 class FlaxAutoModelForSpeechSeq2Seq(_BaseAutoModelClass):
     _model_mapping = FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
+
+
+class FlaxAutoModelForAudioClassification(_BaseAutoModelClass):
+    _model_mapping = FLAX_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
 
 
 FlaxAutoModelForSpeechSeq2Seq = auto_class_update(

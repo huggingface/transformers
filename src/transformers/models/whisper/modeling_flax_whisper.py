@@ -1563,6 +1563,7 @@ class FlaxWhisperForAudioClassification(FlaxWhisperPreTrainedModel):
         else:
             return random_params
 
+    @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_features: jnp.ndarray,
