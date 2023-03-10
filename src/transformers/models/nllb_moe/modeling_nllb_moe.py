@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch NllbMoe model."""
+""" PyTorch No Language Left Behind Mixture of Expert model."""
 
 
 import math
@@ -253,6 +253,108 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
             self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
         return position_ids.unsqueeze(0).expand(input_shape).contiguous() + past_key_values_length
+
+
+class NllbMoeTop2Router(nn.Module):
+    """
+    Router using tokens choose top-2 experts assignment.
+
+    This router uses the same mechanism as in Switch Transformer (https://arxiv.org/abs/2101.03961) and V-MoE
+    (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
+    routed to their choice of expert until the expert's expert_capacity is reached. **There is no guarantee that each
+    token is processed by an expert**, or that each expert receives at least one token.
+
+    """
+
+    def __init__(self, config: NllbMoeConfig):
+        super().__init__()
+        self.num_experts = config.num_experts
+        self.expert_capacity = config.expert_capacity
+        self.classifier = nn.Linear(config.hidden_size, self.num_experts, bias=config.router_bias)
+        self.jitter_noise = config.router_jitter_noise
+        self.ignore_padding_tokens = config.router_ignore_padding_tokens
+        self.dtype = getattr(torch, config.router_dtype)
+
+    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        r"""
+        Computes router probabilities from input hidden states.
+
+        Args:
+            hidden_states (`torch.Tensor`):
+                (batch_size, sequence_length, hidden_dim) from which router probabilities are computed.
+        Returns:
+            router_probabilities (`torch.Tensor`):
+                Tensor of shape (batch_size, sequence_length, num_experts) corresponding to the probabilities for each
+                token and expert. Used for routing tokens to experts.
+            router_logits (`torch.Tensor`):
+                Logits tensor of shape (batch_size, sequence_length, num_experts) corresponding to raw router logits.
+                This is used later for computing router z-loss.
+        """
+        # float32 is used to ensure stability. See the discussion of "selective precision" in
+        # https://arxiv.org/abs/2101.03961.
+        # We also store the previous dtype to cast back the output to the previous dtype
+        self.input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(self.dtype)
+
+        if self.jitter_noise > 0:
+            # Get the lower and upper bound of the uniform distribution
+            # Adapted from: https://stackoverflow.com/questions/44328530/how-to-get-a-uniform-distribution-in-a-range-r1-r2-in-pytorch
+            distrib_lower_bound = 1.0 - self.jitter_noise
+            distrib_upper_bound = 1.0 + self.jitter_noise
+
+            uniform_distrib = torch.rand(hidden_states.shape, device=hidden_states.device, dtype=self.dtype)
+            uniform_distrib = uniform_distrib * (distrib_lower_bound - distrib_upper_bound)
+
+            uniform_distrib = uniform_distrib + distrib_upper_bound
+            # Multiply the token inputs by the uniform distribution - adding some noise
+            hidden_states *= uniform_distrib
+
+        # Shape: [num_groups, tokens_per_group, num_experts]
+        self._cast_classifier()
+        router_logits = self.classifier(hidden_states)
+
+        # Apply Softmax and cast back to the original `dtype`
+        router_probabilities = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
+        return router_probabilities, router_logits
+
+    def _cast_classifier(self):
+        r"""
+        `bitsandbytes` `Linear8bitLt` layers does not support manual casting Therefore we need to check if they are an
+        instance of the `Linear8bitLt` class by checking special attributes.
+        """
+        if not (hasattr(self.classifier, "SCB") or hasattr(self.classifier, "CB")):
+            self.classifier = self.classifier.to(self.dtype)
+
+    def forward(self, hidden_states: torch.Tensor) -> Tuple:
+        r"""
+        Generic forward function for every Router class. Each Router expects to have the same input hidden states
+        (`hidden_states`) corresponding to the hidden states for each token, the `expert_capacity` corresponding to the
+        number of tokens the Router will send to each expert, some Routers can send up to few tokens to each expert.
+
+        Each Router works as the following: it expects the hidden states for each token, gets the `router_probs` and
+        `router_logits` from the `router_weights`. This will assign for each token, the raw probability to be assigned
+        to an expert. Then each Router class will have to define its own `_compute_routing_instructions`.
+
+        Args:
+            hidden_states (`torch.Tensor`) :
+                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
+        Returns:
+            Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
+            and the router logits. The router probabilities and logits are required to compute the loss.
+        """
+        router_probs, router_logits = self._compute_router_probabilities(hidden_states)
+
+        expert_index = torch.argmax(router_probs, dim=-1)
+        expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
+
+        # Mask tokens outside expert capacity. Sum over each sequence
+        token_priority = torch.cumsum(expert_index, dim=-2)
+        # mask if the token routed to to the expert will overflow
+        expert_capacity_mask = token_priority <= self.expert_capacity
+        expert_index = expert_index * expert_capacity_mask
+
+        router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
+        return expert_index, router_probs, router_logits
 
 
 # Copied from transformers.models.switch_transformers.modeling_switch_transformers.SwitchTransformersTop1Router with SwitchTransformers->NllbMoe
@@ -810,10 +912,16 @@ class NllbMoeDecoderLayer(nn.Module):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states, present_key_value, )
+        outputs = (
+            hidden_states,
+            present_key_value,
+        )
 
         if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights, )
+            outputs += (
+                self_attn_weights,
+                cross_attn_weights,
+            )
 
         if output_router_logits:
             outputs += (router_states,)
@@ -1425,7 +1533,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                 all_cross_attentions += (layer_outputs[3],)
 
             if output_router_logits:
-                    all_router_probs += (layer_outputs[-1],)
+                all_router_probs += (layer_outputs[-1],)
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -1735,7 +1843,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                 aux_loss = self.router_aux_loss_coef * (encoder_aux_loss + decoder_aux_loss)
                 loss = loss + z_loss + aux_loss
 
-        output = (loss, ) if loss is not None else ()
+        output = (loss,) if loss is not None else ()
         if not return_dict:
             output += (lm_logits,)
             if output_router_logits:  # only return the loss if they are not None
@@ -1778,9 +1886,9 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                 router_logits, expert_indexes = router_output
                 total_router_logits.append(router_logits)
                 total_expert_indexes.append(expert_indexes)
-        if len(total_expert_indexes)>0:
+        if len(total_expert_indexes) > 0:
             total_router_logits = torch.cat(total_router_logits, dim=1)
-        if len(total_expert_indexes)>0:
+        if len(total_expert_indexes) > 0:
             torch.cat(total_expert_indexes, dim=1)
         return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
 
