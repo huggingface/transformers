@@ -83,6 +83,8 @@
       title: Object detection
     - local: tasks/zero_shot_object_detection
       title: Zero-shot object detection
+    - local: tasks/zero_shot_image_classification
+      title: Zero-shot image classification
     title: Computer Vision
   - sections:
     - local: tasks/image_captioning
