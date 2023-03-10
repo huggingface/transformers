@@ -507,7 +507,7 @@ class NllbMoeAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
@@ -515,30 +515,30 @@ class NllbMoeAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
+        # if encoder_hidden_states are provided this layer is used as a cross-attention layer
         # for the decoder
-        is_cross_attention = key_value_states is not None
+        is_cross_attention = encoder_hidden_states is not None
 
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # `past_key_value[0].shape[2] == encoder_hidden_states.shape[1]`
         # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
+        # the provided `encoder_hidden_states` to support prefix tuning
         if (
             is_cross_attention
             and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
+            and past_key_value[0].shape[2] == encoder_hidden_states.shape[1]
         ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
         elif is_cross_attention:
             # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+            key_states = self._shape(self.k_proj(encoder_hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(encoder_hidden_states), -1, bsz)
         elif past_key_value is not None:
             # reuse k, v, self_attention
             key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
@@ -715,13 +715,13 @@ class NllbMoeDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = NllbMoeAttention(
+        self.cross_attention = NllbMoeAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.cross_attention_layer_norm = nn.LayerNorm(self.embed_dim)
         self.ffn = NllbMoeLayerFF(config, config.decoder_ffn_dim, is_sparse=self.is_sparse)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
@@ -778,23 +778,23 @@ class NllbMoeDecoderLayer(nn.Module):
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            hidden_states = self.cross_attention_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.cross_attention(
                 hidden_states=hidden_states,
-                key_value_states=encoder_hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
+                past_key_value=cross_attn_past_key_value,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
 
             # add cross-attn to positions 3,4 of present_key_value tuple
-            present_key_value = present_key_value + cross_attn_present_key_value
+            present_key_value += cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
@@ -810,10 +810,10 @@ class NllbMoeDecoderLayer(nn.Module):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states, present_key_value)
+        outputs = (hidden_states, present_key_value, )
 
         if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
+            outputs += (self_attn_weights, cross_attn_weights, )
 
         if output_router_logits:
             outputs += (router_states,)
@@ -1417,13 +1417,13 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             if skip_the_layer:
                 continue
 
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-                all_cross_attentions += (layer_outputs[2],)
-            
             if use_cache:
-                present_key_value_states += (layer_outputs[3 if output_attentions else 1],)
-            
+                present_key_value_states += (layer_outputs[1],)
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[2],)
+                all_cross_attentions += (layer_outputs[3],)
+
             if output_router_logits:
                     all_router_probs += (layer_outputs[-1],)
 
@@ -1664,7 +1664,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        output_router_logits: Optional[bool] = True,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], Seq2SeqMoEOutput]:
         r"""
@@ -1735,8 +1735,9 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                 aux_loss = self.router_aux_loss_coef * (encoder_aux_loss + decoder_aux_loss)
                 loss = loss + z_loss + aux_loss
 
+        output = (loss, ) if loss is not None else ()
         if not return_dict:
-            output = (lm_logits,)
+            output += (lm_logits,)
             if output_router_logits:  # only return the loss if they are not None
                 output += (
                     encoder_z_loss,
@@ -1748,7 +1749,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
             else:
                 output += outputs[1:]
 
-            return ((loss,) + output) if loss is not None else output
+            return output
 
         return Seq2SeqMoEOutput(
             loss=loss,
@@ -1760,7 +1761,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
             encoder_aux_loss=encoder_aux_loss,
             decoder_aux_loss=decoder_aux_loss,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.decoder_hidden_states,
+            encoder_hidden_states=outputs.encoder_hidden_states,
             decoder_hidden_states=outputs.decoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
             decoder_attentions=outputs.decoder_attentions,
