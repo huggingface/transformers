@@ -20,7 +20,14 @@ import tempfile
 import unittest
 
 from transformers import NllbMoeConfig, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device, require_torch_gpu
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    slow,
+    torch_device,
+    require_torch_gpu,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -33,7 +40,14 @@ if is_torch_available():
     import torch
 
     from transformers import NllbMoeForConditionalGeneration, NllbMoeModel, NllbTokenizer
-    from transformers.models.nllb_moe.modeling_nllb_moe import NllbMoeDecoder, NllbMoeEncoder, NllbMoeTop1Router, load_balancing_loss_func,router_z_loss_func
+    from transformers.models.nllb_moe.modeling_nllb_moe import (
+        NllbMoeDecoder,
+        NllbMoeEncoder,
+        NllbMoeTop1Router,
+        load_balancing_loss_func,
+        router_z_loss_func,
+    )
+
 
 def prepare_nllb_moe_inputs_dict(
     config,
@@ -64,7 +78,6 @@ def prepare_nllb_moe_inputs_dict(
         "decoder_head_mask": decoder_head_mask,
         "cross_attn_head_mask": cross_attn_head_mask,
     }
-
 
 
 class NllbMoeModelTester:
@@ -164,7 +177,6 @@ class NllbMoeModelTester:
             num_sparse_encoder_layers=self.num_sparse_encoder_layers,
             num_sparse_decoder_layers=self.num_sparse_decoder_layers,
         )
-        
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
@@ -351,9 +363,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         and `transformers` implementation of Switch-C transformers. We only check the logits
         of the first batch.
         """
-        model = NllbMoeModel.from_pretrained("google/switch-base-8", torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = NllbMoeModel.from_pretrained("google/switch-base-8", torch_dtype=torch.bfloat16).to(torch_device)
         input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
         decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
 
@@ -373,7 +383,7 @@ class NllbMoeModelIntegrationTests(unittest.TestCase):
         hf_logits = hf_logits[0, 0, :30]
 
         torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
-        
+
     def test_inference_no_head(self):
         model = NllbMoeModel.from_pretrained("facebook/nllb-moe_418M").to(torch_device)
         input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])
