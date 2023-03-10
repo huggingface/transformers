@@ -118,9 +118,6 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         self.assertTrue(hasattr(image_processor, "do_normalize"))
         self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
-    def test_batch_feature(self):
-        pass
-
     def test_expected_patches(self):
         dummy_image = self.image_processor_tester.prepare_dummy_image()
 
@@ -231,9 +228,6 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, 
         image_processor = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processor, "do_normalize"))
         self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
-
-    def test_batch_feature(self):
-        pass
 
     def test_call_pil_four_channels(self):
         # Initialize image_processor
