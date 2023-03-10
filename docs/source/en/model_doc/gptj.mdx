@@ -31,7 +31,7 @@ Tips:
 >>> from transformers import GPTJForCausalLM
 >>> import torch
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> device = "cuda"
 >>> model = GPTJForCausalLM.from_pretrained(
 ...     "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16,
 ... ).to(device)
@@ -84,7 +84,7 @@ model.
 >>> from transformers import GPTJForCausalLM, AutoTokenizer
 >>> import torch
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> device = "cuda"
 >>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", torch_dtype=torch.float16).to(device)
 >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
