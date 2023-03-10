@@ -464,22 +464,22 @@ class NllbMoeTop1Router(nn.Module):
 class NllbMoeDenseActDense(nn.Module):
     def __init__(self, config: NllbMoeConfig, ffn_dim: int):
         super().__init__()
-        self.wi = nn.Linear(config.d_model, ffn_dim, bias=False)
-        self.wo = nn.Linear(ffn_dim, config.d_model, bias=False)
+        self.fc1 = nn.Linear(config.d_model, ffn_dim, bias=False)
+        self.fc2 = nn.Linear(ffn_dim, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.activation_dropout)
         self.act = ACT2FN[config.activation_function]
 
     def forward(self, hidden_states):
-        hidden_states = self.wi(hidden_states)
+        hidden_states = self.fc1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
         if (
-            isinstance(self.wo.weight, torch.Tensor)
-            and hidden_states.dtype != self.wo.weight.dtype
-            and self.wo.weight.dtype != torch.int8
+            isinstance(self.fc2.weight, torch.Tensor)
+            and hidden_states.dtype != self.fc2.weight.dtype
+            and self.fc2.weight.dtype != torch.int8
         ):
-            hidden_states = hidden_states.to(self.wo.weight.dtype)
-        hidden_states = self.wo(hidden_states)
+            hidden_states = hidden_states.to(self.fc2.weight.dtype)
+        hidden_states = self.fc2(hidden_states)
         return hidden_states
 
 
