@@ -2006,6 +2006,7 @@ else:
             "NllbMoePreTrainedModel",
             "NllbMoeSparseMLP",
             "NllbMoeTop1Router",
+            "NllbMoeTop2Router",
         ]
     )
     _import_structure["models.nystromformer"].extend(
@@ -5339,6 +5340,7 @@ if TYPE_CHECKING:
             NllbMoePreTrainedModel,
             NllbMoeSparseMLP,
             NllbMoeTop1Router,
+            NllbMoeTop2Router,
         )
         from .models.nystromformer import (
             NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
