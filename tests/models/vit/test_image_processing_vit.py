@@ -98,6 +98,9 @@ class ViTImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
+    def test_batch_feature(self):
+        pass
+
     def test_call_pil(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)

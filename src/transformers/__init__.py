@@ -3580,12 +3580,6 @@ else:
             "TFViTPreTrainedModel",
         ]
     )
-    _import_structure["models.ict"].extend(
-        [
-            "TFICTForImageClassification",
-            "TFICTPreTrainedModel",
-        ]
-    )
     _import_structure["models.vit_mae"].extend(
         [
             "TFViTMAEForPreTraining",
