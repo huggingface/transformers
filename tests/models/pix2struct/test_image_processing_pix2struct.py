@@ -62,10 +62,7 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
         self.patch_size = patch_size
 
     def prepare_image_processor_dict(self):
-        return {
-            "do_normalize": self.do_normalize,
-            "do_convert_rgb": self.do_convert_rgb,
-        }
+        return {"do_normalize": self.do_normalize, "do_convert_rgb": self.do_convert_rgb}
 
     def prepare_dummy_image(self):
         img_url = "https://www.ilankelman.org/stopsigns/australia.jpg"
