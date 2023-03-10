@@ -173,20 +173,17 @@ class Pix2StructVisionAttention(nn.Module):
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length = hidden_states.shape[:2]
 
-        def shape(states):
+        def to_projection_shape(states):
             """projection"""
             return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-        def unshape(states):
-            """reshape"""
-            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
-
         # get query states
-        query_states = shape(self.query(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
+        # (batch_size, n_heads, seq_length, dim_per_head)
+        query_states = to_projection_shape(self.query(hidden_states))
 
         # get key/value states
-        key_states = shape(self.key(hidden_states))
-        value_states = shape(self.value(hidden_states))
+        key_states = to_projection_shape(self.key(hidden_states))
+        value_states = to_projection_shape(self.value(hidden_states))
 
         # compute scores
         # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
@@ -223,7 +220,11 @@ class Pix2StructVisionAttention(nn.Module):
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
 
-        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+        attn_output = torch.matmul(attn_weights, value_states)
+
+        # (batch_size, seq_length, dim)
+        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
+
         attn_output = self.output(attn_output)
 
         outputs = (attn_output,) + (position_bias,)
@@ -782,24 +783,20 @@ class Pix2StructTextAttention(nn.Module):
 
         key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
 
-        def shape(states):
+        def to_projection_shape(states):
             """projection"""
             return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-
-        def unshape(states):
-            """reshape"""
-            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
 
         def project(hidden_states, proj_layer, key_value_states, past_key_value):
             """projects hidden states correctly to key/query states"""
             if key_value_states is None:
                 # self-attn
                 # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(hidden_states))
+                hidden_states = to_projection_shape(proj_layer(hidden_states))
             elif past_key_value is None:
                 # cross-attn
                 # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(key_value_states))
+                hidden_states = to_projection_shape(proj_layer(key_value_states))
 
             if past_key_value is not None:
                 if key_value_states is None:
@@ -811,14 +808,15 @@ class Pix2StructTextAttention(nn.Module):
                     # the provided `key_value_states` to support prefix tuning
                     # cross-attn
                     # (batch_size, n_heads, seq_length, dim_per_head)
-                    hidden_states = shape(proj_layer(key_value_states))
+                    hidden_states = to_projection_shape(proj_layer(key_value_states))
                 else:
                     # cross-attn
                     hidden_states = past_key_value
             return hidden_states
 
         # get query states
-        query_states = shape(self.query(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
+        # (batch_size, n_heads, seq_length, dim_per_head)
+        query_states = to_projection_shape(self.query(hidden_states))
 
         # get key/value states
         key_states = project(
@@ -869,7 +867,10 @@ class Pix2StructTextAttention(nn.Module):
         if layer_head_mask is not None:
             attn_weights = attn_weights * layer_head_mask
 
-        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+        attn_output = torch.matmul(attn_weights, value_states)
+        # (batch_size, seq_length, dim)
+        attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
+
         attn_output = self.output(attn_output)
 
         present_key_value_state = (key_states, value_states) if use_cache else None
