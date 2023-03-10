@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch CodeGen model."""
 
+import functools
 from typing import Optional, Tuple, Union
 
 import torch
@@ -51,16 +52,10 @@ CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.gptj.modeling_gptj.fixed_pos_embedding
-def fixed_pos_embedding(x, seq_dim=1, seq_len=None):
-    dim = x.shape[-1]
-    if seq_len is None:
-        seq_len = x.shape[seq_dim]
+def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = (
-        torch.einsum("i , j -> i j", torch.arange(seq_len, dtype=torch.float), inv_freq).to(x.device).float()
-    )
-    return torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)
+    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.float), inv_freq).float()
+    return torch.concat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
 # Copied from transformers.models.gptj.modeling_gptj.rotate_every_two
@@ -71,27 +66,15 @@ def rotate_every_two(x):
     return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 
-# Copied from transformers.models.gptj.modeling_gptj.duplicate_interleave
-def duplicate_interleave(m):
-    """
-    A simple version of `torch.repeat_interleave` for duplicating a matrix while interleaving the copy.
-    """
-    dim0 = m.shape[0]
-    m = m.view(-1, 1)  # flatten the matrix
-    m = m.repeat(1, 2)  # repeat all elements into the 2nd dimension
-    m = m.view(dim0, -1)  # reshape into a matrix, interleaving the copy
-    return m
-
-
 # Copied from transformers.models.gptj.modeling_gptj.apply_rotary_pos_emb
-def apply_rotary_pos_emb(x, sincos, offset=0):
-    sin, cos = (duplicate_interleave(t)[None, offset : x.shape[1] + offset, None, :] for t in sincos)
-    # einsum notation for lambda t: repeat(t[offset:x.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
-    return (x * cos) + (rotate_every_two(x) * sin)
+def apply_rotary_pos_emb(tensor: torch.Tensor, sincos: torch.Tensor) -> torch.Tensor:
+    sin, cos = (torch.repeat_interleave(t[:, :, None, :], 2, 3) for t in sincos)
+    # einsum notation for lambda t: repeat(t[offset:tensor.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
+    return (tensor * cos) + (rotate_every_two(tensor) * sin)
 
 
 class CodeGenAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, lookup_embed_positions):
         super().__init__()
 
         max_positions = config.max_position_embeddings
@@ -117,9 +100,8 @@ class CodeGenAttention(nn.Module):
         self.qkv_proj = nn.Linear(self.embed_dim, self.embed_dim * 3, bias=False)
 
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.rotary_dim = None
-        if config.rotary_dim is not None:
-            self.rotary_dim = config.rotary_dim
+        self.rotary_dim = config.rotary_dim
+        self.embed_positions = lookup_embed_positions
 
     def _split_heads(self, x, n_head, dim_head, mp_num):
         reshaped = x.reshape(x.shape[:-1] + (n_head // mp_num, dim_head))
@@ -183,8 +165,9 @@ class CodeGenAttention(nn.Module):
     def forward(
         self,
         hidden_states: Optional[torch.FloatTensor],
-        attention_mask: Optional[torch.FloatTensor] = None,
         layer_past: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
@@ -205,12 +188,8 @@ class CodeGenAttention(nn.Module):
         value = self._split_heads(value, self.num_attention_heads, self.head_dim, mp_num=mp_num)
         value = value.permute(0, 2, 1, 3)
 
-        seq_len = key.shape[1]
-        offset = 0
-
-        if layer_past is not None:
-            offset = layer_past[0].shape[-2]
-            seq_len += offset
+        sincos = self.embed_positions(position_ids.device)[position_ids]
+        sincos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
@@ -219,16 +198,14 @@ class CodeGenAttention(nn.Module):
             q_rot = query[:, :, :, : self.rotary_dim]
             q_pass = query[:, :, :, self.rotary_dim :]
 
-            sincos = fixed_pos_embedding(k_rot, 1, seq_len=seq_len)
-            k_rot = apply_rotary_pos_emb(k_rot, sincos, offset=offset)
-            q_rot = apply_rotary_pos_emb(q_rot, sincos, offset=offset)
+            k_rot = apply_rotary_pos_emb(k_rot, sincos)
+            q_rot = apply_rotary_pos_emb(q_rot, sincos)
 
             key = torch.cat([k_rot, k_pass], dim=-1)
             query = torch.cat([q_rot, q_pass], dim=-1)
         else:
-            sincos = fixed_pos_embedding(key, 1, seq_len=seq_len)
-            key = apply_rotary_pos_emb(key, sincos, offset=offset)
-            query = apply_rotary_pos_emb(query, sincos, offset=offset)
+            key = apply_rotary_pos_emb(key, sincos)
+            query = apply_rotary_pos_emb(query, sincos)
 
         key = key.permute(0, 2, 1, 3)
         query = query.permute(0, 2, 1, 3)
@@ -280,11 +257,11 @@ class CodeGenMLP(nn.Module):
 
 # Copied from transformers.models.gptj.modeling_gptj.GPTJBlock with GPTJ->CodeGen
 class CodeGenBlock(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, lookup_embed_positions):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
-        self.attn = CodeGenAttention(config)
+        self.attn = CodeGenAttention(config, lookup_embed_positions)
         self.mlp = CodeGenMLP(inner_dim, config)
 
     def forward(
@@ -292,6 +269,7 @@ class CodeGenBlock(nn.Module):
         hidden_states: Optional[torch.FloatTensor],
         layer_past: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
@@ -299,9 +277,10 @@ class CodeGenBlock(nn.Module):
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
-            hidden_states,
+            hidden_states=hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -428,7 +407,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
         self.vocab_size = config.vocab_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([CodeGenBlock(config) for _ in range(config.n_layer)])
+        self.h = nn.ModuleList([CodeGenBlock(config, self.lookup_embed_positions) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
         self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
 
@@ -436,6 +415,11 @@ class CodeGenModel(CodeGenPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @functools.cache
+    def lookup_embed_positions(self, device: torch.device) -> torch.Tensor:
+        pos_embd_dim = self.config.rotary_dim or self.config.hidden_size
+        return create_sinusoidal_positions(self.config.max_position_embeddings, pos_embd_dim).to(device)
 
     def get_input_embeddings(self):
         return self.wte
@@ -572,9 +556,10 @@ class CodeGenModel(CodeGenPreTrainedModel):
                 )
             else:
                 outputs = block(
-                    hidden_states,
+                    hidden_states=hidden_states,
                     layer_past=layer_past,
                     attention_mask=attention_mask,
+                    position_ids=position_ids,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
@@ -645,8 +630,7 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
-        else:
-            position_ids = None
+
         return {
             "input_ids": input_ids,
             "past_key_values": past_key_values,
