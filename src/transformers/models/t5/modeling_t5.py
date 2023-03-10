@@ -704,7 +704,11 @@ class T5Block(nn.Module):
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16:
-            clamp_value = torch.where(torch.isinf(hidden_states).any(), torch.finfo(hidden_states.dtype).max - 1000, torch.finfo(hidden_states.dtype).max)
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
@@ -731,7 +735,11 @@ class T5Block(nn.Module):
 
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16:
-                clamp_value = torch.where(torch.isinf(hidden_states).any(), torch.finfo(hidden_states.dtype).max - 1000, torch.finfo(hidden_states.dtype).max)
+                clamp_value = torch.where(
+                    torch.isinf(hidden_states).any(),
+                    torch.finfo(hidden_states.dtype).max - 1000,
+                    torch.finfo(hidden_states.dtype).max,
+                )
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
             # Combine self attn and cross attn key value states
@@ -746,7 +754,11 @@ class T5Block(nn.Module):
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16:
-            clamp_value = torch.where(torch.isinf(hidden_states).any(), torch.finfo(hidden_states.dtype).max - 1000, torch.finfo(hidden_states.dtype).max)
+            clamp_value = torch.where(
+                torch.isinf(hidden_states).any(),
+                torch.finfo(hidden_states.dtype).max - 1000,
+                torch.finfo(hidden_states.dtype).max,
+            )
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         outputs = (hidden_states,)
