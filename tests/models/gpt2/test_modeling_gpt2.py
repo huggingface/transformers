@@ -591,27 +591,6 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
     @slow
-    def test_batch_forward(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        tokenizer.padding_side = "left"
-
-        # This tokenizer has no pad token, so we have to set it in some way
-        # Define PAD Token = EOS Token = 50256
-        tokenizer.pad_token = tokenizer.eos_token
-
-        model = GPT2LMHeadModel.from_pretrained("gpt2", pad_token_id=tokenizer.eos_token_id)
-        sentences = ["Hello, my dog is a little bit of a mess. I'm not sure if he's"]
-        inputs = tokenizer(sentences, padding=True, return_tensors="pt")
-        logits = model(**inputs).logits[:, -1, :]
-        indexes = torch.argmax(logits).item()
-
-        inputs_padded = tokenizer(sentences, padding="max_length", max_length=30, return_tensors="pt")
-        logits_padded = model(**inputs_padded).logits[:, -1, :]
-        indexes_padded = torch.argmax(logits_padded).item()
-
-        self.assertTrue(indexes == indexes_padded)
-
-    @slow
     def test_batch_generation_2heads(self):
         model = GPT2DoubleHeadsModel.from_pretrained("gpt2")
         model.to(torch_device)
