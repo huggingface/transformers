@@ -1538,7 +1538,7 @@ class Trainer:
 
             if self.args.ddp_bucket_cap_mb is not None:
                 kwargs["bucket_cap_mb"] = self.args.ddp_bucket_cap_mb
-            if is_torch_neuroncore_available:
+            if is_torch_neuroncore_available():
                 return model
             model = nn.parallel.DistributedDataParallel(
                 model,
@@ -2492,7 +2492,8 @@ class Trainer:
                 - the documentation of [sigopt](https://app.sigopt.com/docs/endpoints/experiments/create)
 
         Returns:
-            [`trainer_utils.BestRun`]: All the information about the best run.
+            [`trainer_utils.BestRun`]: All the information about the best run. Experiment summary can be found in
+            `run_summary` attribute for Ray backend.
         """
         if backend is None:
             backend = default_hp_search_backend()
