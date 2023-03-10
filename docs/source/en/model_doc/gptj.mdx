@@ -33,7 +33,9 @@ Tips:
 
 >>> device = "cuda"
 >>> model = GPTJForCausalLM.from_pretrained(
-...     "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16,
+...     "EleutherAI/gpt-j-6B",
+...     revision="float16",
+...     torch_dtype=torch.float16,
 ... ).to(device)
 ```
 
