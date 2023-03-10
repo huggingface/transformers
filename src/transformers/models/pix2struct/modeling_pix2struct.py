@@ -1642,10 +1642,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     ):
         batch_size, _, _ = pixel_embeds.shape
 
-        vision_outputs = self.encoder(
-            pixel_embeds=pixel_embeds,
-            attention_mask=attention_mask,
-        )
+        vision_outputs = self.encoder(pixel_embeds=pixel_embeds, attention_mask=attention_mask)
 
         image_embeds = vision_outputs[0]
 
