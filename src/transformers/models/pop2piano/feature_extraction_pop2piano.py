@@ -250,6 +250,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                     pass
             print(f"Found {len(audio_file_names)} audio file(s) - {', '.join(audio_file_names)}")
             return audio_files, audio_file_names, sr
+        else:
+            raise ValueError(f"{dir_path} is neither a file nor a directory.")
 
     def __call__(self,
                  audio_path:Union[str, Any, List[str], List[Any]]=None,
@@ -538,7 +540,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             raise ValueError("You are setting save_path but not saving anything, use save_midi=True to "
                              "save the midi file and use save_mix to save the mix file or do both!")
 
-        mix_sample_rate = self.sample_rate if mix_sample_rate is None else mix_sample_rate
+        mix_sample_rate = ESSENTIA_SAMPLERATE if mix_sample_rate is None else mix_sample_rate
 
         pm_list = []
         for relative_tokens_, beatsteps_, ext_beatstep_, raw_audio_, audio_file_name in zip(relative_tokens, beatsteps, ext_beatstep, raw_audio, audio_file_names):
@@ -555,8 +557,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                                                            cutoff_time_idx=(self.n_bars + 1) * 4,
                                                            )
             for n in pm.instruments[0].notes:
-                n.start += beatsteps[0]
-                n.end += beatsteps[0]
+                n.start += beatsteps_[0]
+                n.end += beatsteps_[0]
 
             pm_list.append(pm)
 
@@ -569,9 +571,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                     raw_audio_ = librosa.core.resample(raw_audio_, orig_sr=sr, target_sr=mix_sample_rate)
                     sr = mix_sample_rate
                 if add_click:
-                    clicks = (
-                            librosa.clicks(times=beatsteps_, sr=sr, length=len(raw_audio_)) * click_amp
-                    )
+                    clicks = librosa.clicks(times=beatsteps_, sr=sr, length=len(raw_audio_)) * click_amp
                     raw_audio_ = raw_audio_ + clicks
                 pm_raw_audio = pm.fluidsynth(sr)
                 stereo = self.get_stereo(raw_audio_, pm_raw_audio, pop_scale=stereo_amp)
