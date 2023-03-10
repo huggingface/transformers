@@ -78,7 +78,9 @@ def shard_on_the_fly(
         )
         torch.save(current_block, save_path)
         sharded_state_dicts.append(current_block.keys())
-        total_size += sum([value.numel() for key, value in current_block.items()]) * dtype_byte_size(list(current_block)[0].dtype)
+        total_size += sum([value.numel() for key, value in current_block.items()]) * dtype_byte_size(
+            list(current_block)[0].dtype
+        )
 
     # Add the last block
     save_path = os.path.join(dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"))
