@@ -179,6 +179,8 @@ class Pix2StructVisionConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
+        patch_embed_hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the input patch_embedding layer in the Transformer encoder.
         d_ff (`int`, *optional*, defaults to 2048):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         d_kv (`int`, *optional*, defaults to 64):
@@ -242,6 +244,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=768,
+        patch_embed_hidden_size=768,
         d_ff=2048,
         d_kv=64,
         projection_dim=768,
@@ -268,6 +271,7 @@ class Pix2StructVisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
+        self.patch_embed_hidden_size = patch_embed_hidden_size
         self.d_ff = d_ff
         self.projection_dim = projection_dim
         self.dropout_rate = dropout_rate

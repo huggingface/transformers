@@ -109,9 +109,14 @@ def convert_pix2struct_original_pytorch_checkpoint_to_hf(
 ):
     flax_params = get_flax_param(t5x_checkpoint_path)
 
-    encoder_config = Pix2StructVisionConfig()
-
-    decoder_config = Pix2StructTextConfig()
+    if not use_large:
+        encoder_config = Pix2StructVisionConfig()
+        decoder_config = Pix2StructTextConfig()
+    else:
+        encoder_config = Pix2StructVisionConfig(
+            hidden_size=1536, d_ff=3968, num_attention_heads=24, num_hidden_layers=18
+        )
+        decoder_config = Pix2StructTextConfig(hidden_size=1536, d_ff=3968, num_heads=24, num_layers=18)
     config = Pix2StructConfig(vision_config=encoder_config, text_config=decoder_config)
 
     model = Pix2StructForConditionalGeneration(config)
@@ -150,6 +155,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--t5x_checkpoint_path", default=None, type=str, help="Path to the original T5x checkpoint.")
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument("--use_large", action="store_true", help="Use large model.")
     args = parser.parse_args()
 
-    convert_pix2struct_original_pytorch_checkpoint_to_hf(args.t5x_checkpoint_path, args.pytorch_dump_folder_path)
+    convert_pix2struct_original_pytorch_checkpoint_to_hf(
+        args.t5x_checkpoint_path, args.pytorch_dump_folder_path, args.use_large
+    )

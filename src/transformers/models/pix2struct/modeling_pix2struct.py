@@ -113,7 +113,7 @@ class Pix2StructVisionEmbeddings(nn.Module):
 
     def __init__(self, config: Pix2StructConfig) -> None:
         super().__init__()
-        self.patch_projection = nn.Linear(config.hidden_size, config.hidden_size)
+        self.patch_projection = nn.Linear(config.patch_embed_hidden_size, config.hidden_size)
 
         self.row_embedder = nn.Embedding(config.seq_len, config.hidden_size)
         self.column_embedder = nn.Embedding(config.seq_len, config.hidden_size)
