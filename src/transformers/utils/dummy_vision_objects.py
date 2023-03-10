@@ -388,10 +388,10 @@ class PerceiverImageProcessor(metaclass=DummyObject):
 
 
 class Pix2StructImageProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
+    _backends = ["vision", "torch"]
 
     def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
+        requires_backends(self, ["vision", "torch"])
 
 
 class PoolFormerFeatureExtractor(metaclass=DummyObject):
