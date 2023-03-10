@@ -43,6 +43,7 @@ from .models.auto.modeling_auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
     MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
 )
 from .training_args import ParallelMode
 from .utils import (
@@ -70,6 +71,7 @@ TASK_MAPPING = {
     "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     "automatic-speech-recognition": {**MODEL_FOR_CTC_MAPPING_NAMES, **MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES},
+    "zero-shot-image-classification": MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES,
 }
 
 logger = logging.get_logger(__name__)

@@ -69,6 +69,7 @@ else:
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
         "MODEL_MAPPING",
         "MODEL_WITH_LM_HEAD_MAPPING",
+        "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING",
         "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
         "AutoModel",
         "AutoBackbone",
@@ -100,6 +101,7 @@ else:
         "AutoModelForVisualQuestionAnswering",
         "AutoModelForDocumentQuestionAnswering",
         "AutoModelWithLMHead",
+        "AutoModelForZeroShotImageClassification",
         "AutoModelForZeroShotObjectDetection",
     ]
 
@@ -126,6 +128,7 @@ else:
         "TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
         "TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
         "TF_MODEL_FOR_VISION_2_SEQ_MAPPING",
+        "TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING",
         "TF_MODEL_MAPPING",
         "TF_MODEL_WITH_LM_HEAD_MAPPING",
         "TFAutoModel",
@@ -144,6 +147,7 @@ else:
         "TFAutoModelForTableQuestionAnswering",
         "TFAutoModelForTokenClassification",
         "TFAutoModelForVision2Seq",
+        "TFAutoModelForZeroShotImageClassification",
         "TFAutoModelWithLMHead",
     ]
 
@@ -226,6 +230,7 @@ if TYPE_CHECKING:
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
             MODEL_FOR_VISION_2_SEQ_MAPPING,
             MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
@@ -258,6 +263,7 @@ if TYPE_CHECKING:
             AutoModelForVideoClassification,
             AutoModelForVision2Seq,
             AutoModelForVisualQuestionAnswering,
+            AutoModelForZeroShotImageClassification,
             AutoModelForZeroShotObjectDetection,
             AutoModelWithLMHead,
         )
@@ -285,6 +291,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
+            TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING,
             TF_MODEL_MAPPING,
             TF_MODEL_WITH_LM_HEAD_MAPPING,
             TFAutoModel,
@@ -303,6 +310,7 @@ if TYPE_CHECKING:
             TFAutoModelForTableQuestionAnswering,
             TFAutoModelForTokenClassification,
             TFAutoModelForVision2Seq,
+            TFAutoModelForZeroShotImageClassification,
             TFAutoModelWithLMHead,
         )
 
