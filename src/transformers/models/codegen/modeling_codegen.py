@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch CodeGen model."""
 
-import functools
 from typing import Optional, Tuple, Union
 
 import torch
@@ -52,6 +51,7 @@ CODEGEN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.gptj.modeling_gptj.apply_rotary_pos_emb
 def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2) / dim))
     sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.float), inv_freq).float()
@@ -69,12 +69,11 @@ def rotate_every_two(x):
 # Copied from transformers.models.gptj.modeling_gptj.apply_rotary_pos_emb
 def apply_rotary_pos_emb(tensor: torch.Tensor, sincos: torch.Tensor) -> torch.Tensor:
     sin, cos = (torch.repeat_interleave(t[:, :, None, :], 2, 3) for t in sincos)
-    # einsum notation for lambda t: repeat(t[offset:tensor.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
     return (tensor * cos) + (rotate_every_two(tensor) * sin)
 
 
 class CodeGenAttention(nn.Module):
-    def __init__(self, config, lookup_embed_positions):
+    def __init__(self, config):
         super().__init__()
 
         max_positions = config.max_position_embeddings
@@ -101,7 +100,8 @@ class CodeGenAttention(nn.Module):
 
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
-        self.embed_positions = lookup_embed_positions
+        pos_embd_dim = self.rotary_dim or self.embed_dim
+        self.embed_positions = create_sinusoidal_positions(self.max_positions, pos_embd_dim)
 
     def _split_heads(self, x, n_head, dim_head, mp_num):
         reshaped = x.reshape(x.shape[:-1] + (n_head // mp_num, dim_head))
@@ -188,7 +188,12 @@ class CodeGenAttention(nn.Module):
         value = self._split_heads(value, self.num_attention_heads, self.head_dim, mp_num=mp_num)
         value = value.permute(0, 2, 1, 3)
 
-        sincos = self.embed_positions(position_ids.device)[position_ids]
+        embed_positions = self.embed_positions
+        if embed_positions.device != position_ids.device:
+            embed_positions = embed_positions.to(position_ids.device)
+            self.embed_positions = embed_positions
+
+        sincos = embed_positions[position_ids]
         sincos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
         if self.rotary_dim is not None:
@@ -257,11 +262,11 @@ class CodeGenMLP(nn.Module):
 
 # Copied from transformers.models.gptj.modeling_gptj.GPTJBlock with GPTJ->CodeGen
 class CodeGenBlock(nn.Module):
-    def __init__(self, config, lookup_embed_positions):
+    def __init__(self, config):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
-        self.attn = CodeGenAttention(config, lookup_embed_positions)
+        self.attn = CodeGenAttention(config)
         self.mlp = CodeGenMLP(inner_dim, config)
 
     def forward(
@@ -407,7 +412,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
         self.vocab_size = config.vocab_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([CodeGenBlock(config, self.lookup_embed_positions) for _ in range(config.n_layer)])
+        self.h = nn.ModuleList([CodeGenBlock(config) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
         self.rotary_dim = min(config.rotary_dim, config.n_ctx // config.num_attention_heads)
 
@@ -415,11 +420,6 @@ class CodeGenModel(CodeGenPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @functools.cache
-    def lookup_embed_positions(self, device: torch.device) -> torch.Tensor:
-        pos_embd_dim = self.config.rotary_dim or self.config.hidden_size
-        return create_sinusoidal_positions(self.config.max_position_embeddings, pos_embd_dim).to(device)
 
     def get_input_embeddings(self):
         return self.wte

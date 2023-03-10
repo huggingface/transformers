@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch GPT-J model."""
-import functools
+
 import warnings
 from typing import Optional, Tuple, Union
 
@@ -61,15 +61,13 @@ def rotate_every_two(x):
     return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 
-# Copied from transformers.models.gptj.modeling_gptj.apply_rotary_pos_emb
 def apply_rotary_pos_emb(tensor: torch.Tensor, sincos: torch.Tensor) -> torch.Tensor:
     sin, cos = (torch.repeat_interleave(t[:, :, None, :], 2, 3) for t in sincos)
-    # einsum notation for lambda t: repeat(t[offset:tensor.shape[1]+offset,:], "n d -> () n () (d j)", j=2)
     return (tensor * cos) + (rotate_every_two(tensor) * sin)
 
 
 class GPTJAttention(nn.Module):
-    def __init__(self, config, lookup_embed_positions):
+    def __init__(self, config):
         super().__init__()
 
         max_positions = config.max_position_embeddings
@@ -99,7 +97,8 @@ class GPTJAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
-        self.embed_positions = lookup_embed_positions
+        pos_embd_dim = self.rotary_dim or self.embed_dim
+        self.embed_positions = create_sinusoidal_positions(self.max_positions, pos_embd_dim)
 
     def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
         """
@@ -192,7 +191,12 @@ class GPTJAttention(nn.Module):
         key = self._split_heads(key, self.num_attention_heads, self.head_dim, True)
         value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
 
-        sincos = self.embed_positions(position_ids.device)[position_ids]
+        embed_positions = self.embed_positions
+        if embed_positions.device != position_ids.device:
+            embed_positions = embed_positions.to(position_ids.device)
+            self.embed_positions = embed_positions
+
+        sincos = embed_positions[position_ids]
         sincos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
         if self.rotary_dim is not None:
@@ -259,11 +263,11 @@ class GPTJMLP(nn.Module):
 
 
 class GPTJBlock(nn.Module):
-    def __init__(self, config, lookup_embed_positions):
+    def __init__(self, config):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
-        self.attn = GPTJAttention(config, lookup_embed_positions)
+        self.attn = GPTJAttention(config)
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
@@ -458,7 +462,7 @@ class GPTJModel(GPTJPreTrainedModel):
         self.vocab_size = config.vocab_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([GPTJBlock(config, self.lookup_embed_positions) for _ in range(config.n_layer)])
+        self.h = nn.ModuleList([GPTJBlock(config) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Model parallel
@@ -468,11 +472,6 @@ class GPTJModel(GPTJPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @functools.cache
-    def lookup_embed_positions(self, device: torch.device) -> torch.Tensor:
-        pos_embd_dim = self.config.rotary_dim or self.config.hidden_size
-        return create_sinusoidal_positions(self.config.max_position_embeddings, pos_embd_dim).to(device)
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
