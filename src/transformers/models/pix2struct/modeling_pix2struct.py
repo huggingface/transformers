@@ -211,9 +211,10 @@ class Pix2StructVisionAttention(nn.Module):
 
         position_bias_masked = position_bias.masked_fill(position_bias == 1, torch.finfo(scores.dtype).min)
         scores += position_bias_masked
+        scores = torch.max(scores, torch.tensor(torch.finfo(scores.dtype).min))
 
         # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
+        attn_weights = nn.functional.softmax(scores, dim=-1, dtype=torch.float32).type_as(scores)
 
         # (batch_size, n_heads, seq_length, key_length)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
