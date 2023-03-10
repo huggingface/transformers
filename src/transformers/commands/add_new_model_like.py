@@ -134,11 +134,13 @@ def find_indent(line: str) -> int:
 
 
 def parse_module_content(content: str, indent_level: int = 0) -> List[str]:
-    """
-    Parse the content of a module in the list of objects it defines.
+    """Parse the content of a module in the list of objects it defines.
+
+    This method will immediately stop the search when a line with indent level less than `indent_level`.
 
     Args:
         content (`str`): The content to parse
+        indent_level (`int`, *optional*, default to 0): The indent level of the blocks to search for
 
     Returns:
         `List[str]`: The list of objects defined in the module.
@@ -149,7 +151,13 @@ def parse_module_content(content: str, indent_level: int = 0) -> List[str]:
     # Doc-styler takes everything between two triple quotes in docstrings, so we need a fake """ here to go with this.
     end_markers = [")", "]", "}", '"""']
 
-    for line in lines:
+    for idx, line in enumerate(lines):
+        if indent_level > 0 and not is_empty_line(line) and find_indent(line) != indent_level:
+            raise ValueError(
+                f"When `indent_level > 0`, the first line in `content` should have indent level {indent_level}. Got"
+                f"{find_indent(line)} instead."
+            )
+
         if find_indent(line) < indent_level and not is_empty_line(line):
             break
 
@@ -157,7 +165,12 @@ def parse_module_content(content: str, indent_level: int = 0) -> List[str]:
         is_valid_object = len(current_object) > 0
         if is_valid_object and len(current_object) == 1:
             is_valid_object = not current_object[0].startswith("# Copied from")
-        if not is_empty_line(line) and not line.endswith(":") and find_indent(line) == indent_level and is_valid_object:
+        if (
+            not is_empty_line(line)
+            and not line.endswith(":")
+            and find_indent(line) == indent_level
+            and is_valid_object
+        ):
             # Closing parts should be included in current object
             if line.lstrip() in end_markers:
                 current_object.append(line)
@@ -411,19 +424,22 @@ def remove_attributes(obj, target_attr):
 
     target_idx = None
     for idx, line in enumerate(lines):
+        # search for assignment
         if line.lstrip().startswith(f"{target_attr} = "):
             target_idx = idx
             break
+        # search for function/method definition
         elif line.lstrip().startswith(f"def {target_attr}("):
             target_idx = idx
             break
 
-    # Not found
+    # target not found
     if target_idx is None:
         return obj
 
     line = lines[target_idx]
     indent_level = find_indent(line)
+    # forward pass to find the ending of the block (including empty lines)
     parsed = parse_module_content("\n".join(lines[target_idx:]), indent_level)
     if len(parsed) > 0:
         parsed = parsed[0]
@@ -431,6 +447,7 @@ def remove_attributes(obj, target_attr):
         for idx in range(num_lines):
             lines[target_idx + idx] = None
 
+    # backward pass to find comments or decorator
     for idx in range(target_idx - 1, -1, -1):
         line = lines[idx]
         if (line.lstrip().startswith("#") or line.lstrip().startswith("@")) and find_indent(line) == indent_level:
