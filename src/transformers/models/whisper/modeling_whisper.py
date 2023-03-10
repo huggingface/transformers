@@ -742,6 +742,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
         self.dropout = config.dropout
+
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
