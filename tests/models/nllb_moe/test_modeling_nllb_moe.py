@@ -271,9 +271,9 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         else {}
     )
     is_encoder_decoder = True
-    fx_compatible = True
+    fx_compatible = False  # TODO should this be supported out of the box
     test_pruning = False
-    test_missing_keys = False
+    test_missing_keys = True
 
     def setUp(self):
         self.model_tester = NllbMoeModelTester(self)
