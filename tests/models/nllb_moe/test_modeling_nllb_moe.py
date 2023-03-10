@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Google NllbMoe Authors and HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""" Testing suite for the PyTorch NllbMoe model. """
 
 
 import copy
@@ -19,7 +20,8 @@ import tempfile
 import unittest
 
 from transformers import NllbMoeConfig, is_torch_available
-from transformers.testing_utils import require_tokenizers, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device, require_torch_gpu
+from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -30,44 +32,65 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoTokenizer,
-        NllbMoeForConditionalGeneration,
-        NllbMoeModel,
-        NllbMoeTop1Router,
-    )
-    from transformers.generation import BeamSampleDecoderOnlyOutput, BeamSampleEncoderDecoderOutput
-    from transformers.models.nllb_moe.modeling_nllb_moe import (
-        NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST,
-        load_balancing_loss_func,
-        router_z_loss_func,
-    )
+    from transformers import NllbMoeForConditionalGeneration, NllbMoeModel, NllbTokenizer
+    from transformers.models.nllb_moe.modeling_nllb_moe import NllbMoeDecoder, NllbMoeEncoder, NllbMoeTop1Router, load_balancing_loss_func,router_z_loss_func
+
+def prepare_nllb_moe_inputs_dict(
+    config,
+    input_ids,
+    decoder_input_ids,
+    attention_mask=None,
+    decoder_attention_mask=None,
+    head_mask=None,
+    decoder_head_mask=None,
+    cross_attn_head_mask=None,
+):
+    if attention_mask is None:
+        attention_mask = input_ids.ne(config.pad_token_id)
+    if decoder_attention_mask is None:
+        decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
+    if head_mask is None:
+        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+    if decoder_head_mask is None:
+        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+    if cross_attn_head_mask is None:
+        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+    return {
+        "input_ids": input_ids,
+        "decoder_input_ids": decoder_input_ids,
+        "attention_mask": attention_mask,
+        "decoder_attention_mask": attention_mask,
+        "head_mask": head_mask,
+        "decoder_head_mask": decoder_head_mask,
+        "cross_attn_head_mask": cross_attn_head_mask,
+    }
+
 
 
 class NllbMoeModelTester:
     def __init__(
         self,
         parent,
-        vocab_size=99,
         batch_size=13,
-        encoder_seq_length=7,
-        decoder_seq_length=9,
-        # For common tests
+        seq_length=7,
         is_training=True,
-        use_attention_mask=True,
-        use_labels=True,
-        hidden_size=32,
-        num_hidden_layers=5,
+        use_labels=False,
+        vocab_size=99,
+        hidden_size=16,
+        num_hidden_layers=2,
         num_attention_heads=4,
-        d_ff=37,
-        relative_attention_num_buckets=8,
-        dropout_rate=0.1,
-        initializer_factor=0.002,
-        eos_token_id=1,
-        pad_token_id=0,
-        decoder_start_token_id=0,
-        decoder_layers=None,
+        intermediate_size=4,
+        hidden_act="relu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        encoder_layerdrop=0.0,
+        decoder_layerdrop=0.0,
+        max_position_embeddings=20,
+        eos_token_id=2,
+        pad_token_id=1,
+        bos_token_id=0,
         sparse_step=1,
+        use_attention_mask=True,
         num_sparse_decoder_layers=2,
         num_sparse_encoder_layers=2,
         expert_capacity=100,
@@ -75,316 +98,101 @@ class NllbMoeModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.encoder_seq_length = encoder_seq_length
-        self.decoder_seq_length = decoder_seq_length
-        # For common tests
-        self.seq_length = self.decoder_seq_length
+        self.seq_length = seq_length
         self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.d_ff = d_ff
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.dropout_rate = dropout_rate
-        self.initializer_factor = initializer_factor
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
+        self.max_position_embeddings = max_position_embeddings
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.scope = None
-        self.decoder_layers = decoder_layers
+        self.bos_token_id = bos_token_id
         self.sparse_step = sparse_step
         self.num_sparse_decoder_layers = num_sparse_decoder_layers
         self.num_sparse_encoder_layers = num_sparse_encoder_layers
         self.expert_capacity = expert_capacity
         self.router_jitter_noise = router_jitter_noise
 
-    def get_large_model_config(self):
-        return NllbMoeConfig.from_pretrained("facebook/nllb-moe")
-
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
-        decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids[:, -1] = self.eos_token_id  # Eos Token
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        attention_mask = None
-        decoder_attention_mask = None
-        if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-            decoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
-
-        lm_labels = None
-        if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+        # we need to clamp the input ids here to avoid having pad token in between
+        # this is because for NllbMoe the position_ids are prepared such that
+        # all pad tokens have pos id = 2 and rest are between 2..seq_length
+        # and the seq_length here is seq_length - num_pad_tokens
+        # but when using past, there is no way of knowing if the past input ids had
+        # pad tokens in them, which results in incorrect seq_lenth and which in turn results in
+        # position_ids being off by num_pad_tokens in past input
+        input_ids = input_ids.clamp(self.pad_token_id + 1)
+        decoder_input_ids = decoder_input_ids.clamp(self.pad_token_id + 1)
 
         config = self.get_config()
-
-        return (
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        )
-
-    def get_pipeline_config(self):
-        return NllbMoeConfig(
-            vocab_size=166,  # nllb_moe forces 100 extra tokens
-            d_model=self.hidden_size,
-            d_ff=self.d_ff,
-            d_kv=self.hidden_size // self.num_attention_heads,
-            num_layers=self.num_hidden_layers,
-            num_decoder_layers=self.decoder_layers,
-            num_heads=self.num_attention_heads,
-            relative_attention_num_buckets=self.relative_attention_num_buckets,
-            dropout_rate=self.dropout_rate,
-            initializer_factor=self.initializer_factor,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.pad_token_id,
-            pad_token_id=self.pad_token_id,
-            decoder_start_token_id=self.decoder_start_token_id,
-            expert_capacity=self.expert_capacity,
-            router_jitter_noise=self.router_jitter_noise,
-        )
+        inputs_dict = prepare_nllb_moe_inputs_dict(config, input_ids, decoder_input_ids)
+        return config, inputs_dict
 
     def get_config(self):
         return NllbMoeConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
-            d_ff=self.d_ff,
-            d_kv=self.hidden_size // self.num_attention_heads,
-            num_layers=self.num_hidden_layers,
-            num_decoder_layers=self.decoder_layers,
-            num_heads=self.num_attention_heads,
-            relative_attention_num_buckets=self.relative_attention_num_buckets,
-            dropout_rate=self.dropout_rate,
-            initializer_factor=self.initializer_factor,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            encoder_ffn_dim=self.intermediate_size,
+            decoder_ffn_dim=self.intermediate_size,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            encoder_layerdrop=self.encoder_layerdrop,
+            decoder_layerdrop=self.decoder_layerdrop,
+            max_position_embeddings=self.max_position_embeddings,
             eos_token_id=self.eos_token_id,
-            bos_token_id=self.pad_token_id,
+            bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            decoder_start_token_id=self.decoder_start_token_id,
+            expert_capacity=self.expert_capacity,
+            router_jitter_noise=self.router_jitter_noise,
             sparse_step=self.sparse_step,
             num_sparse_encoder_layers=self.num_sparse_encoder_layers,
             num_sparse_decoder_layers=self.num_sparse_decoder_layers,
         )
+        
 
-    def check_prepare_lm_labels_via_shift_left(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        model = NllbMoeModel(config=config)
-        model.to(torch_device)
-        model.eval()
+    def prepare_config_and_inputs_for_common(self):
+        config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
 
-        # make sure that lm_labels are correctly padded from the right
-        lm_labels.masked_fill_((lm_labels == self.decoder_start_token_id), self.eos_token_id)
-
-        # add casaul pad token mask
-        triangular_mask = torch.tril(lm_labels.new_ones(lm_labels.shape)).logical_not()
-        lm_labels.masked_fill_(triangular_mask, self.pad_token_id)
-        decoder_input_ids = model._shift_right(lm_labels)
-
-        for i, (decoder_input_ids_slice, lm_labels_slice) in enumerate(zip(decoder_input_ids, lm_labels)):
-            # first item
-            self.parent.assertEqual(decoder_input_ids_slice[0].item(), self.decoder_start_token_id)
-            if i < decoder_input_ids_slice.shape[-1]:
-                if i < decoder_input_ids.shape[-1] - 1:
-                    # items before diagonal
-                    self.parent.assertListEqual(
-                        decoder_input_ids_slice[1 : i + 1].tolist(), lm_labels_slice[:i].tolist()
-                    )
-                # pad items after diagonal
-                if i < decoder_input_ids.shape[-1] - 2:
-                    self.parent.assertListEqual(
-                        decoder_input_ids_slice[i + 2 :].tolist(), lm_labels_slice[i + 1 : -1].tolist()
-                    )
-            else:
-                # all items after square
-                self.parent.assertListEqual(decoder_input_ids_slice[1:].tolist(), lm_labels_slice[:-1].tolist())
-
-    def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        model = NllbMoeModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
-        )
-        result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-        decoder_output = result.last_hidden_state
-        decoder_past = result.past_key_values
-        encoder_output = result.encoder_last_hidden_state
-
-        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
-        self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
-        # There should be `num_layers` key value embeddings stored in decoder_past
-        self.parent.assertEqual(len(decoder_past), config.num_layers)
-        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 4)
-
-    def create_and_check_with_lm_head(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        model = NllbMoeForConditionalGeneration(config=config).to(torch_device).eval()
-        outputs = model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            labels=lm_labels,
-        )
-        self.parent.assertEqual(len(outputs), 10)
-        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
-        self.parent.assertEqual(outputs["loss"].size(), ())
-
-    def create_and_check_decoder_model_past(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
+    def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = NllbMoeModel(config=config).get_decoder().to(torch_device).eval()
-        # first forward pass
-        outputs = model(input_ids, use_cache=True, output_router_logits=False)
-        outputs_use_cache_conf = model(input_ids, output_router_logits=False)
-        outputs_no_past = model(input_ids, use_cache=False, output_router_logits=False)
-
-        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
-        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
-
-        output, past_key_values = outputs.to_tuple()
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-
-        output_from_no_past = model(next_input_ids, output_router_logits=False)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, output_router_logits=False)[
-            "last_hidden_state"
-        ]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
-    def create_and_check_decoder_model_attention_mask_past(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        model = NllbMoeModel(config=config).get_decoder()
-        model.to(torch_device)
-        model.eval()
-
-        # create attention mask
-        attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
-        half_seq_length = input_ids.shape[-1] // 2
-        attn_mask[:, half_seq_length:] = 0
+        input_ids = inputs_dict["input_ids"]
+        attention_mask = inputs_dict["attention_mask"]
+        head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        output, past_key_values = model(
-            input_ids, attention_mask=attn_mask, use_cache=True, output_router_logits=False
-        ).to_tuple()
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-        # change a random masked slice from input_ids
-        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
-        input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
-
-        # append to next input_ids and attn_mask
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
-            dim=1,
-        )
-
-        # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask, output_router_logits=False)[
-            "last_hidden_state"
-        ]
-        output_from_past = model(
-            next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, output_router_logits=False
-        )["last_hidden_state"]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        model = NllbMoeModel(config=config).get_decoder().to(torch_device).eval()
-        # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True, output_router_logits=False)
+        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
         # append to next input_ids and
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([attention_mask, next_mask], dim=-1)
+        next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask, output_router_logits=False)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
             "last_hidden_state"
         ]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            past_key_values=past_key_values,
-            output_router_logits=False,
-        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -394,158 +202,51 @@ class NllbMoeModelTester:
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
 
-    @slow
-    def create_and_check_generate_with_past_key_values(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        r"""
-        This test does not pass for small models due to precision errors. It is therefore only run for slightly larger models.
-        """
-        model = NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe").to(torch_device).eval()
-        torch.manual_seed(0)
-        output_without_past_cache = model.generate(
-            input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
-        )
-        torch.manual_seed(0)
-        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
-        self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
+    def check_encoder_decoder_model_standalone(self, config, inputs_dict):
+        model = NllbMoeModel(config=config).to(torch_device).eval()
+        outputs = model(**inputs_dict)
 
-    def create_and_check_model_fp16_forward(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        model = NllbMoeModel(config=config).to(torch_device).half().eval()
-        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
-        self.parent.assertFalse(torch.isnan(output).any().item())
+        encoder_last_hidden_state = outputs.encoder_last_hidden_state
+        last_hidden_state = outputs.last_hidden_state
 
-    def create_and_check_encoder_decoder_shared_weights(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
-        lm_labels,
-    ):
-        for model_class in [NllbMoeModel, NllbMoeForConditionalGeneration]:
-            torch.manual_seed(0)
-            model = model_class(config=config).to(torch_device).eval()
-            # load state dict copies weights but does not tie them
-            model.encoder.load_state_dict(model.decoder.state_dict(), strict=False)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            encoder = model.get_encoder()
+            encoder.save_pretrained(tmpdirname)
+            encoder = NllbMoeEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-            torch.manual_seed(0)
-            tied_config = copy.deepcopy(config)
-            tied_config.tie_encoder_decoder = True
-            tied_model = model_class(config=tied_config).to(torch_device).eval()
+        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
+            0
+        ]
 
-            model_result = model(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-                decoder_attention_mask=decoder_attention_mask,
-            )
+        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
 
-            tied_model_result = tied_model(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-                decoder_attention_mask=decoder_attention_mask,
-            )
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            decoder = model.get_decoder()
+            decoder.save_pretrained(tmpdirname)
+            decoder = NllbMoeDecoder.from_pretrained(tmpdirname).to(torch_device)
 
-            # check that models has less parameters
-            self.parent.assertLess(
-                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-            )
-            random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
+        last_hidden_state_2 = decoder(
+            input_ids=inputs_dict["decoder_input_ids"],
+            attention_mask=inputs_dict["decoder_attention_mask"],
+            encoder_hidden_states=encoder_last_hidden_state,
+            encoder_attention_mask=inputs_dict["attention_mask"],
+        )[0]
 
-            # check that outputs are equal
-            self.parent.assertTrue(
-                torch.allclose(
-                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
-                )
-            )
-
-            # check that outputs after saving and loading are equal
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                tied_model.save_pretrained(tmpdirname)
-                tied_model = model_class.from_pretrained(tmpdirname)
-                tied_model.to(torch_device)
-                tied_model.eval()
-
-                # check that models has less parameters
-                self.parent.assertLess(
-                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
-                )
-                random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
-
-                tied_model_result = tied_model(
-                    input_ids=input_ids,
-                    decoder_input_ids=decoder_input_ids,
-                    attention_mask=attention_mask,
-                    decoder_attention_mask=decoder_attention_mask,
-                )
-
-                # check that outputs are equal
-                self.parent.assertTrue(
-                    torch.allclose(
-                        model_result[0][0, :, random_slice_idx],
-                        tied_model_result[0][0, :, random_slice_idx],
-                        atol=1e-4,
-                    )
-                )
-
-    def check_resize_embeddings_nllb_moe_v1_1(
-        self,
-        config,
-    ):
-        prev_vocab_size = config.vocab_size
-
-        config.tie_word_embeddings = False
-        model = NllbMoeForConditionalGeneration(config=config).to(torch_device).eval()
-        model.resize_token_embeddings(prev_vocab_size - 10)
-
-        self.parent.assertEqual(model.get_input_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.get_output_embeddings().weight.shape[0], prev_vocab_size - 10)
-        self.parent.assertEqual(model.config.vocab_size, prev_vocab_size - 10)
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        ) = config_and_inputs
-
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "decoder_input_ids": decoder_input_ids,
-            "decoder_attention_mask": decoder_attention_mask,
-            "use_cache": False,
-            "output_router_logits": False,
-        }
-        return config, inputs_dict
+        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
 
 
 @require_torch
 class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (NllbMoeModel, NllbMoeForConditionalGeneration) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            NllbMoeModel,
+            NllbMoeForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (NllbMoeForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -557,303 +258,192 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_pruning = False
-    test_resize_embeddings = True
-    test_model_parallel = False
     is_encoder_decoder = True
-    test_torchscript = False
-    # The small NLLB_MOE model needs higher percentages for CPU/MP tests
-    model_split_percents = [0.8, 0.9]
+    fx_compatible = True
+    test_pruning = False
+    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = NllbMoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NllbMoeConfig, d_model=37)
+        self.config_tester = ConfigTester(self, config_class=NllbMoeConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_shift_right(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
+    def test_save_load_strict(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_v1_1(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        # check that gated gelu feed forward and different word embeddings work
-        config = config_and_inputs[0]
-        config.tie_word_embeddings = False
-        config.feed_forward_proj = "gated-gelu"
-        self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
-
-    def test_config_and_model_silu_gated(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        config.feed_forward_proj = "gated-silu"
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_with_lm_head(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
-
-    def test_decoder_model_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
-
-    def test_decoder_model_past_with_attn_mask(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
-
-    @slow
-    def test_beam_sample_generate_dict_output(self):
-        r"""
-        This test needs to be overriden with a larger model since it fails for very small models due to precision issues.
-        """
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            # disable cache
-            config.use_cache = False
-
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
-
-            model = model_class.from_pretrained("facebook/nllb-moe").to(torch_device).eval()
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=2)
-
-            num_return_sequences = 2
-            if model.config.is_encoder_decoder:
-                max_length = 4
-            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
-                input_ids.shape[0] * num_return_sequences, max_length
-            )
-            beam_kwargs["num_return_sequences"] = num_return_sequences
-
-            output_beam_sample, output_generate = self._beam_sample_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                max_length=max_length,
-                num_return_sequences=num_return_sequences,
-                beam_scorer=beam_scorer,
-                beam_kwargs=beam_kwargs,
-                logits_warper=logits_warper,
-                logits_warper_kwargs=logits_warper_kwargs,
-                output_scores=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-
-            if model.config.is_encoder_decoder:
-                self.assertIsInstance(output_beam_sample, BeamSampleEncoderDecoderOutput)
-                self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
-            else:
-                self.assertIsInstance(output_beam_sample, BeamSampleDecoderOnlyOutput)
-                self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
-
-            self.assertListEqual(output_generate.sequences.tolist(), output_beam_sample.sequences.tolist())
-
-    @slow
-    def test_beam_sample_generate(self):
-        r"""
-        This test needs to be overriden with a larger model since it fails for very small models due to precision issues.
-        """
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            # It is important set set the eos_token_id to None to ensure that no sequences
-            # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
-            config.eos_token_id = None
-            config.forced_eos_token_id = None
-
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=2)
-
-            model = model_class.from_pretrained("facebook/nllb-moe").to(torch_device).eval()
-
-            # check `generate()` and `beam_search()` are equal
-            # change `num_return_sequences = 2` but not for `beam_scorer`
-            num_return_sequences = 2
-            if model.config.is_encoder_decoder:
-                max_length = 4
-            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
-                input_ids.shape[0] * num_return_sequences, max_length
-            )
-            beam_kwargs["num_return_sequences"] = num_return_sequences
-
-            output_generate, output_beam_sample = self._beam_sample_generate(
-                model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                max_length=max_length,
-                num_return_sequences=num_return_sequences,
-                beam_scorer=beam_scorer,
-                beam_kwargs=beam_kwargs,
-                logits_warper=logits_warper,
-                logits_warper_kwargs=logits_warper_kwargs,
-            )
-
-            self.assertListEqual(output_generate.tolist(), output_beam_sample.tolist())
-
-    def test_decoder_model_past_with_3d_attn_mask(self):
-        (
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        ) = self.model_tester.prepare_config_and_inputs()
-
-        attention_mask = ids_tensor(
-            [self.model_tester.batch_size, self.model_tester.encoder_seq_length, self.model_tester.encoder_seq_length],
-            vocab_size=2,
-        )
-        decoder_attention_mask = ids_tensor(
-            [self.model_tester.batch_size, self.model_tester.decoder_seq_length, self.model_tester.decoder_seq_length],
-            vocab_size=2,
-        )
-
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        )
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+            self.assertEqual(info["missing_keys"], [])
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_generate_with_past_key_values(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
+    def test_encoder_decoder_model_standalone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    def test_encoder_decoder_shared_weights(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
-    def test_model_fp16_forward(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+        for model_class in (NllbMoeModel, NllbMoeForConditionalGeneration):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
 
-    def test_v1_1_resize_embeddings(self):
-        config = self.model_tester.prepare_config_and_inputs()[0]
-        self.model_tester.check_resize_embeddings_nllb_moe_v1_1(config)
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in NLLB_MOE_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = NllbMoeModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
 
-    @unittest.skip("Test has a segmentation fault on torch 1.8.0")
-    def test_export_to_onnx(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        model = NllbMoeModel(config_and_inputs[0]).to(torch_device)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            torch.onnx.export(
-                model,
-                (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
-                f"{tmpdirname}/nllb_moe_test.onnx",
-                export_params=True,
-                opset_version=9,
-                input_names=["input_ids", "decoder_input_ids"],
-            )
+            wte = model.get_input_embeddings()
+            if not self.is_encoder_decoder:
+                inputs["inputs_embeds"] = wte(input_ids)
+            else:
+                inputs["inputs_embeds"] = wte(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
 
-    def test_generate_with_head_masking(self):
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config = config_and_inputs[0]
-        max_length = config_and_inputs[1].shape[-1] + 3
-        model = NllbMoeForConditionalGeneration(config).eval()
-        model.to(torch_device)
+            with torch.no_grad():
+                model(**inputs)[0]
 
-        head_masking = {
-            "head_mask": torch.zeros(config.num_layers, config.num_heads, device=torch_device),
-            "decoder_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-            "cross_attn_head_mask": torch.zeros(config.num_decoder_layers, config.num_heads, device=torch_device),
-        }
-
-        for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-            head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from NLLB_MOE model when head_mask specified
-            if name == "head_mask":
-                head_masks["decoder_head_mask"] = torch.ones(
-                    config.num_decoder_layers, config.num_heads, device=torch_device
-                )
-
-            out = model.generate(
-                config_and_inputs[1],
-                num_beams=1,
-                max_length=max_length,
-                output_attentions=True,
-                return_dict_in_generate=True,
-                **head_masks,
-            )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
-    @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
-    def test_disk_offload(self):
-        pass
+    def test_generate_fp16(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        model = NllbMoeForConditionalGeneration(config).eval().to(torch_device)
+        if torch_device == "cuda":
+            model.half()
+        model.generate(input_ids, attention_mask=attention_mask)
+        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
 
-def use_task_specific_params(model, task):
-    model.config.update(model.config.task_specific_params[task])
+def _long_tensor(tok_lst):
+    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
+
+
+TOLERANCE = 1e-4
 
 
 @require_torch
-class TestAsymmetricNllbMoe(unittest.TestCase):
-    def build_model_and_check_forward_pass(self, **kwargs):
-        tester = NllbMoeModelTester(self, **kwargs)
-        config, *inputs = tester.prepare_config_and_inputs()
-        (
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
-        ) = inputs
-        model = NllbMoeForConditionalGeneration(config=config).to(torch_device).eval()
-        outputs = model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            labels=lm_labels,
-            output_router_logits=False,
+@require_sentencepiece
+@require_tokenizers
+@slow
+class NllbMoeModelIntegrationTests(unittest.TestCase):
+    @cached_property
+    def default_tokenizer(self):
+        return NllbTokenizer.from_pretrained("facebook/nllb-moe_418M")
+
+    @require_torch_gpu
+    def test_small_logits(self):
+        r"""
+        Logits testing to check implementation consistency between `t5x` implementation
+        and `transformers` implementation of Switch-C transformers. We only check the logits
+        of the first batch.
+        """
+        model = NllbMoeModel.from_pretrained("google/switch-base-8", torch_dtype=torch.bfloat16).to(
+            torch_device
         )
-        # outputs = model(*inputs)
-        assert len(outputs) == 4
-        assert outputs["logits"].size() == (tester.batch_size, tester.decoder_seq_length, tester.vocab_size)
-        assert outputs["loss"].size() == ()
-        return model
+        input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
+        decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
 
-    def test_small_decoder(self):
-        # num_hidden_layers is passed to NllbMoeConfig as num_layers
-        model = self.build_model_and_check_forward_pass(decoder_layers=1, num_hidden_layers=2)
-        assert len(model.encoder.block) == 2
-        assert len(model.decoder.block) == 1
+        # fmt: off
+        EXPECTED_MEAN_LOGITS = torch.Tensor(
+            [
+                -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
+                0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
+                0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
+                0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
+                0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
+                -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
+            ]
+        ).to(torch.bfloat16)
+        # fmt: on
+        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state.cpu()
+        hf_logits = hf_logits[0, 0, :30]
 
-    def test_defaulting_to_symmetry(self):
-        # num_hidden_layers is passed to NllbMoeConfig as num_layers
-        model = self.build_model_and_check_forward_pass(num_hidden_layers=2)
-        assert len(model.decoder.block) == len(model.encoder.block) == 2
+        torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
+        
+    def test_inference_no_head(self):
+        model = NllbMoeModel.from_pretrained("facebook/nllb-moe_418M").to(torch_device)
+        input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])
+        decoder_input_ids = _long_tensor([[2, 128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38]])
+        inputs_dict = prepare_nllb_moe_inputs_dict(model.config, input_ids, decoder_input_ids)
+        with torch.no_grad():
+            output = model(**inputs_dict)[0]
+        expected_shape = torch.Size((1, 11, 1024))
+        self.assertEqual(output.shape, expected_shape)
+        # change to expected output here
+        expected_slice = torch.tensor(
+            [[-0.7780, -0.1676, 0.1038], [-6.7556, -1.3992, 0.0567], [-7.5383, -0.5920, -0.2779]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+
+    def test_inference_head(self):
+        model = NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe_418M").to(torch_device)
+
+        # change to intended input
+        input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])
+        decoder_input_ids = _long_tensor([[2, 128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38]])
+        inputs_dict = prepare_nllb_moe_inputs_dict(model.config, input_ids, decoder_input_ids)
+        with torch.no_grad():
+            output = model(**inputs_dict)[0]
+        expected_shape = torch.Size((1, 11, model.config.vocab_size))
+        self.assertEqual(output.shape, expected_shape)
+        # change to expected output here
+        expected_slice = torch.tensor(
+            [[-1.0448, -1.0411, 3.7992], [-3.2191, -3.2386, -1.3451], [-3.6210, -3.5993, 0.4925]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+
+    def test_seq_to_seq_generation(self):
+        model = NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe_418M").to(torch_device)
+        tokenizer = NllbTokenizer.from_pretrained("facebook/nllb-moe_418M", src_lang="fr", tgt_lang="en")
+
+        src_fr = [
+            "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
+            "Selon moi, il y a deux niveaux de réponse de la part du gouvernement français.",
+            "Lorsque François Hollande téléphone à Barack Obama ou quand le ministre des affaires étrangères Laurent"
+            " Fabius convoque l'ambassadeur des Etats-Unis, ils réagissent à une vraie découverte, qui est celle de"
+            " l'ampleur de la surveillance américaine sur l'ensemble des communications en France.",
+        ]
+
+        # The below article tests that we don't add any hypotheses outside of the top n_beams
+        dct = tokenizer(src_fr, padding=True, return_tensors="pt")
+
+        hypotheses_batch = model.generate(
+            input_ids=dct["input_ids"].to(torch_device),
+            attention_mask=dct["attention_mask"].to(torch_device),
+            num_beams=5,
+            forced_bos_token_id=tokenizer.get_lang_id("en"),
+        )
+
+        expected_en = [
+            "The NSA case highlights the total absence of intelligence debate",
+            "I think there are two levels of response from the French government.",
+            "When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the U.S."
+            " Ambassador, they respond to a real discovery, which is that of the scale of U.S. surveillance on all"
+            " communications in France.",
+        ]
+
+        generated = tokenizer.batch_decode(
+            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
+        )
+        assert generated == expected_en
 
 
 @require_torch
-class SwitchTransformerRouterTest(unittest.TestCase):
+class NllbMoeRouterTest(unittest.TestCase):
     r"""
     Switch Transformers has different blocks from classic transformer based models.
     The Swift MLP contains a Router class, that has to be tested to check if it is correctly implemented
@@ -978,76 +568,3 @@ class SwitchTransformerRouterTest(unittest.TestCase):
         expert_index = expert_index * expert_capacity_mask
 
         assert torch.sum(expert_index) <= batch_size * self.config.num_experts * self.config.expert_capacity
-
-
-@slow
-@require_torch
-@require_tokenizers
-class SwitchTransformerModelIntegrationTests(unittest.TestCase):
-    @require_torch_gpu
-    def test_small_logits(self):
-        r"""
-        Logits testing to check implementation consistency between `t5x` implementation
-        and `transformers` implementation of Switch-C transformers. We only check the logits
-        of the first batch.
-        """
-        model = NllbMoeModel.from_pretrained("facebook/nllb-moe", torch_dtype=torch.bfloat16).to(torch_device)
-        input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
-        decoder_input_ids = torch.ones((32, 64), dtype=torch.long).to(torch_device)
-
-        # fmt: off
-        EXPECTED_MEAN_LOGITS = torch.Tensor(
-            [
-                -0.204102, -0.193359, 0.523438, -0.296875, 0.108887,
-                0.0211182, 0.605469, -0.100586, -0.0551758, 0.296875,
-                0.0090332, 0.174805, 0.139648, -0.170898, -0.0981445,
-                0.0245361, 0.0373535, 0.050293, -0.212891, 0.129883,
-                0.390625, -0.203125, -0.122559, -0.180664, 0.0437012,
-                -0.349609, -0.0250244, -0.104004, -0.15918, -0.133789
-            ]
-        ).to(torch.bfloat16)
-        # fmt: on
-        hf_logits = model(input_ids, decoder_input_ids=decoder_input_ids).last_hidden_state.cpu()
-        hf_logits = hf_logits[0, 0, :30]
-
-        torch.testing.assert_allclose(hf_logits, EXPECTED_MEAN_LOGITS, rtol=6e-3, atol=9e-3)
-
-    def test_small_generate(self):
-        # Generate test using the smalled switch-C model.
-
-        model = NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe", torch_dtype=torch.bfloat16).eval()
-        tokenizer = AutoTokenizer.from_pretrained("t5-small")
-        model = model.to(torch_device)
-
-        input_ids = tokenizer(
-            "The human walks into a bar and orders a <extra_id_0>", return_tensors="pt"
-        ).input_ids.to(torch_device)
-        sequences = model.generate(input_ids)
-        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
-        self.assertEqual(output_str, "drink.")
-
-        input_ids = tokenizer(
-            "A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.",
-            return_tensors="pt",
-        ).input_ids.to(torch_device)
-        sequences = model.generate(input_ids)
-        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=False)[0]
-
-        EXPECTED_OUTPUT = "<pad><extra_id_0> man<extra_id_1> beer<extra_id_2> a<extra_id_3> salt<extra_id_4>.</s>"
-        self.assertEqual(output_str, EXPECTED_OUTPUT)
-
-    def test_small_batch_generate(self):
-        BATCH_SIZE = 4
-        model = NllbMoeForConditionalGeneration.from_pretrained("facebook/nllb-moe", torch_dtype=torch.bfloat16).eval()
-        tokenizer = AutoTokenizer.from_pretrained("t5-small")
-
-        inputs = [
-            "A <extra_id_0> walks into a bar a orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>."
-        ] * BATCH_SIZE
-        encoded_input = tokenizer.batch_encode_plus(inputs, return_tensors="pt")
-
-        sequences = model.generate(**encoded_input)
-        batch_output = tokenizer.batch_decode(sequences, skip_special_tokens=False)
-
-        for i in range(0, BATCH_SIZE, 2):
-            self.assertEqual(batch_output[i], batch_output[i + 1])

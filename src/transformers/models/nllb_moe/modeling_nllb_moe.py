@@ -810,10 +810,7 @@ class NllbMoeDecoderLayer(nn.Module):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (
-            hidden_states,
-            present_key_value if use_cache else None,
-        )
+        outputs = (hidden_states, present_key_value)
 
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
@@ -1003,7 +1000,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         )
         sparse_step = config.encoder_sparse_step
         self.layers = nn.ModuleList()
-        for i in range(config.num_layers):
+        for i in range(config.encoder_layers):
             is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
             self.layers.append(NllbMoeEncoderLayer(config, is_sparse))
 
@@ -1138,15 +1135,16 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
                         output_router_logits=output_router_logits,
                     )
 
+                hidden_states = layer_outputs[0]
+
             if skip_the_layer:
                 layer_outputs = (None, None, None)
 
-            if output_router_logits:
-                *layer_outputs, router_probs = layer_outputs
-                all_router_probs += router_probs
-
             if output_attentions:
-                all_attentions += (layer_outputs[-1],)
+                all_attentions += (layer_outputs[1],)
+
+            if output_router_logits:
+                all_router_probs += (layer_outputs[-1],)
 
         last_hidden_state = self.layer_norm(hidden_states)
 
@@ -1196,7 +1194,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
 
         sparse_step = config.decoder_sparse_step
         self.layers = nn.ModuleList()
-        for i in range(config.num_layers):
+        for i in range(config.decoder_layers):
             is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
             self.layers.append(NllbMoeDecoderLayer(config, is_sparse))
 
@@ -1414,27 +1412,26 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                         output_router_logits=output_router_logits,
                     )
 
-                if output_router_logits:
-                    *layer_outputs, router_probs = layer_outputs
-                    all_router_probs += (router_probs,)
-    
-                hidden_states, present_key_value_state = layer_outputs[:2]
+                hidden_states = layer_outputs[0]
 
             if skip_the_layer:
                 continue
 
-            if use_cache:
-                present_key_value_states = present_key_value_states + (present_key_value_state,)
-
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
                 all_cross_attentions += (layer_outputs[2],)
+            
+            if use_cache:
+                present_key_value_states += (layer_outputs[3 if output_attentions else 1],)
+            
+            if output_router_logits:
+                    all_router_probs += (layer_outputs[-1],)
 
         hidden_states = self.layer_norm(hidden_states)
 
         # Add last layer
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states += (hidden_states,)
 
         if not return_dict:
             return tuple(
@@ -1591,9 +1588,9 @@ class NllbMoeModel(NllbMoePreTrainedModel):
             return decoder_outputs + encoder_outputs
 
         return Seq2SeqMoEModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             cross_attentions=decoder_outputs.cross_attentions,
+            last_hidden_state=decoder_outputs.last_hidden_state,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -1717,17 +1714,16 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
             # todo check in the config if router loss enables
 
             if output_router_logits:
+                encoder_router_logits = outputs[-1]
+                decoder_router_logits = outputs[5 if output_attentions else 3]
+
                 # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
-                encoder_router_logits, encoder_expert_indexes = self._unpack_router_logits(
-                    outputs.encoder_router_logits
-                )
+                encoder_router_logits, encoder_expert_indexes = self._unpack_router_logits(encoder_router_logits)
                 encoder_z_loss = router_z_loss_func(encoder_router_logits)
                 encoder_router_probs = nn.Softmax(dim=-1)(encoder_router_logits)
                 encoder_aux_loss = load_balancing_loss_func(encoder_router_probs, encoder_expert_indexes)
 
-                decoder_router_logits, decoder_expert_indexes = self._unpack_router_logits(
-                    outputs.decoder_router_logits
-                )
+                decoder_router_logits, decoder_expert_indexes = self._unpack_router_logits(decoder_router_logits)
                 decoder_z_loss = router_z_loss_func(decoder_router_logits)
                 decoder_router_probs = nn.Softmax(dim=-1)(decoder_router_logits)
                 decoder_aux_loss = load_balancing_loss_func(decoder_router_probs, decoder_expert_indexes)
@@ -1777,10 +1773,14 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         total_router_logits = []
         total_expert_indexes = []
         for router_output in router_outputs:
-            if router_output[0] is not None:
+            if router_output is not None:
                 router_logits, expert_indexes = router_output
                 total_router_logits.append(router_logits)
                 total_expert_indexes.append(expert_indexes)
+        if len(total_expert_indexes)>0:
+            total_router_logits = torch.cat(total_router_logits, dim=1)
+        if len(total_expert_indexes)>0:
+            torch.cat(total_expert_indexes, dim=1)
         return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
 
     # Copied from transfomers.models.switch_transformers.SwitchTransformersForConditionalGeneration.prepare_inputs_for_generation
