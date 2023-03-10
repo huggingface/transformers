@@ -135,11 +135,8 @@ def convert_pix2struct_original_pytorch_checkpoint_to_hf(
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 
     inputs = processor(raw_image, return_tensors="pt", max_patches=2048)
-    # inputs["decoder_input_ids"] = torch.LongTensor([[0]])
-
     output = model.generate(**inputs, do_sample=False)
 
-    # assert processor.decode(output[0], skip_special_tokens=True) == "A stop sign is on a street corner."
     print(processor.decode(output[0], skip_special_tokens=True))
 
     # mkdir if needed
