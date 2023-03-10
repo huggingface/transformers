@@ -6248,7 +6248,6 @@ if TYPE_CHECKING:
         from .models.mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel
         from .models.mobilebert import (
             TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileBertForMaskedLM,
             TFMobileBertForMultipleChoice,
             TFMobileBertForNextSentencePrediction,
@@ -6259,6 +6258,9 @@ if TYPE_CHECKING:
             TFMobileBertMainLayer,
             TFMobileBertModel,
             TFMobileBertPreTrainedModel,
+        )
+        from .models.mobilevit import (
+            TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileViTForImageClassification,
             TFMobileViTForSemanticSegmentation,
             TFMobileViTModel,
