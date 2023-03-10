@@ -152,9 +152,9 @@ def parse_module_content(content: str, indent_level: int = 0) -> List[str]:
     end_markers = [")", "]", "}", '"""']
 
     for idx, line in enumerate(lines):
-        if indent_level > 0 and not is_empty_line(line) and find_indent(line) != indent_level:
+        if idx == 0 and indent_level > 0 and not is_empty_line(line) and find_indent(line) != indent_level:
             raise ValueError(
-                f"When `indent_level > 0`, the first line in `content` should have indent level {indent_level}. Got"
+                f"When `indent_level > 0`, the first line in `content` should have indent level {indent_level}. Got "
                 f"{find_indent(line)} instead."
             )
 
