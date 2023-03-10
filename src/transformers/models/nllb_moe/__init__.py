@@ -44,7 +44,7 @@ else:
         "NllbMoeModel",
         "NllbMoePreTrainedModel",
         "NllbMoeTop1Router",
-        "NllbMoeTop1Router"
+        "NllbMoeTop2Router",
         "NllbMoeSparseMLP",
     ]
 

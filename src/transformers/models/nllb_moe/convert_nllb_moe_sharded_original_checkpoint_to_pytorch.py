@@ -11,20 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import json
 import argparse
+import json
 import os
+
 import torch
 from torch import nn
 
-from transformers import NllbMoeConfig, NllbMoeForConditionalGeneration
+from transformers import NllbMoeConfig
+from transformers.modeling_utils import dtype_byte_size
 from transformers.models.switch_transformers.convert_switch_transformers_original_flax_checkpoint_to_pytorch import (
     rename_keys,
 )
-from transformers.modeling_utils import dtype_byte_size
 from transformers.utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME
 
+
 # 'encoder.layers.7.moe_layer.experts.0.fc2.bias', 'encoder.layers.11.moe_layer.experts.0.fc1.weight',
+
 
 def remove_ignore_keys_(state_dict):
     ignore_keys = [
@@ -47,13 +50,17 @@ def make_linear_from_emb(emb):
     lin_layer.weight.data = emb.weight.data
     return lin_layer
 
-def rename_keys(state_dict):
+
+def rename_fairseq_keys(state_dict):
     # 'encoder.layers.7.moe_layer.experts.0.fc2.bias' ->'encoder.layers.7.ffn.mlp.experts.0.fc2.bias'
     # 'encoder.layers.7.fc2.bias' ->  'encoder.layers.7.ffn.mlp.fc2.bias'
-    
+
     pass
 
-def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, num_experts, dtype, weights_name: str = WEIGHTS_NAME):
+
+def shard_on_the_fly(
+    switch_checkpoint_path, dump_path, max_shard_size, num_experts, dtype, weights_name: str = WEIGHTS_NAME
+):
     sharded_state_dicts = []
     current_block = {}
     total_size = 0
@@ -71,17 +78,16 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, num_expe
         )
         torch.save(current_block, save_path)
         sharded_state_dicts.append(current_block.keys())
-        total_size += sum([value.numel() for key, value in current_block.items()]) * dtype_byte_size(raw_weights.dtype)
+        total_size += sum([value.numel() for key, value in current_block.items()]) * dtype_byte_size(list(current_block)[0].dtype)
 
     # Add the last block
     save_path = os.path.join(dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"))
-    shared_weights = torch.load(switch_checkpoint_path.replace(".pt","-shared.pt"))["model"].keys()
+    shared_weights = torch.load(switch_checkpoint_path.replace(".pt", "-shared.pt"))["model"].keys()
     remove_ignore_keys_(shared_weights)
-    
+
     # state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
     # lm_head to initialise too
 
-    
     torch.save(shared_weights, save_path)
     sharded_state_dicts.append(shared_weights.keys())
 
@@ -113,9 +119,6 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, num_expe
     return metadata, index
 
 
-
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
@@ -141,16 +144,14 @@ if __name__ == "__main__":
         args.max_shard_size,
         args.dtype,
     )
-    
-    model = ''
+
+    model = ""
     vocab_size = model["encoder.embed_tokens.weight"].shape[0]
 
-    config = NllbMoeConfig.from_pretrained('',
+    config = NllbMoeConfig.from_pretrained(
+        "",
         num_sparse_encoder_layers=1,
         num_sparse_decoder_layers=1,
-        
     )
 
     model.save_pretrained(args.pytorch_dump_folder_path)
-    
-
