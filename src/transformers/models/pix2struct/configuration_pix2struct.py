@@ -43,7 +43,7 @@ class Pix2StructTextConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 50244):
             Vocabulary size of the `Pix2Struct` text model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`Pix2StructModel`].
         hidden_size (`int`, *optional*, defaults to 768):
@@ -54,20 +54,20 @@ class Pix2StructTextConfig(PretrainedConfig):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_heads (`int`, *optional*, defaults to 8):
+        num_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
             The maximum distance of the longer sequences for the bucket separation.
-        dropout_rate (`float`, *optional*, defaults to 0.0):
+        dropout_rate (`float`, *optional*, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
-        initializer_factor (`float``, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        dense_act_fn (`str`, *optional*, defaults to "gelu_new"):
+        dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string).
         decoder_start_token_id (`int`, *optional*, defaults to 0):
             The id of the `decoder_start_token_id` token.
@@ -389,7 +389,7 @@ class Pix2StructConfig(PretrainedConfig):
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the Pix2StructVisionConfig with default values.")
+            logger.info("vision_config is None. Initializing the Pix2StructVisionConfig with default values.")
 
         if not isinstance(text_config, Pix2StructTextConfig):
             self.text_config = Pix2StructTextConfig(**text_config)

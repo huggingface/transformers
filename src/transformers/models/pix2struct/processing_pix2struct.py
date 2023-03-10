@@ -69,7 +69,7 @@ class Pix2StructProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchEncoding:
         """
-        This method uses [`Pix2StructImageProcessor.__call__`] method to prepare image(s) for the model, and
+        This method uses [`Pix2StructImageProcessor.preprocess`] method to prepare image(s) for the model, and
         [`Pix2StructTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.

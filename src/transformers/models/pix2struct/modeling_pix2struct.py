@@ -98,7 +98,7 @@ except ImportError:
     # using the normal Pix2StructLayerNorm
     pass
 except Exception:
-    logger.warning("discovered apex but it failed to load, falling back to Pix2StructLayerNorm")
+    logger.warning("Discovered apex but it failed to load, falling back to Pix2StructLayerNorm")
     pass
 
 ALL_LAYERNORM_LAYERS.append(Pix2StructLayerNorm)
