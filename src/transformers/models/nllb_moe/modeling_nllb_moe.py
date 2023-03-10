@@ -572,7 +572,7 @@ class NllbMoeLayerFF(nn.Module):
         return output
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->NllbMoe
+# Adapted from transformers.models.bart.modeling_bart.BartAttention with Bart->NllbMoe
 class NllbMoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
