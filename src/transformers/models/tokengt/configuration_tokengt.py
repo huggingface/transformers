@@ -23,8 +23,8 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 TOKENGT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # pcqm4mv1 now deprecated
     "tokengt-lap16": "https://huggingface.co/raman-ai/tokengt-base-lap-pcqm4mv2/blob/main/config.json",
+    "tokengt-orf64": "https://huggingface.co/raman-ai/tokengt-base-orf-pcqm4mv2/blob/main/config.json",
 }
 
 

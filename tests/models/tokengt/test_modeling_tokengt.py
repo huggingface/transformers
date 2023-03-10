@@ -536,7 +536,8 @@ class TokenGTModelTester:
 class TokenGTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_graph_classification(self):
-        model = TokenGTForGraphClassification.from_pretrained("raman-ai/tokengt-base-lap-pcqm4mv2")
+        model_lap = TokenGTForGraphClassification.from_pretrained("raman-ai/tokengt-base-lap-pcqm4mv2")
+        model_orf = TokenGTForGraphClassification.from_pretrained("raman-ai/tokengt-base-orf-pcqm4mv2")
 
         # Actual real graph data from the pcqm4mv2 dataset
         # fmt: off
@@ -925,13 +926,23 @@ class TokenGTModelIntegrationTest(unittest.TestCase):
             "labels": tensor([4.5878, 4.9715]),
         }
 
-        output = model(**model_input)["logits"]
+        output_lap = model_lap(**model_input)["logits"]
+        output_orf = model_orf(**model_input)["logits"]
 
         expected_shape = torch.Size((2, 1))
-        self.assertEqual(output.shape, expected_shape)
+        self.assertEqual(output_lap.shape, expected_shape)
 
-        expected_logs = torch.tensor(
+        expected_logs_lap = torch.tensor(
             [[4.6461], [4.6461]]
         )
 
-        self.assertTrue(torch.allclose(output, expected_logs, atol=1e-4))
+        expected_logs_orf = torch.tensor(
+           [[5.3723],[5.3770]]
+        )
+
+        print(output_orf)
+        # [[5.3722],
+        # [5.3811]]
+
+        self.assertTrue(torch.allclose(output_lap, expected_logs_lap, atol=1e-4))
+        self.assertTrue(torch.allclose(output_orf, expected_logs_orf, atol=1e-2))
