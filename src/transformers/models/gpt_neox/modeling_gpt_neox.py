@@ -656,7 +656,7 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         if labels is not None:
             # we are doing next-token prediction; shift prediction scores and input ids by one
             shift_logits = lm_logits[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
+            labels = labels[:, 1:].contiguous().to(lm_logits.device)
             loss_fct = CrossEntropyLoss()
             lm_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), labels.view(-1))
 
