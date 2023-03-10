@@ -333,6 +333,8 @@ class Pix2StructConfig(PretrainedConfig):
             Factor to multiply the initialization range with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        is_vqa (`bool`, *optional*, defaults to `False`):
+            Whether the model has been fine-tuned for VQA or not.
         kwargs (*optional*):
             Dictionary of keyword arguments.
 
@@ -368,6 +370,7 @@ class Pix2StructConfig(PretrainedConfig):
         vision_config=None,
         initializer_factor=1.0,
         initializer_range=0.02,
+        is_vqa=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -407,6 +410,8 @@ class Pix2StructConfig(PretrainedConfig):
 
         self.text_config.initializer_range = self.initializer_range
         self.vision_config.initializer_range = self.initializer_range
+
+        self.is_vqa = is_vqa
 
     @classmethod
     def from_text_vision_configs(

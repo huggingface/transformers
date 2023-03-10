@@ -1276,7 +1276,8 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
-            loss = loss_fct(logits.view(-1, logits.size(-1)), labels.view(-1))
+            masked_labels = labels.masked_fill(labels == self.config.pad_token_id, -100)
+            loss = loss_fct(logits.view(-1, logits.size(-1)), masked_labels.view(-1))
 
         if not return_dict:
             return tuple(
@@ -1510,6 +1511,8 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         self.decoder_eos_token_ids = decoder_config.eos_token_id
         self.decoder = Pix2StructTextModel(decoder_config)
 
+        self.is_vqa = config.is_vqa
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1671,9 +1674,15 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
                         ],
                         dim=-1,
                     )
-
         elif input_ids is None:
             input_ids = torch.LongTensor([[self.decoder_input_ids]]).repeat(batch_size, 1).to(image_embeds.device)
+
+            if self.is_vqa:
+                # warn users that they should pass `input_ids` if they want to use `generate` for VQA
+                logger.warning(
+                    "You are using `generate` for a model that has been fine-tuned on Visual Question Answering.",
+                    "For better results, make sure to pass an input text question to `Pix2StructProcessor`",
+                )
 
         if decoder_attention_mask is None:
             decoder_attention_mask = torch.ones_like(input_ids).to(image_embeds.device)
