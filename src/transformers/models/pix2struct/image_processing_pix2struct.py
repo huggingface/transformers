@@ -64,7 +64,8 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
     def torch_extract_patches(self, image_tensor, patch_height, patch_width):
         """
-        Utiliy function to extract patches from a given image tensor.
+        Utiliy function to extract patches from a given image tensor. Returns a tensor of shape (1, `patch_height`,
+        `patch_width`, `num_channels`x `patch_height` x `patch_width`)
 
         Args:
             image_tensor (torch.Tensor):
