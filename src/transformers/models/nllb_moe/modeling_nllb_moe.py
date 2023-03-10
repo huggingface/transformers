@@ -1605,6 +1605,9 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(NLLB_MOE_INPUTS_DOCSTRING)
+    @replace_return_docstrings(
+        output_type=Union[Tuple[torch.Tensor], Seq2SeqMoEModelOutput], config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
