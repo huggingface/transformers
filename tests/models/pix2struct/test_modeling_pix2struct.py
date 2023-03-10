@@ -64,6 +64,7 @@ class Pix2StructVisionModelTester:
         num_channels=3,
         is_training=True,
         hidden_size=12,
+        patch_embed_hidden_size=12,
         projection_dim=32,
         max_patches=64,
         num_hidden_layers=5,
@@ -77,6 +78,7 @@ class Pix2StructVisionModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
+        self.patch_embed_hidden_size = patch_embed_hidden_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.is_training = is_training
@@ -113,6 +115,7 @@ class Pix2StructVisionModelTester:
             dropout=self.dropout,
             attention_dropout=self.attention_dropout,
             initializer_range=self.initializer_range,
+            patch_embed_hidden_size=self.patch_embed_hidden_size,
         )
 
     def create_and_check_model(self, config, pixel_embeds):
