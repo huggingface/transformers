@@ -485,7 +485,7 @@ class Pix2StructPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-VIT_START_DOCSTRING = r"""
+PIX2STRUCT_VISION_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
@@ -496,7 +496,7 @@ VIT_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-VIT_INPUTS_DOCSTRING = r"""
+PIX2STRUCT_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_embeds (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
@@ -521,7 +521,7 @@ VIT_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare Pix2StructVision Model transformer outputting raw hidden-states without any specific head on top.",
-    VIT_START_DOCSTRING,
+    PIX2STRUCT_VISION_START_DOCSTRING,
 )
 class Pix2StructVisionModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructVisionConfig
@@ -556,7 +556,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PIX2STRUCT_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
