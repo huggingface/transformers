@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import ast
 import difflib
 import json
 import os
@@ -402,12 +403,74 @@ SPECIAL_PATTERNS = {
 _re_class_func = re.compile(r"^(?:class|def)\s+([^\s:\(]+)\s*(?:\(|\:)", flags=re.MULTILINE)
 
 
+def remove_attributes(obj, attrs_to_remove=None):
+    """Remove some attributes in `obj`.
+
+    The string `obj` needs to be able to be parsed by `ast.parse`.
+    """
+    if not attrs_to_remove:
+        return obj
+
+    _parsed_obj = ast.parse(obj)
+
+    if not _parsed_obj.body:
+        return obj
+
+    # The end line number in the last previous block
+    prev_end = -1
+
+    lines = obj.split(os.linesep)
+    for parsed_obj in _parsed_obj.body:
+        # So far we only look the class definitions
+        if not isinstance(parsed_obj, ast.ClassDef):
+            continue
+
+        class_def = parsed_obj
+        attributes = class_def.body
+
+        if not attributes:
+            continue
+
+        for attribute in attributes:
+            # These are 1-based line numbers, with `end_lineno` being inclusive
+            start, end = attribute.lineno, attribute.end_lineno  # noqa: F841
+
+            found = False
+            if isinstance(attribute, ast.Assign):
+                # The targets are the names of variables
+                for x in attribute.targets:
+                    if x.id in attrs_to_remove:
+                        found = True
+                    break
+            elif isinstance(attribute, ast.FunctionDef) and attribute.name in attrs_to_remove:
+                found = True
+
+            if not found:
+                prev_end = end
+                continue
+
+            # The start and end line numbers within which the block will be removed
+            # 1-based and both  side inclusive
+            start_lineno = prev_end + 1
+            end_lineno = end
+
+            # Be careful with the 0-based indices
+            for idx in range(start_lineno - 1, end_lineno):
+                lines[idx] = None
+
+    lines = [x for x in lines if x is not None]
+    new_obj = os.linesep.join(lines)
+
+    return new_obj
+
+
 def duplicate_module(
     module_file: Union[str, os.PathLike],
     old_model_patterns: ModelPatterns,
     new_model_patterns: ModelPatterns,
     dest_file: Optional[str] = None,
     add_copied_from: bool = True,
+    attrs_to_remove: list[str] = None,
 ):
     """
     Create a new module from an existing one and adapting all function and classes names from old patterns to new ones.
@@ -491,8 +554,11 @@ def duplicate_module(
 
         new_objects.append(obj)
 
+    # Remove some attributes that we don't want to copy to the new file(s)
+    content = remove_attributes("\n".join(new_objects), attrs_to_remove=attrs_to_remove)
+
     with open(dest_file, "w", encoding="utf-8") as f:
-        content = f.write("\n".join(new_objects))
+        f.write(content)
 
 
 def filter_framework_files(
@@ -1294,6 +1360,7 @@ def create_new_model_like(
             new_model_patterns,
             dest_file=dest_file,
             add_copied_from=False,
+            attrs_to_remove=["pipeline_model_mapping", "is_pipeline_test_to_skip"],
         )
         disabled_fx_test = disabled_fx_test | disable_fx_test(dest_file)
 
