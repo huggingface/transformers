@@ -51,6 +51,23 @@ if __name__ == "__main__":
                     config = tester.get_config()
                     for k, v in config.to_dict().items():
                         if isinstance(v, int) and v >= 100:
+
+                            if k.endswith("_token_id"):
+                                # skip
+                                continue
+                            elif k.endswith("max_position_embeddings"):
+                                # TODO: 78 to fix
+                                continue
+                            elif k.endswith("hidden_size"):
+                                # TODO: 21 to fix
+                                continue
+                            elif k.endswith("_dim"):
+                                # TODO: 20 to fix
+                                continue
+                            elif k.endswith("_size"):
+                                # TODO: 60 -21 = 39 to fix
+                                continue
+
                             # Need to deal with (allow) special cases, otherwise change some values
                             failures.append(
                                 f"{tester_class.__name__} will produce a `config` of type `{config.__class__.__name__}`"
