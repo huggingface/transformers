@@ -19,7 +19,7 @@ import copy
 import math
 import random
 import torchaudio
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 
 import numpy as np
 import torch
@@ -220,10 +220,8 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
 
 
 class LogMelSpectrogram(nn.Module):
-    def __init__(self, sample_rate=22050, n_fft=4096, hop_length=1024, f_min=10.0, n_mels=512):
-        ## TODO
-        ## make values n_fft hop_length accessible
-        ## TODO
+    """ Generates MelSpectrogram then applies log base e. """
+    def __init__(self, sample_rate, n_fft, hop_length, f_min, n_mels):
         super(LogMelSpectrogram, self).__init__()
         self.melspectrogram = torchaudio.transforms.MelSpectrogram(
             sample_rate=sample_rate,
@@ -242,6 +240,7 @@ class LogMelSpectrogram(nn.Module):
         return X
 
 class ConcatEmbeddingToMel(nn.Module):
+    """ Embedding Matrix for `composer` tokens. """
     def __init__(self, embedding_offset, n_vocab, n_dim) -> None:
         super(ConcatEmbeddingToMel, self).__init__()
         self.embedding = nn.Embedding(num_embeddings=n_vocab, embedding_dim=n_dim)
@@ -918,6 +917,13 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         else:
             encoder_extended_attention_mask = None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
         cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
@@ -955,11 +961,6 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
@@ -1355,12 +1356,13 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
         self.transformer.encoder._freeze_parameters()
 
     def forward(self,
-                input_ids,
-                batch,
-                ext_beatstep,
+                batches,
+                batch_arr_shapes: List[torch.Size],
+                input_ids=None,
                 composer=None,
                 max_batch_size:int = None,
                 n_bars: int = 2,
+                **kwargs
                 ):
 
         # select composer randomly if not already given
@@ -1369,52 +1371,57 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
             composer = np.random.choice(list(composer_to_feature_token.keys()), size=1)[0]
         elif composer not in composer_to_feature_token.keys():
             raise ValueError(f"Composer not found in list, Please choose from {list(composer_to_feature_token.keys())}")
-        composer_value = composer_to_feature_token[composer]
 
         n_bars = self.config.dataset.get("n_bars", None) if n_bars is None else n_bars
         max_batch_size = 64 // n_bars if max_batch_size is None else max_batch_size
         max_length = self.config.dataset.get("target_length") * max(1, (n_bars // self.config.dataset.get("n_bars")))
         PAD = self.config.pad_token_id
 
-        inputs_embeds = self.spectrogram(batch).transpose(-1, -2)
-        if self.config.dataset.get("mel_is_conditioned", None):
-            composer_value = torch.tensor(composer_value, device=self.device)
-            composer_value = composer_value.repeat(inputs_embeds.shape[0])
-            inputs_embeds = self.mel_conditioner(inputs_embeds, composer_value)
+        relative_tokens_arr = []
+        # For multiple audios(batch, seq_len, seq_dim)
+        for i, batch_shape in enumerate(batch_arr_shapes):
+            batch = batches[i, :batch_shape[0], :batch_shape[1]]
+            inputs_embeds = self.spectrogram(batch).transpose(-1, -2)
+            if self.config.dataset.get("mel_is_conditioned", None):
+                composer_value = composer_to_feature_token[composer]
+                composer_value = torch.tensor(composer_value, device=self.device)
+                composer_value = composer_value.repeat(inputs_embeds.shape[0])
+                inputs_embeds = self.mel_conditioner(inputs_embeds, composer_value)
 
-        batch_size = inputs_embeds.shape[0]
+            batch_size = inputs_embeds.shape[0]
 
-        relative_tokens = list()
-        for i in range(0, batch_size, max_batch_size):
-            start = i
-            end = min(batch_size, i + max_batch_size)
+            # As described in the official pop2piano implementation
+            relative_tokens = list()
+            for i in range(0, batch_size, max_batch_size):
+                start = i
+                end = min(batch_size, i + max_batch_size)
 
-            if input_ids is None:
-                _input_ids = None
-                _inputs_embeds = inputs_embeds[start:end]
-            else:
-                _input_ids = input_ids[start:end]
-                _inputs_embeds = None
+                if input_ids is None:
+                    _input_ids = None
+                    _inputs_embeds = inputs_embeds[start:end]
+                else:
+                    _input_ids = input_ids[start:end]
+                    _inputs_embeds = None
 
-            _relative_tokens = self.transformer.generate(
-                input_ids=_input_ids,
-                inputs_embeds=_inputs_embeds,
-                max_length=max_length,
-            )
-            _relative_tokens = _relative_tokens.cpu().numpy()
-            relative_tokens.append(_relative_tokens)
+                _relative_tokens = self.transformer.generate(
+                    input_ids=_input_ids,
+                    inputs_embeds=_inputs_embeds,
+                    max_length=max_length,
+                )
+                _relative_tokens = _relative_tokens.cpu().numpy()
+                relative_tokens.append(_relative_tokens)
 
-        max_length = max([rt.shape[-1] for rt in relative_tokens])
+            max_length = max([rt.shape[-1] for rt in relative_tokens])
 
-        for i in range(len(relative_tokens)):
-            relative_tokens[i] = np.pad(
-                relative_tokens[i],
-                [(0, 0), (0, max_length - relative_tokens[i].shape[-1])],
-                constant_values=PAD,
-            )
-        relative_tokens = np.concatenate(relative_tokens)
-
-        return relative_tokens
+            for i in range(len(relative_tokens)):
+                relative_tokens[i] = np.pad(
+                    relative_tokens[i],
+                    [(0, 0), (0, max_length - relative_tokens[i].shape[-1])],
+                    constant_values=PAD,
+                )
+            relative_tokens = np.concatenate(relative_tokens)
+            relative_tokens_arr.append(relative_tokens)
+        return relative_tokens_arr
 
 
 

@@ -21,6 +21,7 @@ import os
 import torch
 import scipy
 import librosa
+import pathlib
 import essentia
 import warnings
 import note_seq
@@ -102,31 +103,48 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         self.vocab_size_velocity = vocab_size_velocity
         self.vocab_size_time = vocab_size_time
 
-    def extract_rhythm(self, raw_audio):
+    def extract_rhythm(self, raw_audio, num_audio_sequences=1):
         """
         This algorithm(`RhythmExtractor2013`) extracts the beat positions and estimates their confidence as well as tempo in bpm for an audio signal.
         For more information please visit https://essentia.upf.edu/reference/std_RhythmExtractor2013.html .
         """
-        essentia_tracker = essentia.standard.RhythmExtractor2013(method="multifeature")
-        bpm, beat_times, confidence, estimates, essentia_beat_intervals = essentia_tracker(raw_audio)
+
+        if num_audio_sequences==1:
+            essentia_tracker = essentia.standard.RhythmExtractor2013(method="multifeature")
+            bpm, beat_times, confidence, estimates, essentia_beat_intervals = essentia_tracker(raw_audio[0])
+            return [bpm], [np.array(beat_times)], [confidence], [estimates], [essentia_beat_intervals]
+
+        bpm, beat_times, confidence, estimates, essentia_beat_intervals = [], [], [], [], []
+        for seq in range(num_audio_sequences):
+            essentia_tracker = essentia.standard.RhythmExtractor2013(method="multifeature")
+            seq_bpm, seq_beat_times, seq_confidence, seq_estimates, seq_essentia_beat_intervals = essentia_tracker(raw_audio[seq])
+            bpm.append(seq_bpm)
+            beat_times.append(np.array(seq_beat_times))
+            confidence.append(seq_confidence)
+            estimates.append(seq_estimates)
+            essentia_beat_intervals.append(seq_essentia_beat_intervals)
+
         return bpm, beat_times, confidence, estimates, essentia_beat_intervals
 
-    def interpolate_beat_times(self, beat_times, steps_per_beat, extend=False):
-        beat_times_function = scipy.interpolate.interp1d(
-            np.arange(beat_times.size),
-            beat_times,
-            bounds_error=False,
-            fill_value="extrapolate",
-        )
-        if extend:
-            beat_steps_8th = beat_times_function(
-                np.linspace(0, beat_times.size, beat_times.size * steps_per_beat + 1)
+    def interpolate_beat_times(self, beat_times_arr, steps_per_beat, extend=False):
+        beat_steps_8th_arr = []
+        for beat_times in beat_times_arr:
+            beat_times_function = scipy.interpolate.interp1d(
+                np.arange(beat_times.size),
+                beat_times,
+                bounds_error=False,
+                fill_value="extrapolate",
             )
-        else:
-            beat_steps_8th = beat_times_function(
-                np.linspace(0, beat_times.size - 1, beat_times.size * steps_per_beat - 1)
-            )
-        return beat_steps_8th
+            if extend:
+                beat_steps_8th = beat_times_function(
+                    np.linspace(0, beat_times.size, beat_times.size * steps_per_beat + 1)
+                )
+            else:
+                beat_steps_8th = beat_times_function(
+                    np.linspace(0, beat_times.size - 1, beat_times.size * steps_per_beat - 1)
+                )
+            beat_steps_8th_arr.append(beat_steps_8th)
+        return beat_steps_8th_arr
 
     def extrapolate_beat_times(self, beat_times, n_extend=1):
         beat_times_function = scipy.interpolate.interp1d(
@@ -197,7 +215,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             beatstep = beatstep - beatstep[0]
 
         if self.use_mel:
-            input_ids = None
             batch, ext_beatstep = self.preprocess_mel(audio,
                                                       beatstep,
                                                       n_bars=n_bars,
@@ -206,15 +223,40 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         else:
             raise NotImplementedError("use_mel must be True")
 
-        return input_ids, batch, ext_beatstep
+        return batch, ext_beatstep
+
+    def load_audiofiles(self, dir_path, sr):
+        if os.path.isfile(dir_path):
+            try:
+                raw_audio, _ = librosa.load(dir_path, sr=sr)
+                raw_audio = [raw_audio]
+                audio_file_name = [''.join(dir_path.split("/")[-1].split(".")[:-1])]
+            except:
+                audio_file_name = []
+                raw_audio = []
+            print(f"Found {len(audio_file_name)} audio file(s) - {', '.join(audio_file_name)}")
+            return raw_audio, audio_file_name, sr
+
+        elif os.path.isdir(dir_path):
+            files = os.listdir(dir_path)
+            audio_files, audio_file_names = [], []
+            for filename in files:
+                filepath = os.path.join(dir_path, filename)
+                try:
+                    audio, _ = librosa.load(filepath, sr=sr)
+                    audio_files.append(audio)
+                    audio_file_names.append(''.join(filename.split(".")[:-1]))
+                except:
+                    pass
+            print(f"Found {len(audio_file_names)} audio file(s) - {', '.join(audio_file_names)}")
+            return audio_files, audio_file_names, sr
 
     def __call__(self,
-                 audio_path:str = None,
-                 raw_audio:Union[np.ndarray, torch.tensor, list] = None,
-                 audio_sr:int =None,
-                 beatsteps=None,
+                 audio_path:Union[str, Any, List[str], List[Any]]=None,
+                 raw_audio:Union[np.ndarray, torch.tensor, List[np.ndarray], List[torch.tensor]]=None,
+                 audio_sr:int=None,
                  steps_per_beat=2,
-                 # n_bars=2,
+                 file_names=None,
                  add_click=False,
                  click_amp=0.2,
                  ):
@@ -223,7 +265,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         Args:
             audio_path (`string`):
                 Audio path from where the audio sequence will be loaded.
-                Can be `None if `raw_audio` and `audio_sr` is given.
+                Can be `None` if `raw_audio` and `audio_sr` are given.
             raw_audio (`np.ndarray`, `torch.tensor`, `List`):
                 Denotes the raw_audio. Can be `None` if `audio_path` is present.
                 If `audio_path` is `None` then `raw_audio` and `audio_sr` must not be `None`.
@@ -244,50 +286,70 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         # If only raw_audio is present then audio_sr also must be present
         if raw_audio is not None and audio_sr is None and audio_path is None:
             raise ValueError("`raw_audio` found but `audio_sr` not found")
-            return
 
         if raw_audio is None and audio_path is None:
             raise ValueError("Either `raw_audio` or `audio_path` is needed!")
-            return
-        elif raw_audio is not None and audio_path is not  None:
-            warnings.warn("Found both `raw_audio` and `audio_path` to be present, so using `raw_audio`")
+        elif raw_audio is not None and (audio_path is not None and audio_sr is not None):
+            warnings.warn("Found both `raw_audio` and `audio_path` to be present, so loading sequence from `audio_path`")
+            raw_audio, audio_file_names, sr = self.load_audiofiles(audio_path, sr=ESSENTIA_SAMPLERATE)
         elif raw_audio is None and audio_path is not None:
-            raw_audio, sr = librosa.load(audio_path, sr=ESSENTIA_SAMPLERATE)
+            raw_audio, audio_file_names, sr = self.load_audiofiles(audio_path, sr=ESSENTIA_SAMPLERATE)
         else:
             sr = audio_sr
+            if file_names is not None:
+                if len(file_names) != len(raw_audio):
+                    raise ValueError(f"lenght of raw_audio and lenght of file_names must be same, Received raw_audio length - {len(raw_audio)} "
+                                     f"and file_names length {len(file_names)}")
+                else:
+                    audio_file_names = file_names
+            if file_names is None:
+                audio_file_names = [f"file{i}" for i in range(len(raw_audio))]
 
-        if beatsteps is None:
-            bpm, beat_times, confidence, estimates, essentia_beat_intervals = self.extract_rhythm(raw_audio=raw_audio)
-            beat_times = np.array(beat_times)
-            beatsteps = self.interpolate_beat_times(beat_times, steps_per_beat, extend=True)
+        bpm, beat_times, confidence, estimates, essentia_beat_intervals = self.extract_rhythm(raw_audio=raw_audio,
+                                                                                              num_audio_sequences=len(audio_file_names))
+        beatsteps = self.interpolate_beat_times(beat_times, steps_per_beat, extend=True)
 
         if self.use_mel is not None:
             if self.sample_rate != ESSENTIA_SAMPLERATE and self.sample_rate is not None:
-                # Change `raw_audio_sr` to `self.sample_rate`
-                raw_audio = librosa.core.resample(
-                    raw_audio, orig_sr=sr, target_sr=self.sample_rate, res_type='kaiser_best'
-                )
-                sr = self.sample_rate
-                start_sample = int(beatsteps[0] * sr)
-                end_sample = int(beatsteps[-1] * sr)
-                _audio = torch.from_numpy(raw_audio)[start_sample:end_sample]
-                fzs = None
+                _audio, fzs = [], []
+                for i in range(len(raw_audio)):
+                    # Change `raw_audio_sr` to `self.sample_rate`
+                    raw_audio[i] = librosa.core.resample(
+                        raw_audio[i], orig_sr=sr, target_sr=self.sample_rate, res_type='kaiser_best'
+                    )
+                    sr = self.sample_rate
+                    start_sample = int(beatsteps[i][0] * sr)
+                    end_sample = int(beatsteps[i][-1] * sr)
+                    _audio.append(torch.from_numpy(raw_audio[i])[start_sample:end_sample])
+                    fzs.append(None)
         else:
             raise NotImplementedError("use_mel must be True")
 
-        input_ids, batch, ext_beatstep = self.single_preprocess(
-            feature_tokens=fzs,
-            audio=_audio,
-            beatstep=beatsteps - beatsteps[0],
-            n_bars=self.n_bars,
-        )
+        input_ids_arr, batch_arr, batch_arr_shapes, ext_beatstep_arr = [], [], [], []
+        for i in range(len(_audio)):
+            batch, ext_beatstep = self.single_preprocess(
+                feature_tokens=fzs[i],
+                audio=_audio[i],
+                beatstep=beatsteps[i] - beatsteps[i][0],
+                n_bars=self.n_bars,
+            )
+            batch_arr.append(batch)
+            batch_arr_shapes.append(batch.size())
+            ext_beatstep_arr.append(ext_beatstep)
 
-        return {"input_ids" : input_ids,
-                "batch" : batch,
+        # Pad them (if more than one), later will be unpadded in modeling_pop2piano
+        sequences, dims = zip(*batch_arr_shapes)
+        batch_mat = torch.zeros([len(batch_arr_shapes), max(sequences), max(dims)])
+        for i in range(len(batch_arr)):
+            batch_mat[i, :batch_arr_shapes[i][0], :batch_arr_shapes[i][1]] = batch_arr[i]
+
+        return {"batches" : batch_mat,
+                "batch_arr_shapes" : batch_arr_shapes,
                 "beatsteps" : beatsteps,
-                "ext_beatstep" : ext_beatstep,
+                "ext_beatstep" : ext_beatstep_arr,
                 "raw_audio" : raw_audio,
                 "sr" : sr,
+                "audio_file_names" : audio_file_names,
                 }
 
     def detokenize(self, token, time_idx_offset):
@@ -460,7 +522,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                     sr,
                     mix_sample_rate=None,
                     save_path=None,
-                    output_name=None,
+                    audio_file_names=None,
                     save_midi = False,
                     save_mix = False,
                     click_amp = 0.2,
@@ -476,56 +538,55 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             raise ValueError("You are setting save_path but not saving anything, use save_midi=True to "
                              "save the midi file and use save_mix to save the mix file or do both!")
 
-        if output_name is None:
-            import time
-            output_name = int(time.time())
-            warnings.warn("output_name is set to None, so using the name output_name")
-
         mix_sample_rate = self.sample_rate if mix_sample_rate is None else mix_sample_rate
 
-        if save_path is not None:
-            if os.path.isdir(save_path):
-                midi_path = os.path.join(save_path, f"midi_output_{output_name}.mid")
-                mix_path =  os.path.join(save_path, f"mix_output_{output_name}.wav")
-            else:
-                raise ValueError(f"Is {save_path} a directory?")
-        pm, notes = self.relative_batch_tokens_to_midi(relative_tokens,
-                                                       beatstep=ext_beatstep,
-                                                       bars_per_batch=self.n_bars,
-                                                       cutoff_time_idx=(self.n_bars + 1) * 4,
-                                                       )
-        for n in pm.instruments[0].notes:
-            n.start += beatsteps[0]
-            n.end += beatsteps[0]
+        pm_list = []
+        for relative_tokens_, beatsteps_, ext_beatstep_, raw_audio_, audio_file_name in zip(relative_tokens, beatsteps, ext_beatstep, raw_audio, audio_file_names):
+            if save_path is not None:
+                if os.path.isdir(save_path):
+                    midi_path = os.path.join(save_path, f"midi_output_{audio_file_name}.mid")
+                    mix_path = os.path.join(save_path, f"mix_output_{audio_file_name}.wav")
+                else:
+                    raise ValueError(f"Is {save_path} a directory?")
 
-        if save_midi:
-            pm.write(midi_path)
-            print(f"midi file saved at {midi_path}!")
+            pm, notes = self.relative_batch_tokens_to_midi(relative_tokens_,
+                                                           beatstep=ext_beatstep_,
+                                                           bars_per_batch=self.n_bars,
+                                                           cutoff_time_idx=(self.n_bars + 1) * 4,
+                                                           )
+            for n in pm.instruments[0].notes:
+                n.start += beatsteps[0]
+                n.end += beatsteps[0]
 
-        if show_plot or save_mix:
-            if mix_sample_rate != sr:
-                raw_audio = librosa.core.resample(raw_audio, orig_sr=sr, target_sr=mix_sample_rate)
-                sr = mix_sample_rate
-            if add_click:
-                clicks = (
-                        librosa.clicks(times=beatsteps, sr=sr, length=len(raw_audio)) * click_amp
+            pm_list.append(pm)
+
+            if save_midi:
+                pm.write(midi_path)
+                print(f"midi file saved at {midi_path}!")
+
+            if show_plot or save_mix:
+                if mix_sample_rate != sr:
+                    raw_audio_ = librosa.core.resample(raw_audio_, orig_sr=sr, target_sr=mix_sample_rate)
+                    sr = mix_sample_rate
+                if add_click:
+                    clicks = (
+                            librosa.clicks(times=beatsteps_, sr=sr, length=len(raw_audio_)) * click_amp
+                    )
+                    raw_audio_ = raw_audio_ + clicks
+                pm_raw_audio = pm.fluidsynth(sr)
+                stereo = self.get_stereo(raw_audio_, pm_raw_audio, pop_scale=stereo_amp)
+
+                sf.write(
+                    file=mix_path,
+                    data=stereo.T,
+                    samplerate=sr,
+                    format="wav",
                 )
-                raw_audio = raw_audio + clicks
-            pm_raw_audio = pm.fluidsynth(sr)
-            stereo = self.get_stereo(raw_audio, pm_raw_audio, pop_scale=stereo_amp)
+                print(f"stereo-mix file saved at {mix_path}!")
 
-            sf.write(
-                file=mix_path,
-                data=stereo.T,
-                samplerate=sr,
-                format="wav",
-            )
-            print(f"stereo-mix file saved at {mix_path}!")
-
-        if show_plot:
-            display("Stereo MIX", ipd.Audio(stereo, rate=sr))
-            display("Rendered MIDI", ipd.Audio(pm_raw_audio, rate=sr))
-            display("Original Song", ipd.Audio(raw_audio, rate=sr))
-            display(note_seq.plot_sequence(note_seq.midi_to_note_sequence(pm)))
-
-        return pm
+            if show_plot:
+                display("Stereo MIX", ipd.Audio(stereo, rate=sr))
+                display("Rendered MIDI", ipd.Audio(pm_raw_audio, rate=sr))
+                display("Original Song", ipd.Audio(raw_audio, rate=sr))
+                display(note_seq.plot_sequence(note_seq.midi_to_note_sequence(pm)))
+        return pm_list
