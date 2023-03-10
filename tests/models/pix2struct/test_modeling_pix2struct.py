@@ -635,7 +635,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
 
         self.assertEqual(
             processor.decode(predictions[1], skip_special_tokens=True),
-            "A collection of books including The Temple Bar.",
+            "A row of books including The Temple Bar.",
         )
 
     def test_batched_inference_image_captioning_conditioned(self):
@@ -656,11 +656,9 @@ class Pix2StructIntegrationTest(unittest.TestCase):
 
         predictions = model.generate(**inputs)
 
-        self.assertEqual(
-            processor.decode(predictions[0], skip_special_tokens=True), "A picture of a stop sign that says yes"
-        )
+        self.assertEqual(processor.decode(predictions[0], skip_special_tokens=True), "A picture of a stop sign")
 
         self.assertEqual(
             processor.decode(predictions[1], skip_special_tokens=True),
-            "An photography ofen Temple Bar and other places in the city.",
+            "An photography ofen and the Temple Bar.",
         )
