@@ -44,6 +44,7 @@ else:
         "NllbMoeModel",
         "NllbMoePreTrainedModel",
         "NllbMoeTop1Router",
+        "NllbMoeTop1Router"
         "NllbMoeSparseMLP",
     ]
 
@@ -67,6 +68,7 @@ if TYPE_CHECKING:
             NllbMoePreTrainedModel,
             NllbMoeSparseMLP,
             NllbMoeTop1Router,
+            NllbMoeTop2Router,
         )
 
 
