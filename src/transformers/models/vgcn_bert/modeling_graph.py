@@ -13,24 +13,83 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Construct the Vocabulary/Entity Graph from text samples"""
+"""Construct the Word/Entity Graph from text samples or pre-defined word-pairs relations
 
-# Build NPMI graph from text samples
+Approaches: NPMI, PMI, pre-defined word-pairs relations.
 
-# You may (or not) first preprocess the text before build the graph,
-# e.g. Stopword removal, String cleaning, Stemming, Nomolization, Lemmatization
+You may (or not) first preprocess the text before build the graph,
+e.g. Stopword removal, String cleaning, Stemming, Nomolization, Lemmatization
+
+"""
 
 from collections import Counter
 from math import log
 from typing import List, Tuple
+import torch
 
 import numpy as np
 import scipy.sparse as sp
 from transformers.tokenization_utils import PreTrainedTokenizerBase
 
 
-def build_pmi_graph(
-    texts: List[str], tokenizer: PreTrainedTokenizerBase, window_size=20, algorithm="npmi"
+class WordGraph:
+    """
+    Word graph based on adjacency matrix, construct from text samples or pre-defined word-pair relations
+
+    Params:
+        `rows`: List[str] of text samples, or pre-defined word-pair relations: List[Tuple[str, str, float]]
+        `tokenizer`: The same pretrained tokenizer that is used for the model late.
+        `window_size`:  Available only for rows is text samples.
+            Size of the sliding window for collecting the pieces of text
+            and further calculate the NPMI value, default is 20.
+        `algorithm`:  Available only for rows is text samples. "npmi" or "pmi", default is "npmi".
+
+    Properties:
+        `adj_matrix`: scipy.sparse.csr_matrix, the word graph in sparse adjacency matrix form.
+        `vocab`: List of words in the graph.
+        `vocab_indices`: indices of vocabulary words.
+
+    """
+
+    def __init__(
+        self, rows: list, tokenizer: PreTrainedTokenizerBase, window_size=20, algorithm="npmi", threshold=0.0
+    ):
+        if type(rows[0]) == tuple:
+            self.adjacency_matrix, self.vocab, self.vocab_indices = _build_predefined_graph(rows, tokenizer)
+        else:
+            self.adjacency_matrix, self.vocab, self.vocab_indices = _build_pmi_graph(
+                rows, tokenizer, window_size, algorithm, threshold
+            )
+
+    def normalized(self):
+        return _normalize_adj(self.adjacency_matrix) if self.adjacency_matrix else None
+
+    def to_torch_sparse(self):
+        if self.adjacency_matrix is None:
+            return None
+        adj = _normalize_adj(self.adjacency_matrix)
+        return _sparse_scipy2torch(adj.tocoo())
+
+
+def _normalize_adj(adj):
+    """Symmetrically normalize adjacency matrix."""
+    # adj = sp.coo_matrix(adj)
+    rowsum = np.array(adj.sum(1))  # D-degree matrix
+    d_inv_sqrt = np.power(rowsum, -0.5).flatten()
+    d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.0
+    d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
+    return adj.dot(d_mat_inv_sqrt).transpose().dot(d_mat_inv_sqrt)
+
+
+def _sparse_scipy2torch(coo_sparse):
+    # coo_sparse=coo_sparse.tocoo()
+    i = torch.LongTensor(np.vstack((coo_sparse.row, coo_sparse.col)))
+    v = torch.from_numpy(coo_sparse.data)
+    return torch.sparse.FloatTensor(i, v, torch.Size(coo_sparse.shape))
+
+
+def _build_pmi_graph(
+    texts: List[str], tokenizer: PreTrainedTokenizerBase, window_size=20, algorithm="npmi", threshold=0.0
 ) -> Tuple[sp.csr_matrix, List, dict]:
     """
     Build PMI or NPMI adjacency based on text samples
@@ -66,21 +125,6 @@ def build_pmi_graph(
     vocab = list(vocab_counter.keys())
     vocab_indices = {k: i for i, k in enumerate(vocab)}
 
-    # windows = []
-    # for t in texts:
-    #     words = t.split()
-    #     length = len(words)
-    #     if length <= window_size:
-    #         windows.append(words)
-    #     else:
-    #         for j in range(length - window_size + 1):
-    #             window_words = words[j : j + window_size]
-    #             windows.append(window_words)
-    # vocab_window_counter = Counter()
-    # # map(lambda x: vocab_window_counter.update(Counter(set(x))), window_words)
-    # for window_words in windows:
-    #     vocab_window_counter.update(Counter(set(window_words)))
-
     # Get the pieces from sliding windows
     windows = []
     for t in texts:
@@ -99,30 +143,18 @@ def build_pmi_graph(
     # Get window-count that every word-pair appeared (count 1 for the same window).
     word_pair_window_counter = Counter()
     for word_ids in windows:
-        vocab_window_counter.update(Counter(set(word_ids)))
+        word_ids = list(set(word_ids))
+        vocab_window_counter.update(Counter(word_ids))
         word_pair_window_counter.update(
             Counter(
-                set(
-                    [
-                        (word_ids[i], word_ids[j])
-                        for i in range(1, len(word_ids))
-                        for j in range(i)
-                        if word_ids[j] != word_ids[i]
-                    ]
-                )
-            )
-        )
-        # Need adding inverse pair?
-        word_pair_window_counter.update(
-            Counter(
-                set(
-                    [
-                        (word_ids[j], word_ids[i])
-                        for i in range(1, len(word_ids))
-                        for j in range(i)
-                        if word_ids[j] != word_ids[i]
-                    ]
-                )
+                [
+                    f(i, j)
+                    # (word_ids[i], word_ids[j])
+                    for i in range(1, len(word_ids))
+                    for j in range(i)
+                    # adding inverse pair
+                    for f in (lambda x, y: (word_ids[x], word_ids[y]), lambda x, y: (word_ids[y], word_ids[x]))
+                ]
             )
         )
 
@@ -142,7 +174,7 @@ def build_pmi_graph(
             if algorithm == "npmi"
             else (log((1.0 * pair_count / total_windows) / (1.0 * i_count * j_count / (total_windows**2))))
         )
-        if value > 0:
+        if value > threshold:
             vocab_adj_row.append(i)
             vocab_adj_col.append(j)
             vocab_adj_weight.append(value)
@@ -158,7 +190,7 @@ def build_pmi_graph(
     return vocab_adj, vocab, vocab_indices
 
 
-def build_manual_graph(
+def _build_predefined_graph(
     words_relations: List[Tuple[str, str, float]], tokenizer: PreTrainedTokenizerBase
 ) -> Tuple[sp.csr_matrix, List, dict]:
     vocab_counter = Counter()
@@ -184,10 +216,10 @@ def build_manual_graph(
     for (w1, w2), v in word_pairs.items():
         vocab_adj_row.append(vocab_indices[w1])
         vocab_adj_col.append(vocab_indices[w2])
-        # Need adding inverse pair?
+        vocab_adj_weight.append(v)
+        # adding inverse
         vocab_adj_row.append(vocab_indices[w2])
         vocab_adj_col.append(vocab_indices[w1])
-        vocab_adj_weight.append(v)
         vocab_adj_weight.append(v)
 
     # Build vocabulary adjacency matrix
@@ -234,15 +266,21 @@ if __name__ == "__main__":
         ("city", "montreal", 0.8),
         ("comeabc", "gobefbef", 0.2),
     ]
-    vocab_adj, vocab, vocab_indices = build_manual_graph(words_relations, tokenizer)
-    print_matrix(vocab_adj.todense())
+    wgraph = WordGraph(words_relations, tokenizer)
+    vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
     print(len(vocab))
+    print_matrix(vocab_adj.todense())
 
     # texts = [" I am here", "He is here", "here i am, gobefbef"]
     texts = [" I am here!", "He is here", "You are also here, gobefbef!", "What is interpribility"]
-    vocab_adj, vocab, vocab_indices = build_pmi_graph(texts, tokenizer, window_size=2)
-    print_matrix(vocab_adj.todense())
+    wgraph = WordGraph(texts, tokenizer, window_size=4)
+    vocab_adj, vocab, vocab_indices = wgraph.adjacency_matrix, wgraph.vocab, wgraph.vocab_indices
+
     print(len(vocab))
+    print_matrix(vocab_adj.todense())
+    print()
+    norm_adj = _normalize_adj(vocab_adj)
+    print_matrix(norm_adj.todense())
 
     # print(vocab_indices[vocab[3]])
     print("---end---")

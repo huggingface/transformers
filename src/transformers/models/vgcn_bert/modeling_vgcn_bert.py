@@ -107,7 +107,7 @@ class VocabGraphConvolution(nn.Module):
         self.hid_dim = hid_dim
         self.out_dim = out_dim
 
-        voc_dim = self.vgcn_graphs[0].shape(0)  # torch.sparse.FloatTensor
+        voc_dim = self.vgcn_graphs[0].shape[0]  # torch.sparse.FloatTensor
         for i in range(len(self.vgcn_graphs)):
             setattr(self, "W%d_vh" % i, nn.Parameter(torch.randn(voc_dim, hid_dim)))
 
@@ -716,12 +716,12 @@ class VGCNBertModel(VGCNBertPreTrainedModel):
 class VGCNBertForMaskedLM(VGCNBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["vocab_projector.weight"]
 
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PretrainedConfig, vgcn_graphs: list):
         super().__init__(config)
 
         self.activation = get_activation(config.activation)
 
-        self.vgcn_bert = VGCNBertModel(config)
+        self.vgcn_bert = VGCNBertModel(config, vgcn_graphs)
         self.vocab_transform = nn.Linear(config.dim, config.dim)
         self.vocab_layer_norm = nn.LayerNorm(config.dim, eps=1e-12)
         self.vocab_projector = nn.Linear(config.dim, config.vocab_size)
@@ -822,12 +822,12 @@ class VGCNBertForMaskedLM(VGCNBertPreTrainedModel):
 )
 # Copied from transformers.models.distilbert.modeling_distilbert.DistilBertForSequenceClassification with DISTILBERT->VGCNBERT,DistilBert->VGCNBert,distilbert->vgcn_bert
 class VGCNBertForSequenceClassification(VGCNBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PretrainedConfig, vgcn_graphs: list):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
 
-        self.vgcn_bert = VGCNBertModel(config)
+        self.vgcn_bert = VGCNBertModel(config, vgcn_graphs)
         self.pre_classifier = nn.Linear(config.dim, config.dim)
         self.classifier = nn.Linear(config.dim, config.num_labels)
         self.dropout = nn.Dropout(config.seq_classif_dropout)
@@ -940,10 +940,10 @@ class VGCNBertForSequenceClassification(VGCNBertPreTrainedModel):
 )
 # Copied from transformers.models.distilbert.modeling_distilbert.DistilBertForQuestionAnswering with DISTILBERT->VGCNBERT,DistilBert->VGCNBert,distilbert->vgcn_bert
 class VGCNBertForQuestionAnswering(VGCNBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PretrainedConfig, vgcn_graphs: list):
         super().__init__(config)
 
-        self.vgcn_bert = VGCNBertModel(config)
+        self.vgcn_bert = VGCNBertModel(config, vgcn_graphs)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
         if config.num_labels != 2:
             raise ValueError(f"config.num_labels should be 2, but it is {config.num_labels}")
@@ -1059,11 +1059,11 @@ class VGCNBertForQuestionAnswering(VGCNBertPreTrainedModel):
 )
 # Copied from transformers.models.distilbert.modeling_distilbert.DistilBertForTokenClassification with DISTILBERT->VGCNBERT,DistilBert->VGCNBert,distilbert->vgcn_bert
 class VGCNBertForTokenClassification(VGCNBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PretrainedConfig, vgcn_graphs: list):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.vgcn_bert = VGCNBertModel(config)
+        self.vgcn_bert = VGCNBertModel(config, vgcn_graphs)
         self.dropout = nn.Dropout(config.dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
@@ -1154,10 +1154,10 @@ class VGCNBertForTokenClassification(VGCNBertPreTrainedModel):
 )
 # Copied from transformers.models.distilbert.modeling_distilbert.DistilBertForMultipleChoice with DISTILBERT->VGCNBERT,DistilBert->VGCNBert,distilbert->vgcn_bert
 class VGCNBertForMultipleChoice(VGCNBertPreTrainedModel):
-    def __init__(self, config: PretrainedConfig):
+    def __init__(self, config: PretrainedConfig, vgcn_graphs: list):
         super().__init__(config)
 
-        self.vgcn_bert = VGCNBertModel(config)
+        self.vgcn_bert = VGCNBertModel(config, vgcn_graphs)
         self.pre_classifier = nn.Linear(config.dim, config.dim)
         self.classifier = nn.Linear(config.dim, 1)
         self.dropout = nn.Dropout(config.seq_classif_dropout)
