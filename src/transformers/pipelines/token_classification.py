@@ -221,10 +221,12 @@ class TokenClassificationPipeline(ChunkPipeline):
         Args:
             inputs (`str` or `List[str]`):
                 One or several texts (or one list of texts) for token classification.
+
         Return:
             A list or a list of list of `dict`: Each result comes as a list of dictionaries (one for each token in the
             corresponding input, or each entity if this pipeline was instantiated with an aggregation_strategy) with
             the following keys:
+
             - **word** (`str`) -- The token/word classified. This is obtained by decoding the selected tokens. If you
               want to have the exact string in the original sentence, use `start` and `end`.
             - **score** (`float`) -- The corresponding probability for `entity`.
