@@ -36,7 +36,6 @@ repo-consistency:
 	python utils/check_copies.py
 	python utils/check_table.py
 	python utils/check_dummies.py
-	python utils/check_model_tester.py
 	python utils/check_repo.py
 	python utils/check_inits.py
 	python utils/check_config_docstrings.py

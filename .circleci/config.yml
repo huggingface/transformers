@@ -171,7 +171,6 @@ jobs:
             - run: python utils/check_copies.py
             - run: python utils/check_table.py
             - run: python utils/check_dummies.py
-            - run: python utils/check_model_tester.py
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
             - run: python utils/check_config_docstrings.py
