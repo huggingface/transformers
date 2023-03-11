@@ -206,7 +206,7 @@ class GPTJAttention(nn.Module):
             embed_positions = embed_positions.to(position_ids.device)
             self.embed_positions = embed_positions
 
-        sincos = embed_positions[position_ids.long()]
+        sincos = embed_positions[position_ids]
         sincos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
         sincos = [t.contiguous() for t in sincos]
 
@@ -578,7 +578,7 @@ class GPTJModel(GPTJPreTrainedModel):
             token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
         if position_ids is not None:
-            position_ids = position_ids.view(-1, input_shape[-1])
+            position_ids = position_ids.view(-1, input_shape[-1]).long()
 
         if past_key_values is None:
             past_length = 0
