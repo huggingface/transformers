@@ -28,7 +28,7 @@ from math import isnan
 from typing import List, Tuple, get_type_hints
 
 from datasets import Dataset
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, delete_repo
 from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 
@@ -85,6 +85,7 @@ if is_tf_available():
         TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
+        PreTrainedModel,
         PushToHubCallback,
         RagRetriever,
         TFAutoModel,
@@ -92,6 +93,7 @@ if is_tf_available():
         TFBertForMaskedLM,
         TFBertForSequenceClassification,
         TFBertModel,
+        TFPreTrainedModel,
         TFRagModel,
         TFSharedEmbeddings,
     )
@@ -2407,7 +2409,6 @@ class TFModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod
@@ -2466,6 +2467,7 @@ class TFModelPushToHubTester(unittest.TestCase):
                 break
         self.assertTrue(models_equal)
 
+    @is_pt_tf_cross_test
     def test_push_to_hub_callback(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2488,6 +2490,12 @@ class TFModelPushToHubTester(unittest.TestCase):
                 models_equal = False
                 break
         self.assertTrue(models_equal)
+
+        tf_push_to_hub_params = dict(inspect.signature(TFPreTrainedModel.push_to_hub).parameters)
+        tf_push_to_hub_params.pop("base_model_card_args")
+        pt_push_to_hub_params = dict(inspect.signature(PreTrainedModel.push_to_hub).parameters)
+        pt_push_to_hub_params.pop("deprecated_kwargs")
+        self.assertDictEaual(tf_push_to_hub_params, pt_push_to_hub_params)
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
