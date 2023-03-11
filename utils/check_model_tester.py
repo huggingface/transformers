@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import glob
 import os
 
 from get_test_info import get_tester_classes
@@ -22,56 +23,41 @@ from get_test_info import get_tester_classes
 if __name__ == "__main__":
     failures = []
 
-    model_test_root_dir = os.path.join("tests", "models")
+    pattern = os.path.join("tests", "models", "**", "test_modeling_*.py")
+    test_files = glob.glob(pattern)
+    # TODO: deal with TF/Flax too
+    test_files = [
+        x for x in test_files if not (x.startswith("test_modeling_tf_") or x.startswith("test_modeling_flax_"))
+    ]
 
-    model_types = os.listdir(model_test_root_dir)
-    model_types = [x for x in model_types if os.path.isdir(os.path.join(model_test_root_dir, x))]
-    model_types = [x for x in model_types if x not in ["auto", "__pycache__"]]
-
-    for model_type in model_types[:]:
-        test_dir = os.path.join(model_test_root_dir, model_type)
-        test_fns = os.listdir(test_dir)
-        test_fns = [x for x in test_fns if x.startswith("test_modeling_")]
-        # TODO: deal with TF/Flax too
-        test_fns = [
-            x for x in test_fns if not (x.startswith("test_modeling_tf_") or x.startswith("test_modeling_flax_"))
-        ]
-        for test_fn in test_fns:
-            test_file = os.path.join(test_dir, test_fn)
-            tester_classes = get_tester_classes(test_file)
-            for tester_class in tester_classes:
-                print(tester_class.__name__)
-                # A few tester classes don't have `parent` parameter in `__init__`
-                # TODO: deal this better
-                try:
-                    tester = tester_class(parent=None)
-                except Exception:
-                    continue
-                if hasattr(tester, "get_config"):
-                    config = tester.get_config()
-                    for k, v in config.to_dict().items():
-                        if isinstance(v, int) and v >= 100:
-
-                            if k.endswith("_token_id"):
-                                # skip
-                                continue
-                            elif k.endswith("max_position_embeddings"):
-                                # TODO: 78 to fix
-                                continue
-                            elif k.endswith("hidden_size"):
-                                # TODO: 21 to fix
-                                continue
-                            elif k.endswith("_dim"):
-                                # TODO: 20 to fix
-                                continue
-                            elif k.endswith("_size"):
-                                # TODO: 60 -21 = 39 to fix
-                                continue
-
-                            # Need to deal with (allow) special cases, otherwise change some values
+    for test_file in test_files:
+        tester_classes = get_tester_classes(test_file)
+        for tester_class in tester_classes:
+            print(tester_class.__name__)
+            # A few tester classes don't have `parent` parameter in `__init__`.
+            # TODO: deal this better
+            try:
+                tester = tester_class(parent=None)
+            except Exception:
+                continue
+            if hasattr(tester, "get_config"):
+                config = tester.get_config()
+                for k, v in config.to_dict().items():
+                    if isinstance(v, int):
+                        target = None
+                        if k in ["vocab_size"]:
+                            target = 100
+                        elif k in ["max_position_embeddings"]:
+                            target = 128
+                        elif k in ["hidden_size", "d_model"]:
+                            target = 40
+                        elif k == ["num_layers", "num_hidden_layers", "num_encoder_layers", "num_decoder_layers"]:
+                            target = 5
+                        if target is not None and v > target:
                             failures.append(
                                 f"{tester_class.__name__} will produce a `config` of type `{config.__class__.__name__}`"
-                                f' with config["{k}"] = {v} which is too large for testing!'
+                                f' with config["{k}"] = {v} which is too large for testing! Set its value to be smaller'
+                                f" than {target}."
                             )
 
     if len(failures) > 0:
