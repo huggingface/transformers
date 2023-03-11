@@ -718,7 +718,7 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
         head_mask: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = True,
+        return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ):
         """
@@ -895,10 +895,10 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
         head_mask: Optional[tf.Tensor] = None,
         cross_attn_head_mask: Optional[tf.Tensor] = None,
         past_key_values: Tuple[Tuple[tf.Tensor]] = None,
-        use_cache: Optional[bool] = True,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = True,
+        return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ):
         r"""
@@ -1136,10 +1136,10 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
         past_key_values: Tuple[Tuple[tf.Tensor]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         decoder_inputs_embeds: Optional[tf.Tensor] = None,
-        use_cache: Optional[bool] = True,
-        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = True,
+        return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
         **kwargs,
     ):
