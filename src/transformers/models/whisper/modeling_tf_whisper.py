@@ -28,6 +28,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
+    TFSequenceClassifierOutput
 )
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
