@@ -1288,7 +1288,10 @@ class NeptuneCallback(TrainerCallback):
         if self._volatile_checkpoints_dir is not None:
             consistent_checkpoint_path = os.path.join(self._volatile_checkpoints_dir, checkpoint)
             try:
-                shutil.copytree(relative_path, os.path.join(consistent_checkpoint_path, relative_path))
+                # Remove leading ../ from a relative path.
+                cpkt_path = relative_path.replace("..", "").lstrip("/")
+                copy_path = os.path.join(consistent_checkpoint_path, cpkt_path)
+                shutil.copytree(relative_path, copy_path)
                 target_path = consistent_checkpoint_path
             except IOError as e:
                 logger.warning(
