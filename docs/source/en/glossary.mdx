@@ -73,6 +73,14 @@ by the tokenizer under the key "attention_mask":
 [[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]
 ```
 
+### autoencoding models
+
+See [encoder models](#encoder-models) and [masked language modeling](#masked-language-modeling-mlm)
+
+### autoregressive models
+
+See [causal language modeling](#causal-language-modeling) and [decoder models](#decoder-models)
+
 ## B
 
 ### backbone
@@ -80,6 +88,11 @@ by the tokenizer under the key "attention_mask":
 The backbone is the network (embeddings and layers) that outputs the raw hidden states or features. It is usually connected to a [head](#head) which accepts the features as its input to make a prediction. For example, [`ViTModel`] is a backbone without a specific head on top. Other models can also use [`VitModel`] as a backbone such as [DPT](model_doc/dpt).
 
 ## C
+
+### causal language modeling
+
+A pretraining task where the model reads the texts in order and has to predict the next word. It's usually done by
+reading the whole sentence but using a mask inside the model to hide the future tokens at a certain timestep.
 
 ### channel
 
@@ -121,7 +134,7 @@ Machine learning algorithms which uses neural networks with several layers.
 
 ### encoder models
 
-Also known as autoencoding models, encoder models take an input (such as text or images) and transform them into a condensed numerical representation called an embedding. Oftentimes, encoder models are pretrained using techniques like [masked language modeling](#masked-language-modeling), which masks parts of the input sequence and forces the model to create more meaningful representations.
+Also known as autoencoding models, encoder models take an input (such as text or images) and transform them into a condensed numerical representation called an embedding. Oftentimes, encoder models are pretrained using techniques like [masked language modeling](#masked-language-modeling-mlm), which masks parts of the input sequence and forces the model to create more meaningful representations.
 
 <Youtube id="H39Z_720T5s"/>
 
@@ -287,7 +300,7 @@ features.
 
 ### large language models (LLM)
 
-A generic term that refers to transformer language models (GPT-3, BLOOM, OPT) that were trained on a large quantity of data.
+A generic term that refers to transformer language models (GPT-3, BLOOM, OPT) that were trained on a large quantity of data. These models also tend to have a large number of learnable parameters (e.g. 175 billion for GPT-3).
 
 ## M
 
@@ -352,7 +365,7 @@ The task of preparing raw data into a format that can be easily consumed by mach
 A model that has been pretrained on some data (for instance all of Wikipedia). Pretraining methods involve a
 self-supervised objective, which can be reading the text and trying to predict the next word (see [causal language
 modeling](#causal-language-modeling)) or masking some words and trying to predict them (see [masked language
-modeling](#masked-language-modeling)). 
+modeling](#masked-language-modeling-mlm)). 
 
   Speech and vision models have their own pretraining objectives. For example, Wav2Vec2 is a speech model pretrained on a contrastive task which requires the model to identify the "true" speech representation from a set of "false" speech representations. On the other hand, BEiT is a vision model pretrained on a masked image modeling task which masks some of the image patches and requires the model to predict the masked patches (similar to the masked language modeling objective).
 
@@ -375,6 +388,12 @@ A measurement in hertz of the number of samples (the audio signal) taken per sec
 ### self-attention
 
 Each element of the input finds out which other elements of the input they should attend to.
+
+### self-supervised learning 
+
+A category of machine learning techniques in which a model creates its own learning objective from unlabeled data. It differs from [unsupervised learning](#unsupervised-learning) and [supervised learning](#supervised-learning) in that the learning process is supervised, but not explicitly from the user. 
+
+One example of self-supervised learning is [masked language modeling](#masked-language-modeling-mlm), where a model is passed sentences with a proportion of its tokens removed and learns to predict the missing tokens.
 
 ### semi-supervised learning
 
