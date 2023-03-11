@@ -1657,9 +1657,6 @@ class TFMBartPreTrainedModel(metaclass=DummyObject):
 TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
 class TFMobileBertForMaskedLM(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -1728,6 +1725,9 @@ class TFMobileBertPreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+
+TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class TFMobileViTForImageClassification(metaclass=DummyObject):
