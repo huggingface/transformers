@@ -94,7 +94,10 @@ class AggregationStrategy(ExplicitEnum):
 class TokenClassificationPipeline(ChunkPipeline):
     """
     Named Entity Recognition pipeline using any `ModelForTokenClassification`. See the [named entity recognition
-    examples](../task_summary#named-entity-recognition) for more information. Example:
+    examples](../task_summary#named-entity-recognition) for more information.
+
+    Example:
+
     ```python
     >>> from transformers import pipeline
 
