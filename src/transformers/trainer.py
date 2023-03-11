@@ -1888,7 +1888,7 @@ class Trainer:
                 if step % args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
 
-                print(f"total_steps={total_steps}")
+                #print(f"total_steps={total_steps}")
                 if (
                     ((total_steps + 1) % args.gradient_accumulation_steps != 0)
                     and args.local_rank != -1
@@ -1916,13 +1916,13 @@ class Trainer:
                 if self.deepspeed:
                     self.deepspeed.step()
 
-                print(f"{step+1} { (step + 1) % args.gradient_accumulation_steps }")
+                #print(f"{step+1} { (step + 1) % args.gradient_accumulation_steps }")
                 if (total_steps + 1) % args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     steps_in_epoch <= args.gradient_accumulation_steps
                     and (step + 1) == steps_in_epoch
                 ):
-                    print("boundary")
+                    #print("boundary")
                     # Gradient clipping
                     if args.max_grad_norm is not None and args.max_grad_norm > 0 and not self.deepspeed:
                         # deepspeed does its own clipping
