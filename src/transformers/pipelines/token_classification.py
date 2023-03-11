@@ -266,7 +266,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             else:
                 model_inputs = {k: v[i].unsqueeze(0) for k, v in inputs.items()}
             if offset_mapping:
-                model_inputs["offset_mapping"] = offset_mapping[i]
+                model_inputs["offset_mapping"] = offset_mapping
             model_inputs["sentence"] = sentence if i == 0 else None
             model_inputs["is_last"] = i == num_chunks - 1
 
