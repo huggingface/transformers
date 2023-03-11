@@ -737,7 +737,6 @@ class WhisperEncoder(WhisperPreTrainedModel):
 
     Args:
         config: WhisperConfig
-        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: WhisperConfig):
