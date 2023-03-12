@@ -48,7 +48,7 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-def rename_fairseq_keys(state_dict, expert_idx = None):
+def rename_fairseq_keys(state_dict, expert_idx=None):
     # 'encoder.layers.7.moe_layer.experts.0.fc2.bias' ->'encoder.layers.7.ffn.mlp.experts.0.fc2.bias'
     # 'encoder.layers.7.fc2.bias' ->  'encoder.layers.7.ffn.mlp.fc2.bias'
     # encoder.layers.7.wg -> encoder.layers.7.ffn.mlp.router.classifier
@@ -57,9 +57,9 @@ def rename_fairseq_keys(state_dict, expert_idx = None):
         key = old_key
         if "experts" in key:
             key = key.replace("moe_layer.experts.0", f"ffn.mlp.experts.expert_{expert_idx}")
-        elif "fc2" :
+        elif "fc2":
             key = key.replace(".fc2.", ".ffn.mlp.fc2")
-        elif "fc1" :
+        elif "fc1":
             key = key.replace(".fc1.", ".ffn.mlp.fc1")
         elif "gate" in key:
             key = key.replace(".moe_layer.gate.wg", ".ffn.mlp.router.classifier")
@@ -67,16 +67,13 @@ def rename_fairseq_keys(state_dict, expert_idx = None):
             key = key.replace("encoder_attn", "cross_attention")
         elif "encoder_attn_layer_norm" in key:
             key = key.replace("encoder_attn_layer_norm", "cross_attention_layer_norm")
-        
+
         new_dict[key] = state_dict[old_key]
     return new_dict
 
 
-def shard_on_the_fly(
-    switch_checkpoint_path, dump_path, num_experts, dtype, weights_name: str = WEIGHTS_NAME
-):
+def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weights_name: str = WEIGHTS_NAME):
     sharded_state_dicts = []
-    current_block = {}
     total_size = 0
     os.makedirs(dump_path, exist_ok=True)
 
@@ -110,7 +107,6 @@ def shard_on_the_fly(
 
     # Otherwise, let's build the index
     weight_map = {}
-    shards = {}
     for idx, shard in enumerate(sharded_state_dicts):
         shard_file = weights_name.replace(".bin", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.bin")
         temp_filename = os.path.join(dump_path, weights_name.replace(".bin", f"-{idx+1:05d}-of-???.bin"))
@@ -154,14 +150,11 @@ if __name__ == "__main__":
         128,
         args.dtype,
     )
-    
+
     # 'decoder.layers.1.ffn.mlp.experts.expert_7.fc1.weight',
-    # should start sparse with layer 3, then 7, 
+    # should start sparse with layer 3, then 7,
     config = NllbMoeConfig.from_pretrained(
-        "facebook/nllb-200-3.3B",
-        encoder_sparse_step=4,
-        decoder_sparse_step=4,
-        num_experts=128
+        "facebook/nllb-200-3.3B", encoder_sparse_step=4, decoder_sparse_step=4, num_experts=128
     )
     config.save_pretrained(args.pytorch_dump_folder_path)
     model = NllbMoeModel.from_pretrained(args.pytorch_dump_folder_path)
