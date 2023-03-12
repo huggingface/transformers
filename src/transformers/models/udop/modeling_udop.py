@@ -24,9 +24,10 @@ from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
 import torch
 from torch import Tensor, nn
+from torch.nn import CrossEntropyLoss
 
 from transformers import UdopConfig
-from transformers.modeling_outputs import BaseModelOutput
+from transformers.modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
@@ -226,6 +227,10 @@ class UdopPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, UdopLayerNorm):
             module.weight.data.fill_(factor * 1.0)
+        elif isinstance(module, RelativePositionBiasBase):
+            factor = self.config.initializer_factor
+            d_model = self.config.d_model
+            module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
         elif isinstance(module, UdopForConditionalGeneration):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
@@ -909,9 +914,6 @@ class RelativePositionBiasBase(nn.Module, ABC):
         extra_head = 2 if prefix_bucket and not self.expand else 0
         self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets + extra_head, self.num_heads)
 
-    def get_required_segment_levels(self) -> Sequence[str]:
-        return [self.level]
-
     @abstractmethod
     def prepare_input(
         self,
@@ -1055,9 +1057,7 @@ class RelativePositionBiasAggregated(nn.Module):
         self.biases = nn.ModuleList(modules)
 
     def forward(
-        self,
-        attention_mask: Optional[Tensor] = None,
-        seg_data: Optional[Dict[str, Any]] = None,
+        self, attention_mask: Optional[Tensor] = None, seg_data: Optional[Dict[str, Any]] = None
     ) -> Union[float, Tensor]:
         x = 0.0
         for bias in self.biases:  # type: ignore
@@ -1359,12 +1359,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
     def __init__(self, config):
         super(UdopForConditionalGeneration, self).__init__(config)
 
-        # get max length of decoder part, for T5 decoder lenght depends
-        # on the task and it can be modified by passing `_max_decoder_length` to the model/config
-        self._max_decoder_length = config.max_decoder_length if hasattr(config, "max_decoder_length") else 256
-
-        self.config.decoder_start_token_id = self.config.pad_token_id
-
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = deepcopy(config)
@@ -1379,7 +1373,10 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         decoder_config.num_layers = config.num_decoder_layers
         self.decoder = UdopStack(decoder_config, self.shared)
 
-        self.init_weights()
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
         # --------------------------------------------------------------------------
         # MAE encoder specifics
@@ -1397,17 +1394,25 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         # self.pos_embed = mae_model_tmp.pos_embed
         # self.special_vis_token = mae_model_tmp.special_vis_token
 
-    @staticmethod
-    def get_required_segment_levels() -> Sequence[str]:
-        return ["tokens"]
+    def get_input_embeddings(self):
+        return self.shared
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, RelativePositionBiasBase):
-            factor = self.config.initializer_factor
-            d_model = self.config.d_model
-            module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+    def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
+        self.encoder.set_input_embeddings(new_embeddings)
+        self.decoder.set_input_embeddings(new_embeddings)
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
 
     def patchify(self, imgs):
         """
@@ -1466,14 +1471,10 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        input_dict: Dict[str, Any] = None,
         **kwargs,
     ) -> Tuple[Tensor, ...]:
-        if input_dict is not None:
-            return_task_outputs = []
-            for task in input_dict:
-                return_task_outputs.append(self.forward(**input_dict[task]))
-            return return_task_outputs
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
             inputs_patches = None
@@ -1509,8 +1510,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
                 return_dict=return_dict,
             )
 
-        if encoder_outputs is None:
-            return None
+        hidden_states = encoder_outputs[0]
 
         if masked_lm_labels is not None and labels is None:
             labels = masked_lm_labels
@@ -1518,28 +1518,69 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         if decoder_input_ids is None and labels is not None:
             decoder_input_ids = self._shift_right(labels)
 
-        # ugly hack for model to work as an encoder
-        if decoder_input_ids is None and masked_lm_labels is None:
-            return encoder_outputs
-
-        outputs = super().forward(
-            input_ids=input_ids,
-            attention_mask=encoder_outputs.attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
+        # Decode
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
             past_key_values=past_key_values,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            labels=labels,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        return outputs  # type: ignore
+        sequence_output = decoder_outputs[0]
 
-    def get_encoder(self):
-        return self
+        # # ugly hack for model to work as an encoder
+        # if decoder_input_ids is None and masked_lm_labels is None:
+        #     return encoder_outputs
+
+        # outputs = super().forward(
+        #     input_ids=input_ids,
+        #     attention_mask=encoder_outputs.attention_mask,
+        #     decoder_input_ids=decoder_input_ids,
+        #     decoder_attention_mask=decoder_attention_mask,
+        #     encoder_outputs=encoder_outputs,
+        #     past_key_values=past_key_values,
+        #     head_mask=head_mask,
+        #     inputs_embeds=inputs_embeds,
+        #     decoder_inputs_embeds=decoder_inputs_embeds,
+        #     labels=labels,
+        #     use_cache=use_cache,
+        #     output_attentions=output_attentions,
+        #     output_hidden_states=output_hidden_states,
+        #     return_dict=return_dict,
+        # )
+
+        if self.config.tie_word_embeddings:
+            # Rescale output before projecting on vocab
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
+            sequence_output = sequence_output * (self.model_dim**-0.5)
+
+        lm_logits = self.lm_head(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss(ignore_index=-100)
+            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
+
+        if not return_dict:
+            output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
+            return ((loss,) + output) if loss is not None else output
+
+        return Seq2SeqLMOutput(
+            loss=loss,
+            logits=lm_logits,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )

@@ -117,6 +117,7 @@ class UdopConfig(PretrainedConfig):
 
         # UDOP attributes
         self.max_2d_position_embeddings = max_2d_position_embeddings
+        self.decoder_start_token_id = pad_token_id
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
