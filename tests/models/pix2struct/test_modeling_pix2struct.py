@@ -187,12 +187,15 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -321,9 +324,11 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_training_gradient_checkpointing(self):
         pass
 
