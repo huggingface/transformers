@@ -37,6 +37,11 @@ from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indi
 
 logger = logging.getLogger(__name__)
 
+UDOP_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "microsoft/udop-large",
+    # See all UDOP models at https://huggingface.co/models?filter=udop
+]
+
 
 @dataclass
 class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
@@ -1252,7 +1257,7 @@ class UdopStack(UdopPreTrainedModel):
             )
             input_shape = inputs_embeds.size()[:-1]
 
-        if not self.is_decoder:
+        if not self.is_decoder and seg_data is not None:
             inputs_embeds += self.cell2dembedding(seg_data)
 
         batch_size, seq_length = input_shape
@@ -1301,9 +1306,6 @@ class UdopStack(UdopPreTrainedModel):
             position_bias = self.relative_bias(attention_mask=attention_mask, seg_data=seg_data)
             position_bias = position_bias + extended_attention_mask
         encoder_decoder_position_bias = None
-
-        # ======================================================
-        # model inferencing
 
         hidden_states = inputs_embeds
 
@@ -1506,7 +1508,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             if image is not None:
                 assert visual_seg_data is not None
                 x = self.patch_embed(image)
-                num_patches = image.size(2) // 16
+                image.size(2) // 16
                 if ids_keep is not None:
                     x = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, x.size(-1)))
                     pad_tokens = self.pad_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)
@@ -1524,8 +1526,8 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
                 seg_data=seg_data,
                 visual_seg_data=visual_seg_data,
                 inputs_patches=inputs_patches,
-                num_patches=num_patches,
-                special_vis_token=self.special_vis_token,
+                # num_patches=num_patches,
+                # special_vis_token=self.special_vis_token,
                 ids_keep=ids_keep,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,

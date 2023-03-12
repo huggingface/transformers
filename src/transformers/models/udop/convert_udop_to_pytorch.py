@@ -1,5 +1,7 @@
 import torch
+
 from transformers import UdopConfig, UdopForConditionalGeneration
+
 
 state_dict = torch.load("/Users/nielsrogge/Downloads/udop-unimodel-large-224/pytorch_model.bin", map_location="cpu")
 
