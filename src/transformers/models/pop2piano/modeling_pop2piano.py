@@ -26,6 +26,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from ...generation.utils import GreedySearchEncoderDecoderOutput
 
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
 
@@ -1356,12 +1357,13 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
         self.transformer.encoder._freeze_parameters()
 
     def forward(self,
-                batches,
-                batch_arr_shapes: List[torch.Size],
+                input_embeds,
+                input_embeds_shapes: List[torch.Size],
                 input_ids=None,
-                composer=None,
+                composer="composer1",
                 max_batch_size:int = None,
                 n_bars: int = 2,
+                return_dict=True,
                 **kwargs
                 ):
 
@@ -1377,61 +1379,31 @@ class Pop2PianoModel(Pop2PianoPreTrainedModel):
         max_length = self.config.dataset.get("target_length") * max(1, (n_bars // self.config.dataset.get("n_bars")))
         PAD = self.config.pad_token_id
 
-        relative_tokens_arr = []
+        relative_tokens_arr, relative_tokens_arr_shapes = [], []
         # For multiple audios(batch, seq_len, seq_dim)
-        for i, batch_shape in enumerate(batch_arr_shapes):
-            batch = batches[i, :batch_shape[0], :batch_shape[1]]
-            inputs_embeds = self.spectrogram(batch).transpose(-1, -2)
+        for i, input_embeds_shape in enumerate(input_embeds_shapes):
+            _input_embeds = input_embeds[i, :input_embeds_shape[0], :input_embeds_shape[1]]
+            _input_embeds = self.spectrogram(_input_embeds).transpose(-1, -2)
             if self.config.dataset.get("mel_is_conditioned", None):
                 composer_value = composer_to_feature_token[composer]
                 composer_value = torch.tensor(composer_value, device=self.device)
-                composer_value = composer_value.repeat(inputs_embeds.shape[0])
-                inputs_embeds = self.mel_conditioner(inputs_embeds, composer_value)
-
-            batch_size = inputs_embeds.shape[0]
+                composer_value = composer_value.repeat(_input_embeds.shape[0])
+                _input_embeds = self.mel_conditioner(_input_embeds, composer_value)
 
             # As described in the official pop2piano implementation
-            relative_tokens = list()
-            for i in range(0, batch_size, max_batch_size):
-                start = i
-                end = min(batch_size, i + max_batch_size)
-
-                if input_ids is None:
-                    _input_ids = None
-                    _inputs_embeds = inputs_embeds[start:end]
-                else:
-                    _input_ids = input_ids[start:end]
-                    _inputs_embeds = None
-
-                _relative_tokens = self.transformer.generate(
-                    input_ids=_input_ids,
-                    inputs_embeds=_inputs_embeds,
-                    max_length=max_length,
-                )
-                _relative_tokens = _relative_tokens.cpu().numpy()
-                relative_tokens.append(_relative_tokens)
-
-            max_length = max([rt.shape[-1] for rt in relative_tokens])
-
-            for i in range(len(relative_tokens)):
-                relative_tokens[i] = np.pad(
-                    relative_tokens[i],
-                    [(0, 0), (0, max_length - relative_tokens[i].shape[-1])],
-                    constant_values=PAD,
-                )
-            relative_tokens = np.concatenate(relative_tokens)
+            relative_tokens = self.transformer.generate(input_ids=input_ids, inputs_embeds=_input_embeds, max_length=max_length)
             relative_tokens_arr.append(relative_tokens)
+            relative_tokens_arr_shapes.append(relative_tokens.size())
+
+        # Outputs can be of different shapes such as - (78, 118), (120, 106) and (75, 106) so pad it to make it pass it through
+        # `GreedySearchEncoderDecoderOutput`
+        no_seq, seq_len = [*zip(*relative_tokens_arr_shapes)]
+        relative_tokens_mat = torch.full(size=[len(relative_tokens), max(no_seq), max(seq_len)], fill_value=-torch.inf)
+        for i, relative_token in enumerate(relative_tokens_arr):
+            relative_tokens_mat[i, :no_seq[i], :seq_len[i]] = relative_token
+        # if return_dict:
+        #     return GreedySearchEncoderDecoderOutput(sequences=relative_tokens)
         return relative_tokens_arr
-
-
-
-
-
-
-
-
-
-
 
 
 
