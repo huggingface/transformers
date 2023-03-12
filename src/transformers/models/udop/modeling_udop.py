@@ -1073,7 +1073,7 @@ BIAS_CLASSES = {
 }
 
 
-def create_relative_bias(config: Union[UdopConfig, UdopConfig]) -> Sequence[RelativePositionBiasBase]:
+def create_relative_bias(config: UdopConfig) -> Sequence[RelativePositionBiasBase]:
     """
     Creates empty list or one/multiple relative biases.
 
@@ -1110,14 +1110,7 @@ class UdopStack(UdopPreTrainedModel):
         self._max_length = config.max_length
 
         setattr(config, "output_attentions", True)
-        if self.is_decoder:
-            self.num_layers = (
-                config.truncate_decoder_after_layer if config.truncate_decoder_after_layer else config.num_layers
-            )
-        else:
-            self.num_layers = (
-                config.truncate_encoder_after_layer if config.truncate_encoder_after_layer else config.num_layers
-            )
+        self.num_layers = config.num_layers
 
         self.block = nn.ModuleList(
             [UdopBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
@@ -1372,8 +1365,19 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
 
         self.config.decoder_start_token_id = self.config.pad_token_id
 
-        self.encoder = UdopStack(self.encoder.config, self.shared)
-        self.decoder = UdopStack(self.decoder.config, self.shared)
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+
+        encoder_config = deepcopy(config)
+        encoder_config.is_decoder = False
+        encoder_config.use_cache = False
+        encoder_config.is_encoder_decoder = False
+        self.encoder = UdopStack(encoder_config, self.shared)
+
+        decoder_config = deepcopy(config)
+        decoder_config.is_decoder = True
+        decoder_config.is_encoder_decoder = False
+        decoder_config.num_layers = config.num_decoder_layers
+        self.decoder = UdopStack(decoder_config, self.shared)
 
         self.init_weights()
 

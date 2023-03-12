@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020, The Udop Authors and HuggingFace Inc.
+# Copyright 2023 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,10 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Udop model configuration"""
-from typing import Mapping
+
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxSeq2SeqConfigWithPast
 from ...utils import logging
 
 
@@ -29,9 +28,9 @@ UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class UdopConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`UdopModel`] or a [`TFUdopModel`]. It is used to
-    instantiate a Udop model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Udop
+    This is the configuration class to store the configuration of a [`UdopForConditionalGeneration`]. It is used to
+    instantiate a UDOP model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the UDOP
     [microsoft/udop-large](https://huggingface.co/microsoft/udop-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -70,6 +69,8 @@ class UdopConfig(PretrainedConfig):
             `"gated-gelu"` feed forward projection. Original Udop uses `"relu"`.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
+            The maximum absolute position embeddings for relative position encoding.
     """
     model_type = "udop"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -94,6 +95,7 @@ class UdopConfig(PretrainedConfig):
         use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
+        max_2d_position_embeddings=1024,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -113,6 +115,9 @@ class UdopConfig(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
 
+        # UDOP attributes
+        self.max_2d_position_embeddings = max_2d_position_embeddings
+
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
@@ -124,38 +129,9 @@ class UdopConfig(PretrainedConfig):
                 "'gated-gelu' or 'relu'"
             )
 
-        # for backwards compatibility
-        if feed_forward_proj == "gated-gelu":
-            self.dense_act_fn = "gelu_new"
-
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-
-
-class UdopOnnxConfig(OnnxSeq2SeqConfigWithPast):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        common_inputs = {
-            "input_ids": {0: "batch", 1: "encoder_sequence"},
-            "attention_mask": {0: "batch", 1: "encoder_sequence"},
-        }
-        if self.use_past:
-            common_inputs["attention_mask"][1] = "past_encoder_sequence + sequence"
-            common_inputs["decoder_input_ids"] = {0: "batch"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
-        else:
-            common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
-            common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
-
-        if self.use_past:
-            self.fill_with_past_key_values_(common_inputs, direction="inputs")
-
-        return common_inputs
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 13
