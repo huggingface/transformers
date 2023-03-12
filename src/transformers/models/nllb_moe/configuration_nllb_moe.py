@@ -123,10 +123,10 @@ class NllbMoeConfig(PretrainedConfig):
         router_jitter_noise=0.01,
         router_dtype="float32",
         router_ignore_padding_tokens=False,
-        num_experts=64,
-        num_sparse_encoder_layers=5,
+        num_experts=128,
+        encoder_sparse_step=4,
         expert_capacity=64,
-        num_sparse_decoder_layers=5,
+        decoder_sparse_step=4,
         router_z_loss_coef=0.001,
         router_aux_loss_coef=0.001,
         pad_token_id=1,
@@ -155,18 +155,8 @@ class NllbMoeConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.router_z_loss_coef = router_z_loss_coef
         self.router_aux_loss_coef = router_aux_loss_coef
-        # This tells us, each how many encoder layer we'll have to set a sparse layer.
-        if num_sparse_encoder_layers > 0:
-            self.encoder_sparse_step = self.encoder_layers // num_sparse_encoder_layers
-        else:
-            self.encoder_sparse_step = self.encoder_layers  # HACK: this will create 0 sparse layers
-
-        # This tells us, each how many encoder layer we'll have to set a sparse layer.
-        if num_sparse_decoder_layers > 0:
-            self.decoder_sparse_step = self.decoder_layers // num_sparse_decoder_layers
-        else:
-            self.decoder_sparse_step = self.decoder_layers  # HACK: this will create 0 sparse layers
-
+        self.decoder_sparse_step = decoder_sparse_step
+        self.encoder_sparse_step = encoder_sparse_step
         self.router_type = router_type
         self.num_experts = num_experts
         self.expert_capacity = expert_capacity

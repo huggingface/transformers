@@ -464,8 +464,8 @@ class NllbMoeTop1Router(nn.Module):
 class NllbMoeDenseActDense(nn.Module):
     def __init__(self, config: NllbMoeConfig, ffn_dim: int):
         super().__init__()
-        self.fc1 = nn.Linear(config.d_model, ffn_dim, bias=False)
-        self.fc2 = nn.Linear(ffn_dim, config.d_model, bias=False)
+        self.fc1 = nn.Linear(config.d_model, ffn_dim)
+        self.fc2 = nn.Linear(ffn_dim, config.d_model)
         self.dropout = nn.Dropout(config.activation_dropout)
         self.act = ACT2FN[config.activation_function]
 
@@ -1109,7 +1109,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         sparse_step = config.encoder_sparse_step
         self.layers = nn.ModuleList()
         for i in range(config.encoder_layers):
-            is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
+            is_sparse = (i + 1) % sparse_step == 0 if sparse_step > 0 else False
             self.layers.append(NllbMoeEncoderLayer(config, is_sparse))
 
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -1303,7 +1303,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         sparse_step = config.decoder_sparse_step
         self.layers = nn.ModuleList()
         for i in range(config.decoder_layers):
-            is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
+            is_sparse = (i + 1) % sparse_step == 0 if sparse_step > 0 else False
             self.layers.append(NllbMoeDecoderLayer(config, is_sparse))
 
         self.layer_norm = nn.LayerNorm(config.d_model)
