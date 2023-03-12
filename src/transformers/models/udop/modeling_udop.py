@@ -25,9 +25,9 @@ from torch import Tensor
 
 from transformers import UdopConfig
 from transformers.modeling_outputs import BaseModelOutput
+from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
-from transformers.models.t5.modeling_t5 import T5LayerNorm
 
 from core.models.embedding.cell_embed import CellEmbeddings
 from core.models.embedding.relative.relative import (
@@ -186,14 +186,9 @@ def collate_vlembed(inputs_patches, inputs_embeds, seg_data, visual_segdata, vis
     if attention_mask is not None:
         attention_mask = torch.cat([attention_mask, visual_attention_mask], 1)
     return inputs_embeds, seg_data, attention_mask
-
-         
-class Residual(nn.Module):
-    def forward(self, x, residual):
-        return x + residual
     
 
-# Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel with T5->Udop
+# Based on T5PreTrainedModel
 class UdopPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -201,30 +196,18 @@ class UdopPreTrainedModel(PreTrainedModel):
     """
 
     config_class = UdopConfig
-    load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
     is_parallelizable = True
     supports_gradient_checkpointing = True
     _no_split_modules = ["UdopBlock"]
     _keep_in_fp32_modules = ["wo"]
 
-    @property
-    def dummy_inputs(self):
-        input_ids = torch.tensor(DUMMY_INPUTS)
-        input_mask = torch.tensor(DUMMY_MASK)
-        dummy_inputs = {
-            "decoder_input_ids": input_ids,
-            "input_ids": input_ids,
-            "decoder_attention_mask": input_mask,
-        }
-        return dummy_inputs
-
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, UdopLayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, (UdopModel, UdopForConditionalGeneration, UdopEncoderModel)):
+        elif isinstance(module, UdopForConditionalGeneration):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
@@ -277,20 +260,129 @@ class UdopPreTrainedModel(PreTrainedModel):
         )
 
         # shift inputs to the right
-        if is_torch_fx_proxy(input_ids):
-            # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
-        else:
-            shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-            shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-            shifted_input_ids[..., 0] = decoder_start_token_id
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = decoder_start_token_id
 
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
         return shifted_input_ids
+    
+
+# Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Udop
+class UdopLayerNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Construct a layernorm module in the T5 style. No bias and no subtraction of mean.
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        # T5 uses a layer_norm which only scales and doesn't shift, which is also known as Root Mean
+        # Square Layer Normalization https://arxiv.org/abs/1910.07467 thus varience is calculated
+        # w/o mean and there is no bias. Additionally we want to make sure that the accumulation for
+        # half-precision inputs is done in fp32
+
+        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+
+        # convert into half-precision if necessary
+        if self.weight.dtype in [torch.float16, torch.bfloat16]:
+            hidden_states = hidden_states.to(self.weight.dtype)
+
+        return self.weight * hidden_states
+
+
+try:
+    from apex.normalization import FusedRMSNorm
+
+    UdopLayerNorm = FusedRMSNorm  # noqa
+
+    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of UdopLayerNorm")
+except ImportError:
+    # using the normal UdopLayerNorm
+    pass
+except Exception:
+    logger.warning("discovered apex but it failed to load, falling back to UdopLayerNorm")
+    pass
+
+ALL_LAYERNORM_LAYERS.append(UdopLayerNorm)
+
+
+# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->Udop
+class UdopDenseActDense(nn.Module):
+    def __init__(self, config: UdopConfig):
+        super().__init__()
+        self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.dropout = nn.Dropout(config.dropout_rate)
+        self.act = ACT2FN[config.dense_act_fn]
+
+    def forward(self, hidden_states):
+        hidden_states = self.wi(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
+
+
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->Udop
+class UdopDenseGatedActDense(nn.Module):
+    def __init__(self, config: UdopConfig):
+        super().__init__()
+        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.dropout = nn.Dropout(config.dropout_rate)
+        self.act = ACT2FN[config.dense_act_fn]
+
+    def forward(self, hidden_states):
+        hidden_gelu = self.act(self.wi_0(hidden_states))
+        hidden_linear = self.wi_1(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.dropout(hidden_states)
+
+        # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
+        # See https://github.com/huggingface/transformers/issues/20287
+        # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
+
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
+
+
+# Copied from transformers.models.t5.modeling_t5.T5LayerFF with T5->Udop
+class UdopLayerFF(nn.Module):
+    def __init__(self, config: UdopConfig):
+        super().__init__()
+        if config.is_gated_act:
+            self.DenseReluDense = UdopDenseGatedActDense(config)
+        else:
+            self.DenseReluDense = UdopDenseActDense(config)
+
+        self.layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.dropout = nn.Dropout(config.dropout_rate)
+
+    def forward(self, hidden_states):
+        forwarded_states = self.layer_norm(hidden_states)
+        forwarded_states = self.DenseReluDense(forwarded_states)
+        hidden_states = hidden_states + self.dropout(forwarded_states)
+        return hidden_states
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Attention with T5->Udop
@@ -737,7 +829,7 @@ class UdopStack(UdopPreTrainedModel):
         self.block = nn.ModuleList(
             [UdopBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
         )
-        self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         
         self.dropout = nn.Dropout(config.dropout_rate)
         
