@@ -15,8 +15,6 @@
 
 from typing import Callable, Optional, Tuple
 
-import numpy as np
-
 import flax
 import flax.linen as nn
 import jax
@@ -446,7 +444,6 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        indices_prng_key,
         deterministic=True,
         output_attentions=False,
     ):
@@ -460,6 +457,10 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         query_layer = self.transpose_for_scores(self.query(hidden_states), n_heads, head_size)
         key_layer = self.transpose_for_scores(self.key(hidden_states), n_heads, head_size)
         value_layer = self.transpose_for_scores(self.value(hidden_states), n_heads, head_size)
+
+        indices_prng_key = None
+        if not deterministic:
+            indices_prng_key = self.make_rng("indices")
 
         attn_output, attn_weights = self.bigbird_block_sparse_attention(
             query_layer,
@@ -532,7 +533,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         to_blocked_mask,
         n_heads,
         head_size,
-        indices_prng_key,
+        indices_prng_key: Optional[jax.random.PRNGKey] = None,
         plan_from_length=None,
         plan_num_rand_blocks=None,
         output_attentions=None,
@@ -576,7 +577,6 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         rsqrt_d = 1 / jnp.sqrt(head_size)
         attn_mask_penalty = -10000.0
 
-        np.random.seed(self.block_sparse_seed)
         if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
             max_seqlen = self.config.max_position_embeddings
             rand_attn = [
@@ -586,7 +586,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                     from_block_size,
                     to_block_size,
                     n_rand_blocks,
-                    indices_prng_key,
+                    indices_prng_key=indices_prng_key,
                     last_idx=1024,
                 )[: (from_seq_len // from_block_size - 2)]
                 for _ in range(n_heads)
@@ -954,7 +954,13 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
 
     @staticmethod
     def _bigbird_block_rand_mask(
-        from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, indices_prng_key, last_idx=-1
+        from_seq_length,
+        to_seq_length,
+        from_block_size,
+        to_block_size,
+        num_rand_blocks,
+        indices_prng_key: Optional[jax.random.PRNGKey] = None,
+        last_idx: Optional[int] = -1,
     ):
         """
         Create adjacency list of random attention.
@@ -965,6 +971,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             from_block_size: int. size of block in from sequence.
             to_block_size: int. size of block in to sequence.
             num_rand_blocks: int. Number of random chunks per row.
+            indices_prng_key: jax.random.PRNGKey. PRNG key that is used to perform random jax operations
             last_idx: if -1 then num_rand_blocks blocks chosen anywhere in to sequence,
             if positive then num_rand_blocks blocks chosen only up to last_idx.
 
@@ -975,9 +982,12 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
 
         if from_seq_length // from_block_size != to_seq_length // to_block_size:
             raise ValueError("Error the number of blocks needs to be same!")
+        rand_attn = jnp.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=jnp.int32)
+        # deterministic nor randomness
+        if indices_prng_key is None:
+            return rand_attn
 
-        rand_attn = np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
-        middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
+        middle_seq = jnp.arange(1, to_seq_length // to_block_size - 1, dtype=jnp.int32)
         last = to_seq_length // to_block_size - 1
         if last_idx > (2 * to_block_size):
             last = (last_idx // to_block_size) - 1
@@ -987,25 +997,31 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             start = i - 2
             end = i
             if i == 1:
-                rand_attn[i - 1, :] = jax.random.permutation(middle_seq[2:last], key=indices_prng_key)[:r]
+                rand_attn = rand_attn.at[i - 1].set(jax.random.permutation(indices_prng_key, middle_seq[2:last])[:r])
             elif i == 2:
-                rand_attn[i - 1, :] = jax.random.permutation(middle_seq[3:last], key=indices_prng_key)[:r]
+                rand_attn = rand_attn.at[i - 1].set(jax.random.permutation(indices_prng_key, middle_seq[3:last])[:r])
             elif i == from_seq_length // from_block_size - 3:
-                rand_attn[i - 1, :] = jax.random.permutation(middle_seq[:last], key=indices_prng_key)[:r]
+                rand_attn = rand_attn.at[i - 1].set(jax.random.permutation(indices_prng_key, middle_seq[:last])[:r])
             # Missing -3: should have been sliced till last-3
             elif i == from_seq_length // from_block_size - 2:
-                rand_attn[i - 1, :] = jax.random.permutation(middle_seq[:last], key=indices_prng_key)[:r]
+                rand_attn = rand_attn.at[i - 1].set(jax.random.permutation(indices_prng_key, middle_seq[:last])[:r])
             # Missing -4: should have been sliced till last-4
             else:
                 if start > last:
                     start = last
-                    rand_attn[i - 1, :] = jax.random.permutation(middle_seq[:start])[:r]
+                    rand_attn = rand_attn.at[i - 1].set(
+                        jax.random.permutation(indices_prng_key, middle_seq[:start])[:r]
+                    )
                 elif (end + 1) == last:
-                    rand_attn[i - 1, :] = jax.random.permutation(middle_seq[:start])[:r]
+                    rand_attn = rand_attn.at[i - 1].set(
+                        jax.random.permutation(indices_prng_key, middle_seq[:start])[:r]
+                    )
                 else:
-                    rand_attn[i - 1, :] = jax.random.permutation(
-                        np.concatenate((middle_seq[:start], middle_seq[end + 1 : last])), key=indices_prng_key
-                    )[:r]
+                    rand_attn = rand_attn.at[i - 1].set(
+                        jax.random.permutation(
+                            indices_prng_key, jnp.concatenate((middle_seq[:start], middle_seq[end + 1 : last]))
+                        )[:r]
+                    )
         return rand_attn
 
     def _bigbird_block_rand_mask_with_head(
@@ -1017,7 +1033,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         num_heads,
         plan_from_length,
         plan_num_rand_blocks,
-        indices_prng_key,
+        indices_prng_key: Optional[jax.random.PRNGKey] = None,
         window_block_left=1,
         window_block_right=1,
         global_block_top=1,
@@ -1036,6 +1052,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             num_heads: int. total number of heads.
             plan_from_length: list. plan from length where num_random_blocks are choosen from.
             plan_num_rand_blocks: list. number of rand blocks within the plan.
+            indices_prng_key: jax.random.PRNGKey. PRNG key that is used to perform random jax operations
             window_block_left: int. number of blocks of window to left of a block.
             window_block_right: int. number of blocks of window to right of a block.
             global_block_top: int. number of blocks at the top.
@@ -1058,14 +1075,22 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         # Total number of blocks in the mmask
         num_blocks = from_seq_length // from_block_size
         # Number of blocks per plan
-        plan_block_length = np.array(plan_from_length) // from_block_size
+        plan_block_length = jnp.array(plan_from_length) // from_block_size
         # till when to follow plan
         max_plan_idx = plan_from_length.index(from_seq_length)
+
         # Random Attention adjacency list
         rand_attn = [
-            np.zeros((num_blocks, np.sum(plan_num_rand_blocks[: max_plan_idx + 1])), dtype=np.int32)
+            jnp.zeros((num_blocks, sum(plan_num_rand_blocks[: max_plan_idx + 1])), dtype=jnp.int32)
             for i in range(num_heads)
         ]
+
+        # deterministic
+        if indices_prng_key is None:
+
+            for nh in range(num_heads):
+                rand_attn[nh] = rand_attn[nh][global_block_top : num_blocks - global_block_bottom, :]
+            return rand_attn
 
         # We will go iteratively over the plan blocks and pick random number of
         # Attention blocks from the legally allowed blocks
@@ -1077,11 +1102,11 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                 # column indx start fromm plan_block_length[plan_idx-1] and ends at
                 # plan_block_length[plan_idx]
                 if plan_num_rand_blocks[plan_idx] > 0:
-                    rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:plan_idx]))
-                    curr_r_cnt = int(np.sum(plan_num_rand_blocks[: plan_idx + 1]))
+                    rnd_r_cnt = int(sum(plan_num_rand_blocks[:plan_idx]))
+                    curr_r_cnt = int(sum(plan_num_rand_blocks[: plan_idx + 1]))
                     for blk_rw_idx in range(global_block_top, plan_block_length[plan_idx - 1]):
                         for h in range(num_heads):
-                            rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                            single_block_row_attention = self._get_single_block_row_attention(
                                 block_id=blk_rw_idx,
                                 to_start_block_id=plan_block_length[plan_idx - 1],
                                 to_end_block_id=plan_block_length[plan_idx],
@@ -1092,6 +1117,9 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                                 global_block_right=global_block_right,
                                 indices_prng_key=indices_prng_key,
                             )
+                            rand_attn[h] = (
+                                rand_attn[h].at[blk_rw_idx, rnd_r_cnt:curr_r_cnt].set(single_block_row_attention)
+                            )
 
                 for pl_id in range(plan_idx):
                     if plan_num_rand_blocks[pl_id] == 0:
@@ -1100,11 +1128,11 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                         rnd_r_cnt = 0
                         to_start_block_id = 0
                         if pl_id > 0:
-                            rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:pl_id]))
+                            rnd_r_cnt = int(sum(plan_num_rand_blocks[:pl_id]))
                             to_start_block_id = plan_block_length[pl_id - 1]
-                        curr_r_cnt = int(np.sum(plan_num_rand_blocks[: pl_id + 1]))
+                        curr_r_cnt = int(sum(plan_num_rand_blocks[: pl_id + 1]))
                         for h in range(num_heads):
-                            rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                            single_block_row_attention = self._get_single_block_row_attention(
                                 block_id=blk_rw_idx,
                                 to_start_block_id=to_start_block_id,
                                 to_end_block_id=plan_block_length[pl_id],
@@ -1115,20 +1143,22 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                                 global_block_right=global_block_right,
                                 indices_prng_key=indices_prng_key,
                             )
+                            rand_attn[h] = (
+                                rand_attn[h].at[blk_rw_idx, rnd_r_cnt:curr_r_cnt].set(single_block_row_attention)
+                            )
 
             if plan_num_rand_blocks[plan_idx] == 0:
                 continue
-            curr_r_cnt = int(np.sum(plan_num_rand_blocks[: plan_idx + 1]))
+            curr_r_cnt = int(sum(plan_num_rand_blocks[: plan_idx + 1]))
             from_start_block_id = global_block_top
             to_start_block_id = 0
             if plan_idx > 0:
-                rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:plan_idx]))
+                rnd_r_cnt = int(sum(plan_num_rand_blocks[:plan_idx]))
                 from_start_block_id = plan_block_length[plan_idx - 1]
                 to_start_block_id = plan_block_length[plan_idx - 1]
-
             for blk_rw_idx in range(from_start_block_id, plan_block_length[plan_idx]):
                 for h in range(num_heads):
-                    rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                    single_block_row_attention = self._get_single_block_row_attention(
                         block_id=blk_rw_idx,
                         to_start_block_id=to_start_block_id,
                         to_end_block_id=plan_block_length[plan_idx],
@@ -1139,10 +1169,10 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                         global_block_right=global_block_right,
                         indices_prng_key=indices_prng_key,
                     )
+                    rand_attn[h] = rand_attn[h].at[blk_rw_idx, rnd_r_cnt:curr_r_cnt].set(single_block_row_attention)
 
         for nh in range(num_heads):
             rand_attn[nh] = rand_attn[nh][global_block_top : num_blocks - global_block_bottom, :]
-
         return rand_attn
 
     @staticmethod
@@ -1151,7 +1181,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         to_start_block_id,
         to_end_block_id,
         num_rand_blocks,
-        indices_prng_key,
+        indices_prng_key: Optional[jax.random.PRNGKey] = None,
         window_block_left=1,
         window_block_right=1,
         global_block_left=1,
@@ -1165,6 +1195,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             to_start_block_id: int. random attention column start id.
             to_end_block_id: int. random attention column end id.
             num_rand_blocks: int. number of random blocks to be selected.
+            indices_prng_key: jax.random.PRNGKey. PRNG key that is used to perform random jax operations
             window_block_left: int. number of blocks of window to left of a block.
             window_block_right: int. number of blocks of window to right of a block.
             global_block_left: int. Number of blocks globally used to the left.
@@ -1174,9 +1205,9 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             row containing the random attention vector of size num_rand_blocks.
         """
         # list of to_blocks from which to choose random attention
-        to_block_list = np.arange(to_start_block_id, to_end_block_id, dtype=np.int32)
+        to_block_list = jnp.arange(to_start_block_id, to_end_block_id, dtype=jnp.int32)
         # permute the blocks
-        perm_block = jax.random.permutation(key=indices_prng_key, x=to_block_list)
+        perm_block = jax.random.permutation(indices_prng_key, to_block_list)
 
         # illegal blocks for the current block id, using window
         illegal_blocks = list(range(block_id - window_block_left, block_id + window_block_right + 1))
@@ -1200,7 +1231,7 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
                 selected_random_blocks.append(perm_block[i])
             if len(selected_random_blocks) == num_rand_blocks:
                 break
-        return np.array(selected_random_blocks, dtype=np.int32)
+        return jnp.array(selected_random_blocks, dtype=jnp.int32)
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertSelfOutput with Bert->BigBird
@@ -1247,7 +1278,6 @@ class FlaxBigBirdAttention(nn.Module):
         self,
         hidden_states,
         attention_mask,
-        indices_prng_key,
         layer_head_mask,
         key_value_states=None,
         init_cache=False,
@@ -1271,7 +1301,6 @@ class FlaxBigBirdAttention(nn.Module):
             attn_outputs = self.self(
                 hidden_states,
                 attention_mask,
-                indices_prng_key=indices_prng_key,
                 deterministic=deterministic,
                 output_attentions=output_attentions,
             )
@@ -1345,7 +1374,6 @@ class FlaxBigBirdLayer(nn.Module):
         hidden_states,
         attention_mask,
         layer_head_mask,
-        indices_prng_key,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
@@ -1356,7 +1384,6 @@ class FlaxBigBirdLayer(nn.Module):
         attention_outputs = self.attention(
             hidden_states,
             attention_mask,
-            indices_prng_key=indices_prng_key,
             layer_head_mask=layer_head_mask,
             init_cache=init_cache,
             deterministic=deterministic,
@@ -1411,7 +1438,6 @@ class FlaxBigBirdLayerCollection(nn.Module):
         hidden_states,
         attention_mask,
         head_mask,
-        indices_prng_key,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
@@ -1440,7 +1466,6 @@ class FlaxBigBirdLayerCollection(nn.Module):
                 hidden_states,
                 attention_mask,
                 head_mask[i] if head_mask is not None else None,
-                indices_prng_key,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 init_cache,
@@ -1489,7 +1514,6 @@ class FlaxBigBirdEncoder(nn.Module):
         hidden_states,
         attention_mask,
         head_mask,
-        indices_prng_key,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
@@ -1502,7 +1526,6 @@ class FlaxBigBirdEncoder(nn.Module):
             hidden_states,
             attention_mask,
             head_mask=head_mask,
-            indices_prng_key=indices_prng_key,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             init_cache=init_cache,
@@ -1533,7 +1556,7 @@ class FlaxBigBirdPredictionHeadTransform(nn.Module):
 class FlaxBigBirdLMPredictionHead(nn.Module):
     config: BigBirdConfig
     dtype: jnp.dtype = jnp.float32
-    bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
+    bias_init: Callable[..., jnp.ndarray] = jax.nn.initializers.zeros
 
     def setup(self):
         self.transform = FlaxBigBirdPredictionHeadTransform(self.config, dtype=self.dtype)
@@ -1623,10 +1646,9 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
         attention_mask = jnp.ones_like(input_ids)
         head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
-        indices_prng_key = jax.random.PRNGKey(0)
 
-        params_rng, dropout_rng = jax.random.split(rng)
-        rngs = {"params": params_rng, "dropout": dropout_rng}
+        params_rng, dropout_rng, indices_rng = jax.random.split(rng, num=3)
+        rngs = {"params": params_rng, "dropout": dropout_rng, "indices": indices_rng}
 
         if self.config.add_cross_attention:
             encoder_hidden_states = jnp.zeros(input_shape + (self.config.hidden_size,))
@@ -1638,7 +1660,6 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
                 token_type_ids,
                 position_ids,
                 head_mask,
-                indices_prng_key,
                 encoder_hidden_states,
                 encoder_attention_mask,
                 return_dict=False,
@@ -1651,7 +1672,6 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
                 token_type_ids,
                 position_ids,
                 head_mask,
-                indices_prng_key,
                 return_dict=False,
             )
 
@@ -1680,14 +1700,12 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         input_ids = jnp.ones((batch_size, max_length), dtype="i4")
         attention_mask = jnp.ones_like(input_ids, dtype="i4")
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
-        indices_prng_key = jax.random.PRNGKey(0)
 
         init_variables = self.module.init(
             jax.random.PRNGKey(0),
             input_ids,
             attention_mask,
             position_ids,
-            indices_prng_key,
             return_dict=False,
             init_cache=True,
         )
@@ -1701,11 +1719,11 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
-        indices_prng_key=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         params: dict = None,
-        dropout_rng: jax.random.PRNGKey = None,
+        dropout_rng: Optional[jax.random.PRNGKey] = None,
+        indices_rng: Optional[jax.random.PRNGKey] = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1731,11 +1749,11 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
         if head_mask is None:
             head_mask = jnp.ones((self.config.num_hidden_layers, self.config.num_attention_heads))
 
-        if indices_prng_key is None:
-            indices_prng_key = jax.random.PRNGKey(0)
-
         # Handle any PRNG if needed
         rngs = {}
+        if indices_rng is not None:
+            rngs["indices"] = indices_rng
+
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
@@ -1758,7 +1776,6 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
                 token_type_ids=jnp.array(token_type_ids, dtype="i4"),
                 position_ids=jnp.array(position_ids, dtype="i4"),
                 head_mask=jnp.array(head_mask, dtype="i4"),
-                indices_prng_key=jnp.array(indices_prng_key, dtype="u4"),
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 deterministic=not train,
@@ -1784,7 +1801,6 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
                 jnp.array(input_ids, dtype="i4"),
                 jnp.array(attention_mask, dtype="i4"),
                 token_type_ids=jnp.array(token_type_ids, dtype="i4"),
-                indices_prng_key=jnp.array(indices_prng_key, dtype="u4"),
                 position_ids=jnp.array(position_ids, dtype="i4"),
                 head_mask=jnp.array(head_mask, dtype="i4"),
                 deterministic=not train,
@@ -1821,7 +1837,6 @@ class FlaxBigBirdModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
-        indices_prng_key,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
@@ -1830,6 +1845,9 @@ class FlaxBigBirdModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
+        import pdb
+
+        pdb.set_trace()
         hidden_states = self.embeddings(
             input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
         )
@@ -1837,7 +1855,6 @@ class FlaxBigBirdModule(nn.Module):
             hidden_states,
             attention_mask,
             head_mask=head_mask,
-            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
@@ -1899,7 +1916,6 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
-        indices_prng_key,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1912,7 +1928,6 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
-            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2003,7 +2018,6 @@ class FlaxBigBirdForMaskedLMModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
-        indices_prng_key,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -2016,7 +2030,6 @@ class FlaxBigBirdForMaskedLMModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
-            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2097,7 +2110,6 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
-        indices_prng_key,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -2110,7 +2122,6 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
-            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2172,7 +2183,6 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
-        indices_prng_key,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -2191,7 +2201,6 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
-            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2279,7 +2288,6 @@ class FlaxBigBirdForTokenClassificationModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
-        indices_prng_key,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -2292,7 +2300,6 @@ class FlaxBigBirdForTokenClassificationModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
-            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2375,7 +2382,6 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
         token_type_ids,
         position_ids,
         head_mask,
-        indices_prng_key,
         logits_mask=None,
         deterministic: bool = True,
         output_attentions: bool = False,
@@ -2390,7 +2396,6 @@ class FlaxBigBirdForQuestionAnsweringModule(nn.Module):
             token_type_ids,
             position_ids,
             head_mask,
-            indices_prng_key=indices_prng_key,
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2439,10 +2444,10 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
-        indices_prng_key=None,
         question_lengths=None,
         params: dict = None,
-        dropout_rng: jax.random.PRNGKey = None,
+        dropout_rng: Optional[jax.random.PRNGKey] = None,
+        indices_rng: Optional[jax.random.PRNGKey] = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2468,9 +2473,6 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
             question_lengths = jnp.argmax((input_ids == self.config.sep_token_id).astype("i4"), axis=-1) + 1
             question_lengths = jnp.expand_dims(question_lengths, axis=1)
 
-        if indices_prng_key is None:
-            indices_prng_key = jax.random.PRNGKey(0)
-
         seqlen = input_ids.shape[1]
 
         logits_mask = None
@@ -2490,6 +2492,10 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
         rngs = {}
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
+
+        if indices_rng is not None:
+            rngs["indices"] = indices_rng
+
         return self.module.apply(
             {"params": params or self.params},
             jnp.array(input_ids, dtype="i4"),
@@ -2497,7 +2503,6 @@ class FlaxBigBirdForQuestionAnswering(FlaxBigBirdPreTrainedModel):
             token_type_ids,
             jnp.array(position_ids, dtype="i4"),
             jnp.array(head_mask, dtype="i4"),
-            jnp.array(indices_prng_key, dtype="u4"),
             logits_mask,
             not train,
             output_attentions,
@@ -2544,7 +2549,6 @@ class FlaxBigBirdForCausalLMModule(nn.Module):
         position_ids,
         token_type_ids: Optional[jnp.ndarray] = None,
         head_mask: Optional[jnp.ndarray] = None,
-        indices_prng_key: Optional[jnp.ndarray] = None,
         encoder_hidden_states: Optional[jnp.ndarray] = None,
         encoder_attention_mask: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
@@ -2560,7 +2564,6 @@ class FlaxBigBirdForCausalLMModule(nn.Module):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
-            indices_prng_key=indices_prng_key,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             init_cache=init_cache,
