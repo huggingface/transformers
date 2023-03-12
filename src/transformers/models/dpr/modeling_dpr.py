@@ -170,7 +170,6 @@ class DPRPreTrainedModel(PreTrainedModel):
 
 
 class DPREncoder(DPRPreTrainedModel):
-
     base_model_prefix = "bert_model"
 
     def __init__(self, config: DPRConfig):
@@ -227,7 +226,6 @@ class DPREncoder(DPRPreTrainedModel):
 
 
 class DPRSpanPredictor(DPRPreTrainedModel):
-
     base_model_prefix = "encoder"
 
     def __init__(self, config: DPRConfig):
@@ -299,6 +297,7 @@ class DPRPretrainedContextEncoder(DPRPreTrainedModel):
     load_tf_weights = None
     base_model_prefix = "ctx_encoder"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
 
 class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
@@ -311,6 +310,7 @@ class DPRPretrainedQuestionEncoder(DPRPreTrainedModel):
     load_tf_weights = None
     base_model_prefix = "question_encoder"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
 
 class DPRPretrainedReader(DPRPreTrainedModel):
@@ -369,7 +369,7 @@ DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
             rather than the left.
 
-            Indices can be obtained using [`DPRTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)

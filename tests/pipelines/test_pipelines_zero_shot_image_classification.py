@@ -25,7 +25,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -38,14 +38,14 @@ else:
             pass
 
 
-@require_vision
 @is_pipeline_test
-class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+@require_vision
+class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
     # Deactivating auto tests since we don't have a good MODEL_FOR_XX mapping,
     # and only CLIP would be there for now.
     # model_mapping = {CLIPConfig: CLIPModel}
 
-    # def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    # def get_test_pipeline(self, model, tokenizer, processor):
     #     if tokenizer is None:
     #         # Side effect of no Fast Tokenizer class for these model, so skipping
     #         # But the slow tokenizer test should still run as they're quite small
@@ -54,7 +54,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     #         # return None, None
 
     #     image_classifier = ZeroShotImageClassificationPipeline(
-    #         model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+    #         model=model, tokenizer=tokenizer, feature_extractor=processor
     #     )
 
     #     # test with a raw waveform

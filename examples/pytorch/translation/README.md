@@ -150,7 +150,7 @@ python examples/pytorch/translation/run_translation.py \
 
 ## With Accelerate
 
-Based on the script [`run_translation_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/translation/run_translationn_no_trainer.py).
+Based on the script [`run_translation_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/translation/run_translation_no_trainer.py).
 
 Like `run_translation.py`, this script allows you to fine-tune any of the models supported on a
 translation task, the main difference is that this

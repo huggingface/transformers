@@ -32,7 +32,7 @@ jobs:
           run: |
             for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
               if [ `basename "${file}"` = "setup.py" ]; then
-                echo ::set-output name=changed::"1"
+                echo "changed=1" >> $GITHUB_OUTPUT
               fi
             done
 
@@ -40,6 +40,8 @@ jobs:
     needs: check-for-setup
     if: (github.event_name == 'push') && (needs.check-for-setup.outputs.changed == '1')
     uses: ./.github/workflows/build-docker-images.yml
+    with:
+      image_postfix: "-push-ci"
     secrets: inherit
 
   run_push_ci:

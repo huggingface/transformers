@@ -57,7 +57,7 @@ tgt_text = "La vie est comme une boîte de chocolat."
 
 model_inputs = tokenizer(src_text, text_target=tgt_text, return_tensors="pt")
 
-loss = model(**model_inputs, labels=labels)  # forward pass
+loss = model(**model_inputs).loss  # forward pass
 ```
 
 - Generation
@@ -90,6 +90,11 @@ loss = model(**model_inputs, labels=labels)  # forward pass
 >>> tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 "Life is like a box of chocolate."
 ```
+
+## Documentation resources
+
+- [Translation task guide](./tasks/translation)
+- [Summarization task guide](./tasks/summarization)
 
 ## M2M100Config
 

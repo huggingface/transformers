@@ -1,0 +1,62 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: 둘러보기
+  - local: installation
+    title: 설치방법
+  title: 시작하기
+- sections:
+  - local: in_translation
+    title: (번역 중)
+  title: 튜토리얼
+- sections:
+  - local: in_translation
+    title: (번역 중)
+  title: How-to 가이드
+- sections:
+  - local: in_translation
+    title: (번역 중)
+  title: 개념 가이드
+- sections:
+  - sections:
+    - local: in_translation
+      title: (번역 중)
+    title: 메인 클래스
+  - sections:
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역 중)
+      title: 텍스트 모델
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역 중)
+      title: 비전 모델
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역 중)
+      title: 오디오 모델
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역 중)
+      title: 멀티모달 모델
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역 중)
+      title: 강화학습 모델
+    - isExpanded: false
+      sections:
+      - local: in_translation
+        title: (번역 중)
+      title: 시계열 모델
+    title: 모델
+  - sections:
+    - local: in_translation
+      title: (번역 중)
+    title: 내부 유틸리티
+  title: API

@@ -42,7 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "xlnet-base-cased"
 _CONFIG_FOR_DOC = "XLNetConfig"
-_TOKENIZER_FOR_DOC = "XLNetTokenizer"
 
 XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlnet-base-cased",
@@ -857,7 +856,7 @@ XLNET_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`XLNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1060,7 +1059,6 @@ class XLNetModel(XLNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1082,7 +1080,6 @@ class XLNetModel(XLNetPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,  # delete after depreciation warning is removed
     ) -> Union[Tuple, XLNetModelOutput]:
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1296,6 +1293,8 @@ class XLNetModel(XLNetPreTrainedModel):
     XLNET_START_DOCSTRING,
 )
 class XLNetLMHeadModel(XLNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"lm_loss.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.attn_type = config.attn_type
@@ -1313,7 +1312,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_loss = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, use_mems=None, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
@@ -1324,7 +1323,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         # offset = 1; offset = 2 seems to have slightly better computation.
         offset = 2
 
-        if past:
+        if past_key_values:
             input_ids = torch.cat([input_ids[:, -offset:], dummy_token], dim=1)
         else:
             input_ids = torch.cat([input_ids, dummy_token], dim=1)
@@ -1350,8 +1349,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         }
 
         # if past is defined in model kwargs then use it for faster decoding
-        if past:
-            inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past)
+        if past_key_values:
+            inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past_key_values)
 
         return inputs
 
@@ -1392,10 +1391,10 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import XLNetTokenizer, XLNetLMHeadModel
+        >>> from transformers import AutoTokenizer, XLNetLMHeadModel
         >>> import torch
 
-        >>> tokenizer = XLNetTokenizer.from_pretrained("xlnet-large-cased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-large-cased")
         >>> model = XLNetLMHeadModel.from_pretrained("xlnet-large-cased")
 
         >>> # We show how to setup inputs to predict a next token using a bi-directional context.
@@ -1514,7 +1513,6 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForSequenceClassificationOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1622,7 +1620,6 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForTokenClassificationOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1710,7 +1707,6 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForMultipleChoiceOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1814,7 +1810,6 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XLNetForQuestionAnsweringSimpleOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1973,10 +1968,10 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import XLNetTokenizer, XLNetForQuestionAnswering
+        >>> from transformers import AutoTokenizer, XLNetForQuestionAnswering
         >>> import torch
 
-        >>> tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
         >>> model = XLNetForQuestionAnswering.from_pretrained("xlnet-base-cased")
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(

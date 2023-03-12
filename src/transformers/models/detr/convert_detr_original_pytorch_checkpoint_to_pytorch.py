@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert DETR checkpoints."""
+"""Convert DETR checkpoints with timm backbone."""
 
 
 import argparse
@@ -20,11 +20,11 @@ import json
 from collections import OrderedDict
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection, DetrForSegmentation
 from transformers.utils import logging
 
@@ -194,9 +194,9 @@ def convert_detr_checkpoint(model_name, pytorch_dump_folder_path):
         config.num_labels = 250
     else:
         config.num_labels = 91
-        repo_id = "datasets/huggingface/label-files"
+        repo_id = "huggingface/label-files"
         filename = "coco-detection-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}

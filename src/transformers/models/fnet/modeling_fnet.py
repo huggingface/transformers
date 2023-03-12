@@ -58,7 +58,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/fnet-base"
 _CONFIG_FOR_DOC = "FNetConfig"
-_TOKENIZER_FOR_DOC = "FNetTokenizer"
 
 FNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/fnet-base",
@@ -186,7 +185,6 @@ class FNetBasicFourierTransform(nn.Module):
             self.fourier_transform = fftn
 
     def forward(self, hidden_states):
-
         # NOTE: We do not use torch.vmap as it is not integrated into PyTorch stable versions.
         # Interested users can modify the code to use vmap from the nightly versions, getting the vmap from here:
         # https://pytorch.org/docs/master/generated/torch.vmap.html. Note that fourier transform methods will need
@@ -479,7 +477,7 @@ FNET_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`FNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -541,20 +539,19 @@ class FNetModel(FNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
         self,
-        input_ids=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, BaseModelOutput]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -624,6 +621,8 @@ class FNetModel(FNetPreTrainedModel):
     FNET_START_DOCSTRING,
 )
 class FNetForPreTraining(FNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -671,10 +670,10 @@ class FNetForPreTraining(FNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import FNetTokenizer, FNetForPreTraining
+        >>> from transformers import AutoTokenizer, FNetForPreTraining
         >>> import torch
 
-        >>> tokenizer = FNetTokenizer.from_pretrained("google/fnet-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/fnet-base")
         >>> model = FNetForPreTraining.from_pretrained("google/fnet-base")
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -716,6 +715,8 @@ class FNetForPreTraining(FNetPreTrainedModel):
 
 @add_start_docstrings("""FNet Model with a `language modeling` head on top.""", FNET_START_DOCSTRING)
 class FNetForMaskedLM(FNetPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -733,7 +734,6 @@ class FNetForMaskedLM(FNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -820,10 +820,10 @@ class FNetForNextSentencePrediction(FNetPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import FNetTokenizer, FNetForNextSentencePrediction
+        >>> from transformers import AutoTokenizer, FNetForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = FNetTokenizer.from_pretrained("google/fnet-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/fnet-base")
         >>> model = FNetForNextSentencePrediction.from_pretrained("google/fnet-base")
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -893,7 +893,6 @@ class FNetForSequenceClassification(FNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -978,7 +977,6 @@ class FNetForMultipleChoice(FNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1060,7 +1058,6 @@ class FNetForTokenClassification(FNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1129,7 +1126,6 @@ class FNetForQuestionAnswering(FNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

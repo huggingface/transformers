@@ -15,12 +15,14 @@
 """
 A subclass of `Trainer` specific to Question-Answering tasks
 """
+import math
+import time
 from typing import Dict, List, Optional
 
 from torch.utils.data import Dataset
 
 from transformers import Seq2SeqTrainer, is_torch_tpu_available
-from transformers.trainer_utils import PredictionOutput
+from transformers.trainer_utils import PredictionOutput, speed_metrics
 
 
 if is_torch_tpu_available(check_device=False):
@@ -59,6 +61,7 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         # Temporarily disable metric computation, we will do it in the loop here.
         compute_metrics = self.compute_metrics
         self.compute_metrics = None
+        start_time = time.time()
         eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
         try:
             output = eval_loop(
@@ -68,11 +71,24 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
                 # self.args.prediction_loss_only
                 prediction_loss_only=True if compute_metrics is None else None,
                 ignore_keys=ignore_keys,
+                metric_key_prefix=metric_key_prefix,
             )
         finally:
             self.compute_metrics = compute_metrics
+        total_batch_size = self.args.eval_batch_size * self.args.world_size
+        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
+            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
+        output.metrics.update(
+            speed_metrics(
+                metric_key_prefix,
+                start_time,
+                num_samples=output.num_samples,
+                num_steps=math.ceil(output.num_samples / total_batch_size),
+            )
+        )
 
-        if self.post_process_function is not None and self.compute_metrics is not None:
+        if self.post_process_function is not None and self.compute_metrics is not None and self.args.should_save:
+            # Only the main node write the results by default
             eval_preds = self.post_process_function(eval_examples, eval_dataset, output)
             metrics = self.compute_metrics(eval_preds)
 
@@ -81,9 +97,13 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
                 if not key.startswith(f"{metric_key_prefix}_"):
                     metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
-            self.log(metrics)
+            metrics.update(output.metrics)
         else:
-            metrics = {}
+            metrics = output.metrics
+
+        if self.args.should_log:
+            # Only the main node log the results by default
+            self.log(metrics)
 
         if self.args.tpu_metrics_debug or self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -102,6 +122,7 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
         # Temporarily disable metric computation, we will do it in the loop here.
         compute_metrics = self.compute_metrics
         self.compute_metrics = None
+        start_time = time.time()
         eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
         try:
             output = eval_loop(
@@ -111,19 +132,31 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
                 # self.args.prediction_loss_only
                 prediction_loss_only=True if compute_metrics is None else None,
                 ignore_keys=ignore_keys,
+                metric_key_prefix=metric_key_prefix,
             )
         finally:
             self.compute_metrics = compute_metrics
 
+        total_batch_size = self.args.eval_batch_size * self.args.world_size
+        if f"{metric_key_prefix}_jit_compilation_time" in output.metrics:
+            start_time += output.metrics[f"{metric_key_prefix}_jit_compilation_time"]
+        output.metrics.update(
+            speed_metrics(
+                metric_key_prefix,
+                start_time,
+                num_samples=output.num_samples,
+                num_steps=math.ceil(output.num_samples / total_batch_size),
+            )
+        )
         if self.post_process_function is None or self.compute_metrics is None:
             return output
 
-        predictions = self.post_process_function(predict_examples, predict_dataset, output.predictions, "predict")
+        predictions = self.post_process_function(predict_examples, predict_dataset, output, "predict")
         metrics = self.compute_metrics(predictions)
 
         # Prefix all keys with metric_key_prefix + '_'
         for key in list(metrics.keys()):
             if not key.startswith(f"{metric_key_prefix}_"):
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
-
+        metrics.update(output.metrics)
         return PredictionOutput(predictions=predictions.predictions, label_ids=predictions.label_ids, metrics=metrics)

@@ -27,6 +27,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 
 if is_flax_available():
     import jax
+
     from transformers import FlaxBeitForImageClassification, FlaxBeitForMaskedImageModeling, FlaxBeitModel
 
 if is_vision_available():
@@ -140,7 +141,6 @@ class FlaxBeitModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxBeitModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (FlaxBeitModel, FlaxBeitForImageClassification, FlaxBeitForMaskedImageModeling) if is_flax_available() else ()
     )
@@ -233,7 +233,7 @@ class FlaxBeitModelIntegrationTest(unittest.TestCase):
         pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
 
         # prepare bool_masked_pos
-        bool_masked_pos = np.ones((1, 196), dtype=np.bool)
+        bool_masked_pos = np.ones((1, 196), dtype=bool)
 
         # forward pass
         outputs = model(pixel_values=pixel_values, bool_masked_pos=bool_masked_pos)

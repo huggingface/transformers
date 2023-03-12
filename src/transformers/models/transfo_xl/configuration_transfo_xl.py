@@ -97,7 +97,7 @@ class TransfoXLConfig(PretrainedConfig):
     >>> # Initializing a Transformer XL configuration
     >>> configuration = TransfoXLConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = TransfoXLModel(configuration)
 
     >>> # Accessing the model configuration
@@ -141,7 +141,7 @@ class TransfoXLConfig(PretrainedConfig):
         init_std=0.02,
         layer_norm_epsilon=1e-5,
         eos_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.cutoffs = []

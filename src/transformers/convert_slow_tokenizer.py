@@ -286,7 +286,7 @@ class GPT2Converter(Converter):
             bos = self.original_tokenizer.bos_token
             bos_token_id = self.original_tokenizer.bos_token_id
             tokenizer.post_processor = processors.TemplateProcessing(
-                single=f"{bos}:0 $A:0",  # token_type_id is 2 for Funnel transformer
+                single=f"{bos}:0 $A:0",
                 pair=f"{bos}:0 $A:0 $B:1",
                 special_tokens=[
                     (bos, bos_token_id),
@@ -891,6 +891,42 @@ class T5Converter(SpmConverter):
         )
 
 
+class WhisperConverter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.encoder
+        merges = list(self.original_tokenizer.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+
+        prefix_token_ids = self.original_tokenizer.prefix_tokens
+        prefixes = self.original_tokenizer.convert_ids_to_tokens(prefix_token_ids)
+        eos = self.original_tokenizer.eos_token
+        eos_token_id = self.original_tokenizer.eos_token_id
+        prefix_template = " ".join([f"{token}:0" for token in prefixes])
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{prefix_template} $A:0 {eos}:0",
+            pair=f"{prefix_template} $A:0 $B:1 {eos}:1",
+            special_tokens=[
+                (eos, eos_token_id),
+                *zip(prefixes, prefix_token_ids),
+            ],
+        )
+
+        return tokenizer
+
+
 class BigBirdConverter(SpmConverter):
     def post_processor(self):
         return processors.TemplateProcessing(
@@ -1043,6 +1079,44 @@ class XGLMConverter(SpmConverter):
         )
 
 
+class MarkupLMConverter(Converter):
+    def converted(self) -> Tokenizer:
+        ot = self.original_tokenizer
+        vocab = ot.encoder
+        merges = list(ot.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+                unk_token=self.original_tokenizer.unk_token,
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+
+        cls = str(self.original_tokenizer.cls_token)
+        sep = str(self.original_tokenizer.sep_token)
+        cls_token_id = self.original_tokenizer.cls_token_id
+        sep_token_id = self.original_tokenizer.sep_token_id
+
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{cls} $A {sep}",
+            pair=f"{cls} $A {sep} $B {sep}",
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
+        )
+
+        return tokenizer
+
+
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
@@ -1072,6 +1146,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
     "LxmertTokenizer": BertConverter,
+    "MarkupLMTokenizer": MarkupLMConverter,
     "MBartTokenizer": MBartConverter,
     "MBart50Tokenizer": MBart50Converter,
     "MPNetTokenizer": MPNetConverter,
@@ -1088,6 +1163,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "RoFormerTokenizer": RoFormerConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
+    "WhisperTokenizer": WhisperConverter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,
     "SplinterTokenizer": SplinterConverter,

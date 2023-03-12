@@ -50,7 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "albert-base-v2"
 _CONFIG_FOR_DOC = "AlbertConfig"
-_TOKENIZER_FOR_DOC = "AlbertTokenizer"
 
 
 ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -582,7 +581,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`AlbertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -632,7 +631,6 @@ ALBERT_INPUTS_DOCSTRING = r"""
     ALBERT_START_DOCSTRING,
 )
 class AlbertModel(AlbertPreTrainedModel):
-
     config_class = AlbertConfig
     base_model_prefix = "albert"
 
@@ -677,7 +675,6 @@ class AlbertModel(AlbertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -762,6 +759,12 @@ class AlbertModel(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForPreTraining(AlbertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [
+        "predictions.decoder.weight",
+        "predictions.decoder.bias",
+        "embeddings.position_ids",
+    ]
+
     def __init__(self, config: AlbertConfig):
         super().__init__(config)
 
@@ -812,10 +815,10 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AlbertTokenizer, AlbertForPreTraining
+        >>> from transformers import AutoTokenizer, AlbertForPreTraining
         >>> import torch
 
-        >>> tokenizer = AlbertTokenizer.from_pretrained("albert-base-v2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
         >>> model = AlbertForPreTraining.from_pretrained("albert-base-v2")
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)
@@ -908,8 +911,12 @@ class AlbertSOPHead(nn.Module):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForMaskedLM(AlbertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [
+        "predictions.decoder.weight",
+        "predictions.decoder.bias",
+        "embeddings.position_ids",
+    ]
 
     def __init__(self, config):
         super().__init__(config)
@@ -956,9 +963,9 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import AlbertTokenizer, AlbertForMaskedLM
+        >>> from transformers import AutoTokenizer, AlbertForMaskedLM
 
-        >>> tokenizer = AlbertTokenizer.from_pretrained("albert-base-v2")
+        >>> tokenizer = AutoTokenizer.from_pretrained("albert-base-v2")
         >>> model = AlbertForMaskedLM.from_pretrained("albert-base-v2")
 
         >>> # add mask_token
@@ -1037,7 +1044,6 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="textattack/albert-base-v2-imdb",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1125,7 +1131,6 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForTokenClassification(AlbertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config: AlbertConfig):
@@ -1146,15 +1151,9 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="vumichien/tiny-albert",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=(
-            "['LABEL_1', 'LABEL_1', 'LABEL_1', 'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_1', 'LABEL_1', "
-            "'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_1']"
-        ),
-        expected_loss=0.66,
     )
     def forward(
         self,
@@ -1217,7 +1216,6 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class AlbertForQuestionAnswering(AlbertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config: AlbertConfig):
@@ -1232,7 +1230,6 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="twmkn9/albert-base-v2-squad2",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1336,7 +1333,6 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,

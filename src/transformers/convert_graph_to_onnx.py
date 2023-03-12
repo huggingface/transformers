@@ -133,7 +133,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
 
 def ensure_valid_input(model, tokens, input_names):
     """
-    Ensure input are presented in the correct order, without any Non
+    Ensure inputs are presented in the correct order, without any Non
 
     Args:
         model: The model used to forward the input data
@@ -273,7 +273,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
     import torch
     from torch.onnx import export
 
-    from .pytorch_utils import is_torch_less_than_1_11
+    from transformers.pytorch_utils import is_torch_less_than_1_11
 
     print(f"Using framework PyTorch: {torch.__version__}")
 
@@ -328,7 +328,6 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: Path):
 
     try:
         import tensorflow as tf
-
         import tf2onnx
         from tf2onnx import __version__ as t2ov
 
@@ -358,7 +357,7 @@ def convert(
     tokenizer: Optional[str] = None,
     use_external_format: bool = False,
     pipeline_name: str = "feature-extraction",
-    **model_kwargs
+    **model_kwargs,
 ):
     """
     Convert the pipeline object to the ONNX Intermediate Representation (IR) format
@@ -435,6 +434,7 @@ def quantize(onnx_model_path: Path) -> Path:
     Returns: The Path generated for the quantized
     """
     import onnx
+    import onnxruntime
     from onnx.onnx_pb import ModelProto
     from onnxruntime.quantization import QuantizationMode
     from onnxruntime.quantization.onnx_quantizer import ONNXQuantizer
@@ -454,19 +454,37 @@ def quantize(onnx_model_path: Path) -> Path:
     copy_model.CopyFrom(onnx_model)
 
     # Construct quantizer
-    quantizer = ONNXQuantizer(
-        model=copy_model,
-        per_channel=False,
-        reduce_range=False,
-        mode=QuantizationMode.IntegerOps,
-        static=False,
-        weight_qType=True,
-        input_qType=False,
-        tensors_range=None,
-        nodes_to_quantize=None,
-        nodes_to_exclude=None,
-        op_types_to_quantize=list(IntegerOpsRegistry),
-    )
+    # onnxruntime renamed input_qType to activation_qType in v1.13.1, so we
+    # check the onnxruntime version to ensure backward compatibility.
+    # See also: https://github.com/microsoft/onnxruntime/pull/12873
+    if parse(onnxruntime.__version__) < parse("1.13.1"):
+        quantizer = ONNXQuantizer(
+            model=copy_model,
+            per_channel=False,
+            reduce_range=False,
+            mode=QuantizationMode.IntegerOps,
+            static=False,
+            weight_qType=True,
+            input_qType=False,
+            tensors_range=None,
+            nodes_to_quantize=None,
+            nodes_to_exclude=None,
+            op_types_to_quantize=list(IntegerOpsRegistry),
+        )
+    else:
+        quantizer = ONNXQuantizer(
+            model=copy_model,
+            per_channel=False,
+            reduce_range=False,
+            mode=QuantizationMode.IntegerOps,
+            static=False,
+            weight_qType=True,
+            activation_qType=False,
+            tensors_range=None,
+            nodes_to_quantize=None,
+            nodes_to_exclude=None,
+            op_types_to_quantize=list(IntegerOpsRegistry),
+        )
 
     # Quantize and export
     quantizer.quantize_model()

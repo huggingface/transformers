@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +25,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_speech_to_text": ["SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "Speech2TextConfig"],
+    "processing_speech_to_text": ["Speech2TextProcessor"],
 }
 
 try:
@@ -46,9 +43,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_speech_to_text"] = ["Speech2TextFeatureExtractor"]
-
-    if is_sentencepiece_available():
-        _import_structure["processing_speech_to_text"] = ["Speech2TextProcessor"]
 
 try:
     if not is_tf_available():
@@ -79,6 +73,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
+    from .processing_speech_to_text import Speech2TextProcessor
 
     try:
         if not is_sentencepiece_available():
@@ -95,9 +90,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
-
-        if is_sentencepiece_available():
-            from .processing_speech_to_text import Speech2TextProcessor
 
     try:
         if not is_tf_available():

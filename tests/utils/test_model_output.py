@@ -107,3 +107,16 @@ class ModelOutputTester(unittest.TestCase):
         self.assertEqual(list(x.keys()), ["a", "b"])
         self.assertEqual(x.a, 30)
         self.assertEqual(x.b, 10)
+
+    def test_instantiate_from_iterator(self):
+        x = ModelOutputTest([("a", 30), ("b", 10)])
+        self.assertEqual(list(x.keys()), ["a", "b"])
+        self.assertEqual(x.a, 30)
+        self.assertEqual(x.b, 10)
+
+        with self.assertRaises(ValueError):
+            _ = ModelOutputTest([("a", 30), (10, 10)])
+
+        x = ModelOutputTest(a=(30, 30))
+        self.assertEqual(list(x.keys()), ["a"])
+        self.assertEqual(x.a, (30, 30))

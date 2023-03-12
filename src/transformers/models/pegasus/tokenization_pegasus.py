@@ -113,7 +113,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         offset=103,  # entries 2 - 104 are only used for pretraining
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.offset = offset
         if additional_special_tokens is not None:
@@ -231,8 +231,17 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
-        out_string = self.sp_model.decode_pieces(tokens)
-        return out_string
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string.strip()
 
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""

@@ -17,7 +17,7 @@
 
 import math
 import random
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -33,16 +33,22 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...pytorch_utils import is_torch_less_than_1_9
 from ...utils import logging
 from .configuration_mctct import MCTCTConfig
 
 
 logger = logging.get_logger(__name__)
 
+if is_torch_less_than_1_9:
+    logger.warning(
+        f"You are using torch=={torch.__version__}, but torch>=1.9.0 is required to use MCTCTModel. Please upgrade"
+        " torch."
+    )
+
 _HIDDEN_STATES_START_POSITION = 1
 
 _CONFIG_FOR_DOC = "MCTCTConfig"
-_PROCESSOR_FOR_DOC = "MCTCTProcessor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "speechbrain/m-ctc-t-large"
@@ -566,13 +572,13 @@ class MCTCTEncoder(MCTCTPreTrainedModel):
 
     def forward(
         self,
-        input_features,
-        attention_mask,
-        head_mask,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
+        input_features: torch.Tensor,
+        attention_mask: torch.Tensor,
+        head_mask: torch.Tensor,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -671,7 +677,6 @@ class MCTCTModel(MCTCTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MCTCT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -680,13 +685,13 @@ class MCTCTModel(MCTCTPreTrainedModel):
     )
     def forward(
         self,
-        input_features,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_features: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -742,7 +747,6 @@ class MCTCTForCTC(MCTCTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MCTCT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -751,14 +755,14 @@ class MCTCTForCTC(MCTCTPreTrainedModel):
     )
     def forward(
         self,
-        input_features,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_features: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple, CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -783,7 +787,6 @@ class MCTCTForCTC(MCTCTPreTrainedModel):
 
         loss = None
         if labels is not None:
-
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 

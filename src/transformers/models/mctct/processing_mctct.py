@@ -58,6 +58,7 @@ class MCTCTProcessor(ProcessorMixin):
             audio = kwargs.pop("raw_speech")
         else:
             audio = kwargs.pop("audio", None)
+        sampling_rate = kwargs.pop("sampling_rate", None)
         text = kwargs.pop("text", None)
         if len(args) > 0:
             audio = args[0]
@@ -67,7 +68,7 @@ class MCTCTProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, **kwargs)
+            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
         if text is not None:
             encodings = self.tokenizer(text, **kwargs)
 

@@ -15,7 +15,7 @@
 """ PyTorch VisionTextDualEncoder model."""
 
 
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -96,7 +96,7 @@ VISION_TEXT_DUAL_ENCODER_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            [`CLIPFeatureExtractor`]. See [`CLIPFeatureExtractor.__call__`] for details.
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -113,7 +113,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`CLIPTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -131,8 +131,8 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            a feature extractor (e.g. if you use ViT as the encoder, you should use [`ViTFeatureExtractor`]). See
-            [`ViTFeatureExtractor.__call__`] for details.
+            an image processor (e.g. if you use ViT as the encoder, you should use [`AutoImageProcessor`]). See
+            [`ViTImageProcessor.__call__`] for details.
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
         output_attentions (`bool`, *optional*):
@@ -169,7 +169,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         vision_model: Optional[PreTrainedModel] = None,
         text_model: Optional[PreTrainedModel] = None,
     ):
-
         if config is None and (vision_model is None or text_model is None):
             raise ValueError("Either a configuration or an vision and a text model has to be provided")
 
@@ -267,15 +266,15 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import VisionTextDualEncoderModel, AutoFeatureExtractor
+        >>> from transformers import VisionTextDualEncoderModel, AutoImageProcessor
 
         >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> image_features = model.get_image_features(**inputs)
         ```"""
@@ -295,16 +294,16 @@ class VisionTextDualEncoderModel(PreTrainedModel):
     @replace_return_docstrings(output_type=CLIPOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        pixel_values=None,
-        attention_mask=None,
-        position_ids=None,
-        return_loss=None,
-        token_type_ids=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        return_loss: Optional[bool] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], CLIPOutput]:
         r"""
         Returns:
 
@@ -316,13 +315,13 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> from transformers import (
         ...     VisionTextDualEncoderModel,
         ...     VisionTextDualEncoderProcessor,
-        ...     ViTFeatureExtractor,
-        ...     BertTokenizer,
+        ...     AutoImageProcessor,
+        ...     AutoTokenizer,
         ... )
 
-        >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-        >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
-        >>> processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
+        >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
+        >>> processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
         >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained(
         ...     "google/vit-base-patch16-224", "bert-base-uncased"
         ... )
@@ -429,7 +428,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                       Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
                       user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
-                      [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
                       should be set to `True` and a configuration object should be provided as `config` argument. This
                       loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
@@ -442,7 +441,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                       Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
                       user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
-                      [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
+                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
                       should be set to `True` and a configuration object should be provided as `config` argument. This
                       loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided

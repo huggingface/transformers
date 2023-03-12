@@ -21,8 +21,9 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, Repository, create_repo, delete_repo
 from requests.exceptions import HTTPError
+
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
@@ -157,12 +158,12 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizerFast")
 
             # Test we can also load the slow version
-            processor = AutoProcessor.from_pretrained(
+            new_processor = AutoProcessor.from_pretrained(
                 "hf-internal-testing/test_dynamic_processor", trust_remote_code=True, use_fast=False
             )
-            tokenizer = processor.tokenizer
-            self.assertTrue(tokenizer.special_attribute_present)
-            self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
+            new_tokenizer = new_processor.tokenizer
+            self.assertTrue(new_tokenizer.special_attribute_present)
+            self.assertEqual(new_tokenizer.__class__.__name__, "NewTokenizer")
         else:
             self.assertEqual(tokenizer.__class__.__name__, "NewTokenizer")
 
@@ -206,9 +207,9 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")
         self.assertEqual(processor.__class__.__name__, "BertTokenizerFast")
 
-    def test_auto_processor_creates_feature_extractor(self):
+    def test_auto_processor_creates_image_processor(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-convnext")
-        self.assertEqual(processor.__class__.__name__, "ConvNextFeatureExtractor")
+        self.assertEqual(processor.__class__.__name__, "ConvNextImageProcessor")
 
 
 @is_staging_test
@@ -218,7 +219,6 @@ class ProcessorPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod
@@ -282,7 +282,8 @@ class ProcessorPushToHubTester(unittest.TestCase):
         processor = CustomProcessor(feature_extractor, tokenizer)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-processor", use_auth_token=self._token)
+            create_repo(f"{USER}/test-dynamic-processor", token=self._token)
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-processor", token=self._token)
             processor.save_pretrained(tmp_dir)
 
             # This has added the proper auto_map field to the feature extractor config

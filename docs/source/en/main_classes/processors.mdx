@@ -20,8 +20,8 @@ Processors can mean two different things in the Transformers library:
 ## Multi-modal processors
 
 Any multi-modal model will require an object to encode or decode the data that groups several modalities (among text,
-vision and audio). This is handled by objects called processors, which group tokenizers (for the text modality) and
-feature extractors (for vision and audio).
+vision and audio). This is handled by objects called processors, which group together two or more processing objects
+such as tokenizers (for the text modality), image processors (for vision) and feature extractors (for audio).
 
 Those processors inherit from the following base class that implements the saving and loading functionality:
 
@@ -112,7 +112,7 @@ Additionally, the following method can be used to convert SQuAD examples into
 [[autodoc]] data.processors.squad.squad_convert_examples_to_features
 
 
-These processors as well as the aforementionned method can be used with files containing the data as well as with the
+These processors as well as the aforementioned method can be used with files containing the data as well as with the
 *tensorflow_datasets* package. Examples are given below.
 
 

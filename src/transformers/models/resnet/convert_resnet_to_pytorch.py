@@ -22,12 +22,12 @@ from functools import partial
 from pathlib import Path
 from typing import List
 
+import timm
 import torch
 import torch.nn as nn
+from huggingface_hub import hf_hub_download
 from torch import Tensor
 
-import timm
-from huggingface_hub import hf_hub_download
 from transformers import AutoFeatureExtractor, ResNetConfig, ResNetForImageClassification
 from transformers.utils import logging
 
@@ -51,7 +51,7 @@ class Tracker:
         for m in self.module.modules():
             self.handles.append(m.register_forward_hook(self._forward_hook))
         self.module(x)
-        list(map(lambda x: x.remove(), self.handles))
+        [x.remove() for x in self.handles]
         return self
 
     @property
@@ -128,9 +128,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     num_labels = 1000
     expected_shape = (1, num_labels)
 
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label

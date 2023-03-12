@@ -32,12 +32,14 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipeline are tested")
     config.addinivalue_line(
         "markers", "is_pt_tf_cross_test: mark test to run only when PT and TF interactions are tested"
     )
     config.addinivalue_line(
         "markers", "is_pt_flax_cross_test: mark test to run only when PT and FLAX interactions are tested"
+    )
+    config.addinivalue_line(
+        "markers", "is_pipeline_test: mark test to run only when pipelines are tested"
     )
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
 

@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +13,6 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
@@ -30,6 +25,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_vilt"] = ["ViltFeatureExtractor"]
+    _import_structure["image_processing_vilt"] = ["ViltImageProcessor"]
     _import_structure["processing_vilt"] = ["ViltProcessor"]
 
 try:
@@ -61,6 +57,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_vilt import ViltFeatureExtractor
+        from .image_processing_vilt import ViltImageProcessor
         from .processing_vilt import ViltProcessor
 
     try:

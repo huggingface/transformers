@@ -25,6 +25,7 @@ from transformers import (
 from transformers.testing_utils import (
     is_pipeline_test,
     nested_simplify,
+    require_pytesseract,
     require_tf,
     require_timm,
     require_torch,
@@ -32,7 +33,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -45,21 +46,15 @@ else:
             pass
 
 
+@is_pipeline_test
 @require_vision
 @require_timm
 @require_torch
-@is_pipeline_test
-class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ObjectDetectionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        if model.__class__.__name__ == "DeformableDetrForObjectDetection":
-            self.skipTest(
-                """Deformable DETR requires a custom CUDA kernel.
-                """
-            )
-
-        object_detector = ObjectDetectionPipeline(model=model, feature_extractor=feature_extractor)
+    def get_test_pipeline(self, model, tokenizer, processor):
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=processor)
         return object_detector, ["./tests/fixtures/tests_samples/COCO/000000039769.png"]
 
     def run_pipeline_test(self, object_detector, examples):
@@ -256,5 +251,25 @@ class ObjectDetectionPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
             [
                 {"score": 0.9988, "label": "cat", "box": {"xmin": 13, "ymin": 52, "xmax": 314, "ymax": 470}},
                 {"score": 0.9987, "label": "cat", "box": {"xmin": 345, "ymin": 23, "xmax": 640, "ymax": 368}},
+            ],
+        )
+
+    @require_torch
+    @require_pytesseract
+    @slow
+    def test_layoutlm(self):
+        model_id = "Narsil/layoutlmv3-finetuned-funsd"
+        threshold = 0.9993
+
+        object_detector = pipeline("object-detection", model=model_id, threshold=threshold)
+
+        outputs = object_detector(
+            "https://huggingface.co/spaces/impira/docquery/resolve/2359223c1837a7587402bda0f2643382a6eefeab/invoice.png"
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
+                {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
             ],
         )

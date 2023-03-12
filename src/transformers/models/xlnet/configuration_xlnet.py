@@ -131,7 +131,7 @@ class XLNetConfig(PretrainedConfig):
     >>> # Initializing a XLNet configuration
     >>> configuration = XLNetConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = XLNetModel(configuration)
 
     >>> # Accessing the model configuration
@@ -176,7 +176,7 @@ class XLNetConfig(PretrainedConfig):
         pad_token_id=5,
         bos_token_id=1,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         """Constructs XLNetConfig."""
         self.vocab_size = vocab_size

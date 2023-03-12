@@ -70,7 +70,7 @@ vocabulary size of the model, i.e. creating logits of shape `(batch_size, 2048, 
 size of 262 byte IDs).
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/perceiver_architecture.jpg"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
 <small> Perceiver IO architecture. Taken from the <a href="https://arxiv.org/abs/2105.15203">original paper</a> </small>
 
@@ -83,12 +83,18 @@ Tips:
   notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Perceiver).
 - Refer to the [blog post](https://huggingface.co/blog/perceiver) if you want to fully understand how the model works and
 is implemented in the library. Note that the models available in the library only showcase some examples of what you can do
-with the Perceiver. There are many more use cases, including question answering, named-entity recognition, object detection, 
-audio classification, video classification, etc. 
+with the Perceiver. There are many more use cases, including question answering, named-entity recognition, object detection,
+audio classification, video classification, etc.
 
 **Note**:
 
 - Perceiver does **not** work with `torch.nn.DataParallel` due to a bug in PyTorch, see [issue #36035](https://github.com/pytorch/pytorch/issues/36035)
+
+## Documentation resources
+
+- [Text classification task guide](./tasks/sequence_classification)
+- [Masked language modeling task guide](./tasks/masked_language_modeling)
+- [Image classification task guide](./tasks/image_classification)
 
 ## Perceiver specific outputs
 
@@ -113,6 +119,11 @@ audio classification, video classification, etc.
 
 [[autodoc]] PerceiverFeatureExtractor
     - __call__
+
+## PerceiverImageProcessor
+
+[[autodoc]] PerceiverImageProcessor
+    - preprocess
 
 ## PerceiverTextPreprocessor
 

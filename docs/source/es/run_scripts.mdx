@@ -123,7 +123,7 @@ python examples/tensorflow/summarization/run_summarization.py  \
 [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) admite un entrenamiento distribuido y de precisión mixta, lo que significa que también puedes usarlo en un script. Para habilitar ambas características:
 
 - Agrega el argumento `fp16` para habilitar la precisión mixta.
-- Establece la cantidad de GPU que se usarás con el argumento `nproc_per_node`.
+- Establece la cantidad de GPU que se usará con el argumento `nproc_per_node`.
 
 ```bash
 python -m torch.distributed.launch \
@@ -200,7 +200,7 @@ En lugar del script `run_summarization.py`, debes usar el script `run_summarizat
 accelerate config
 ```
 
-Prueba tu configuración para asegurarte que esta configurada correctamente:
+Prueba tu configuración para asegurarte que está configurada correctamente:
 
 ```bash
 accelerate test

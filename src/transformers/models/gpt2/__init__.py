@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +18,8 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
+    is_keras_nlp_available,
+    is_tensorflow_text_available,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -75,6 +73,14 @@ else:
     ]
 
 try:
+    if not is_keras_nlp_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_gpt2_tf"] = ["TFGPT2Tokenizer"]
+
+try:
     if not is_flax_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -126,6 +132,14 @@ if TYPE_CHECKING:
             TFGPT2Model,
             TFGPT2PreTrainedModel,
         )
+
+    try:
+        if not is_keras_nlp_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_gpt2_tf import TFGPT2Tokenizer
 
     try:
         if not is_flax_available():

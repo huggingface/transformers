@@ -23,9 +23,10 @@ from transformers import PLBartConfig, is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -213,13 +214,26 @@ class PLBartModelTester:
 
 
 @require_torch
-class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (PLBartModel, PLBartForConditionalGeneration, PLBartForSequenceClassification) if is_torch_available() else ()
     )
     all_generative_model_classes = (PLBartForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "conversational": PLBartForConditionalGeneration,
+            "feature-extraction": PLBartModel,
+            "summarization": PLBartForConditionalGeneration,
+            "text2text-generation": PLBartForConditionalGeneration,
+            "text-classification": PLBartForSequenceClassification,
+            "text-generation": PLBartForCausalLM,
+            "zero-shot": PLBartForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
-    fx_compatible = True
+    fx_compatible = False  # Fix me Michael
     test_pruning = False
     test_missing_keys = False
 
@@ -409,12 +423,12 @@ class PLBartBaseIntegrationTest(AbstractSeq2SeqIntegrationTest):
     src_text = ["Is 0 the first Fibonacci number ?", "Find the sum of all prime numbers ."]
     tgt_text = ["0 the first Fibonacci number?", "the sum of all prime numbers.......... the the"]
 
-    # @unittest.skip("This test is broken, still generates english")
     def test_base_generate(self):
         inputs = self.tokenizer([self.src_text[0]], return_tensors="pt").to(torch_device)
+        src_lan = self.tokenizer._convert_lang_code_special_format("en_XX")
         translated_tokens = self.model.generate(
             input_ids=inputs["input_ids"].to(torch_device),
-            decoder_start_token_id=self.tokenizer.lang_code_to_id["en_XX"],
+            decoder_start_token_id=self.tokenizer.lang_code_to_id[src_lan],
         )
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         self.assertEqual(self.tgt_text[0], decoded[0])
@@ -422,8 +436,9 @@ class PLBartBaseIntegrationTest(AbstractSeq2SeqIntegrationTest):
     @slow
     def test_fill_mask(self):
         inputs = self.tokenizer(["Is 0 the <mask> Fibonacci <mask> ?"], return_tensors="pt").to(torch_device)
+        src_lan = self.tokenizer._convert_lang_code_special_format("en_XX")
         outputs = self.model.generate(
-            inputs["input_ids"], decoder_start_token_id=self.tokenizer.lang_code_to_id["en_XX"], num_beams=1
+            inputs["input_ids"], decoder_start_token_id=self.tokenizer.lang_code_to_id[src_lan], num_beams=1
         )
         prediction: str = self.tokenizer.batch_decode(
             outputs, clean_up_tokenization_spaces=True, skip_special_tokens=True

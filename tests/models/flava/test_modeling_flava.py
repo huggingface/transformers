@@ -22,8 +22,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import (
     FlavaConfig,
     FlavaImageCodebookConfig,
@@ -42,6 +42,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -435,7 +436,6 @@ class FlavaTextModelTester:
 
 @require_torch
 class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlavaTextModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -569,7 +569,6 @@ class FlavaMultimodalModelTester:
 
 @require_torch
 class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlavaMultimodalModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -667,7 +666,6 @@ class FlavaImageCodebookTester:
 
 @require_torch
 class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlavaImageCodebook,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -746,17 +744,30 @@ class FlavaModelTester:
     def __init__(
         self,
         parent,
+        text_kwargs=None,
+        image_kwargs=None,
+        multimodal_kwargs=None,
+        image_codebook_kwargs=None,
         is_training=True,
         hidden_size=32,
         projection_dim=32,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
     ):
+        if text_kwargs is None:
+            text_kwargs = {}
+        if image_kwargs is None:
+            image_kwargs = {}
+        if multimodal_kwargs is None:
+            multimodal_kwargs = {}
+        if image_codebook_kwargs is None:
+            image_codebook_kwargs = {}
+
         self.parent = parent
-        self.image_model_tester = FlavaImageModelTester(parent)
-        self.text_model_tester = FlavaTextModelTester(parent)
-        self.multimodal_model_tester = FlavaMultimodalModelTester(parent)
-        self.image_codebook_tester = FlavaImageCodebookTester(parent)
+        self.image_model_tester = FlavaImageModelTester(parent, **image_kwargs)
+        self.text_model_tester = FlavaTextModelTester(parent, **text_kwargs)
+        self.multimodal_model_tester = FlavaMultimodalModelTester(parent, **multimodal_kwargs)
+        self.image_codebook_tester = FlavaImageCodebookTester(parent, **image_codebook_kwargs)
         self.is_training = is_training
         self.config_tester = ConfigTester(self, config_class=FlavaConfig, hidden_size=37)
         self.hidden_size = hidden_size
@@ -846,8 +857,9 @@ class FlavaModelTester:
 
 
 @require_torch
-class FlavaModelTest(ModelTesterMixin, unittest.TestCase):
+class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": FlavaModel} if is_torch_available() else {}
     class_for_tester = FlavaModelTester
     test_head_masking = False
     test_pruning = False

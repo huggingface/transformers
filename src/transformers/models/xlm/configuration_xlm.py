@@ -142,7 +142,7 @@ class XLMConfig(PretrainedConfig):
     >>> # Initializing a XLM configuration
     >>> configuration = XLMConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = XLMModel(configuration)
 
     >>> # Accessing the model configuration
@@ -192,7 +192,7 @@ class XLMConfig(PretrainedConfig):
         lang_id=0,
         pad_token_id=2,
         bos_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         """Constructs XLMConfig."""
         self.vocab_size = vocab_size

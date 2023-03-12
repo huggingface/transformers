@@ -91,16 +91,17 @@ class PLBartConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import PLBartModel, PLBartConfig
+    >>> from transformers import PLBartConfig, PLBartModel
 
     >>> # Initializing a PLBART uclanlp/plbart-base style configuration
     >>> configuration = PLBartConfig()
-    >>> # Initializing a model from the uclanlp/plbart-base style configuration
+
+    >>> # Initializing a model (with random weights) from the uclanlp/plbart-base style configuration
     >>> model = PLBartModel(configuration)
+
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-
     model_type = "plbart"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -131,7 +132,7 @@ class PLBartConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
