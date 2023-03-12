@@ -870,6 +870,7 @@ def multi_scale_deformable_attention(
     )
     return output.transpose(1, 2).contiguous()
 
+
 class Mask2Former3DSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -887,10 +888,9 @@ class Mask2Former3DSinePositionEmbedding(nn.Module):
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
-    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
-        
+    def forward(self,  hidden_states: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
-            mask = torch.zeros((x.size(0), x.size(2), x.size(3), x.size(4)), device=x.device, dtype=torch.bool)
+            mask = torch.zeros(hidden_states.shape[:4]), device=hidden_states.device, dtype=torch.bool)
         not_mask = ~mask
         y_embed = not_mask.cumsum(1, dtype=torch.float32)
         x_embed = not_mask.cumsum(2, dtype=torch.float32)
@@ -2391,7 +2391,6 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
         self,
         pixel_values: Tensor,
         pixel_mask: Optional[Tensor] = None,
-        video_input: Optional[bool] = False,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -2440,8 +2439,8 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             pixel_values=pixel_values, output_hidden_states=output_hidden_states
         )
 
-        if video_input:
-            transformer_module_output = self.video_transformer_module(
+        if self.config.video_input:
+            transformer_module_output = self.transformer_module(
                 multi_scale_features=pixel_level_module_output.decoder_hidden_states,
                 mask_features=pixel_level_module_output.decoder_last_hidden_state,
                 output_hidden_states=True,
@@ -2551,7 +2550,6 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         mask_labels: Optional[List[Tensor]] = None,
         class_labels: Optional[List[Tensor]] = None,
         pixel_mask: Optional[Tensor] = None,
-        video_input: Optional[bool] = False,
         output_hidden_states: Optional[bool] = None,
         output_auxiliary_logits: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -2563,8 +2561,6 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         class_labels (`List[torch.LongTensor]`, *optional*):
             list of target class labels of shape `(num_labels, height, width)` to be fed to a model. They identify the
             labels of `mask_labels`, e.g. the label of `mask_labels[i][j]` if `class_labels[i][j]`.
-        video_input (`bool`, *optional`):
-            Whether input given to the model is a video.
         Returns:
             `Mask2FormerUniversalSegmentationOutput`
 
@@ -2680,7 +2676,6 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         outputs = self.model(
             pixel_values=pixel_values,
             pixel_mask=pixel_mask,
-            video_input=video_input,
             output_hidden_states=output_hidden_states or self.config.use_auxiliary_loss,
             output_attentions=output_attentions,
             return_dict=True,

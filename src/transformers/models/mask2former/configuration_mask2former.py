@@ -109,8 +109,6 @@ class Mask2FormerConfig(PretrainedConfig):
             Range of frames in the video
         frame_shuffle (`bool`, *optional*, defaults to False): 
             Whether to shuffle the frames or not
-        input_augmentations(`List[str]`, *optional*, defaults to []):
-            List of augmentations to apply on the video input such as brightness", "contrast", etc.
 
     Examples:
 
@@ -165,7 +163,6 @@ class Mask2FormerConfig(PretrainedConfig):
         num_frames: int = 2,
         frame_range: int = 20,
         frame_shuffle: bool = False,
-        input_augmentations: List[str] = [],
         **kwargs,
     ):
         if backbone_config is None:
@@ -219,7 +216,6 @@ class Mask2FormerConfig(PretrainedConfig):
         self.num_frames = num_frames
         self.frame_range = frame_range
         self.frame_shuffle = frame_shuffle
-        self.input_augmentations = input_augmentations
 
         super().__init__(**kwargs)
 
