@@ -178,12 +178,9 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
-            mean (`float` or `List[float]`):
-                Image mean.
-            std (`float` or `List[float]`):
-                Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+            data_format (`str`):
+                The data format of the image. Can be either "ChannelDimension.channels_first" or
+                "ChannelDimension.channels_last".
         """
         if image.dtype == np.uint8:
             image = image.astype(np.float32)
