@@ -125,6 +125,9 @@ class Mask2FormerConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+
+    >>> # If you want to use the model with video input then make sure that you set the `is_video` flag to True
+    >>> configuration.is_video = True
     ```
 
     """

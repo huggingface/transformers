@@ -2653,6 +2653,50 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ... )[0]["segmentation"]
         >>> print(pred_panoptic_map.shape)
         torch.Size([338, 676])
+
+        Video instance segmentation example:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation, Mask2FormerConfig
+        >>> import torch
+        >>> import torchvision
+        >>> from huggingface_hub import hf_hub_download
+
+        >>> # Load Mask2former config
+        >>> config = Mask2FormerConfig()
+
+        >>> # set `is_video` config option to true
+        >>> config.is_video = True
+
+        >>> # Load Mask2Former trained on YouTubeVIS 2021 dataset
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/video-mask2former-swin-small-youtubevis21-instance")
+        >>> model = Mask2FormerForUniversalSegmentation.from_pretrained(
+        ...     "video-mask2former-swin-small-youtubevis21-instance", config=config
+        ... )
+
+        >>> file_path = hf_hub_download(repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset")
+        >>> video_input = torchvision.io.read_video(file_path)[0]
+
+        >>> video_images = []
+        >>> for frame in video_input:
+        >>>     inputs = processor(images=frame, return_tensors="pt", do_resize=True, size=(480, 640))
+        >>>     video_images.append(inputs.pixel_values)
+
+        >>> processed_video = torch.cat(video_images)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(processed_video)
+
+        >>> # Model predicts class_queries_logits of shape `(batch_size, num_queries)`
+        >>> # and masks_queries_logits of shape `(batch_size, num_queries, height, width)`
+        >>> class_queries_logits = outputs.class_queries_logits
+        >>> masks_queries_logits = outputs.masks_queries_logits
+
+        >>> # Perform post-processing to get video instance segmentation map
+        >>> pred_video_instance_map = image_processor.post_process_video_instance_segmentation(
+        ...     outputs, target_sizes=[image.size[::-1]]
+        ... )[0]["segmentation"]
+        >>> print(pred_video_instance_map.shape)
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
