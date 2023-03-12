@@ -16,21 +16,21 @@ limitations under the License.
 
 # Controlli su una Pull Request
 
-Quando si apre una pull request sui 🤗 Transformers, vengono eseguiti un discreto numero di controlli per assicurarsi che la patch che si sta aggiungendo non stia rompendo qualcosa di esistente. Questi controlli sono di quattro tipi:
+Quando apri una pull request sui 🤗 Transformers, vengono eseguiti un discreto numero di controlli per assicurarsi che la patch che stai aggiungendo non stia rompendo qualcosa di esistente. Questi controlli sono di quattro tipi:
 - test regolari
 - costruzione della documentazione
 - stile del codice e della documentazione
 - coerenza generale del repository
 
-In questo documento, cercheremo di spiegare quali sono i vari controlli e le loro ragioni, oltre a spiegare come eseguire il debug locale se uno di essi fallisce sulla vostra PR.
+In questo documento, cercheremo di spiegare quali sono i vari controlli e le loro ragioni, oltre a spiegare come eseguire il debug locale se uno di essi fallisce sulla tua PR.
 
-Si noti che tutti richiedono un'installazione dev:
+Nota che tutti richiedono un'installazione dev:
 
 ```bash
 pip install transformers[dev]
 ```
 
-o per un'installazione modificabile:
+o un'installazione modificabile:
 
 ```bash
 pip install -e .[dev]
@@ -42,7 +42,7 @@ all'interno del repo Transformers.
 
 Tutti i job che iniziano con `ci/circleci: run_tests_` eseguono parti della suite di test dei Transformers. Ognuno di questi job si concentra su una parte della libreria in un determinato ambiente: per esempio `ci/circleci: run_tests_pipelines_tf` esegue il test delle pipeline in un ambiente in cui è installato solo TensorFlow.
 
-Si noti che per evitare di eseguire i test quando non ci sono cambiamenti reali nei moduli che si stanno testando, ogni volta viene eseguita solo una parte della suite di test: viene eseguita una utility per determinare le differenze nella libreria tra prima e dopo la PR (ciò che GitHub mostra nella scheda "Files changes") e sceglie i test che sono stati impattati dalla diff. Questa utility può essere eseguita localmente con:
+Nota che per evitare di eseguire i test quando non ci sono cambiamenti reali nei moduli che si stanno testando, ogni volta viene eseguita solo una parte della suite di test: viene eseguita una utility per determinare le differenze nella libreria tra prima e dopo la PR (ciò che GitHub mostra nella scheda "Files changes") e sceglie i test che sono stati impattati dalla diff. Questa utility può essere eseguita localmente con:
 
 ```bash
 python utils/tests_fetcher.py
@@ -55,7 +55,7 @@ dalla root del repo Transformers. Di seguito ciò che farà:
 3. Applica questa mappa ai file raccolti nel passaggio 1, si ottiene l'elenco dei file del modello interessati dalla PR.
 4. Mappa ciascuno di questi file con i corrispondenti file di test e ottiene l'elenco dei test da eseguire.
 
-Quando si esegue lo script in locale, si dovrebbe ottenere la stampa dei risultati dei passi 1, 3 e 4 e quindi sapere quali test sono stati eseguiti. Lo script creerà anche un file chiamato `test_list.txt` che contiene l'elenco dei test da eseguire e che può essere eseguito localmente con il seguente comando:
+Quando esegui lo script in locale, dovresti ottenere la stampa dei risultati dei passi 1, 3 e 4 e quindi sapere quali test sono stati eseguiti. Lo script creerà anche un file chiamato `test_list.txt` che contiene l'elenco dei test da eseguire e che puoi eseguire localmente con il seguente comando:
 
 ```bash
 python -m pytest -n 8 --dist=loadfile -rA -s $(cat test_list.txt)
@@ -65,13 +65,13 @@ Nel caso in cui qualcosa sia sfuggito, l'intera suite di test viene eseguita quo
 
 ## Build della documentazione
 
-Il job `ci/circleci: build_doc` esegue una build della documentazione per assicurarsi che tutto sia a posto una volta che la PR è stata unita. Se questo passaggio fallisce, si può controllare localmente entrando nella cartella `docs` del repo Transformers e digitare
+Il job `ci/circleci: build_doc` esegue una build della documentazione per assicurarsi che tutto sia a posto una volta che la PR è stata unita. Se questo passaggio fallisce, puoi controllare localmente entrando nella cartella `docs` del repo Transformers e digitare
 
 ```bash
 make html
 ```
 
-Sphinx non è noto per i suoi messaggi di errore utili, quindi potrebbe essere necessario provare alcune cose per trovare davvero la fonte dell'errore.
+Sphinx non è noto per i suoi messaggi di errore chiari, quindi potrebbe essere necessario che provi alcune cose per trovare davvero la fonte dell'errore.
 
 ## Stile del codice e della documentazione
 
@@ -97,7 +97,7 @@ Quest'ultimo comando eseguirà anche tutti i controlli aggiuntivi per la consist
 
 ## Coerenza del repository
 
-All'interno sono raggruppati tutti i test per assicurarsi che la PR lasci il repository in un buono stato ed è eseguito dal controllo `ci/circleci: check_repository_consistency`. È possibile eseguire localmente questo controllo eseguendo quanto segue:
+All'interno sono raggruppati tutti i test per assicurarsi che la tua PR lasci il repository in un buono stato ed è eseguito dal controllo `ci/circleci: check_repository_consistency`. Puoi eseguire localmente questo controllo eseguendo quanto segue:
 
 ```bash
 make repo-consistency
@@ -112,7 +112,7 @@ Questo verifica che:
 - Le tabelle autogenerate nella documentazione sono aggiornate (eseguito da `utils/check_table.py`)
 - La libreria ha tutti gli oggetti disponibili anche se non tutte le dipendenze opzionali sono installate (eseguito da `utils/check_dummies.py`)
 
-Se questo controllo fallisce, le prime due voci richiedono una correzione manuale, mentre le ultime quattro possono essere corrette automaticamente eseguendo il comando
+Se questo controllo fallisce, le prime due voci richiedono una correzione manuale, mentre le ultime quattro possono essere corrette automaticamente per te eseguendo il comando
 
 ```bash
 make fix-copies
@@ -120,7 +120,7 @@ make fix-copies
 
 Ulteriori controlli riguardano le PR che aggiungono nuovi modelli, principalmente che:
 
-- Tutti i modelli aggiunti sono in una Auto-mapping (eseguita da `utils/check_repo.py`)
+- Tutti i modelli aggiunti sono in un Auto-mapping (eseguita da `utils/check_repo.py`)
 <!-- TODO Sylvain, add a check that makes sure the common tests are implemented.-->
 - Tutti i modelli sono testati correttamente (eseguito da `utils/check_repo.py`)
 
