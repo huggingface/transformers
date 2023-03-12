@@ -40,9 +40,8 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     Constructs a Pix2Struct image processor.
 
     Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in the `preprocess` method.
+        patch_size (`Dict[str, int]`, *optional*, defaults to `{"height": 16, "width": 16}`):
+            The patch size to use for the image. According to Pix2Struct paper and code, the patch size is 16x16.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method. Can be overridden by the `do_normalize` parameter in the `preprocess` method. According to
