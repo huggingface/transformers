@@ -93,13 +93,17 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         )
         return patches.unsqueeze(0)
 
-    def extract_flattened_patches(self, image: np.ndarray, max_patches: int, **kwargs) -> np.ndarray:
+    def extract_flattened_patches(self, image: np.ndarray, max_patches: int, patch_size: dict, **kwargs) -> np.ndarray:
         """
         Extract flattened patches from an image.
 
         Args:
             image (`np.ndarray`):
                 Image to extract flattened patches from.
+            max_patches (`int`):
+                Maximum number of patches to extract.
+            patch_size (`dict`):
+                Dictionary containing the patch height and width.
         """
         requires_backends(self.extract_flattened_patches, "torch")
 
@@ -111,7 +115,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             else:
                 image = torch.from_numpy(image)
 
-        patch_height, patch_width = self.patch_size["height"], self.patch_size["width"]
+        patch_height, patch_width = patch_size["height"], patch_size["width"]
         _, image_height, image_width = image.shape
         image_height = float(image_height)
         image_width = float(image_width)
@@ -195,6 +199,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         max_patches: Optional[int] = 2048,
+        patch_size: Optional[Dict[str, int]] = None,
         do_normalize: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         do_convert_rgb: bool = None,
@@ -238,6 +243,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         """
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        patch_size = patch_size if patch_size is not None else self.patch_size
 
         if not is_batched(images):
             images = [images]
@@ -259,7 +265,10 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             images = [self.normalize(image=image, data_format=data_format) for image in images]
 
         # convert to torch tensor and permute
-        images = [self.extract_flattened_patches(image=image, max_patches=max_patches) for image in images]
+        images = [
+            self.extract_flattened_patches(image=image, max_patches=max_patches, patch_size=patch_size)
+            for image in images
+        ]
 
         # create attention mask in numpy
         attention_masks = [(image.sum(axis=-1) != 0).astype(np.float32) for image in images]
