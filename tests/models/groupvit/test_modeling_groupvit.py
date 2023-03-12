@@ -17,14 +17,15 @@
 
 import inspect
 import os
+import random
 import tempfile
 import unittest
 
 import numpy as np
-
 import requests
+
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_pt_tf_cross_test, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -35,6 +36,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -95,7 +97,8 @@ class GroupViTVisionModelTester:
         self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        rng = random.Random(0)
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size], rng=rng)
         config = self.get_config()
 
         return config, pixel_values
@@ -160,6 +163,18 @@ class GroupViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="GroupViT does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
+
+    @is_pt_tf_cross_test
+    def test_pt_tf_model_equivalence(self):
+        import tensorflow as tf
+
+        seed = 338
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        tf.random.set_seed(seed)
+        return super().test_pt_tf_model_equivalence()
 
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -368,7 +383,8 @@ class GroupViTTextModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        rng = random.Random(0)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size, rng=rng)
 
         input_mask = None
         if self.use_input_mask:
@@ -417,7 +433,6 @@ class GroupViTTextModelTester:
 
 @require_torch
 class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (GroupViTTextModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -459,10 +474,15 @@ class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class GroupViTModelTester:
-    def __init__(self, parent, is_training=True):
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+        if text_kwargs is None:
+            text_kwargs = {}
+        if vision_kwargs is None:
+            vision_kwargs = {}
+
         self.parent = parent
-        self.text_model_tester = GroupViTTextModelTester(parent)
-        self.vision_model_tester = GroupViTVisionModelTester(parent)
+        self.text_model_tester = GroupViTTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = GroupViTVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -502,8 +522,9 @@ class GroupViTModelTester:
 
 
 @require_torch
-class GroupViTModelTest(ModelTesterMixin, unittest.TestCase):
+class GroupViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GroupViTModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": GroupViTModel} if is_torch_available() else {}
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
@@ -531,6 +552,18 @@ class GroupViTModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="GroupViTModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
+
+    @is_pt_tf_cross_test
+    def test_pt_tf_model_equivalence(self):
+        import tensorflow as tf
+
+        seed = 163
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        tf.random.set_seed(seed)
+        return super().test_pt_tf_model_equivalence()
 
     # override as the `logit_scale` parameter initilization is different for GROUPVIT
     def test_initialization(self):

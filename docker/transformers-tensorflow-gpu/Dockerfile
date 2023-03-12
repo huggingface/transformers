@@ -12,11 +12,13 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-tensorflow,testing]
 
 # If set to nothing, will install the latest version
-ARG TENSORFLOW=''
+ARG TENSORFLOW='2.11'
 
 RUN [ ${#TENSORFLOW} -gt 0 ] && VERSION='tensorflow=='$TENSORFLOW'.*' ||  VERSION='tensorflow'; python3 -m pip install --no-cache-dir -U $VERSION
 RUN python3 -m pip uninstall -y torch flax
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
+
+RUN python3 -m pip install --no-cache-dir -U tensorflow_probability
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

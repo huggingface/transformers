@@ -17,8 +17,7 @@
 from collections import OrderedDict
 from typing import Any, List, Mapping, Optional
 
-from transformers import PreTrainedTokenizer, TensorType, is_torch_available
-
+from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfigWithPast, PatchingSpec
 from ...utils import logging
@@ -65,7 +64,7 @@ class GPT2Config(PretrainedConfig):
             Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
         resid_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        embd_pdrop (`int`, *optional*, defaults to 0.1):
+        embd_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the embeddings.
         attn_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention.
@@ -117,12 +116,12 @@ class GPT2Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import GPT2Model, GPT2Config
+    >>> from transformers import GPT2Config, GPT2Model
 
     >>> # Initializing a GPT2 configuration
     >>> configuration = GPT2Config()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = GPT2Model(configuration)
 
     >>> # Accessing the model configuration

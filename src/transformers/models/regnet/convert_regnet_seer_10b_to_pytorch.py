@@ -29,14 +29,14 @@ from typing import Dict, List, Tuple
 
 import torch
 import torch.nn as nn
-from torch import Tensor
-
 from classy_vision.models.regnet import RegNet, RegNetParams
 from huggingface_hub import cached_download, hf_hub_url
+from torch import Tensor
+from vissl.models.model_helpers import get_trunk_forward_outputs
+
 from transformers import AutoFeatureExtractor, RegNetConfig, RegNetForImageClassification, RegNetModel
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
-from vissl.models.model_helpers import get_trunk_forward_outputs
 
 
 logging.set_verbosity_info()
@@ -60,7 +60,7 @@ class Tracker:
         for name, m in self.module.named_modules():
             self.handles.append(m.register_forward_hook(partial(self._forward_hook, name=name)))
         self.module(x)
-        list(map(lambda x: x.remove(), self.handles))
+        [x.remove() for x in self.handles]
         return self
 
     @property
@@ -163,9 +163,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
 
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
+    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label

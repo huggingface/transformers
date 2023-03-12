@@ -19,6 +19,7 @@ import random
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -26,15 +27,15 @@ from ...modeling_tf_outputs import TFBaseModelOutputWithPastAndCrossAttentions
 
 # Public API
 from ...modeling_tf_utils import (
+    TFModelInputType,
     TFPreTrainedModel,
-    TFSharedEmbeddings,
-    TFWrappedEmbeddings,
     get_initializer,
     keras_serializable,
     unpack_inputs,
 )
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
+    ContextManagers,
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -49,7 +50,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "allenai/led-base-16384"
 _CONFIG_FOR_DOC = "LEDConfig"
-_TOKENIZER_FOR_DOC = "LEDTokenizer"
 
 
 LARGE_NEGATIVE = -1e8
@@ -112,7 +112,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-class TFLEDLearnedPositionalEmbedding(TFSharedEmbeddings):
+class TFLEDLearnedPositionalEmbedding(tf.keras.layers.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
@@ -122,10 +122,11 @@ class TFLEDLearnedPositionalEmbedding(TFSharedEmbeddings):
 
     def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
         """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_shape[:2]
+        seq_len = input_shape[1]
+        position_ids = tf.range(seq_len, delta=1, name="range")
+        position_ids += past_key_values_length
 
-        positions = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
-        return super().call(positions)
+        return super().call(tf.cast(position_ids, dtype=tf.int32))
 
 
 # Copied from transformers.models.longformer.modeling_tf_longformer.TFLongformerSelfAttention with TFLongformer->TFLEDEncoder
@@ -1321,10 +1322,10 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        input_ids = tf.convert_to_tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0]], dtype=tf.int64)
+        input_ids = tf.convert_to_tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0]], dtype=tf.int32)
         # make sure global layers are initialized
-        attention_mask = tf.convert_to_tensor([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0]], dtype=tf.int64)
-        global_attention_mask = tf.convert_to_tensor([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0]], dtype=tf.int64)
+        attention_mask = tf.convert_to_tensor([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0]], dtype=tf.int32)
+        global_attention_mask = tf.convert_to_tensor([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0]], dtype=tf.int32)
         dummy_inputs = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -1336,10 +1337,10 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
             }
         ]
     )
@@ -1648,7 +1649,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         config: LEDConfig
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
+    def __init__(self, config: LEDConfig, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -1702,7 +1703,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`LEDTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1737,17 +1738,25 @@ class TFLEDEncoder(tf.keras.layers.Layer):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = shape_list(input_ids)
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.embed_tokens.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.vocab_size})"
-                ),
-            )
-            inputs_embeds = self.embed_tokens(input_ids)
+            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
+            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
+            # is used with a name ending in `/`, that name replaces the current name scope.
+            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
+            if hasattr(self.embed_tokens, "load_weight_prefix"):
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
+                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+                tf.debugging.assert_less(
+                    input_ids,
+                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
+                    message=(
+                        "input_ids must be smaller than the embedding layer's input dimension (got"
+                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
+                    ),
+                )
+                inputs_embeds = self.embed_tokens(input_ids)
         elif inputs_embeds is not None:
             input_shape = shape_list(inputs_embeds)[:-1]
         else:
@@ -1760,7 +1769,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         if global_attention_mask is not None:
             attention_mask = attention_mask * tf.cast((global_attention_mask + 1), dtype=attention_mask.dtype)
 
-        (padding_len, input_ids, attention_mask, inputs_embeds,) = self._pad_to_window_size(
+        padding_len, input_ids, attention_mask, inputs_embeds = self._pad_to_window_size(
             input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
@@ -1800,7 +1809,6 @@ class TFLEDEncoder(tf.keras.layers.Layer):
 
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
-
             if output_hidden_states:
                 hidden_states_to_add = self.compute_hidden_states(hidden_states, padding_len)
                 encoder_states = encoder_states + (hidden_states_to_add,)
@@ -1915,7 +1923,7 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         embed_tokens: output embedding
     """
 
-    def __init__(self, config: LEDConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
+    def __init__(self, config: LEDConfig, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
@@ -1957,7 +1965,7 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         Args:
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it. Indices can be obtained using [`LEDTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                provide it. Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details. [What are input IDs?](../glossary#input-ids)
             attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -2022,17 +2030,25 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         positions = self.embed_positions(input_shape, past_key_values_length)
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.embed_tokens.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.vocab_size})"
-                ),
-            )
-            inputs_embeds = self.embed_tokens(input_ids)
+            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
+            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
+            # is used with a name ending in `/`, that name replaces the current name scope.
+            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
+            if hasattr(self.embed_tokens, "load_weight_prefix"):
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
+                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+                tf.debugging.assert_less(
+                    input_ids,
+                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
+                    message=(
+                        "input_ids must be smaller than the embedding layer's input dimension (got"
+                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
+                    ),
+                )
+                inputs_embeds = self.embed_tokens(input_ids)
 
         hidden_states = inputs_embeds
 
@@ -2132,32 +2148,25 @@ class TFLEDMainLayer(tf.keras.layers.Layer):
     def __init__(self, config: LEDConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="led.shared")
+        self.shared = tf.keras.layers.Embedding(
+            input_dim=config.vocab_size,
+            output_dim=config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
+            name="led.shared",
+        )
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        self.shared.load_weight_prefix = "led.shared"
 
-        with tf.compat.v1.variable_scope("led.shared") as shared_abs_scope_name:
-            pass
-
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        embed_tokens.vocab_size = self.shared.vocab_size
-        embed_tokens.hidden_size = self.shared.hidden_size
-
-        self.encoder = TFLEDEncoder(config, embed_tokens, name="encoder")
-        self.decoder = TFLEDDecoder(config, embed_tokens, name="decoder")
+        self.encoder = TFLEDEncoder(config, self.shared, name="encoder")
+        self.decoder = TFLEDDecoder(config, self.shared, name="decoder")
 
     def get_input_embeddings(self):
         return self.shared
 
     def set_input_embeddings(self, new_embeddings):
-        self.shared.weight = new_embeddings
-        self.shared.vocab_size = self.shared.weight.shape[0]
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("led.shared") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        self.encoder.set_embed_tokens(embed_tokens)
-        self.decoder.set_embed_tokens(embed_tokens)
+        self.shared = new_embeddings
+        self.encoder.embed_tokens = self.shared
+        self.decoder.embed_tokens = self.shared
 
     @unpack_inputs
     def call(
@@ -2178,9 +2187,8 @@ class TFLEDMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs
+        **kwargs,
     ):
-
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             use_cache = False
 
@@ -2258,7 +2266,6 @@ class TFLEDModel(TFLEDPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLEDSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2281,9 +2288,8 @@ class TFLEDModel(TFLEDPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs
+        **kwargs,
     ):
-
         outputs = self.led(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -2363,7 +2369,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         self.bias_layer = BiasLayer(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
-        self.final_logits_bias = self.bias_layer.bias  # alias to keep the same interface with PT
+
         # TODO (Joao): investigate why LED has numerical issues in XLA generate
         self.supports_xla_generation = False
 
@@ -2374,10 +2380,15 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         return self.led.encoder
 
     def get_bias(self):
-        return {"final_logits_bias": self.final_logits_bias}
+        return {"final_logits_bias": self.bias_layer.bias}
 
     def set_bias(self, value):
-        self.final_logits_bias = value["final_logits_bias"]
+        # Replaces the existing layers containing bias for correct (de)serialization.
+        vocab_size = value["final_logits_bias"].shape[-1]
+        self.bias_layer = BiasLayer(
+            name="final_logits_bias", shape=[1, vocab_size], initializer="zeros", trainable=False
+        )
+        self.bias_layer.bias.assign(value["final_logits_bias"])
 
     def get_output_embeddings(self):
         return self.get_input_embeddings()
@@ -2390,23 +2401,23 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
     @replace_return_docstrings(output_type=TFLEDSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         encoder_outputs: Optional[TFLEDEncoderBaseModelOutput] = None,
-        global_attention_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+        global_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[tf.Tensor] = None,
+        training: bool = False,
     ):
         """
         Returns:
@@ -2414,11 +2425,11 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LEDTokenizer, TFLEDForConditionalGeneration
+        >>> from transformers import AutoTokenizer, TFLEDForConditionalGeneration
         >>> import tensorflow as tf
 
         >>> mname = "allenai/led-base-16384"
-        >>> tokenizer = LEDTokenizer.from_pretrained(mname)
+        >>> tokenizer = AutoTokenizer.from_pretrained(mname)
         >>> TXT = "My friends are <mask> but they eat too many carbs."
         >>> model = TFLEDForConditionalGeneration.from_pretrained(mname)
         >>> batch = tokenizer([TXT], return_tensors="tf")
@@ -2429,7 +2440,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
 
         if labels is not None:
             use_cache = False
-            if decoder_input_ids is None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
@@ -2452,7 +2463,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
-        lm_logits = self.led.shared(outputs[0], mode="linear")
+        lm_logits = tf.matmul(outputs[0], self.led.shared.weights, transpose_b=True)
         lm_logits = self.bias_layer(lm_logits)
         masked_lm_loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)
 
@@ -2496,22 +2507,22 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         use_cache=None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "head_mask": head_mask,
@@ -2521,16 +2532,6 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
-
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            # cached cross_attention states don't have to be reordered -> they are always the same
-            reordered_past += (
-                tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past[:2]) + layer_past[2:],
-            )
-        return reordered_past
 
     def hf_compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""

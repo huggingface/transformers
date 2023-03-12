@@ -22,11 +22,11 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo
 from requests.exceptions import HTTPError
+
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
 from transformers.testing_utils import TOKEN, USER, check_json_file_has_correct_format, get_tests_dir, is_staging_test
-from transformers.utils import is_torch_available, is_vision_available
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
@@ -34,106 +34,12 @@ sys.path.append(str(Path(__file__).parent.parent / "utils"))
 from test_module.custom_feature_extraction import CustomFeatureExtractor  # noqa E402
 
 
-if is_torch_available():
-    import numpy as np
-    import torch
-
-if is_vision_available():
-    from PIL import Image
-
-
 SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = get_tests_dir("fixtures")
 
 
-def prepare_image_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
-    """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-    or a list of PyTorch tensors if one specifies torchify=True.
-
-    One can specify whether the images are of the same resolution or not.
-    """
-
-    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
-
-    image_inputs = []
-    for i in range(feature_extract_tester.batch_size):
-        if equal_resolution:
-            width = height = feature_extract_tester.max_resolution
-        else:
-            # To avoid getting image width/height 0
-            min_resolution = feature_extract_tester.min_resolution
-            if getattr(feature_extract_tester, "size_divisor", None):
-                # If `size_divisor` is defined, the image needs to have width/size >= `size_divisor`
-                min_resolution = max(feature_extract_tester.size_divisor, min_resolution)
-            width, height = np.random.choice(np.arange(min_resolution, feature_extract_tester.max_resolution), 2)
-        image_inputs.append(
-            np.random.randint(
-                255,
-                size=(
-                    feature_extract_tester.num_channels,
-                    width,
-                    height,
-                ),
-                dtype=np.uint8,
-            )
-        )
-
-    if not numpify and not torchify:
-        # PIL expects the channel dimension as last dimension
-        image_inputs = [Image.fromarray(np.moveaxis(image, 0, -1)) for image in image_inputs]
-
-    if torchify:
-        image_inputs = [torch.from_numpy(image) for image in image_inputs]
-
-    return image_inputs
-
-
-def prepare_video(feature_extract_tester, width=10, height=10, numpify=False, torchify=False):
-    """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
-
-    video = []
-    for i in range(feature_extract_tester.num_frames):
-        video.append(np.random.randint(255, size=(feature_extract_tester.num_channels, width, height), dtype=np.uint8))
-
-    if not numpify and not torchify:
-        # PIL expects the channel dimension as last dimension
-        video = [Image.fromarray(np.moveaxis(frame, 0, -1)) for frame in video]
-
-    if torchify:
-        video = [torch.from_numpy(frame) for frame in video]
-
-    return video
-
-
-def prepare_video_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
-    """This function prepares a batch of videos: a list of list of PIL images, or a list of list of numpy arrays if
-    one specifies numpify=True, or a list of list of PyTorch tensors if one specifies torchify=True.
-
-    One can specify whether the videos are of the same resolution or not.
-    """
-
-    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
-
-    video_inputs = []
-    for i in range(feature_extract_tester.batch_size):
-        if equal_resolution:
-            width = height = feature_extract_tester.max_resolution
-        else:
-            width, height = np.random.choice(
-                np.arange(feature_extract_tester.min_resolution, feature_extract_tester.max_resolution), 2
-            )
-            video = prepare_video(
-                feature_extract_tester=feature_extract_tester,
-                width=width,
-                height=height,
-                numpify=numpify,
-                torchify=torchify,
-            )
-        video_inputs.append(video)
-
-    return video_inputs
-
-
 class FeatureExtractionSavingTestMixin:
+    test_cast_dtype = None
+
     def test_feat_extract_to_json_string(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         obj = json.loads(feat_extract.to_json_string())
@@ -194,7 +100,6 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod

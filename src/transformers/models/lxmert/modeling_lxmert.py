@@ -42,7 +42,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "unc-nlp/lxmert-base-uncased"
 _CONFIG_FOR_DOC = "LxmertConfig"
-_TOKENIZER_FOR_DOC = "LxmertTokenizer"
 
 LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "unc-nlp/lxmert-base-uncased",
@@ -527,7 +526,6 @@ class LxmertXLayer(nn.Module):
         visual_attention_mask,
         output_attentions=False,
     ):
-
         lang_att_output, visual_att_output = self.cross_att(
             lang_input=lang_feats,
             lang_attention_mask=lang_attention_mask,
@@ -610,7 +608,6 @@ class LxmertEncoder(nn.Module):
         visual_attention_mask=None,
         output_attentions=None,
     ):
-
         vision_hidden_states = ()
         language_hidden_states = ()
         vision_attentions = () if output_attentions or self.config.output_attentions else None
@@ -739,7 +736,7 @@ class LxmertVisualObjHead(nn.Module):
             visual_losses["obj"] = {"shape": (-1,), "num": config.num_object_labels}
         if config.visual_attr_loss:
             visual_losses["attr"] = {"shape": (-1,), "num": config.num_attr_labels}
-        if config.visual_obj_loss:
+        if config.visual_feat_loss:
             visual_losses["feat"] = {
                 "shape": (-1, config.visual_feat_dim),
                 "num": config.visual_feat_dim,
@@ -827,7 +824,7 @@ LXMERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`LxmertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -900,7 +897,6 @@ class LxmertModel(LxmertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LxmertModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -918,7 +914,6 @@ class LxmertModel(LxmertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[LxmertModelOutput, Tuple[torch.FloatTensor]]:
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1023,6 +1018,8 @@ class LxmertModel(LxmertPreTrainedModel):
     LXMERT_START_DOCSTRING,
 )
 class LxmertForPreTraining(LxmertPreTrainedModel):
+    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         # Configuration
@@ -1070,7 +1067,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
                 "num": config.num_attr_labels,
                 "loss": "visual_ce",
             }
-        if config.visual_obj_loss:
+        if config.visual_feat_loss:
             visual_losses["feat"] = {
                 "shape": (-1, config.visual_feat_dim),
                 "num": config.visual_feat_dim,
@@ -1123,7 +1120,6 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         self.answer_head.logit_fc[-1] = qa_logit_layer
 
     def _get_resized_qa_labels(self, cur_qa_logit_layer, num_labels):
-
         if num_labels is None:
             return cur_qa_logit_layer
 
@@ -1355,7 +1351,6 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         self.answer_head.logit_fc[-1] = qa_logit_layer
 
     def _get_resized_qa_labels(self, cur_qa_logit_layer, num_labels):
-
         if num_labels is None:
             return cur_qa_logit_layer
 
@@ -1384,7 +1379,6 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LxmertForQuestionAnsweringOutput,
         config_class=_CONFIG_FOR_DOC,

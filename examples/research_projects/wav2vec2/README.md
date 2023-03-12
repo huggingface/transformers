@@ -216,3 +216,34 @@ PYTHONPATH=../../../src deepspeed --num_gpus 4 run_pretrain.py \
 --fp16 \
 --deepspeed ds_config_wav2vec2_zero2.json \
 ```
+
+
+### Forced Alignment
+
+Character level forced alignment for audio and text pairs with wav2vec2 models finetuned on ASR task for a specific language.
+Inspired by [this](https://pytorch.org/tutorials/intermediate/forced_alignment_with_torchaudio_tutorial.html) Pytorch tutorial.
+
+#### Input Formats
+
+    Input format in script.txt              Input format in wavs directroy
+    0000    sentence1                       0000.wav
+    0001    sentence2                       0001.wav
+    
+#### Output Format
+
+Output directory will contain 0000.txt and 0001.txt. Each file will have format like below
+
+    char    score   start_ms    end_ms
+    h       0.25    1440        1520
+    
+#### Run command
+
+```
+python alignment.py  \
+--model_name="arijitx/wav2vec2-xls-r-300m-bengali" \
+--wav_dir="./wavs"
+--text_file="script.txt" \
+--input_wavs_sr=48000 \
+--output_dir="./out_alignment" \
+--cuda
+```

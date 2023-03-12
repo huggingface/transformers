@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,6 +41,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_videomae"] = ["VideoMAEFeatureExtractor"]
+    _import_structure["image_processing_videomae"] = ["VideoMAEImageProcessor"]
 
 if TYPE_CHECKING:
     from .configuration_videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
@@ -70,6 +67,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_videomae import VideoMAEFeatureExtractor
+        from .image_processing_videomae import VideoMAEImageProcessor
 
 else:
     import sys

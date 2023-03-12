@@ -75,6 +75,16 @@ encode the text and prepare the images. The following example shows how to get t
 
 This model was contributed by [valhalla](https://huggingface.co/valhalla). The original code can be found [here](https://github.com/openai/CLIP).
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with CLIP.
+
+- A blog post on [How to fine-tune CLIP on 10,000 image-text pairs](https://huggingface.co/blog/fine-tune-clip-rsicd).
+- CLIP is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/contrastive-image-text).
+
+If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we will review it.
+The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
 ## CLIPConfig
 
 [[autodoc]] CLIPConfig
@@ -100,6 +110,11 @@ This model was contributed by [valhalla](https://huggingface.co/valhalla). The o
 
 [[autodoc]] CLIPTokenizerFast
 
+## CLIPImageProcessor
+
+[[autodoc]] CLIPImageProcessor
+    - preprocess
+
 ## CLIPFeatureExtractor
 
 [[autodoc]] CLIPFeatureExtractor
@@ -119,6 +134,17 @@ This model was contributed by [valhalla](https://huggingface.co/valhalla). The o
 
 [[autodoc]] CLIPTextModel
     - forward
+
+## CLIPTextModelWithProjection
+
+[[autodoc]] CLIPTextModelWithProjection
+    - forward
+
+## CLIPVisionModelWithProjection
+
+[[autodoc]] CLIPVisionModelWithProjection
+    - forward
+
 
 ## CLIPVisionModel
 

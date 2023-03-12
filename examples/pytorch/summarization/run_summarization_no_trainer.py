@@ -27,20 +27,20 @@ import random
 from pathlib import Path
 
 import datasets
+import evaluate
 import nltk
 import numpy as np
 import torch
-from datasets import load_dataset
-from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
-
-import evaluate
-import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
+from datasets import load_dataset
 from filelock import FileLock
-from huggingface_hub import Repository
+from huggingface_hub import Repository, create_repo
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
+
+import transformers
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
@@ -56,7 +56,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.23.0.dev0")
+check_min_version("4.27.0.dev0")
 
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
@@ -159,15 +159,6 @@ def parse_args():
             "target text after tokenization.Sequences longer than this will be truncated, sequences shorter will be "
             "padded. Will default to `max_target_length`.This argument is also used to override the ``max_length`` "
             "param of ``model.generate``, which is used during ``evaluate`` and ``predict``."
-        ),
-    )
-    parser.add_argument(
-        "--max_length",
-        type=int,
-        default=128,
-        help=(
-            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
         ),
     )
     parser.add_argument(
@@ -298,7 +289,7 @@ def parse_args():
         default="all",
         help=(
             'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
-            ' `"wandb"` and `"comet_ml"`. Use `"all"` (default) to report to all integrations.'
+            ' `"wandb"`, `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations.'
             "Only applicable when `--with_tracking` is passed."
         ),
     )
@@ -373,7 +364,8 @@ def main():
                 repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
             else:
                 repo_name = args.hub_model_id
-            repo = Repository(args.output_dir, clone_from=repo_name)
+            create_repo(repo_name, exist_ok=True, token=args.hub_token)
+            repo = Repository(args.output_dir, clone_from=repo_name, token=args.hub_token)
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -439,7 +431,11 @@ def main():
         logger.info("Training new model from scratch")
         model = AutoModelForSeq2SeqLM.from_config(config)
 
-    model.resize_token_embeddings(len(tokenizer))
+    # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
+    # on a small vocab and want a smaller embedding size, remove this test.
+    embedding_size = model.get_input_embeddings().weight.shape[0]
+    if len(tokenizer) > embedding_size:
+        model.resize_token_embeddings(len(tokenizer))
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
@@ -468,6 +464,9 @@ def main():
                 f"--summary_column' value '{args.summary_column}' needs to be one of: {', '.join(column_names)}"
             )
 
+    if args.val_max_target_length is None:
+        args.val_max_target_length = args.max_target_length
+
     # Temporarily set max_target_length for training.
     max_target_length = args.max_target_length
     padding = "max_length" if args.pad_to_max_length else False
@@ -492,7 +491,7 @@ def main():
         return model_inputs
 
     with accelerator.main_process_first():
-        processed_datasets = raw_datasets.map(
+        train_dataset = raw_datasets["train"].map(
             preprocess_function,
             batched=True,
             num_proc=args.preprocessing_num_workers,
@@ -501,8 +500,16 @@ def main():
             desc="Running tokenizer on dataset",
         )
 
-    train_dataset = processed_datasets["train"]
-    eval_dataset = processed_datasets["validation"]
+        # Temporarily set max_target_length for validation.
+        max_target_length = args.val_max_target_length
+        eval_dataset = raw_datasets["validation"].map(
+            preprocess_function,
+            batched=True,
+            num_proc=args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not args.overwrite_cache,
+            desc="Running tokenizer on dataset",
+        )
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 1):
@@ -662,14 +669,11 @@ def main():
                 break
 
         model.eval()
-        if args.val_max_target_length is None:
-            args.val_max_target_length = args.max_target_length
 
         gen_kwargs = {
-            "max_length": args.val_max_target_length if args is not None else config.max_length,
+            "max_length": args.val_max_target_length,
             "num_beams": args.num_beams,
         }
-        samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
                 generated_tokens = accelerator.unwrap_model(model).generate(
@@ -686,7 +690,7 @@ def main():
                     # If we did not pad to max length, we need to pad the labels too
                     labels = accelerator.pad_across_processes(batch["labels"], dim=1, pad_index=tokenizer.pad_token_id)
 
-                generated_tokens, labels = accelerator.gather((generated_tokens, labels))
+                generated_tokens, labels = accelerator.gather_for_metrics((generated_tokens, labels))
                 generated_tokens = generated_tokens.cpu().numpy()
                 labels = labels.cpu().numpy()
 
@@ -699,14 +703,6 @@ def main():
                 decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
                 decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-                # If we are in a multiprocess environment, the last batch has duplicates
-                if accelerator.num_processes > 1:
-                    if step == len(eval_dataloader) - 1:
-                        decoded_preds = decoded_preds[: len(eval_dataloader.dataset) - samples_seen]
-                        decoded_labels = decoded_labels[: len(eval_dataloader.dataset) - samples_seen]
-                    else:
-                        samples_seen += len(decoded_labels)
-
                 metric.add_batch(
                     predictions=decoded_preds,
                     references=decoded_labels,
@@ -750,16 +746,10 @@ def main():
             tokenizer.save_pretrained(args.output_dir)
             if args.push_to_hub:
                 repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
-        with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-            json.dump(
-                {
-                    "eval_rouge1": result["rouge1"],
-                    "eval_rouge2": result["rouge2"],
-                    "eval_rougeL": result["rougeL"],
-                    "eval_rougeLsum": result["rougeLsum"],
-                },
-                f,
-            )
+
+            all_results = {f"eval_{k}": v for k, v in result.items()}
+            with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+                json.dump(all_results, f)
 
 
 if __name__ == "__main__":

@@ -86,12 +86,12 @@ class XLMRobertaXLConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import XLMRobertaXLModel, XLMRobertaXLConfig
+    >>> from transformers import XLMRobertaXLConfig, XLMRobertaXLModel
 
     >>> # Initializing a XLM_ROBERTA_XL bert-base-uncased style configuration
     >>> configuration = XLMRobertaXLConfig()
 
-    >>> # Initializing a model from the bert-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the bert-base-uncased style configuration
     >>> model = XLMRobertaXLModel(configuration)
 
     >>> # Accessing the model configuration
@@ -119,7 +119,7 @@ class XLMRobertaXLConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size

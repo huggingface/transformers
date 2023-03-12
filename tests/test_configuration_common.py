@@ -23,8 +23,9 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo
 from requests.exceptions import HTTPError
+
 from transformers import AutoConfig, BertConfig, GPT2Config, is_torch_available
 from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import TOKEN, USER, is_staging_test
@@ -84,6 +85,8 @@ config_common_kwargs = {
     "sep_token_id": 9,
     "decoder_start_token_id": 10,
     "exponential_decay_length_penalty": (5, 1.01),
+    "suppress_tokens": [0, 1],
+    "begin_suppress_tokens": 2,
     "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }
@@ -219,7 +222,6 @@ class ConfigPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod

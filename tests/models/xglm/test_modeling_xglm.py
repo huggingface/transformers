@@ -18,11 +18,12 @@ import math
 import unittest
 
 from transformers import XGLMConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -294,10 +295,12 @@ class XGLMModelTester:
 
 
 @require_torch
-class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XGLMModel, XGLMForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (XGLMForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": XGLMModel, "text-generation": XGLMForCausalLM} if is_torch_available() else {}
+    )
     fx_compatible = True
     test_missing_keys = False
     test_pruning = False
@@ -425,8 +428,14 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         output_ids = model.generate(input_ids, do_sample=True, num_beams=1)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = "Today is a nice day and the sun is shining. A nice day with warm rainy"
-        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
+        EXPECTED_OUTPUT_STRS = [
+            # TODO: remove this once we move to torch 2.0
+            # torch 1.13.1 + cu116
+            "Today is a nice day and the sun is shining. A nice day with warm rainy",
+            # torch 2.0 + cu117
+            "Today is a nice day and the water is still cold. We just stopped off for some fresh",
+        ]
+        self.assertIn(output_str, EXPECTED_OUTPUT_STRS)
 
     @slow
     def test_xglm_sample_max_time(self):
@@ -468,3 +477,22 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=1.25 * MAX_TIME))
+
+    @require_torch_gpu
+    def test_batched_nan_fp16(self):
+        model_name = "facebook/xglm-564M"
+        tokenizer = XGLMTokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
+
+        model = XGLMForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).cuda()
+        model = model.eval()
+
+        batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")
+
+        input_ids = batch["input_ids"].cuda()
+        attention_mask = batch["attention_mask"].cuda()
+
+        with torch.no_grad():
+            outputs = model(input_ids, attention_mask=attention_mask)
+            self.assertFalse(
+                torch.isnan(outputs.logits[0]).any().item()
+            )  # the first logits could contain NaNs if it fails

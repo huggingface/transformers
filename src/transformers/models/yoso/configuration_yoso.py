@@ -83,12 +83,12 @@ class YosoConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import YosoModel, YosoConfig
+    >>> from transformers import YosoConfig, YosoModel
 
     >>> # Initializing a YOSO uw-madison/yoso-4096 style configuration
     >>> configuration = YosoConfig()
 
-    >>> # Initializing a model from the uw-madison/yoso-4096 style configuration
+    >>> # Initializing a model (with random weights) from the uw-madison/yoso-4096 style configuration
     >>> model = YosoModel(configuration)
 
     >>> # Accessing the model configuration
@@ -120,7 +120,7 @@ class YosoConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

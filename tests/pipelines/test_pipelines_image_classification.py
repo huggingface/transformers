@@ -26,11 +26,12 @@ from transformers.testing_utils import (
     nested_simplify,
     require_tf,
     require_torch,
+    require_torch_or_tf,
     require_vision,
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -44,13 +45,14 @@ else:
 
 
 @is_pipeline_test
+@require_torch_or_tf
 @require_vision
-class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ImageClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        image_classifier = ImageClassificationPipeline(model=model, feature_extractor=feature_extractor, top_k=2)
+    def get_test_pipeline(self, model, tokenizer, processor):
+        image_classifier = ImageClassificationPipeline(model=model, image_processor=processor, top_k=2)
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
             "http://images.cocodataset.org/val2017/000000039769.jpg",
@@ -140,7 +142,7 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     @require_tf
     def test_small_model_tf(self):
         small_model = "hf-internal-testing/tiny-random-vit"
-        image_classifier = pipeline("image-classification", model=small_model)
+        image_classifier = pipeline("image-classification", model=small_model, framework="tf")
 
         outputs = image_classifier("http://images.cocodataset.org/val2017/000000039769.jpg")
         self.assertEqual(

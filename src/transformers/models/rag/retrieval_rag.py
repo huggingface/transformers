@@ -612,17 +612,17 @@ class RagRetriever:
         )
 
         if self.return_tokenized_docs:
-            retrived_doc_text = []
-            retrived_doc_title = []
+            retrieved_doc_text = []
+            retrieved_doc_title = []
 
             for b_idx in range(len(docs)):
                 for doc_idx in range(n_docs):
-                    retrived_doc_text.append(docs[b_idx]["text"][doc_idx])
-                    retrived_doc_title.append(docs[b_idx]["title"][doc_idx])
+                    retrieved_doc_text.append(docs[b_idx]["text"][doc_idx])
+                    retrieved_doc_title.append(docs[b_idx]["title"][doc_idx])
 
             tokenized_docs = self.ctx_encoder_tokenizer(
-                retrived_doc_title,
-                retrived_doc_text,
+                retrieved_doc_title,
+                retrieved_doc_text,
                 truncation=True,
                 padding="longest",
                 return_tensors=return_tensors,

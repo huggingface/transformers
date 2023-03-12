@@ -1,7 +1,3 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
 # Copyright 2022 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +25,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["feature_extraction_yolos"] = ["YolosFeatureExtractor"]
+    _import_structure["image_processing_yolos"] = ["YolosImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -54,6 +51,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .feature_extraction_yolos import YolosFeatureExtractor
+        from .image_processing_yolos import YolosImageProcessor
 
     try:
         if not is_torch_available():

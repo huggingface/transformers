@@ -24,7 +24,7 @@ from transformers import ImageGPTConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -33,6 +33,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -264,12 +265,16 @@ class ImageGPTModelTester:
 
 
 @require_torch
-class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (ImageGPTForCausalImageModeling, ImageGPTForImageClassification, ImageGPTModel) if is_torch_available() else ()
     )
     all_generative_model_classes = (ImageGPTForCausalImageModeling,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": ImageGPTModel, "image-classification": ImageGPTForImageClassification}
+        if is_torch_available()
+        else {}
+    )
     test_missing_keys = False
     input_name = "pixel_values"
 
@@ -538,7 +543,8 @@ class ImageGPTModelIntegrationTest(unittest.TestCase):
         inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        with torch.no_grad():
+            outputs = model(**inputs)
 
         # verify the logits
         expected_shape = torch.Size((1, 1024, 512))

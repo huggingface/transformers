@@ -164,6 +164,25 @@ class ConversationalPipeline(Pipeline):
     """
     Multi-turn conversational pipeline.
 
+    Example:
+
+    ```python
+    >>> from transformers import pipeline, Conversation
+
+    >>> chatbot = pipeline(model="microsoft/DialoGPT-medium")
+    >>> conversation = Conversation("Going to the movies tonight - any suggestions?")
+    >>> conversation = chatbot(conversation)
+    >>> conversation.generated_responses[-1]
+    'The Big Lebowski'
+
+    >>> conversation.add_user_input("Is it an action movie?")
+    >>> conversation = chatbot(conversation)
+    >>> conversation.generated_responses[-1]
+    "It's a comedy."
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
     This conversational pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"conversational"`.
 
@@ -171,22 +190,7 @@ class ConversationalPipeline(Pipeline):
     currently: *'microsoft/DialoGPT-small'*, *'microsoft/DialoGPT-medium'*, *'microsoft/DialoGPT-large'*. See the
     up-to-date list of available models on
     [huggingface.co/models](https://huggingface.co/models?filter=conversational).
-
-    Usage:
-
-    ```python
-    conversational_pipeline = pipeline("conversational")
-
-    conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
-    conversation_2 = Conversation("What's the last book you have read?")
-
-    conversational_pipeline([conversation_1, conversation_2])
-
-    conversation_1.add_user_input("Is it an action movie?")
-    conversation_2.add_user_input("What is the genre of this book?")
-
-    conversational_pipeline([conversation_1, conversation_2])
-    ```"""
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

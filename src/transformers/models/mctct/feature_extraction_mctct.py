@@ -21,6 +21,7 @@ from typing import List, Optional, Union
 import numpy as np
 import torch
 import torchaudio
+from packaging import version
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -29,6 +30,13 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+parsed_torchaudio_version_base = version.parse(version.parse(torchaudio.__version__).base_version)
+if not parsed_torchaudio_version_base >= version.parse("0.10"):
+    logger.warning(
+        f"You are using torchaudio=={torchaudio.__version__}, but torchaudio>=0.10.0 is required to use "
+        "MCTCTFeatureExtractor. This requires torch>=1.10.0. Please upgrade torch and torchaudio."
+    )
 
 
 class MCTCTFeatureExtractor(SequenceFeatureExtractor):
@@ -45,7 +53,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         feature_size (`int`, defaults to 80):
             The feature dimension of the extracted features. This is the number of mel_frequency
         sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         padding_value (`float`, defaults to 0.0):
             The value that is used to fill the padding values.
         hop_length (`int`, defaults to 10):
@@ -82,7 +90,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         normalize_means=True,
         normalize_vars=True,
         return_attention_mask=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
 
@@ -239,7 +247,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s). sequences. It returns the
@@ -267,7 +275,7 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.

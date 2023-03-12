@@ -19,13 +19,12 @@ import inspect
 import os
 import tempfile
 import unittest
-from typing import Dict, List, Tuple
 
 import numpy as np
-
 import requests
+
 from transformers import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -36,6 +35,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -120,7 +120,7 @@ class OwlViTVisionModelTester:
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         num_patches = (self.image_size // self.patch_size) ** 2
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -294,7 +294,6 @@ class OwlViTTextModelTester:
 
 @require_torch
 class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (OwlViTTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -339,10 +338,15 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class OwlViTModelTester:
-    def __init__(self, parent, is_training=True):
+    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+        if text_kwargs is None:
+            text_kwargs = {}
+        if vision_kwargs is None:
+            vision_kwargs = {}
+
         self.parent = parent
-        self.text_model_tester = OwlViTTextModelTester(parent)
-        self.vision_model_tester = OwlViTVisionModelTester(parent)
+        self.text_model_tester = OwlViTTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = OwlViTVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
         self.text_config = self.text_model_tester.get_config().to_dict()
         self.vision_config = self.vision_model_tester.get_config().to_dict()
@@ -390,8 +394,13 @@ class OwlViTModelTester:
 
 
 @require_torch
-class OwlViTModelTest(ModelTesterMixin, unittest.TestCase):
+class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (OwlViTModel,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": OwlViTModel, "zero-shot-object-detection": OwlViTForObjectDetection}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -671,52 +680,6 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertTrue(models_equal)
 
-    def test_model_outputs_equivalence(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def set_nan_tensor_to_zero(t):
-            t[t != t] = 0
-            return t
-
-        def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
-            with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
-
-                def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif isinstance(tuple_object, Dict):
-                        for tuple_iterable_value, dict_iterable_value in zip(
-                            tuple_object.values(), dict_object.values()
-                        ):
-                            recursive_check(tuple_iterable_value, dict_iterable_value)
-                    elif tuple_object is None:
-                        return
-                    else:
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
-                            msg=(
-                                "Tuple and dict output are not equal. Difference:"
-                                f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
-                                f" {torch.isnan(tuple_object).any()} and `inf`: {torch.isinf(tuple_object)}. Dict has"
-                                f" `nan`: {torch.isnan(dict_object).any()} and `inf`: {torch.isinf(dict_object)}."
-                            ),
-                        )
-
-                recursive_check(tuple_output, dict_output)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs)
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -791,3 +754,56 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
             [[0.0691, 0.0445, 0.1373], [0.1592, 0.0456, 0.3192], [0.1632, 0.0423, 0.2478]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+
+    @slow
+    def test_inference_one_shot_object_detection(self):
+        model_name = "google/owlvit-base-patch32"
+        model = OwlViTForObjectDetection.from_pretrained(model_name).to(torch_device)
+
+        processor = OwlViTProcessor.from_pretrained(model_name)
+
+        image = prepare_img()
+        query_image = prepare_img()
+        inputs = processor(
+            images=image,
+            query_images=query_image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model.image_guided_detection(**inputs)
+
+        num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
+        self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
+
+        expected_slice_boxes = torch.tensor(
+            [[0.0691, 0.0445, 0.1373], [0.1592, 0.0456, 0.3192], [0.1632, 0.0423, 0.2478]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+
+    @slow
+    @require_torch_gpu
+    def test_inference_one_shot_object_detection_fp16(self):
+        model_name = "google/owlvit-base-patch32"
+        model = OwlViTForObjectDetection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)
+
+        processor = OwlViTProcessor.from_pretrained(model_name)
+
+        image = prepare_img()
+        query_image = prepare_img()
+        inputs = processor(
+            images=image,
+            query_images=query_image,
+            max_length=16,
+            padding="max_length",
+            return_tensors="pt",
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model.image_guided_detection(**inputs)
+
+        # No need to check the logits, we just check inference runs fine.
+        num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
+        self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))

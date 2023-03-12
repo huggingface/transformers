@@ -92,12 +92,12 @@ class YolosConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import YolosModel, YolosConfig
+    >>> from transformers import YolosConfig, YolosModel
 
     >>> # Initializing a YOLOS hustvl/yolos-base style configuration
     >>> configuration = YolosConfig()
 
-    >>> # Initializing a model from the hustvl/yolos-base style configuration
+    >>> # Initializing a model (with random weights) from the hustvl/yolos-base style configuration
     >>> model = YolosModel(configuration)
 
     >>> # Accessing the model configuration
@@ -129,7 +129,7 @@ class YolosConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -160,7 +160,6 @@ class YolosConfig(PretrainedConfig):
 
 
 class YolosOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

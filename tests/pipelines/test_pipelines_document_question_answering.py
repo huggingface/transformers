@@ -28,7 +28,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
 if is_vision_available():
@@ -56,14 +56,14 @@ INVOICE_URL = (
 @is_pipeline_test
 @require_torch
 @require_vision
-class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING
 
     @require_pytesseract
     @require_vision
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(self, model, tokenizer, processor):
         dqa_pipeline = pipeline(
-            "document-question-answering", model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+            "document-question-answering", model=model, tokenizer=tokenizer, image_processor=processor
         )
 
         image = INVOICE_URL
@@ -83,11 +83,6 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
                 "question": question,
                 "word_boxes": word_boxes,
             },
-            {
-                "image": None,
-                "question": question,
-                "word_boxes": word_boxes,
-            },
         ]
         return dqa_pipeline, examples
 
@@ -101,7 +96,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
                     {"score": ANY(float), "answer": ANY(str), "start": ANY(int), "end": ANY(int)},
                 ]
             ]
-            * 4,
+            * 3,
         )
 
     @require_torch
@@ -195,6 +190,52 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
 
     @slow
     @require_torch
+    @require_detectron2
+    @require_pytesseract
+    def test_large_model_pt_chunk(self):
+        dqa_pipeline = pipeline(
+            "document-question-answering",
+            model="tiennvcs/layoutlmv2-base-uncased-finetuned-docvqa",
+            revision="9977165",
+            max_seq_len=50,
+        )
+        image = INVOICE_URL
+        question = "What is the invoice number?"
+
+        outputs = dqa_pipeline(image=image, question=question, top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.9974, "answer": "1110212019", "start": 23, "end": 23},
+                {"score": 0.9948, "answer": "us-001", "start": 16, "end": 16},
+            ],
+        )
+
+        outputs = dqa_pipeline({"image": image, "question": question}, top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.9974, "answer": "1110212019", "start": 23, "end": 23},
+                {"score": 0.9948, "answer": "us-001", "start": 16, "end": 16},
+            ],
+        )
+
+        outputs = dqa_pipeline(
+            [{"image": image, "question": question}, {"image": image, "question": question}], top_k=2
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                [
+                    {"score": 0.9974, "answer": "1110212019", "start": 23, "end": 23},
+                    {"score": 0.9948, "answer": "us-001", "start": 16, "end": 16},
+                ]
+            ]
+            * 2,
+        )
+
+    @slow
+    @require_torch
     @require_pytesseract
     @require_vision
     def test_large_model_pt_layoutlm(self):
@@ -251,6 +292,59 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
             [
                 {"score": 0.4251, "answer": "us-001", "start": 16, "end": 16},
                 {"score": 0.0819, "answer": "1110212019", "start": 23, "end": 23},
+            ],
+        )
+
+    @slow
+    @require_torch
+    @require_pytesseract
+    @require_vision
+    def test_large_model_pt_layoutlm_chunk(self):
+        tokenizer = AutoTokenizer.from_pretrained(
+            "impira/layoutlm-document-qa", revision="3dc6de3", add_prefix_space=True
+        )
+        dqa_pipeline = pipeline(
+            "document-question-answering",
+            model="impira/layoutlm-document-qa",
+            tokenizer=tokenizer,
+            revision="3dc6de3",
+            max_seq_len=50,
+        )
+        image = INVOICE_URL
+        question = "What is the invoice number?"
+
+        outputs = dqa_pipeline(image=image, question=question, top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
+                {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
+            ],
+        )
+
+        outputs = dqa_pipeline(
+            [{"image": image, "question": question}, {"image": image, "question": question}], top_k=2
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                [
+                    {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
+                    {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
+                ]
+            ]
+            * 2,
+        )
+
+        word_boxes = list(zip(*apply_tesseract(load_image(image), None, "")))
+
+        # This model should also work if `image` is set to None
+        outputs = dqa_pipeline({"image": None, "word_boxes": word_boxes, "question": question}, top_k=2)
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.9999, "answer": "us-001", "start": 16, "end": 16},
+                {"score": 0.9998, "answer": "us-001", "start": 16, "end": 16},
             ],
         )
 

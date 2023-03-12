@@ -138,7 +138,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         model_max_length=512,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         separate_vocabs=False,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
@@ -265,10 +265,18 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise"""
-        if self._decode_use_source_tokenizer:
-            return self.spm_source.DecodePieces(tokens)
-        else:
-            return self.spm_target.DecodePieces(tokens)
+        sp_model = self.spm_source if self._decode_use_source_tokenizer else self.spm_target
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                out_string += sp_model.decode_pieces(current_sub_tokens) + token + " "
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += sp_model.decode_pieces(current_sub_tokens)
+        return out_string.strip()
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""

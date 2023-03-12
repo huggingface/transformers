@@ -41,7 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "squeezebert/squeezebert-uncased"
 _CONFIG_FOR_DOC = "SqueezeBertConfig"
-_TOKENIZER_FOR_DOC = "SqueezeBertTokenizer"
 
 SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "squeezebert/squeezebert-uncased",
@@ -316,7 +315,6 @@ class SqueezeBertEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
-
         if head_mask is None:
             head_mask_is_all_none = True
         elif head_mask.count(None) == len(head_mask):
@@ -332,7 +330,6 @@ class SqueezeBertEncoder(nn.Module):
         all_attentions = () if output_attentions else None
 
         for layer in self.layers:
-
             if output_hidden_states:
                 hidden_states = hidden_states.permute(0, 2, 1)
                 all_hidden_states += (hidden_states,)
@@ -497,7 +494,7 @@ SQUEEZEBERT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SqueezeBertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -573,7 +570,6 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -647,8 +643,11 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
 
 @add_start_docstrings("""SqueezeBERT Model with a `language modeling` head on top.""", SQUEEZEBERT_START_DOCSTRING)
 class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
-
-    _keys_to_ignore_on_load_missing = [r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [
+        r"predictions.decoder.bias",
+        "cls.predictions.decoder.weight",
+        "embeddings.position_ids",
+    ]
 
     def __init__(self, config):
         super().__init__(config)
@@ -667,7 +666,6 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -747,7 +745,6 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -847,7 +844,6 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
         SQUEEZEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -940,7 +936,6 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1018,7 +1013,6 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

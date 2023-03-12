@@ -22,13 +22,14 @@ import transformers
 from transformers import GPT2Config, GPT2Tokenizer, is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
     import jax
     import jax.numpy as jnp
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -189,7 +190,6 @@ class FlaxGPT2ModelTester:
 
 @require_flax
 class FlaxGPT2ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxGPT2Model, FlaxGPT2LMHeadModel) if is_flax_available() else ()
     all_generative_model_classes = (FlaxGPT2LMHeadModel,) if is_flax_available() else ()
 
@@ -224,7 +224,7 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
         output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
 
         expected_string = [
-            "Hello this is a long string of words. I'm going to try to explain what I mean.",
+            "Hello this is a long string of words. I'm going to start with the first one.\n",
             "Hey, I'm not sure if I'm going to be able to do",
         ]
 

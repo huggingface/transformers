@@ -96,12 +96,12 @@ class VisualBertConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import VisualBertModel, VisualBertConfig
+    >>> from transformers import VisualBertConfig, VisualBertModel
 
     >>> # Initializing a VisualBERT visualbert-vqa-coco-pre style configuration
-    >>> configuration = VisualBertConfig.from_pretrained("visualbert-vqa-coco-pre")
+    >>> configuration = VisualBertConfig.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
 
-    >>> # Initializing a model from the visualbert-vqa-coco-pre style configuration
+    >>> # Initializing a model (with random weights) from the visualbert-vqa-coco-pre style configuration
     >>> model = VisualBertModel(configuration)
 
     >>> # Accessing the model configuration
@@ -130,7 +130,7 @@ class VisualBertConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 

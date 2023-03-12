@@ -96,12 +96,12 @@ class BartConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import BartModel, BartConfig
+    >>> from transformers import BartConfig, BartModel
 
     >>> # Initializing a BART facebook/bart-large style configuration
     >>> configuration = BartConfig()
 
-    >>> # Initializing a model from the facebook/bart-large style configuration
+    >>> # Initializing a model (with random weights) from the facebook/bart-large style configuration
     >>> model = BartModel(configuration)
 
     >>> # Accessing the model configuration
@@ -139,7 +139,7 @@ class BartConfig(PretrainedConfig):
         is_encoder_decoder=True,
         decoder_start_token_id=2,
         forced_eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

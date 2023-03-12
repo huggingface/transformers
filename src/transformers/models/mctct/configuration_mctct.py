@@ -103,12 +103,12 @@ class MCTCTConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import MCTCTModel, MCTCTConfig
+    >>> from transformers import MCTCTConfig, MCTCTModel
 
     >>> # Initializing a M-CTC-T mctct-large style configuration
     >>> configuration = MCTCTConfig()
 
-    >>> # Initializing a model from the mctct-large style configuration
+    >>> # Initializing a model (with random weights) from the mctct-large style configuration
     >>> model = MCTCTModel(configuration)
 
     >>> # Accessing the model configuration
@@ -144,7 +144,7 @@ class MCTCTConfig(PretrainedConfig):
         conv_channels=None,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.vocab_size = vocab_size

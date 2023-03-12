@@ -24,12 +24,13 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
-    from transformers import ConvNextForImageClassification, ConvNextModel
+    from transformers import ConvNextBackbone, ConvNextForImageClassification, ConvNextModel
     from transformers.models.convnext.modeling_convnext import CONVNEXT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -53,9 +54,9 @@ class ConvNextModelTester:
         use_labels=True,
         intermediate_size=37,
         hidden_act="gelu",
-        type_sequence_label_size=10,
+        num_labels=10,
         initializer_range=0.02,
-        num_labels=3,
+        out_features=["stage2", "stage3", "stage4"],
         scope=None,
     ):
         self.parent = parent
@@ -69,8 +70,9 @@ class ConvNextModelTester:
         self.use_labels = use_labels
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
-        self.type_sequence_label_size = type_sequence_label_size
+        self.num_labels = num_labels
         self.initializer_range = initializer_range
+        self.out_features = out_features
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -78,10 +80,9 @@ class ConvNextModelTester:
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
-
         return config, pixel_values, labels
 
     def get_config(self):
@@ -93,6 +94,8 @@ class ConvNextModelTester:
             hidden_act=self.hidden_act,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            out_features=self.out_features,
+            num_labels=self.num_labels,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -107,12 +110,40 @@ class ConvNextModelTester:
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
         model = ConvNextForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        model = ConvNextBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify hidden states
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
+
+        # verify backbone works with out_features=None
+        config.out_features = None
+        model = ConvNextBackbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
+        self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -122,7 +153,7 @@ class ConvNextModelTester:
 
 
 @require_torch
-class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
+class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ConvNext does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -132,9 +163,15 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
         (
             ConvNextModel,
             ConvNextForImageClassification,
+            ConvNextBackbone,
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"feature-extraction": ConvNextModel, "image-classification": ConvNextForImageClassification}
+        if is_torch_available()
+        else {}
     )
 
     fx_compatible = True
@@ -159,16 +196,16 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
     def create_and_test_config_common_properties(self):
         return
 
-    @unittest.skip(reason="ConvNext does not output attentions")
-    def test_attention_outputs(self):
-        pass
-
     @unittest.skip(reason="ConvNext does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     @unittest.skip(reason="ConvNext does not support input and output embeddings")
     def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip(reason="ConvNext does not use feedforward chunking")
+    def test_feed_forward_chunking(self):
         pass
 
     def test_forward_signature(self):

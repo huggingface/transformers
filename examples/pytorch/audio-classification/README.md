@@ -81,7 +81,7 @@ python run_audio_classification.py \
     --do_train \
     --do_eval \
     --fp16 \
-    --learning_rate 3e-5 \
+    --learning_rate 3e-4 \
     --max_length_seconds 16 \
     --attention_mask False \
     --warmup_ratio 0.1 \

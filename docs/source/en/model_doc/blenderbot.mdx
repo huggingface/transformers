@@ -32,6 +32,11 @@ and code publicly available. Human evaluations show our best models are superior
 dialogue in terms of engagingness and humanness measurements. We then discuss the limitations of this work by analyzing
 failure cases of our models.*
 
+Tips:
+
+- Blenderbot is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
+  the left.
+
 This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The authors' code can be found [here](https://github.com/facebookresearch/ParlAI) .
 
 
@@ -60,6 +65,12 @@ Here is an example of model usage:
 >>> print(tokenizer.batch_decode(reply_ids))
 ["<s> That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?</s>"]
 ```
+
+## Documentation resources
+
+- [Causal language modeling task guide](./tasks/language_modeling)
+- [Translation task guide](./tasks/translation)
+- [Summarization task guide](./tasks/summarization)
 
 ## BlenderbotConfig
 

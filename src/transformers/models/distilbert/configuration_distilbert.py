@@ -87,12 +87,12 @@ class DistilBertConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import DistilBertModel, DistilBertConfig
+    >>> from transformers import DistilBertConfig, DistilBertModel
 
     >>> # Initializing a DistilBERT configuration
     >>> configuration = DistilBertConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = DistilBertModel(configuration)
 
     >>> # Accessing the model configuration
@@ -121,7 +121,7 @@ class DistilBertConfig(PretrainedConfig):
         qa_dropout=0.1,
         seq_classif_dropout=0.2,
         pad_token_id=0,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

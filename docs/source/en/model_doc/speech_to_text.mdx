@@ -57,7 +57,7 @@ be installed as follows: `apt install libsndfile1-dev`
 >>> inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt")
 >>> generated_ids = model.generate(inputs["input_features"], attention_mask=inputs["attention_mask"])
 
->>> transcription = processor.batch_decode(generated_ids)
+>>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
 >>> transcription
 ['mister quilter is the apostle of the middle classes and we are glad to welcome his gospel']
 ```
@@ -87,9 +87,9 @@ be installed as follows: `apt install libsndfile1-dev`
 ...     forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"],
 ... )
 
->>> translation = processor.batch_decode(generated_ids)
+>>> translation = processor.batch_decode(generated_ids, skip_special_tokens=True)
 >>> translation
-["<lang:fr> (Vidéo) Si M. Kilder est l'apossible des classes moyennes, et nous sommes heureux d'être accueillis dans son évangile."]
+["(Vidéo) Si M. Kilder est l'apossible des classes moyennes, et nous sommes heureux d'être accueillis dans son évangile."]
 ```
 
 See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look for Speech2Text checkpoints.

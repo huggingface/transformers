@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
@@ -46,6 +46,7 @@ if is_flax_available():
     from flax.core.frozen_dict import unfreeze
     from flax.training.common_utils import onehot
     from flax.traverse_util import flatten_dict
+
     from transformers import FLAX_MODEL_MAPPING, ByT5Tokenizer, T5Config, T5Tokenizer
     from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
     from transformers.models.t5.modeling_flax_t5 import (
@@ -81,7 +82,6 @@ class FlaxT5ModelTester:
         scope=None,
         decoder_layers=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -228,7 +228,6 @@ class FlaxT5ModelTester:
 
 @require_flax
 class FlaxT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxT5Model, FlaxT5ForConditionalGeneration) if is_flax_available() else ()
     all_generative_model_classes = (FlaxT5ForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
@@ -489,7 +488,6 @@ class FlaxT5EncoderOnlyModelTester:
         decoder_start_token_id=0,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -576,7 +574,6 @@ class FlaxT5EncoderOnlyModelTester:
 
 @require_flax
 class FlaxT5EncoderOnlyModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxT5EncoderModel,) if is_flax_available() else ()
     is_encoder_decoder = False
 
@@ -866,6 +863,21 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
         self.assertTrue(output_str == "Hello there!")
 
     @slow
+    def test_small_generation_bfloat16(self):
+        model = FlaxT5ForConditionalGeneration.from_pretrained("t5-small", dtype=jnp.bfloat16)
+        model.config.max_length = 8
+        model.config.num_beams = 1
+        model.config.do_sample = False
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        input_ids = tokenizer("summarize: Hello there", return_tensors="np").input_ids
+
+        sequences = model.generate(input_ids).sequences
+
+        output_str = tokenizer.batch_decode(sequences, skip_special_tokens=True)[0]
+        self.assertTrue(output_str == "Hello there!")
+
+    @slow
     def test_summarization(self):
         model = FlaxT5ForConditionalGeneration.from_pretrained("t5-base")
         tok = T5Tokenizer.from_pretrained("t5-base")
@@ -1061,7 +1073,7 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
         expected_summaries = [
             'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a'
             " cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\" one"
-            " magazine says . all 150 on board were killed when germanwings flight 9525 crashed .",
+            " magazine says . all 150 on board were killed in the crash .",
             "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a"
             " preliminary examination into the situation in the occupied Palestinian territory . as members of the"
             " court, Palestinians may be subject to counter-charges as well .",

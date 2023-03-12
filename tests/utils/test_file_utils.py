@@ -15,28 +15,24 @@
 import contextlib
 import importlib
 import io
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
 import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
 from transformers import *  # noqa F406
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
-from transformers.utils import (
-    FLAX_WEIGHTS_NAME,
-    TF2_WEIGHTS_NAME,
-    WEIGHTS_NAME,
-    ContextManagers,
-    find_labels,
-    get_file_from_repo,
-    has_file,
-    is_flax_available,
-    is_tf_available,
-    is_torch_available,
-)
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, require_tf, require_torch
+from transformers.utils import ContextManagers, find_labels, is_flax_available, is_tf_available, is_torch_available
+
+
+if is_torch_available():
+    from transformers import BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification
+
+if is_tf_available():
+    from transformers import TFBertForPreTraining, TFBertForQuestionAnswering, TFBertForSequenceClassification
+
+if is_flax_available():
+    from transformers import FlaxBertForPreTraining, FlaxBertForQuestionAnswering, FlaxBertForSequenceClassification
 
 
 MODEL_ID = DUMMY_UNKNOWN_IDENTIFIER
@@ -77,38 +73,6 @@ class TestImportMechanisms(unittest.TestCase):
         assert importlib.util.find_spec("transformers") is not None
 
 
-class GetFromCacheTests(unittest.TestCase):
-    def test_has_file(self):
-        self.assertTrue(has_file("hf-internal-testing/tiny-bert-pt-only", WEIGHTS_NAME))
-        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", TF2_WEIGHTS_NAME))
-        self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", FLAX_WEIGHTS_NAME))
-
-    def test_get_file_from_repo_distant(self):
-        # `get_file_from_repo` returns None if the file does not exist
-        self.assertIsNone(get_file_from_repo("bert-base-cased", "ahah.txt"))
-
-        # The function raises if the repository does not exist.
-        with self.assertRaisesRegex(EnvironmentError, "is not a valid model identifier"):
-            get_file_from_repo("bert-base-case", "config.json")
-
-        # The function raises if the revision does not exist.
-        with self.assertRaisesRegex(EnvironmentError, "is not a valid git identifier"):
-            get_file_from_repo("bert-base-cased", "config.json", revision="ahaha")
-
-        resolved_file = get_file_from_repo("bert-base-cased", "config.json")
-        # The name is the cached name which is not very easy to test, so instead we load the content.
-        config = json.loads(open(resolved_file, "r").read())
-        self.assertEqual(config["hidden_size"], 768)
-
-    def test_get_file_from_repo_local(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            filename = Path(tmp_dir) / "a.txt"
-            filename.touch()
-            self.assertEqual(get_file_from_repo(tmp_dir, "a.txt"), str(filename))
-
-            self.assertIsNone(get_file_from_repo(tmp_dir, "b.txt"))
-
-
 class GenericUtilTests(unittest.TestCase):
     @unittest.mock.patch("sys.stdout", new_callable=io.StringIO)
     def test_context_managers_no_context(self, mock_stdout):
@@ -131,29 +95,39 @@ class GenericUtilTests(unittest.TestCase):
         # The output should be wrapped with an English and French welcome and goodbye
         self.assertEqual(mock_stdout.getvalue(), "Bonjour!\nWelcome!\nTransformers are awesome!\nBye!\nAu revoir!\n")
 
-    def test_find_labels(self):
-        if is_torch_available():
-            from transformers import BertForPreTraining, BertForQuestionAnswering, BertForSequenceClassification
+    @require_torch
+    def test_find_labels_pt(self):
+        self.assertEqual(find_labels(BertForSequenceClassification), ["labels"])
+        self.assertEqual(find_labels(BertForPreTraining), ["labels", "next_sentence_label"])
+        self.assertEqual(find_labels(BertForQuestionAnswering), ["start_positions", "end_positions"])
 
-            self.assertEqual(find_labels(BertForSequenceClassification), ["labels"])
-            self.assertEqual(find_labels(BertForPreTraining), ["labels", "next_sentence_label"])
-            self.assertEqual(find_labels(BertForQuestionAnswering), ["start_positions", "end_positions"])
+        # find_labels works regardless of the class name (it detects the framework through inheritance)
+        class DummyModel(BertForSequenceClassification):
+            pass
 
-        if is_tf_available():
-            from transformers import TFBertForPreTraining, TFBertForQuestionAnswering, TFBertForSequenceClassification
+        self.assertEqual(find_labels(DummyModel), ["labels"])
 
-            self.assertEqual(find_labels(TFBertForSequenceClassification), ["labels"])
-            self.assertEqual(find_labels(TFBertForPreTraining), ["labels", "next_sentence_label"])
-            self.assertEqual(find_labels(TFBertForQuestionAnswering), ["start_positions", "end_positions"])
+    @require_tf
+    def test_find_labels_tf(self):
+        self.assertEqual(find_labels(TFBertForSequenceClassification), ["labels"])
+        self.assertEqual(find_labels(TFBertForPreTraining), ["labels", "next_sentence_label"])
+        self.assertEqual(find_labels(TFBertForQuestionAnswering), ["start_positions", "end_positions"])
 
-        if is_flax_available():
-            # Flax models don't have labels
-            from transformers import (
-                FlaxBertForPreTraining,
-                FlaxBertForQuestionAnswering,
-                FlaxBertForSequenceClassification,
-            )
+        # find_labels works regardless of the class name (it detects the framework through inheritance)
+        class DummyModel(TFBertForSequenceClassification):
+            pass
 
-            self.assertEqual(find_labels(FlaxBertForSequenceClassification), [])
-            self.assertEqual(find_labels(FlaxBertForPreTraining), [])
-            self.assertEqual(find_labels(FlaxBertForQuestionAnswering), [])
+        self.assertEqual(find_labels(DummyModel), ["labels"])
+
+    @require_flax
+    def test_find_labels_flax(self):
+        # Flax models don't have labels
+        self.assertEqual(find_labels(FlaxBertForSequenceClassification), [])
+        self.assertEqual(find_labels(FlaxBertForPreTraining), [])
+        self.assertEqual(find_labels(FlaxBertForQuestionAnswering), [])
+
+        # find_labels works regardless of the class name (it detects the framework through inheritance)
+        class DummyModel(FlaxBertForSequenceClassification):
+            pass
+
+        self.assertEqual(find_labels(DummyModel), [])

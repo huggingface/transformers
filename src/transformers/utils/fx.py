@@ -34,6 +34,7 @@ from .. import PretrainedConfig, PreTrainedModel, logging
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_BACKBONE_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_CTC_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
@@ -44,6 +45,7 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES,
     MODEL_FOR_PRETRAINING_MAPPING_NAMES,
     MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+    MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
@@ -62,7 +64,6 @@ def _generate_supported_model_class_names(
     model_name: Type[PretrainedConfig],
     supported_tasks: Optional[Union[str, List[str]]] = None,
 ) -> List[str]:
-
     task_mapping = {
         "default": MODEL_MAPPING_NAMES,
         "pretraining": MODEL_FOR_PRETRAINING_MAPPING_NAMES,
@@ -80,6 +81,8 @@ def _generate_supported_model_class_names(
         "image-classification": MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
         "ctc": MODEL_FOR_CTC_MAPPING_NAMES,
         "audio-classification": MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
+        "semantic-segmentation": MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
+        "backbone": MODEL_FOR_BACKBONE_MAPPING_NAMES,
     }
 
     if supported_tasks is None:
@@ -97,6 +100,7 @@ def _generate_supported_model_class_names(
 
 
 _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
+    "altclip",
     "albert",
     "bart",
     "bert",
@@ -128,6 +132,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "plbart",
     "resnet",
     "roberta",
+    "segformer",
     "speech_to_text",
     "speech_to_text_2",
     "swin",
@@ -148,7 +153,12 @@ for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS:
 
 _SPECIAL_SUPPORTED_MODELS = [
     "CLIPTextModel",
+    "CLIPTextModelWithProjection",
     "CLIPVisionModel",
+    "CLIPVisionModelWithProjection",
+    "AltCLIPTextModel",
+    "AltCLIPVisionModel",
+    "GitVisionModel",
     "GPT2DoubleHeadsModel",
     "Speech2Text2Decoder",
     "TrOCRDecoder",
@@ -225,6 +235,15 @@ def torch_arange(*args, **kwargs):
     step = kwargs.get("step", step)
     dtype = kwargs.get("dtype")
     return torch.empty((end - start) // step, dtype=dtype, device="meta")
+
+
+def torch_full(*args, **kwargs):
+    args = list(args)
+    if isinstance(args[1], torch.Tensor) and args[1].device == torch.device("meta"):
+        args[1] = 1  # Any value.
+    kwargs_without_device = dict(kwargs)
+    kwargs_without_device.pop("device", None)
+    return torch.full(*args, **kwargs_without_device)
 
 
 def torch_cat(tensors, dim=None, axis=None, *, out=None):
@@ -506,6 +525,7 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.where: torch_where,
     torch.abs: torch_abs,
     torch.arange: torch_arange,
+    torch.full: torch_full,
     torch.cat: torch_cat,
     torch.stack: torch_stack,
     torch.add: torch_add,
@@ -550,12 +570,6 @@ class HFProxy(Proxy):
         return self.tracer.create_proxy("call_method", "size", (self,), {})
 
     @property
-    def dtype(self):
-        if hasattr(self, "_metadata") and self._metadata is not None:
-            return self._metadata.dtype
-        return self.tracer.create_proxy("call_function", builtins.getattr, (self, "dtype"), {})
-
-    @property
     def device(self):
         # Hack so we can track when devices are used. During meta-tensor propagation,
         # replace these values with a constant 'meta'
@@ -594,12 +608,15 @@ class HFAttribute(HFProxy):
         self.tracer = root.tracer
         self._node = None
 
+        if hasattr(self.root, "_metadata"):
+            self.install_metadata(getattr(self.root._metadata, attr))
+
     @property
     def node(self):
         # the node for attributes is added lazily, since most will just be method calls
         # which do not rely on the getitem call
         if self._node is None:
-            self._node = self.tracer.create_proxy("call_function", getattr, (self.root, self.attr), {}).node
+            self._node = self.tracer.create_proxy("call_function", builtins.getattr, (self.root, self.attr), {}).node
         return self._node
 
     def __call__(self, *args, **kwargs):
@@ -660,10 +677,20 @@ class HFTracer(Tracer):
     # Feature flag for proxying accesses to buffer values
     proxy_buffer_attributes: bool = True
     allow_insert_stateless_mods: bool = True
-    _TORCH_METHODS_TO_PATCH = ["arange", "zeros", "ones", "full", "full_like", "eye", "empty", "tensor"]
+    _TORCH_METHODS_TO_PATCH = [
+        "arange",
+        "zeros",
+        "ones",
+        "full",
+        "full_like",
+        "eye",
+        "empty",
+        "tensor",
+        "clamp",
+        "finfo",
+    ]
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
-
         super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
 
         if not is_torch_fx_available():
@@ -684,12 +711,12 @@ class HFTracer(Tracer):
         inputs_dict = {}
 
         if input_name in ["labels", "start_positions", "end_positions"]:
-
             batch_size = shape[0]
             if model_class_name in [
                 *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
@@ -730,9 +757,12 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
+                *get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES),
                 "GPT2DoubleHeadsModel",
             ]:
                 inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
+            elif model_class_name in [*get_values(MODEL_FOR_CTC_MAPPING_NAMES)]:
+                inputs_dict["labels"] = torch.zeros(shape, dtype=torch.float32, device=device)
             else:
                 raise NotImplementedError(
                     f"Generating the dummy input named {input_name} for {model_class_name} is not supported yet."
@@ -862,11 +892,12 @@ class HFTracer(Tracer):
 
         return rv
 
+    # Replaced by .getattr from PyTorch 1.13
     def _module_getattr(self, attr, attr_val, parameter_proxy_cache):
         if getattr(self, "_disable_module_getattr", False):
             return attr_val
         else:
-            # return super()._module_getattr(attr, attr_val, parameter_proxy_cache)
+
             def maybe_get_proxy_for_attr(attr_val, collection_to_search, parameter_proxy_cache):
                 for n, p in collection_to_search:
                     if attr_val is p:
@@ -898,6 +929,10 @@ class HFTracer(Tracer):
                     return maybe_buffer_proxy
 
             return attr_val
+
+    # Needed for PyTorch 1.13+
+    def getattr(self, attr: str, attr_val: Any, parameter_proxy_cache: Dict[str, Any]):
+        return self._module_getattr(attr, attr_val, parameter_proxy_cache)
 
     def call_module(self, m, forward, args, kwargs):
         self.orig_forward = forward
@@ -949,7 +984,13 @@ class HFTracer(Tracer):
                     continue
                 if param.default is inspect.Parameter.empty:
                     raise ValueError(f"You need to specify a default value for the parameter {param.name}.")
-            concrete_args.update({p.name: p.default for p in sig.parameters.values() if p.name not in dummy_inputs})
+            concrete_args.update(
+                {
+                    p.name: p.default
+                    for p in sig.parameters.values()
+                    if (p.name not in dummy_inputs and p.name not in concrete_args)
+                }
+            )
 
         input_names = sig.parameters.keys() - concrete_args.keys()
 
@@ -1109,7 +1150,6 @@ def symbolic_trace(
     input_names: Optional[List[str]] = None,
     disable_check: bool = False,
 ) -> GraphModule:
-
     """
     Performs symbolic tracing on the model.
 

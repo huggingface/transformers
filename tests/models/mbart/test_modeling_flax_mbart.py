@@ -21,7 +21,7 @@ from transformers import MBartConfig, is_flax_available
 from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 from transformers.utils import cached_property
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -35,6 +35,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+
     from transformers import AutoTokenizer
     from transformers.models.mbart.modeling_flax_mbart import (
         FlaxMBartForConditionalGeneration,

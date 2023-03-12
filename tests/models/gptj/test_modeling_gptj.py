@@ -20,9 +20,10 @@ import unittest
 from transformers import GPTJConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, tooslow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -360,14 +361,24 @@ class GPTJModelTester:
 
 
 @require_torch
-class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification, GPTJForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (GPTJForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": GPTJModel,
+            "question-answering": GPTJForQuestionAnswering,
+            "text-classification": GPTJForSequenceClassification,
+            "text-generation": GPTJForCausalLM,
+            "zero-shot": GPTJForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
     test_pruning = False
     test_missing_keys = False
@@ -572,3 +583,38 @@ class GPTJModelLanguageGenerationTest(unittest.TestCase):
         model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+    @tooslow
+    def test_contrastive_search_gptj(self):
+        article = (
+            "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and "
+            "research laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+        model = GPTJForCausalLM.from_pretrained(
+            "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16
+        ).to(torch_device)
+        input_ids = tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = model.generate(input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+        generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
+                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
+                "United Kingdom with offices in Mountain View, San Francisco, New York City, Paris, Tokyo, Seoul, "
+                "Beijing, Singapore, Tel Aviv, Dublin, Sydney, and Melbourne.[1]\n\nContents\n\nIn 2010, Google's "
+                "parent company, Alphabet, announced a $500 million investment in DeepMind, with the aim of creating "
+                "a company that would apply deep learning to problems in healthcare, energy, transportation, and "
+                "other areas.[2]\n\nOn April 23, 2014, Google announced that it had acquired DeepMind for $400 "
+                "million in cash and stock.[3] The acquisition was seen as a way for Google to enter the "
+                "fast-growing field of artificial intelligence (AI), which it had so far avoided due to concerns "
+                'about ethical and social implications.[4] Google co-founder Sergey Brin said that he was "thrilled" '
+                'to have acquired DeepMind, and that it would "help us push the boundaries of AI even further."'
+                "[5]\n\nDeepMind's founders, Demis Hassabis and Mustafa Suleyman, were joined by a number of Google "
+                "employees"
+            ],
+        )
