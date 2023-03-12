@@ -69,34 +69,37 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
         raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
         return raw_image
 
-    def prepare_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    # Copied from transformers.tests.test_image_processing_common.prepare_image_inputs
+    def prepare_image_inputs(image_processor_tester, equal_resolution=False, numpify=False, torchify=False):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
         or a list of PyTorch tensors if one specifies torchify=True.
+
+        One can specify whether the images are of the same resolution or not.
         """
 
-        if numpify and torchify:
-            raise ValueError("You cannot specify both numpy and PyTorch tensors at the same time")
+        assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
 
-        if equal_resolution:
-            image_inputs = []
-            for i in range(self.batch_size):
-                image_inputs.append(
-                    np.random.randint(
-                        255, size=(self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8
-                    )
-                )
-        else:
-            image_inputs = []
-            for i in range(self.batch_size):
-                width, height = np.random.choice(np.arange(self.min_resolution, self.max_resolution), 2)
-                image_inputs.append(np.random.randint(255, size=(self.num_channels, width, height), dtype=np.uint8))
+        image_inputs = []
+        for i in range(image_processor_tester.batch_size):
+            if equal_resolution:
+                width = height = image_processor_tester.max_resolution
+            else:
+                # To avoid getting image width/height 0
+                min_resolution = image_processor_tester.min_resolution
+                if getattr(image_processor_tester, "size_divisor", None):
+                    # If `size_divisor` is defined, the image needs to have width/size >= `size_divisor`
+                    min_resolution = max(image_processor_tester.size_divisor, min_resolution)
+                width, height = np.random.choice(np.arange(min_resolution, image_processor_tester.max_resolution), 2)
+            image_inputs.append(
+                np.random.randint(255, size=(image_processor_tester.num_channels, width, height), dtype=np.uint8)
+            )
 
         if not numpify and not torchify:
             # PIL expects the channel dimension as last dimension
-            image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+            image_inputs = [Image.fromarray(np.moveaxis(image, 0, -1)) for image in image_inputs]
 
         if torchify:
-            image_inputs = [torch.from_numpy(x) for x in image_inputs]
+            image_inputs = [torch.from_numpy(image) for image in image_inputs]
 
         return image_inputs
 
@@ -131,7 +134,7 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_inputs(equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
@@ -159,7 +162,7 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_inputs(equal_resolution=False, numpify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -186,7 +189,7 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_inputs(equal_resolution=False, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
@@ -233,7 +236,7 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, 
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_inputs(equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
