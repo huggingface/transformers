@@ -595,10 +595,6 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        if attention_mask is None:
-            # check where `pixel_embeds` is not 0
-            attention_mask = (pixel_embeds.sum(dim=-1) != 0).float()
-
         embedding_output = self.embeddings(pixel_embeds)
 
         encoder_outputs = self.encoder(
