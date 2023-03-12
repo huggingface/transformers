@@ -14,21 +14,12 @@
 # limitations under the License.
 """ PyTorch UDOP model."""
 
-
 import logging
-from typing import Any, Dict, Optional, Sequence, Tuple
+import math
 from dataclasses import dataclass
+from typing import Any, Dict, Optional, Sequence, Tuple
 
 import torch
-from torch import nn
-from torch import Tensor
-
-from transformers import UdopConfig
-from transformers.modeling_outputs import BaseModelOutput
-from ...activations import ACT2FN
-from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
-
 from core.models.embedding.cell_embed import CellEmbeddings
 from core.models.embedding.relative.relative import (
     RelativePositionBias1D,
@@ -37,6 +28,15 @@ from core.models.embedding.relative.relative import (
     create_relative_bias,
 )
 from core.models.mae.build import mae_model
+from torch import Tensor, nn
+
+from transformers import UdopConfig
+from transformers.modeling_outputs import BaseModelOutput
+
+from ...activations import ACT2FN
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,34 +44,30 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
     """
-    Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
     Args:
+    Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
-            hidden_size)` is output.
+            Sequence of hidden-states at the output of the last layer of the model. If `past_key_values` is used only
+            the last hidden-state of the sequences of shape `(batch_size, 1, hidden_size)` is output.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
             `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-            encoder_sequence_length, embed_size_per_head)`.
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
-            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
-            input) to speed up sequential decoding.
+            encoder_sequence_length, embed_size_per_head)`. Contains pre-computed hidden-states (key and values in the
+            self-attention blocks and optionally if `config.is_encoder_decoder=True` in the cross-attention blocks)
+            that can be used (see `past_key_values` input) to speed up sequential decoding.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
+            the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
         cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -83,12 +79,12 @@ class BaseModelOutputWithVisionEmbeds(BaseModelOutput):
     attention_mask: torch.FloatTensor = None
     seg_data: torch.FloatTensor = None
 
-        
+
 @dataclass
 class VisSeq2SeqLMOutput(BaseModelOutput):
     """
-    Base class for sequence-to-sequence language models outputs.
     Args:
+    Base class for sequence-to-sequence language models outputs.
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Language modeling loss.
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
@@ -96,40 +92,37 @@ class VisSeq2SeqLMOutput(BaseModelOutput):
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. Contains pre-computed
+            hidden-states (key and values in the self-attention blocks and in the cross-attention blocks) that can be
+            used (see `past_key_values` input) to speed up sequential decoding.
         decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
+            the decoder at the output of each layer plus the initial embedding outputs.
         decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
+            sequence_length)`. Attentions weights of the decoder, after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
         cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
-            weighted average in the cross-attention heads.
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
         encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder of the model.
         encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
+            the encoder at the output of each layer plus the initial embedding outputs.
         encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
-            self-attention heads.
+            sequence_length)`. Attentions weights of the encoder, after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
     image_output: Optional[Tuple[torch.FloatTensor]] = None
-    image_target: Optional[Tuple[torch.FloatTensor]] = None  
-    image_mask_label: Optional[Tuple[torch.FloatTensor]] = None 
+    image_target: Optional[Tuple[torch.FloatTensor]] = None
+    image_mask_label: Optional[Tuple[torch.FloatTensor]] = None
 
 
 def pad_sequence(seq, target_len, pad_value=0):
@@ -145,48 +138,67 @@ def pad_sequence(seq, target_len, pad_value=0):
     return seq[:target_len]
 
 
-def collate_vlembed(inputs_patches, inputs_embeds, seg_data, visual_segdata, vis_special_token=None, attention_mask=None, num_patches=14, max_len=0):
-    
+def collate_vlembed(
+    inputs_patches,
+    inputs_embeds,
+    seg_data,
+    visual_segdata,
+    vis_special_token=None,
+    attention_mask=None,
+    num_patches=14,
+    max_len=0,
+):
     L = num_patches
-    ocr_points_x = torch.clip(torch.floor((seg_data[:, :, 0]+seg_data[:, :, 2])/2.0 * L).long(), 0, L-1)
-    ocr_points_y = torch.clip(torch.floor((seg_data[:, :, 1]+seg_data[:, :, 3])/2.0 * L).long(), 0, L-1) * L
+    ocr_points_x = torch.clip(torch.floor((seg_data[:, :, 0] + seg_data[:, :, 2]) / 2.0 * L).long(), 0, L - 1)
+    ocr_points_y = torch.clip(torch.floor((seg_data[:, :, 1] + seg_data[:, :, 3]) / 2.0 * L).long(), 0, L - 1) * L
     ocr_points = ocr_points_x + ocr_points_y
     target_seg = (seg_data.mean(-1) == 0.0) | (seg_data.mean(-1) == 1.0)
-    repeated_vision_embeds = torch.gather(inputs_patches, 1, ocr_points.unsqueeze(-1).repeat(1, 1, inputs_patches.size(-1)))
+    repeated_vision_embeds = torch.gather(
+        inputs_patches, 1, ocr_points.unsqueeze(-1).repeat(1, 1, inputs_patches.size(-1))
+    )
     repeated_vision_embeds[target_seg] = 0.0
     inputs_embeds += repeated_vision_embeds
-    
-    
+
     patch_inds = torch.full_like(inputs_patches[:, :, 0], True).bool()
-    ind = torch.cat([torch.arange(len(ocr_points))[:, None].repeat(1, ocr_points.size(-1))[:, :, None].to(ocr_points), ocr_points[:, :, None]], -1).flatten(0,1)
+    ind = torch.cat(
+        [
+            torch.arange(len(ocr_points))[:, None].repeat(1, ocr_points.size(-1))[:, :, None].to(ocr_points),
+            ocr_points[:, :, None],
+        ],
+        -1,
+    ).flatten(0, 1)
     rows, cols = zip(*ind)
     patch_inds[rows, cols] = False
-    
-    
+
     input_vision_patches = [inputs_patches[i][patch_inds[i]] for i in range(len(patch_inds))]
     visual_segdata = [visual_segdata[i][patch_inds[i]] for i in range(len(patch_inds))]
     if attention_mask is not None:
         visual_attention_mask = [torch.tensor([1] * len(item)).to(attention_mask) for item in visual_segdata]
-        
+
     if max_len == 0:
         max_len = inputs_patches.size(1)
     else:
-        max_len = max_len - inputs_embeds.size(1)    
-    inputs_vision_patches = torch.stack([pad_sequence(item, max_len, torch.zeros_like(inputs_patches[0, 0])) for item in input_vision_patches])
-    visual_segdata = torch.stack([pad_sequence(item, max_len, torch.zeros_like(seg_data[0, 0])) for item in visual_segdata])
+        max_len = max_len - inputs_embeds.size(1)
+    inputs_vision_patches = torch.stack(
+        [pad_sequence(item, max_len, torch.zeros_like(inputs_patches[0, 0])) for item in input_vision_patches]
+    )
+    visual_segdata = torch.stack(
+        [pad_sequence(item, max_len, torch.zeros_like(seg_data[0, 0])) for item in visual_segdata]
+    )
     if attention_mask is not None:
-        visual_attention_mask = torch.stack([pad_sequence(item, max_len, torch.zeros_like(attention_mask[0, 0])) for item in visual_attention_mask])
-        
+        visual_attention_mask = torch.stack(
+            [pad_sequence(item, max_len, torch.zeros_like(attention_mask[0, 0])) for item in visual_attention_mask]
+        )
+
     if vis_special_token is not None:
         inputs_vision_patches += vis_special_token
-    
-    
+
     inputs_embeds = torch.cat([inputs_embeds, inputs_vision_patches], 1)
     seg_data = torch.cat([seg_data, visual_segdata], 1)
     if attention_mask is not None:
         attention_mask = torch.cat([attention_mask, visual_attention_mask], 1)
     return inputs_embeds, seg_data, attention_mask
-    
+
 
 # Based on T5PreTrainedModel
 class UdopPreTrainedModel(PreTrainedModel):
@@ -269,7 +281,7 @@ class UdopPreTrainedModel(PreTrainedModel):
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
         return shifted_input_ids
-    
+
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerNorm with T5->Udop
 class UdopLayerNorm(nn.Module):
@@ -805,8 +817,7 @@ class UdopBlock(nn.Module):
 
 class UdopStack(UdopPreTrainedModel):
     """
-    Almost exact copy of transformers T5Stack with the modification
-    of passing `position_bias` in the forward method
+    Almost exact copy of transformers T5Stack with the modification of passing `position_bias` in the forward method
     """
 
     def __init__(self, config, embed_tokens=None):
@@ -815,8 +826,8 @@ class UdopStack(UdopPreTrainedModel):
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
         self._max_length = config.max_length
-        
-        setattr(config, 'output_attentions', True)
+
+        setattr(config, "output_attentions", True)
         if self.is_decoder:
             self.num_layers = (
                 config.truncate_decoder_after_layer if config.truncate_decoder_after_layer else config.num_layers
@@ -830,12 +841,12 @@ class UdopStack(UdopPreTrainedModel):
             [UdopBlock(config, has_relative_attention_bias=bool(i == 0)) for i in range(self.num_layers)]
         )
         self.final_layer_norm = UdopLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        
+
         self.dropout = nn.Dropout(config.dropout_rate)
-        
+
         if not self.is_decoder:
             self.cell2dembedding = CellEmbeddings(config.max_2d_position_embeddings, config.hidden_size)
-  
+
         # get weights from encoder position bias
         self.relative_bias = self._get_relative_bias(config)
 
@@ -845,14 +856,14 @@ class UdopStack(UdopPreTrainedModel):
                 self._tie_or_clone_weights(
                     bias.relative_attention_bias, self.block[0].layer[0].SelfAttention.relative_attention_bias
                 )
-                
+
         self.init_weights()
 
     @staticmethod
-    def _get_relative_bias(config: T5Config) -> RelativePositionBiasAggregated:
+    def _get_relative_bias(config: UdopConfig) -> RelativePositionBiasAggregated:
         relative_bias_list = create_relative_bias(config)
         return RelativePositionBiasAggregated(relative_bias_list)
-    
+
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -876,25 +887,24 @@ class UdopStack(UdopPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        cross_attn_head_mask = None,
+        cross_attn_head_mask=None,
         position_bias=None,  # modified line,
-        inputs_patches=None, # modified line,
-        seg_data=None, # modified line,
-        visual_seg_data=None, # modified line,
-        num_patches=None, # modified line,
-        special_vis_token=None, # modified line,
+        inputs_patches=None,  # modified line,
+        seg_data=None,  # modified line,
+        visual_seg_data=None,  # modified line,
+        num_patches=None,  # modified line,
+        special_vis_token=None,  # modified line,
     ):
-        
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = True #False #True #output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            True  # False #True #output_attentions if output_attentions is not None else self.config.output_attentions
+        )
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-                      
-            
-            
-        #======================================================    
+
+        # ======================================================
         # input embeddings processing
 
         if input_ids is not None and inputs_embeds is not None:
@@ -914,7 +924,7 @@ class UdopStack(UdopPreTrainedModel):
                 self.get_extended_attention_mask(attention_mask, input_shape, attention_mask.device)
             )
             # encoder_attention_mask = attention_mask
-            logger.warning('Empty batch')
+            logger.warning("Empty batch")
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
@@ -924,28 +934,38 @@ class UdopStack(UdopPreTrainedModel):
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
             inputs_embeds = self.embed_tokens(input_ids)
-                
+
         if inputs_patches is not None:
-            #===========================    
+            # ===========================
             # combine OCR text and visual embed
-            inputs_embeds, seg_data, attention_mask = collate_vlembed(inputs_patches, inputs_embeds, seg_data, visual_seg_data, special_vis_token, attention_mask, num_patches, 0)
+            inputs_embeds, seg_data, attention_mask = collate_vlembed(
+                inputs_patches,
+                inputs_embeds,
+                seg_data,
+                visual_seg_data,
+                special_vis_token,
+                attention_mask,
+                num_patches,
+                0,
+            )
             input_shape = inputs_embeds.size()[:-1]
-            
+
         if not self.is_decoder:
             inputs_embeds += self.cell2dembedding(seg_data)
 
         batch_size, seq_length = input_shape
-        
-        
-        #======================================================    
+
+        # ======================================================
         # input masking/pos embed processing
 
         # required mask seq length can be calculated via length of past
         mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
 
         if use_cache is True:
-            assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
-            
+            assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(
+                self
+            )
+
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
@@ -976,19 +996,15 @@ class UdopStack(UdopPreTrainedModel):
         if self.is_decoder:  # modified lines
             position_bias = None
         else:
-            position_bias = self.relative_bias(
-                    attention_mask=attention_mask, seg_data=seg_data
-                )
+            position_bias = self.relative_bias(attention_mask=attention_mask, seg_data=seg_data)
             position_bias = position_bias + extended_attention_mask
         encoder_decoder_position_bias = None
 
-        
-        
-        #======================================================    
-        # model inferencing 
-        
+        # ======================================================
+        # model inferencing
+
         hidden_states = inputs_embeds
-                               
+
         hidden_states = self.dropout(hidden_states)
 
         for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
@@ -1009,7 +1025,7 @@ class UdopStack(UdopPreTrainedModel):
             )
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-            if use_cache is False:     # MP fixes
+            if use_cache is False:  # MP fixes
                 layer_outputs = layer_outputs[:1] + (None,) + layer_outputs[1:]
             hidden_states, present_key_value_state = layer_outputs[:2]
 
@@ -1048,7 +1064,7 @@ class UdopStack(UdopPreTrainedModel):
                 ]
                 if v is not None
             )
-        
+
         return BaseModelOutputWithVisionEmbeds(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
@@ -1076,19 +1092,25 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
 
         self.encoder = UdopStack(self.encoder.config, self.shared)
         self.decoder = UdopStack(self.decoder.config, self.shared)
-        
+
         self.init_weights()
-        
+
         # --------------------------------------------------------------------------
         # MAE encoder specifics
 
-        mae_model_tmp = mae_model(config.mae_version, config.mae_checkpoint, config.image_size, config.vocab_size, config.max_2d_position_embeddings)
+        mae_model_tmp = mae_model(
+            config.mae_version,
+            config.mae_checkpoint,
+            config.image_size,
+            config.vocab_size,
+            config.max_2d_position_embeddings,
+        )
 
         self.patch_embed = mae_model_tmp.patch_embed
         self.embed_dim = mae_model_tmp.embed_dim
         self.pos_embed = mae_model_tmp.pos_embed
         self.special_vis_token = mae_model_tmp.special_vis_token
-        
+
     @staticmethod
     def get_required_segment_levels() -> Sequence[str]:
         return ["tokens"]
@@ -1103,36 +1125,33 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
 
     def patchify(self, imgs):
         """
-        imgs: (N, 3, H, W)
-        x: (N, L, patch_size**2 *3)
+        imgs: (N, 3, H, W) x: (N, L, patch_size**2 *3)
         """
         p = self.patch_embed.patch_size[0]
         assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
 
         h = w = imgs.shape[2] // p
         x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
-        x = torch.einsum('nchpwq->nhwpqc', x)
+        x = torch.einsum("nchpwq->nhwpqc", x)
         x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
         return x
 
     def mae_loss(self, imgs, pred, mask):
         """
-        imgs: [N, 3, H, W]
-        pred: [N, L, p*p*3]
-        mask: [N, L], 0 is keep, 1 is remove, 
+        imgs: [N, 3, H, W] pred: [N, L, p*p*3] mask: [N, L], 0 is keep, 1 is remove,
         """
         target = self.patchify(imgs)
         if self.norm_pix_loss:
             mean = target.mean(dim=-1, keepdim=True)
             var = target.var(dim=-1, keepdim=True)
-            target = (target - mean) / (var + 1.e-6)**.5
+            target = (target - mean) / (var + 1.0e-6) ** 0.5
 
         loss = (pred - target) ** 2
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
 
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
-    
+
     def forward(
         self,
         input_ids: Tensor = None,
@@ -1164,7 +1183,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         input_dict: Dict[str, Any] = None,
         **kwargs,
     ) -> Tuple[Tensor, ...]:
-        
         if input_dict is not None:
             return_task_outputs = []
             for task in input_dict:
@@ -1172,7 +1190,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             return return_task_outputs
 
         if encoder_outputs is None:
-            inputs_patches=None
+            inputs_patches = None
             if image is not None:
                 assert visual_seg_data is not None
                 x = self.patch_embed(image)
@@ -1181,7 +1199,9 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
                     x = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, x.size(-1)))
                     pad_tokens = self.pad_token.repeat(x.shape[0], ids_restore.shape[1] - x.shape[1], 1)
                     x_padded = torch.cat([x, pad_tokens], dim=1)  # no cls token
-                    x_padded = torch.gather(x_padded, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x_padded.shape[2]))
+                    x_padded = torch.gather(
+                        x_padded, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x_padded.shape[2])
+                    )
                     inputs_patches = x_padded
                 else:
                     inputs_patches = x
@@ -1201,7 +1221,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
-            )           
+            )
 
         if encoder_outputs is None:
             return None
@@ -1234,6 +1254,6 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         )
 
         return outputs  # type: ignore
-    
+
     def get_encoder(self):
         return self

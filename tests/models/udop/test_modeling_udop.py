@@ -41,10 +41,10 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         ByT5Tokenizer,
+        T5Tokenizer,
         UdopEncoderModel,
         UdopForConditionalGeneration,
         UdopModel,
-        T5Tokenizer,
     )
     from transformers.models.udop.modeling_udop import UDOP_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -855,7 +855,9 @@ class UdopModelFp16Tests(unittest.TestCase):
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
         # Load using `accelerate` in bf16
-        model = UdopForConditionalGeneration.from_pretrained("microsoft/udop-large", torch_dtype=torch.bfloat16, device_map="auto")
+        model = UdopForConditionalGeneration.from_pretrained(
+            "microsoft/udop-large", torch_dtype=torch.bfloat16, device_map="auto"
+        )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.bfloat16)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.bfloat16)
 
@@ -874,7 +876,9 @@ class UdopModelFp16Tests(unittest.TestCase):
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
         # Load using `accelerate`
-        model = UdopForConditionalGeneration.from_pretrained("microsoft/udop-large", torch_dtype=torch.float16, device_map="auto")
+        model = UdopForConditionalGeneration.from_pretrained(
+            "microsoft/udop-large", torch_dtype=torch.float16, device_map="auto"
+        )
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wo.weight.dtype == torch.float32)
         self.assertTrue(model.decoder.block[0].layer[2].DenseReluDense.wi.weight.dtype == torch.float16)
 
