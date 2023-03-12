@@ -49,6 +49,9 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             Pix2Struct paper and code, the image is normalized with its own mean and standard deviation.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        max_patches (`int`, *optional*, defaults to `2048`):
+            The maximum number of patches to extract from the image as per the [Pix2Struct
+            paper](https://arxiv.org/pdf/2210.03347.pdf).
     """
 
     model_input_names = ["pixel_values"]
@@ -58,12 +61,14 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         patch_size: Dict[str, int] = {"height": 16, "width": 16},
         do_normalize: bool = True,
         do_convert_rgb: bool = True,
+        max_patches: int = 2048,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.patch_size = patch_size
         self.do_normalize = do_normalize
         self.do_convert_rgb = do_convert_rgb
+        self.max_patches = max_patches
 
     # adapted from: https://discuss.pytorch.org/t/tf-image-extract-patches-in-pytorch/171409/2
     def torch_extract_patches(self, image_tensor, patch_height, patch_width):
@@ -195,7 +200,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        max_patches: Optional[int] = 2048,
+        max_patches: Optional[int] = None,
         patch_size: Optional[Dict[str, int]] = None,
         do_normalize: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -241,6 +246,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         patch_size = patch_size if patch_size is not None else self.patch_size
+        max_patches = max_patches if max_patches is not None else self.max_patches
 
         if not is_batched(images):
             images = [images]
