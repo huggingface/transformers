@@ -885,30 +885,33 @@ class Mask2Former3DSinePositionEmbedding(nn.Module):
 
     def forward(self,  hidden_states: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
-            mask = torch.zeros(hidden_states.shape[:4], device=hidden_states.device, dtype=torch.bool)
+            mask = torch.zeros((hidden_states.size(0), hidden_states.size(1), hidden_states.size(3), hidden_states.size(4)), device=hidden_states.device, dtype=torch.bool)
         not_mask = ~mask
-        y_embed = not_mask.cumsum(1, dtype=torch.float32)
-        x_embed = not_mask.cumsum(2, dtype=torch.float32)
-        z_embed = not_mask.cumsum(3, dtype=torch.float32)
+        y_embed = not_mask.cumsum(2, dtype=torch.float32)
+        x_embed = not_mask.cumsum(3, dtype=torch.float32)
+        z_embed = not_mask.cumsum(1, dtype=torch.float32)
+
         if self.normalize:
             eps = 1e-6
             y_embed = y_embed / (y_embed[:, :, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, :, -1:] + eps) * self.scale
             z_embed = z_embed / (z_embed[:, -1, :, :] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=hidden_states.device)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
-        
-        dim_t_z = torch.arange((self.num_pos_feats * 2), dtype=torch.float32, device=x.device)
+
+        dim_t_z = torch.arange((self.num_pos_feats * 2), dtype=torch.float32, device=hidden_states.device)
         dim_t_z = self.temperature ** (2 * torch.div(dim_t_z, 2, rounding_mode="floor") / (self.num_pos_feats * 2))
 
         pos_x = x_embed[:, :, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, :, None] / dim_t
         pos_z = z_embed[:, :, :, :, None] / dim_t_z
+
         pos_x = torch.stack((pos_x[:, :, :, :, 0::2].sin(), pos_x[:, :, :, :, 1::2].cos()), dim=5).flatten(4)
         pos_y = torch.stack((pos_y[:, :, :, :, 0::2].sin(), pos_y[:, :, :, :, 1::2].cos()), dim=5).flatten(4)
         pos_z = torch.stack((pos_z[:, :, :, :, 0::2].sin(), pos_z[:, :, :, :, 1::2].cos()), dim=5).flatten(4)
         pos = (torch.cat((pos_y, pos_x), dim=4) + pos_z).permute(0, 1, 4, 2, 3)
+
         return pos
 
 # Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerSinePositionEmbedding with MaskFormer->Mask2Former
@@ -929,9 +932,9 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
-    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
+    def forward(self, hidden_states: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
-            mask = torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool)
+            mask = torch.zeros((hidden_states.size(0), hidden_states.size(2), hidden_states.size(3)), device=hidden_states.device, dtype=torch.bool)
         not_mask = ~mask
         y_embed = not_mask.cumsum(1, dtype=torch.float32)
         x_embed = not_mask.cumsum(2, dtype=torch.float32)
@@ -940,7 +943,7 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=hidden_states.device)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -2079,17 +2082,18 @@ class Mask2FormerMaskPredictor(nn.Module):
         super().__init__()
         self.hidden_size = hidden_size
         self.num_heads = num_heads
+        self.is_video = is_video
 
         self.mask_embedder = Mask2FormerMLPPredictionHead(self.hidden_size, self.hidden_size, mask_feature_size)
 
     def forward(self, outputs: torch.Tensor, pixel_embeddings: torch.Tensor, attention_mask_target_size: int = None):
         mask_embeddings = self.mask_embedder(outputs.transpose(0, 1))
 
-        if is_video:
-            outputs = torch.einsum("bqc,btchw->bqthw", mask_embeddings, pixel_embeddings)
-            b, q, t, _, _ = outputs.shape
+        if self.is_video:
+            outputs_mask = torch.einsum("bqc,btchw->bqthw", mask_embeddings, pixel_embeddings)
+            b, q, t, _, _ = outputs_mask.shape
             # [B, Q, T, H, W] -> [B, Q, T*H*W] -> [B, h, Q, T*H*W] -> [B*h, Q, T*HW]
-            attention_mask = F.interpolate(outputs.flatten(0, 1), size=attention_mask_target_size, mode="bilinear", align_corners=False)
+            attention_mask = nn.functional.interpolate(outputs_mask.flatten(0, 1), size=attention_mask_target_size, mode="bilinear", align_corners=False)
             attention_mask = attention_mask.view(b, q, t, attention_mask_target_size[0], attention_mask_target_size[1])
         else:
             # Sum up over the channels
@@ -2214,10 +2218,10 @@ class Mask2FormerVideoTransformerModule(nn.Module):
         mask_features = mask_features.view(batch_size, t, m_channels, m_height, m_width)
         
         for i in range(self.num_feature_levels):
-            size_list.append(multi_scale_features[i].shape[-2:])
-            
+            size_list.append(multi_scale_features[i].shape[-2:])            
             position_embeddings_3d = self.position_embedder(multi_scale_features[i].view(batch_size, t, -1, size_list[-1][0], size_list[-1][1]), None).flatten(3)
             multi_stage_positional_embeddings.append(position_embeddings_3d)
+
             multi_stage_features.append(
                 self.input_projections[i](multi_scale_features[i]).flatten(2) 
                     + self.level_embed.weight[i][None, :, None]
@@ -2226,7 +2230,6 @@ class Mask2FormerVideoTransformerModule(nn.Module):
             _, channels, height_width = multi_stage_features[-1].shape
             
             multi_stage_positional_embeddings[-1] = multi_stage_positional_embeddings[-1].view(batch_size, t, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)            
-            
             multi_stage_features[-1] = multi_stage_features[-1].view(batch_size, t, channels, height_width).permute(1, 3, 0, 2).flatten(0, 1)
         
 
