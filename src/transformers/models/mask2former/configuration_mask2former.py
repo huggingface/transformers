@@ -101,14 +101,16 @@ class Mask2FormerConfig(PretrainedConfig):
             the logits from each decoder's stage.
         feature_strides (`List[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
             Feature strides corresponding to features generated from backbone network.
-        output_auxiliary_logits (`bool`, *optional*):
+        output_auxiliary_logits (`boolean`, *optional*):
             Should the model output its `auxiliary_logits` or not.
+        is_video (`boolean``, *optional*, defaults to `False` ):
+            Whether the input being passed to the model is a video or not.
         num_frames (`int`, *optional*, defaults to 2):
-            Number of frames in the video
+            Number of frames in the video.
         frame_range (`int`, *optional*, defaults to 20):
-            Range of frames in the video
-        frame_shuffle (`bool`, *optional*, defaults to False): 
-            Whether to shuffle the frames or not
+            The range of the frames in the video.
+        frame_shuffle (`boolean`, *optional*, defaults to False): 
+            Whether to shuffle the frames in the video or not.
 
     Examples:
 
@@ -160,6 +162,7 @@ class Mask2FormerConfig(PretrainedConfig):
         use_auxiliary_loss: bool = True,
         feature_strides: List[int] = [4, 8, 16, 32],
         output_auxiliary_logits: bool = None,
+        is_video: bool = False,
         num_frames: int = 2,
         frame_range: int = 20,
         frame_shuffle: bool = False,
@@ -213,6 +216,7 @@ class Mask2FormerConfig(PretrainedConfig):
         self.feature_strides = feature_strides
         self.output_auxiliary_logits = output_auxiliary_logits
         self.num_hidden_layers = decoder_layers
+        self.is_video = is_video
         self.num_frames = num_frames
         self.frame_range = frame_range
         self.frame_shuffle = frame_shuffle
