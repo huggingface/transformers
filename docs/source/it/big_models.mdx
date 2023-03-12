@@ -62,7 +62,7 @@ Adesso usiamo una dimensione massima di frammentazione di 200MB:
 ['config.json', 'pytorch_model-00001-of-00003.bin', 'pytorch_model-00002-of-00003.bin', 'pytorch_model-00003-of-00003.bin', 'pytorch_model.bin.index.json']
 ```
 
-On top of the configuration of the model, we see three different weights files, and an `index.json` file which is our index. A checkpoint like this can be fully reloaded using the [`~PreTrainedModel.from_pretrained`] method:
+In aggiunta alla configurazione del modello, vediamo tre differenti file dei pesi, e un file `index.json` che è il nostro indice. Un checkpoint può essere ricaricato totalmente usando il metodo [`~PreTrainedModel.from_pretrained`]:
 
 ```py
 >>> with tempfile.TemporaryDirectory() as tmp_dir:
@@ -70,9 +70,9 @@ On top of the configuration of the model, we see three different weights files, 
 ...     new_model = AutoModel.from_pretrained(tmp_dir)
 ```
 
-The main advantage of doing this for big models is that during step 2 of the workflow shown above, each shard of the checkpoint is loaded after the previous one, capping the memory usage in RAM to the model size plus the size of the biggest shard.
+Il vantaggio principale di applicare questo metodo per modelli grandi è che durante il passo 2 del workflow illustrato in precedenza, ogni frammento del checkpoint viene caricato dopo il precedente, limitando l'utilizzo della RAM alla dimensione del modello più la dimensione del frammento più grande.
 
-Beind the scenes, the index file is used to determine which keys are in the checkpoint, and where the corresponding weights are stored. We can load that index like any json and get a dictionary:
+Dietro le quinte, il file indice è utilizzato per determinare quali chiavi sono nel checkpoint, e dove i corrispondenti pesi sono memorizzati. Possiamo caricare l'indice come un qualsiasi json e ottenere un dizionario:
 
 ```py
 >>> import json
@@ -86,14 +86,14 @@ Beind the scenes, the index file is used to determine which keys are in the chec
 dict_keys(['metadata', 'weight_map'])
 ```
 
-The metadata just consists of the total size of the model for now. We plan to add several other informations in the future:
+I metadati consistono solo nella dimensione totale del modello per ora. Abbiamo in programma di aggiungere altre informazioni in futuro:
 
 ```py
 >>> index["metadata"]
 {'total_size': 433245184}
 ```
 
-The weights map is the main part of this index, which maps each parameter name (as usually found in a PyTorch model `state_dict`) to the file it's stored in:
+La mappa dei pesi è la parte principale di questo indice, che mappa ogni nome dei parametri (si trova solitamente nei modelli PyTorch come `state_dict`) al file in cui è memorizzato:
 
 ```py
 >>> index["weight_map"]
@@ -102,7 +102,7 @@ The weights map is the main part of this index, which maps each parameter name (
  ...
 ```
 
-If you want to directly load such a sharded checkpoint inside a model without using [`~PreTrainedModel.from_pretrained`] (like you would do `model.load_state_dict()` for a full checkpoint) you should use [`~modeling_utils.load_sharded_checkpoint`]:
+Se vuoi caricare direttamente un checkpoint frammentato in un modello senza usare [`~PreTrainedModel.from_pretrained`] (come si farebbe con `model.load_state_dict()` per un checkpoint completo) devi usare [`~modeling_utils.load_sharded_checkpoint`]:
 
 ```py
 >>> from transformers.modeling_utils import load_sharded_checkpoint
@@ -112,8 +112,8 @@ If you want to directly load such a sharded checkpoint inside a model without us
 ...     load_sharded_checkpoint(model, tmp_dir)
 ```
 
-## Low memory loading
+## Caricamento low memory
 
-Sharded checkpoints reduce the memory usage during step 2 of the workflow mentioned above, but in order to use that model in a low memory setting, we recommend leveraging our tools based on the Accelerate library.
+Frammentare i checkpoint l'utilizzo di memoria al passo 2 del workflow citato in precedenza, ma per utilizzare questo modello in un ambiente con poca memoria, consigliamo di utilizzare i nostri strumenti basati sulla libreria Accelerate.
 
-Please read the following guide for more information: [Large model loading using Accelerate](./main_classes/model#large-model-loading)
+Per ulteriori informazioni, leggere la seguente guida: [Large model loading using Accelerate](./main_classes/model#large-model-loading)
