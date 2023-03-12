@@ -61,6 +61,7 @@ PATH_TO_DOC = "docs/source/en"
 PRIVATE_MODELS = [
     "AltRobertaModel",
     "DPRSpanPredictor",
+    "UdopStack",
     "LongT5Stack",
     "RealmBertModel",
     "T5Stack",

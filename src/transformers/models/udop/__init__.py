@@ -31,11 +31,8 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_udop"] = [
         "UDOP_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "UdopEncoderModel",
         "UdopForConditionalGeneration",
-        "UdopModel",
         "UdopPreTrainedModel",
-        "load_tf_weights_in_udop",
     ]
 
 if TYPE_CHECKING:
@@ -49,11 +46,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_udop import (
             UDOP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            UdopEncoderModel,
             UdopForConditionalGeneration,
-            UdopModel,
             UdopPreTrainedModel,
-            load_tf_weights_in_udop,
         )
 
 else:
