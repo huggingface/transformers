@@ -1109,7 +1109,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         sparse_step = config.encoder_sparse_step
         self.layers = nn.ModuleList()
         for i in range(config.encoder_layers):
-            is_sparse = (i + 1 % sparse_step == 0) if sparse_step > 0 else False
+            is_sparse = (i + 1) % sparse_step == 0 if sparse_step > 0 else False
             self.layers.append(NllbMoeEncoderLayer(config, is_sparse))
 
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -1303,7 +1303,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         sparse_step = config.decoder_sparse_step
         self.layers = nn.ModuleList()
         for i in range(config.decoder_layers):
-            is_sparse = (i % sparse_step == 1) if sparse_step > 0 else False
+            is_sparse = (i + 1) % sparse_step == 0 if sparse_step > 0 else False
             self.layers.append(NllbMoeDecoderLayer(config, is_sparse))
 
         self.layer_norm = nn.LayerNorm(config.d_model)

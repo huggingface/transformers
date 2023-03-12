@@ -123,7 +123,7 @@ class NllbMoeConfig(PretrainedConfig):
         router_jitter_noise=0.01,
         router_dtype="float32",
         router_ignore_padding_tokens=False,
-        num_experts=64,
+        num_experts=128,
         encoder_sparse_step=4,
         expert_capacity=64,
         decoder_sparse_step=4,
