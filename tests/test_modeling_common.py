@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
 from pytest import mark
 from requests.exceptions import HTTPError
@@ -3429,7 +3429,6 @@ class ModelPushToHubTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._token = TOKEN
-        set_access_token(TOKEN)
         HfFolder.save_token(TOKEN)
 
     @classmethod
