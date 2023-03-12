@@ -18,11 +18,8 @@ import os
 import torch
 from torch import nn
 
-from transformers import NllbMoeConfig
+from transformers import NllbMoeConfig, NllbMoeModel
 from transformers.modeling_utils import dtype_byte_size
-from transformers.models.switch_transformers.convert_switch_transformers_original_flax_checkpoint_to_pytorch import (
-    rename_keys,
-)
 from transformers.utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME
 
 
@@ -51,44 +48,58 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-def rename_fairseq_keys(state_dict):
+def rename_fairseq_keys(state_dict, expert_idx = None):
     # 'encoder.layers.7.moe_layer.experts.0.fc2.bias' ->'encoder.layers.7.ffn.mlp.experts.0.fc2.bias'
     # 'encoder.layers.7.fc2.bias' ->  'encoder.layers.7.ffn.mlp.fc2.bias'
-
-    pass
+    # encoder.layers.7.wg -> encoder.layers.7.ffn.mlp.router.classifier
+    new_dict = {}
+    for old_key in state_dict.keys():
+        key = old_key
+        if "experts" in key:
+            key = key.replace("moe_layer.experts.0", f"ffn.mlp.experts.expert_{expert_idx}")
+        elif "fc2" :
+            key = key.replace(".fc2.", ".ffn.mlp.fc2")
+        elif "fc1" :
+            key = key.replace(".fc1.", ".ffn.mlp.fc1")
+        elif "gate" in key:
+            key = key.replace(".moe_layer.gate.wg", ".ffn.mlp.router.classifier")
+        elif "encoder_attn" in key:
+            key = key.replace("encoder_attn", "cross_attention")
+        elif "encoder_attn_layer_norm" in key:
+            key = key.replace("encoder_attn_layer_norm", "cross_attention_layer_norm")
+        
+        new_dict[key] = state_dict[old_key]
+    return new_dict
 
 
 def shard_on_the_fly(
-    switch_checkpoint_path, dump_path, max_shard_size, num_experts, dtype, weights_name: str = WEIGHTS_NAME
+    switch_checkpoint_path, dump_path, num_experts, dtype, weights_name: str = WEIGHTS_NAME
 ):
     sharded_state_dicts = []
     current_block = {}
     total_size = 0
-
     os.makedirs(dump_path, exist_ok=True)
 
     for expert in range(num_experts):
         expert_path = switch_checkpoint_path + f"-rank-{expert}.pt"
-        expert_state = torch.load(expert_path)["model"].keys()
+        expert_state = torch.load(expert_path)["model"]
         remove_ignore_keys_(expert_state)
-        expert_state = rename_keys(expert_state)
-        current_block.update(expert_state)
+        expert_state = rename_fairseq_keys(expert_state, expert)
         save_path = os.path.join(
             dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin")
         )
-        torch.save(current_block, save_path)
-        sharded_state_dicts.append(current_block.keys())
-        total_size += sum([value.numel() for key, value in current_block.items()]) * dtype_byte_size(
-            list(current_block)[0].dtype
+        torch.save(expert_state, save_path)
+        sharded_state_dicts.append(expert_state.keys())
+        total_size += sum([value.numel() for key, value in expert_state.items()]) * dtype_byte_size(
+            expert_state[list(expert_state)[0]].dtype
         )
 
     # Add the last block
     save_path = os.path.join(dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"))
-    shared_weights = torch.load(switch_checkpoint_path.replace(".pt", "-shared.pt"))["model"].keys()
+    shared_weights = torch.load(switch_checkpoint_path + "-shared.pt")["model"]
     remove_ignore_keys_(shared_weights)
-
-    # state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
-    # lm_head to initialise too
+    shared_weights = rename_fairseq_keys(shared_weights)
+    shared_weights["shared.weight"] = shared_weights["decoder.embed_tokens.weight"]
 
     torch.save(shared_weights, save_path)
     sharded_state_dicts.append(shared_weights.keys())
@@ -101,12 +112,9 @@ def shard_on_the_fly(
     weight_map = {}
     shards = {}
     for idx, shard in enumerate(sharded_state_dicts):
-        shard_file = weights_name.replace(
-            ".bin", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.bin"
-        )  # len(sharded_state_dicts):05d}
+        shard_file = weights_name.replace(".bin", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.bin")
         temp_filename = os.path.join(dump_path, weights_name.replace(".bin", f"-{idx+1:05d}-of-???.bin"))
         os.rename(temp_filename, os.path.join(dump_path, shard_file))
-        shards[shard_file] = shard
         for key in shard:
             weight_map[key] = shard_file
 
@@ -131,29 +139,32 @@ if __name__ == "__main__":
         required=False,
         help="Path to a directory containing a folder per layer. Follows the original Google format.",
     )
-    parser.add_argument("--dtype", default="bfloat16", type=str, required=False, help="dtype of the saved model")
+    parser.add_argument("--dtype", default="float32", type=str, required=False, help="dtype of the saved model")
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="/mnt/disks/disk_switch/original_checkpoints/switch-xxl-128-converted",
+        default="/home/arthur_huggingface_co/fairseq/weights/checkpoints/hf-converted-moe-54b",
         type=str,
         required=False,
         help="Path to the output pytorch model.",
     )
     args = parser.parse_args()
-    shard_on_the_fly(
-        args.switch_t5x_checkpoint_path,
+    metadata, index = shard_on_the_fly(
+        args.nllb_moe_checkpoint_path,
         args.pytorch_dump_folder_path,
-        args.max_shard_size,
+        128,
         args.dtype,
     )
-
-    model = ""
-    vocab_size = model["encoder.embed_tokens.weight"].shape[0]
-
+    
+    # 'decoder.layers.1.ffn.mlp.experts.expert_7.fc1.weight',
+    # should start sparse with layer 3, then 7, 
     config = NllbMoeConfig.from_pretrained(
-        "",
-        num_sparse_encoder_layers=1,
-        num_sparse_decoder_layers=1,
+        "facebook/nllb-200-3.3B",
+        encoder_sparse_step=4,
+        decoder_sparse_step=4,
+        num_experts=128
     )
-
-    model.save_pretrained(args.pytorch_dump_folder_path)
+    config.save_pretrained(args.pytorch_dump_folder_path)
+    model = NllbMoeModel.from_pretrained(args.pytorch_dump_folder_path)
+    print("Done")
+    # model.push_to_hub("ArthurZ/nllb-moe-54b")
+    # model.save_pretrained(args.pytorch_dump_folder_path)
