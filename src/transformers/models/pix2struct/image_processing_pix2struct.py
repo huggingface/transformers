@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 class Pix2StructImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a PIX2STRUCT image processor.
+    Constructs a Pix2Struct image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
