@@ -7348,41 +7348,6 @@ def load_tf_weights_in_t5(*args, **kwargs):
     requires_backends(load_tf_weights_in_t5, ["torch"])
 
 
-UDOP_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class UdopEncoderModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class UdopForConditionalGeneration(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class UdopModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class UdopPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-def load_tf_weights_in_udop(*args, **kwargs):
-    requires_backends(load_tf_weights_in_udop, ["torch"])
-
-
 TABLE_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -7601,14 +7566,14 @@ class UMT5EncoderModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class UMT5ForConditionalGeneration(metaclass=DummyObject):
+class UdopEncoderModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class UMT5ForQuestionAnswering(metaclass=DummyObject):
+class UdopForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -7623,13 +7588,14 @@ class UMT5ForSequenceClassification(metaclass=DummyObject):
 
 
 class UMT5Model(metaclass=DummyObject):
+class UdopModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class UMT5PreTrainedModel(metaclass=DummyObject):
+class UdopPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
