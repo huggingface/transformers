@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch UDOP model."""
 
+import collections
 import logging
 import math
 import random
@@ -206,6 +207,36 @@ def collate_vlembed(
     if attention_mask is not None:
         attention_mask = torch.cat([attention_mask, visual_attention_mask], 1)
     return inputs_embeds, seg_data, attention_mask
+
+
+class UdopPatchEmbeddings(nn.Module):
+    """2D Image to Patch Embeddings"""
+
+    def __init__(self, config):
+        super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+
+        self.proj = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, pixel_values):
+        batch_size, num_channels, height, width = pixel_values.shape
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model"
+                f" ({self.image_size[0]}*{self.image_size[1]})."
+            )
+        embeddings = self.proj(pixel_values)
+        embeddings = embeddings.flatten(2).transpose(1, 2)
+        return embeddings
 
 
 # Based on T5PreTrainedModel
@@ -1168,12 +1199,9 @@ class UdopStack(UdopPreTrainedModel):
         seg_data=None,  # modified line,
         visual_seg_data=None,  # modified line,
         num_patches=None,  # modified line,
-        special_vis_token=None,  # modified line,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = (
-            True  # False #True #output_attentions if output_attentions is not None else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1218,7 +1246,6 @@ class UdopStack(UdopPreTrainedModel):
                 inputs_embeds,
                 seg_data,
                 visual_seg_data,
-                special_vis_token,
                 attention_mask,
                 num_patches,
                 0,
@@ -1389,10 +1416,10 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         #     config.max_2d_position_embeddings,
         # )
 
-        # self.patch_embed = UdopPatchEmbeddings(config)
+        self.patch_embed = UdopPatchEmbeddings(config)
         # self.embed_dim = mae_model_tmp.embed_dim
         # self.pos_embed = mae_model_tmp.pos_embed
-        # self.special_vis_token = mae_model_tmp.special_vis_token
+        # self.special_vis_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
     def get_input_embeddings(self):
         return self.shared
@@ -1414,34 +1441,32 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def patchify(self, imgs):
-        """
-        imgs: (N, 3, H, W) x: (N, L, patch_size**2 *3)
-        """
-        p = self.patch_embed.patch_size[0]
-        assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
+    # def patchify(self, imgs):
+    #     """
+    # imgs: (N, 3, H, W) x: (N, L, patch_size**2 *3) #"""
+    #     p = self.patch_embed.patch_size[0]
+    #     assert imgs.shape[2] == imgs.shape[3] and imgs.shape[2] % p == 0
 
-        h = w = imgs.shape[2] // p
-        x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
-        x = torch.einsum("nchpwq->nhwpqc", x)
-        x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
-        return x
+    #     h = w = imgs.shape[2] // p
+    #     x = imgs.reshape(shape=(imgs.shape[0], 3, h, p, w, p))
+    #     x = torch.einsum("nchpwq->nhwpqc", x)
+    #     x = x.reshape(shape=(imgs.shape[0], h * w, p**2 * 3))
+    #     return x
 
-    def mae_loss(self, imgs, pred, mask):
-        """
-        imgs: [N, 3, H, W] pred: [N, L, p*p*3] mask: [N, L], 0 is keep, 1 is remove,
-        """
-        target = self.patchify(imgs)
-        if self.norm_pix_loss:
-            mean = target.mean(dim=-1, keepdim=True)
-            var = target.var(dim=-1, keepdim=True)
-            target = (target - mean) / (var + 1.0e-6) ** 0.5
+    # def mae_loss(self, imgs, pred, mask):
+    #     """
+    # imgs: [N, 3, H, W] pred: [N, L, p*p*3] mask: [N, L], 0 is keep, 1 is remove, #"""
+    #     target = self.patchify(imgs)
+    #     if self.norm_pix_loss:
+    #         mean = target.mean(dim=-1, keepdim=True)
+    #         var = target.var(dim=-1, keepdim=True)
+    #         target = (target - mean) / (var + 1.0e-6) ** 0.5
 
-        loss = (pred - target) ** 2
-        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+    #     loss = (pred - target) ** 2
+    #     loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
 
-        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
-        return loss
+    #     loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+    #     return loss
 
     def forward(
         self,
@@ -1560,7 +1585,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
         if self.config.tie_word_embeddings:
             # Rescale output before projecting on vocab
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-            sequence_output = sequence_output * (self.model_dim**-0.5)
+            sequence_output = sequence_output * (self.config.d_model**-0.5)
 
         lm_logits = self.lm_head(sequence_output)
 

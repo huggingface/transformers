@@ -37,22 +37,22 @@ class UdopConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
-        vocab_size (`int`, *optional*, defaults to 32128):
+        vocab_size (`int`, *optional*, defaults to 33201):
             Vocabulary size of the Udop model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`UdopModel`] or [`TFUdopModel`].
-        d_model (`int`, *optional*, defaults to 512):
+            `inputs_ids` passed when calling [`UdopForConditionalGeneration`].
+        d_model (`int`, *optional*, defaults to 1024):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
             Size of the key, query, value projections per attention head. The `inner_dim` of the projection layer will
             be defined as `num_heads * d_kv`.
-        d_ff (`int`, *optional*, defaults to 2048):
+        d_ff (`int`, *optional*, defaults to 4096):
             Size of the intermediate feed forward layer in each `UdopBlock`.
-        num_layers (`int`, *optional*, defaults to 6):
-            Number of hidden layers in the Transformer encoder.
+        num_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder and decoder.
         num_decoder_layers (`int`, *optional*):
             Number of hidden layers in the Transformer decoder. Will use the same value as `num_layers` if not set.
-        num_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
+        num_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder and decoder.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
@@ -78,15 +78,16 @@ class UdopConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32128,
-        d_model=512,
+        vocab_size=33201,
+        d_model=1024,
         d_kv=64,
-        d_ff=2048,
-        num_layers=6,
+        d_ff=4096,
+        num_layers=24,
         num_decoder_layers=None,
-        num_heads=8,
+        num_heads=16,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
+        relative_bias_args=[{"type": "1d"}, {"type": "horizontal"}, {"type": "vertical"}],
         dropout_rate=0.1,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
@@ -96,6 +97,9 @@ class UdopConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         max_2d_position_embeddings=1024,
+        image_size=224,
+        patch_size=16,
+        num_channels=3,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -118,6 +122,10 @@ class UdopConfig(PretrainedConfig):
         # UDOP attributes
         self.max_2d_position_embeddings = max_2d_position_embeddings
         self.decoder_start_token_id = pad_token_id
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.relative_bias_args = relative_bias_args
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
