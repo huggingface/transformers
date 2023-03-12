@@ -155,9 +155,11 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         result = torch.cat([row_ids, col_ids, patches], -1)
 
         # [max_patches, 2 + patch_height * patch_width * image_channels]
-        result = torch.nn.functional.pad(result, [0, 0, 0, max_patches - (rows * columns)])
+        result = torch.nn.functional.pad(result, [0, 0, 0, max_patches - (rows * columns)]).float()
 
-        return result.float()
+        result = to_numpy_array(result)
+
+        return result
 
     def normalize(
         self, image: np.ndarray, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
@@ -254,11 +256,9 @@ class Pix2StructImageProcessor(BaseImageProcessor):
 
         # convert to torch tensor and permute
         images = [self.extract_flattened_patches(image=image, max_patches=max_patches) for image in images]
-        attention_masks = [(image.sum(dim=-1) != 0).float() for image in images]
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-        attention_masks = [to_numpy_array(image) for image in attention_masks]
+        # create attention mask in numpy
+        attention_masks = [(image.sum(axis=-1) != 0).astype(np.float32) for image in images]
 
         encoded_outputs = BatchFeature(
             data={"pixel_embeds": images, "attention_mask": attention_masks}, tensor_type=return_tensors
