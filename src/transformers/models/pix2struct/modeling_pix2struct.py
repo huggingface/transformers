@@ -499,9 +499,10 @@ PIX2STRUCT_VISION_START_DOCSTRING = r"""
 
 PIX2STRUCT_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_embeds (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`Pix2StructVisionImageProcessor.__call__`] for details.
+        pixel_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_channels x patch_height x patch_width)`):
+            Flattened and padded pixel values. These values can be obtained using [`AutoImageProcessor`]. See
+            [`Pix2StructVisionImageProcessor.__call__`] for details. Check the [original
+            paper](https://arxiv.org/abs/2210.03347) (figure 5) for more details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
