@@ -54,7 +54,11 @@ class Pix2StructImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
 
     def __init__(
-        self, patch_size: Dict[str, int] = [16, 16], do_normalize: bool = True, do_convert_rgb: bool = True, **kwargs
+        self,
+        patch_size: Dict[str, int] = {"height": 16, "width": 16},
+        do_normalize: bool = True,
+        do_convert_rgb: bool = True,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.patch_size = patch_size
@@ -107,7 +111,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             else:
                 image = torch.from_numpy(image)
 
-        patch_height, patch_width = self.patch_size
+        patch_height, patch_width = self.patch_size["height"], self.patch_size["width"]
         _, image_height, image_width = image.shape
         image_height = float(image_height)
         image_width = float(image_width)
