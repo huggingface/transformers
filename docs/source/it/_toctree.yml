@@ -33,6 +33,8 @@
     title: Convertire modelli tensorflow
   - local: serialization
     title: Esporta modelli Transformers
+  - local: big_models
+    title: Istanziare un big model
   - local: debugging
     title: Debugging
   title: Guide pratiche
