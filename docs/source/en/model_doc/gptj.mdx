@@ -21,21 +21,22 @@ This model was contributed by [Stella Biderman](https://huggingface.co/stellaath
 
 Tips:
 
-- To load [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B) in float32 one would need at least 2x model size CPU
-  RAM: 1x for initial weights and another 1x to load the checkpoint. So for GPT-J it would take at least 48GB of CPU
-  RAM to just load the model. To reduce the CPU RAM usage there are a few options. The `torch_dtype` argument can be
-  used to initialize the model in half-precision. And the `low_cpu_mem_usage` argument can be used to keep the RAM
-  usage to 1x. There is also a [fp16 branch](https://huggingface.co/EleutherAI/gpt-j-6B/tree/float16) which stores
-  the fp16 weights, which could be used to further minimize the RAM usage. Combining all this it should take roughly
-  12.1GB of CPU RAM to load the model.
+- To load [GPT-J](https://huggingface.co/EleutherAI/gpt-j-6B) in float32 one would need at least 2x model size
+  RAM: 1x for initial weights and another 1x to load the checkpoint. So for GPT-J it would take at least 48GB
+  RAM to just load the model. To reduce the RAM usage there are a few options. The `torch_dtype` argument can be
+  used to initialize the model in half-precision on a CUDA device only. There is also a fp16 branch which stores the fp16 weights,
+  which could be used to further minimize the RAM usage:
 
 ```python
 >>> from transformers import GPTJForCausalLM
 >>> import torch
 
+>>> device = "cuda"
 >>> model = GPTJForCausalLM.from_pretrained(
-...     "EleutherAI/gpt-j-6B", revision="float16", torch_dtype=torch.float16, low_cpu_mem_usage=True
-... )
+...     "EleutherAI/gpt-j-6B",
+...     revision="float16",
+...     torch_dtype=torch.float16,
+... ).to(device)
 ```
 
 - The model should fit on 16GB GPU for inference. For training/fine-tuning it would take much more GPU RAM. Adam
@@ -85,7 +86,8 @@ model.
 >>> from transformers import GPTJForCausalLM, AutoTokenizer
 >>> import torch
 
->>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", torch_dtype=torch.float16)
+>>> device = "cuda"
+>>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", torch_dtype=torch.float16).to(device)
 >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
 >>> prompt = (
@@ -94,7 +96,7 @@ model.
 ...     "researchers was the fact that the unicorns spoke perfect English."
 ... )
 
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+>>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
 
 >>> gen_tokens = model.generate(
 ...     input_ids,
