@@ -239,9 +239,9 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                The channel dimension format considered by the normalization function:
+                    - `ChannelDimension.FIRST` or `'channels_first'`: The channel dimension is the first dimension.
+                    - `ChannelDimension.LAST` or `'channels_last'`: The channel dimension is the last dimension.
         """
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
